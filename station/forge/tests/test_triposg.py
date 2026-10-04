@@ -92,15 +92,43 @@ class FakePipe:
         return ["flash" if c.get("use_flash_decoder", True) else "hierarchical" for c in self.calls]
 
 
-class FakeRuntime:
-    """PyTorch, diso, the TripoSG checkout and the hub, all made of nothing."""
+# A weights folder as huggingface_hub 0.30.2 leaves one. It fetches eight files at a time, each into
+# `.cache/huggingface/download/<name>.<etag>.incomplete`, and moves a file into place when it is whole: the
+# small marker within seconds, the weights minutes later (seen with a real, interrupted download of a small
+# repository). So a download that stopped leaves the marker and no weights.
+MARKER = Path("model_index.json")
+WEIGHTS = Path("transformer") / "diffusion_pytorch_model.safetensors"
+PART = Path(".cache") / "huggingface" / "download" / "transformer" / "xGOKKLRSlIhH692h=.53aa5117.incomplete"
 
-    def __init__(self, pipe=None, modules=("torch", "diso"), cuda=True, diso_error=None, load_error=None,
+
+def lay_weights(folder: Path, state: str) -> None:
+    """``complete``; ``partial`` (the marker, and the weights half-way); ``marker`` (the marker, and the
+    weights not begun); ``absent``."""
+    if state == "absent":
+        return
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / MARKER).write_text("{}")
+    for path, there in ((WEIGHTS, state == "complete"), (PART, state == "partial")):
+        (folder / path).unlink(missing_ok=True)
+        if there:
+            (folder / path).parent.mkdir(parents=True, exist_ok=True)
+            (folder / path).write_bytes(b"weights")
+
+
+class FakeRuntime:
+    """PyTorch, diso, the TripoSG checkout and the hub, all made of nothing.
+
+    ``download``: "complete" fetches what is missing; "fails" cannot reach the hub; "stops" breaks off
+    with the weights half-way; "offline" hands the folder back as it is, as the library does without a
+    network. ``load_errors``: what the next loads fail with, for a reason that is not the weights.
+    """
+
+    def __init__(self, pipe=None, modules=("torch", "diso"), cuda=True, diso_error=None, load_errors=(),
                  download="complete", gate=None):
         self.pipe = pipe or FakePipe()
         self.modules = set(modules)
         self.fake_torch = FakeTorch(cuda)
-        self.diso_error, self.load_error, self.download_result, self.gate = diso_error, load_error, download, gate
+        self.diso_error, self.load_errors, self.download_result, self.gate = diso_error, list(load_errors), download, gate
         self.downloads, self.loads, self.repos = [], [], []
 
     def installed(self, module):
@@ -121,30 +149,33 @@ class FakeRuntime:
         self.loads.append(weights)
         if self.gate is not None:
             assert self.gate.wait(20), "the test never let the load finish"
-        if self.load_error:
-            error, self.load_error = self.load_error, None  # the next load works
-            raise OSError(error)
+        if self.load_errors:
+            raise OSError(self.load_errors.pop(0))
+        if not (Path(weights) / WEIGHTS).is_file():
+            # What diffusers says of a folder that has the marker and not the weights.
+            raise OSError(f"Error no file named {WEIGHTS.name} found in directory {Path(weights) / WEIGHTS.parent}.")
         return self.pipe
 
     def download(self, weights):
         self.downloads.append(weights)
+        folder = Path(weights)
         if self.download_result == "fails":
             raise ConnectionError("no route to huggingface.co")
-        Path(weights).mkdir(parents=True, exist_ok=True)
-        if self.download_result == "complete":
-            (Path(weights) / "model_index.json").write_text("{}")
+        if self.download_result == "offline":
+            if not folder.is_dir() or not any(folder.iterdir()):
+                raise FileNotFoundError("Cannot find an appropriate cached snapshot folder")
+            return  # "Returning existing local_dir ... as remote repo cannot be accessed"
+        if self.download_result == "stops":
+            lay_weights(folder, "partial")
+            raise ConnectionError("Connection broken: IncompleteRead")
+        lay_weights(folder, "complete")
 
 
 def station(tmp_path, weights="complete", **overrides):
-    """Settings for a Station with a TripoSG checkout; ``weights`` is "complete", "partial" or "absent"."""
+    """Settings for a Station with a TripoSG checkout; ``weights`` is a state of `lay_weights`."""
     repo = tmp_path / "TripoSG"
     (repo / "triposg").mkdir(parents=True)
-    folder = repo / "pretrained_weights" / "TripoSG"
-    if weights != "absent":
-        folder.mkdir(parents=True)
-        (folder / "vae").mkdir()  # what a download that stopped half-way leaves
-    if weights == "complete":
-        (folder / "model_index.json").write_text("{}")
+    lay_weights(repo / "pretrained_weights" / "TripoSG", weights)
     return make_settings(tmp_path / "data", generator="triposg", triposg_repo=str(repo), **overrides)
 
 
@@ -244,6 +275,7 @@ def test_complete_weights_are_loaded_without_a_download(tmp_path, matting):
     settings = station(tmp_path)
     runtime = FakeRuntime()
     generator = TripoSGGenerator(settings, runtime)
+    assert generator.weights_gap() == ""
     generator.warm_up()
     weights = str(Path(settings.triposg_repo) / "pretrained_weights" / "TripoSG")
     assert runtime.downloads == [] and runtime.loads == [weights]
@@ -254,17 +286,46 @@ def test_complete_weights_are_loaded_without_a_download(tmp_path, matting):
     assert runtime.loads == [weights]
 
 
-@pytest.mark.parametrize("weights", ["partial", "absent"])
-def test_a_folder_without_model_index_is_incomplete_and_downloaded_again(tmp_path, matting, weights):
-    settings = station(tmp_path, weights=weights)
+def weights_folder(settings) -> str:
+    return str(Path(settings.triposg_repo) / "pretrained_weights" / "TripoSG")
+
+
+def test_a_folder_that_shows_its_gap_is_downloaded_before_the_load(tmp_path, matting):
+    # No folder at all: the marker is missing.
+    settings = station(tmp_path / "absent", weights="absent")
     runtime = FakeRuntime()
     generator = TripoSGGenerator(settings, runtime)
     ready, note = generator.availability()
-    assert ready is False and "model_index.json" in note and "downloaded first" in note
+    assert ready is False and "no model_index.json in" in note and "downloaded first" in note
     generator.warm_up()
-    folder = str(Path(settings.triposg_repo) / "pretrained_weights" / "TripoSG")
-    assert runtime.downloads == [folder] and runtime.loads == [folder]
+    assert runtime.downloads == [weights_folder(settings)] and runtime.loads == [weights_folder(settings)]
+    assert generator.availability() == (True, "") and generator.weights_gap() == ""
+
+    # A download that stopped with the weights half-way: the marker is there, and so is the unfinished file.
+    settings = station(tmp_path / "partial", weights="partial")
+    runtime = FakeRuntime()
+    generator = TripoSGGenerator(settings, runtime)
+    ready, note = generator.availability()
+    assert ready is False and "stopped before it was whole" in note and "downloaded first" in note
+    generator.warm_up()
+    assert runtime.downloads == [weights_folder(settings)] and runtime.loads == [weights_folder(settings)]
     assert generator.availability() == (True, "")
+
+
+def test_a_marker_without_the_weights_is_fetched_when_the_load_fails(tmp_path, matting):
+    """A download that stopped before a weight file was begun leaves the marker and nothing that shows a gap.
+
+    The load then fails; the adapter fetches what is missing once and loads again, instead of failing every job.
+    """
+    settings = station(tmp_path, weights="marker")
+    runtime = FakeRuntime()
+    generator = TripoSGGenerator(settings, runtime)
+    assert generator.weights_gap() == "" and generator.availability() == (False, "the model is not loaded yet")
+    generator.warm_up()
+    folder = weights_folder(settings)
+    assert runtime.loads == [folder, folder] and runtime.downloads == [folder]
+    assert generator.availability() == (True, "")
+    assert generator.generate(request()).decoder == "flash" and runtime.downloads == [folder]
 
 
 def test_weights_setting_and_full_precision(tmp_path, matting):
@@ -276,28 +337,61 @@ def test_weights_setting_and_full_precision(tmp_path, matting):
     assert runtime.pipe.moved == ("cuda", "float32")
 
 
-def test_a_download_that_fails_or_stays_incomplete(tmp_path, matting):
-    generator = TripoSGGenerator(station(tmp_path, weights="partial"), FakeRuntime(download="fails"))
+def test_a_download_that_fails_stops_or_has_no_network(tmp_path, matting):
+    # The hub cannot be reached and the folder shows its gap: no load is tried.
+    runtime = FakeRuntime(download="fails")
+    generator = TripoSGGenerator(station(tmp_path / "a", weights="partial"), runtime)
     with pytest.raises(GeneratorUnavailable, match="the weights could not be downloaded"):
         generator.warm_up()
-    assert "no route to huggingface.co" in generator.availability()[1]
+    assert "no route to huggingface.co" in generator.availability()[1] and runtime.loads == []
 
-    runtime = FakeRuntime(download="partial")
-    generator = TripoSGGenerator(station(tmp_path / "second", weights="partial"), runtime)
-    with pytest.raises(GeneratorUnavailable, match="the download left no model_index.json"):
+    # The download breaks off again: the same.
+    runtime = FakeRuntime(download="stops")
+    generator = TripoSGGenerator(station(tmp_path / "b", weights="absent"), runtime)
+    with pytest.raises(GeneratorUnavailable, match="the weights could not be downloaded.*Connection broken"):
+        generator.warm_up()
+    assert runtime.loads == [] and "stopped before it was whole" in generator.weights_gap()
+
+    # No network: the library hands the folder back as it is, and the adapter says it is still not whole.
+    runtime = FakeRuntime(download="offline")
+    generator = TripoSGGenerator(station(tmp_path / "c", weights="partial"), runtime)
+    with pytest.raises(GeneratorUnavailable, match="still not complete after the download"):
         generator.warm_up()
     assert runtime.loads == []
 
+    # No network and a marker without the weights: both loads fail, and the reason is the load's own.
+    settings = station(tmp_path / "d", weights="marker")
+    runtime = FakeRuntime(download="offline")
+    generator = TripoSGGenerator(settings, runtime)
+    with pytest.raises(GeneratorUnavailable, match="could not be loaded from .*no file named diffusion_pytorch_model"):
+        generator.warm_up()
+    assert len(runtime.loads) == 2 and len(runtime.downloads) == 1
+    # The network comes back: the next job's load fetches the rest by itself.
+    runtime.download_result = "complete"
+    assert generator.generate(request()).decoder == "flash" and generator.availability() == (True, "")
+    assert len(runtime.downloads) == 2
+
+    # The load fails and the hub cannot be reached: both reasons are given.
+    runtime = FakeRuntime(download="fails")
+    generator = TripoSGGenerator(station(tmp_path / "e", weights="marker"), runtime)
+    with pytest.raises(GeneratorUnavailable) as raised:
+        generator.warm_up()
+    assert "no file named diffusion_pytorch_model" in str(raised.value)
+    assert "the weights could not be downloaded" in str(raised.value)
+
 
 def test_a_failed_load_is_reported_and_tried_again_by_the_next_job(tmp_path, matting):
-    runtime = FakeRuntime(load_error="CUDA out of memory")
-    generator = TripoSGGenerator(station(tmp_path), runtime)
+    # A reason that is not the weights: the folder is whole, and fetching changes nothing.
+    runtime = FakeRuntime(load_errors=["CUDA out of memory", "CUDA out of memory"])
+    settings = station(tmp_path)
+    generator = TripoSGGenerator(settings, runtime)
     with pytest.raises(GeneratorUnavailable, match="the model could not be loaded"):
         generator.warm_up()
     ready, note = generator.availability()
     assert ready is False and "CUDA out of memory" in note
+    assert len(runtime.loads) == 2 and runtime.downloads == [weights_folder(settings)]
     assert generator.generate(request()).decoder == "flash"
-    assert generator.availability() == (True, "") and len(runtime.loads) == 2
+    assert generator.availability() == (True, "") and len(runtime.loads) == 3
 
 
 def test_availability_answers_while_the_model_loads(tmp_path, matting):
@@ -341,6 +435,15 @@ def test_the_default_call_is_upstreams_own(tmp_path, matting):
     assert call["num_inference_steps"] == 30 and call["guidance_scale"] == 6.5
     assert call["generator"].seed == 7 and call["generator"].device == "cuda"
     assert runtime.fake_torch.emptied == 1
+
+
+def test_an_inside_out_generator_has_its_faces_turned_round(tmp_path, matting):
+    expected = unit_mesh()[1]
+    as_made = loaded(tmp_path / "a", FakePipe())[0].generate(request())
+    assert np.array_equal(as_made.faces, expected)
+    turned = loaded(tmp_path / "b", FakePipe(), triposg_inside_out=True)[0].generate(request())
+    assert np.array_equal(turned.faces, expected[:, ::-1]) and np.array_equal(turned.vertices, as_made.vertices)
+    assert turned.faces.flags["C_CONTIGUOUS"] and turned.faces.dtype == np.int64
 
 
 def test_a_matted_crop_is_put_on_white(tmp_path, matting):
@@ -524,6 +627,33 @@ def test_views_that_cannot_be_matted_are_passed_over_and_are_no_failed_generatio
         # Two views gave no picture; the third was generated, and it is the only generation.
         assert status["state"] == "ready" and status["attempts"] == 1 and len(runtime.pipe.calls) == 1
         assert [e["view"] for e in app.state.forge.job(status["jobId"]).attemptLog] == [2]
+
+
+def test_a_matte_of_specks_is_a_view_that_cannot_be_used_not_a_failed_generation(tmp_path, matting):
+    runtime = FakeRuntime()
+    app, _ = served(tmp_path, runtime)
+    with TestClient(app) as client:
+        wait_until(lambda: client.get("/health").json()["generatorReady"])
+        model = room_model("dots", [(0.6, 0.6, 0.6)])
+        client.post("/rooms", json=model)
+        meta = meta_for(model["objects"][0], 15000)
+        meta["views"] = meta["views"] * 3
+        photos = [jpeg(seed=1), jpeg(seed=2), jpeg(seed=3)]
+
+        # The first two photos give a matte of dots: they are passed over, and the third is generated.
+        matting.specks_on = {matting.calls + 1, matting.calls + 2}
+        status = wait_for(client, post_object(client, "dots", meta, photos).json()["jobId"])
+        assert status["state"] == "ready" and status["attempts"] == 1 and len(runtime.pipe.calls) == 1
+        assert [e["view"] for e in app.state.forge.job(status["jobId"]).attemptLog] == [2]
+
+        # All three: no generation was made, and the job says why in the words of the matte.
+        matting.specks_on = {matting.calls + k for k in (1, 2, 3)}
+        photos = [jpeg(seed=4), jpeg(seed=5), jpeg(seed=6)]
+        status = wait_for(client, post_object(client, "dots", meta, photos).json()["jobId"])
+        job = app.state.forge.job(status["jobId"])
+        assert status["state"] == "failed" and status["error"].count("the matte holds only specks") == 3
+        assert "index 0 is out of bounds" not in status["error"]
+        assert job.attempts == 0 and job.attemptLog == [] and len(runtime.pipe.calls) == 1
 
 
 def test_an_empty_matte_is_not_sent(tmp_path, matting):

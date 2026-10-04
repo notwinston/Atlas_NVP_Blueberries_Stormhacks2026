@@ -5,9 +5,10 @@
 
 It posts a room of one object and one photo, follows the job, saves the answer and the GLB,
 runs the asset validator on it, and reads the generator's frame from the mesh: which axis is
-up, and where the back of the chair is. The reading is what `FORGE_TRIPOSG_UP` and
-`FORGE_TRIPOSG_FRONT` are set from, so the photo must be of a chair, clearly taller than it is
-wide, seen from the front and from one side at once, at about 45 degrees.
+up, where the back of the chair is, and whether the faces are wound outwards. The reading is
+what `FORGE_TRIPOSG_UP`, `FORGE_TRIPOSG_FRONT` and `FORGE_TRIPOSG_INSIDE_OUT` are set from, so
+the photo must be of a chair, clearly taller than it is wide, seen from the front and from one
+side at once, at about 45 degrees.
 
 With FORGE_DEBUG_KEEP=1 on the service, and this script on the same machine, the frame is read
 from the generator's raw output (`data/jobs/<jobId>/raw_view0.npz`), which also exists when
@@ -50,6 +51,8 @@ BACK_REST = 0.6  # upright when the top's footprint is under this share of the b
 OFF_CENTRE = 0.30  # a back rest sits at least this far from the middle, in half-depths
 CANONICAL_WITHIN = 20.0  # degrees between the front and +Z
 VIEW_FROM, VIEW_TO = 25.0, 65.0  # a front this far from +Z is the photo's own 45 degrees
+WOUND = 0.01  # the volume the faces enclose, as a share of the bounding box, beyond which the winding is clear
+OPEN_EDGES = 0.01  # with a larger share of its edges on a hole, a mesh is open and its winding cannot be read
 
 
 # --------------------------------------------------------------------------- the reading
@@ -167,6 +170,36 @@ def find_front(points: np.ndarray, weights: np.ndarray) -> tuple[Optional[float]
                    f"so the front is at {front:+.0f}")
 
 
+def winding(vertices: np.ndarray, faces: np.ndarray) -> tuple[str, float]:
+    """Which way the faces are wound, from the sign of the volume they enclose.
+
+    Faces wound counter-clockwise seen from outside enclose a positive volume;
+    clean-up, the colours and the baked shade all take that on trust. Returns
+    ``("outwards" | "inwards" | "unclear", volume as a share of the bounding box)``;
+    unclear for a mesh that encloses next to nothing (faces wound both ways),
+    and for one that is not closed: an open sheet encloses no volume, and the
+    number the sum gives for it means nothing.
+    """
+    v = np.asarray(vertices, dtype=np.float64)
+    f = np.asarray(faces, dtype=np.int64).reshape(-1, 3)
+    extent = v.max(axis=0) - v.min(axis=0)
+    box = float(np.prod(extent))
+    if len(f) == 0 or box <= 0.0:
+        return "unclear", 0.0
+    v = v - v.mean(axis=0)
+    volume = float(np.einsum("ij,ij->i", v[f[:, 0]], np.cross(v[f[:, 1]], v[f[:, 2]])).sum()) / 6.0
+    share = volume / box
+    # An edge that only one face uses lies on a hole. A generated surface has none, or next to none.
+    # Vertices are told apart by where they are: a GLB repeats a vertex wherever the surface creases.
+    _, place = np.unique(np.round(v / max(float(extent.max()), 1e-12), 6), axis=0, return_inverse=True)
+    a = place.reshape(-1)[f]
+    b = a[:, [1, 2, 0]]
+    _, uses = np.unique(np.minimum(a, b) * (int(a.max()) + 1) + np.maximum(a, b), return_counts=True)
+    if (uses == 1).mean() > OPEN_EDGES:
+        return "unclear", share
+    return ("outwards" if share > WOUND else "inwards" if share < -WOUND else "unclear"), share
+
+
 def read_frame(vertices: np.ndarray, faces: np.ndarray, up_axis: Optional[str] = None, yaw_degrees: int = 0) -> dict:
     """Read the generator's frame from a chair mesh.
 
@@ -176,6 +209,16 @@ def read_frame(vertices: np.ndarray, faces: np.ndarray, up_axis: Optional[str] =
     """
     points, weights = _samples(vertices, faces)
     reading: dict = {"source": "raw" if up_axis is None else "glb", "notes": []}
+    wound, share = winding(vertices, faces)
+    reading["winding"] = wound
+    reading["notes"].append({
+        "outwards": f"winding: the faces are wound outwards (they enclose {share:+.2f} of the bounding box)",
+        "inwards": f"winding: the faces are wound INWARDS (they enclose {share:+.2f} of the bounding box): the "
+                   "mesh is inside out. It would get one colour and its shade the wrong way round. "
+                   "Set FORGE_TRIPOSG_INSIDE_OUT=1",
+        "unclear": "winding: it cannot be read from this mesh (it is not closed, or its faces are wound both "
+                   f"ways; the sum is {share:+.3f} of the bounding box). Look at the mesh with back faces hidden",
+    }[wound])
     if up_axis is None:
         axis, sign, why = find_up(points)
         reading["notes"].append(f"up: {why}")
@@ -226,6 +269,8 @@ def print_reading(reading: dict) -> None:
     if reading.get("up"):
         print(f"\n  FORGE_TRIPOSG_UP={reading['up']}")
         print(f"  FORGE_TRIPOSG_FRONT={reading['front']}")
+    if reading.get("winding") == "inwards":
+        print("  FORGE_TRIPOSG_INSIDE_OUT=1")
 
 
 def analyse_file(path: Path, up_axis: Optional[str] = None, yaw_degrees: int = 0) -> dict:

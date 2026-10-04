@@ -3,7 +3,7 @@ import pytest
 from forge.config import Settings
 
 NEW = ("FORGE_CLEANING_TIMEOUT_S", "FORGE_POOR_FIT", "FORGE_TRIPOSG_UP", "FORGE_TRIPOSG_FRONT",
-       "FORGE_TRIPOSG_FALLBACK_DECODER")
+       "FORGE_TRIPOSG_FALLBACK_DECODER", "FORGE_TRIPOSG_INSIDE_OUT")
 
 
 @pytest.fixture
@@ -19,7 +19,7 @@ def test_defaults(env):
         assert settings.matting_timeout_s == 10.0 and settings.generate_timeout_s == 90.0
         assert settings.poor_fit == 0.20
         assert settings.triposg_up == "Y" and settings.triposg_front == "unknown"
-        assert settings.triposg_fallback_decoder is True
+        assert settings.triposg_fallback_decoder is True and settings.triposg_inside_out is False
 
 
 def test_each_setting_has_its_variable(env):
@@ -28,7 +28,9 @@ def test_each_setting_has_its_variable(env):
     env.setenv("FORGE_TRIPOSG_UP", "z")  # case does not matter
     env.setenv("FORGE_TRIPOSG_FRONT", "Canonical")
     env.setenv("FORGE_TRIPOSG_FALLBACK_DECODER", "0")
+    env.setenv("FORGE_TRIPOSG_INSIDE_OUT", "1")
     settings = Settings.from_env()
+    assert settings.triposg_inside_out is True
     assert settings.cleaning_timeout_s == 45.0 and settings.poor_fit == 0.3
     assert settings.triposg_up == "Z" and settings.triposg_front == "canonical"
     assert settings.triposg_fallback_decoder is False

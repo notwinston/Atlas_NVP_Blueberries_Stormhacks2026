@@ -14,7 +14,7 @@ machine and the first object does not pay for the load.
 What it expects on the Station:
   FORGE_TRIPOSG_REPO     the cloned TripoSG repository (holds `triposg/` and `scripts/`)
   FORGE_TRIPOSG_WEIGHTS  the VAST-AI/TripoSG weights folder; `<repo>/pretrained_weights/TripoSG` when empty.
-                         Downloaded when the service starts if it does not hold `model_index.json`
+                         Downloaded when the service starts if it is not complete (see `weights_gap`)
   diso                   TripoSG's decoder, built from source against the installed PyTorch
   rembg                  the matting model: TripoSG is never given a picture that is not matted
 """
@@ -37,9 +37,14 @@ from .base import GenerationRequest, GeneratorError, GeneratorUnavailable, RawMe
 log = logging.getLogger("forge.triposg")
 
 _HF_REPO = "VAST-AI/TripoSG"
-# A weights folder is complete when it holds this file: a download that stopped half-way
-# leaves the folder and not the file, and loading from it fails.
+# What a weights folder must hold to be loaded at all, and where the download keeps a file
+# until it is whole. `snapshot_download` (huggingface_hub 0.30.2) fetches eight files at a time
+# into `<folder>/.cache/huggingface/download/<name>.<etag>.incomplete` and moves each into
+# place when it is whole. The marker is a few hundred bytes and arrives within seconds; the
+# weights follow minutes later. So a download that stopped leaves the marker and no weights:
+# the marker alone does not make a folder complete.
 _WEIGHTS_MARKER = "model_index.json"
+_DOWNLOAD_PARTS = Path(".cache") / "huggingface" / "download"
 
 # TripoSG's two ways from latents to a mesh. "flash" is its default and needs diso; one open
 # report has it fail on Windows with a CUDA error, after which the pipeline crashes on the empty
@@ -121,8 +126,18 @@ class TripoSGGenerator:
             return Path(self._settings.triposg_weights)
         return Path(self._settings.triposg_repo or ".") / "pretrained_weights" / "TripoSG"
 
-    def _weights_complete(self) -> bool:
-        return (self.weights_dir() / _WEIGHTS_MARKER).is_file()
+    def weights_gap(self) -> str:
+        """Why the weights folder cannot be complete, as far as that shows without loading; empty when nothing shows.
+
+        A folder that passes may still lack a file (a download stopped before one
+        of its files was begun): the load finds that, and fetches what is missing.
+        """
+        folder = self.weights_dir()
+        if not (folder / _WEIGHTS_MARKER).is_file():
+            return f"no {_WEIGHTS_MARKER} in {folder}"
+        if any((folder / _DOWNLOAD_PARTS).rglob("*.incomplete")):
+            return f"a download into {folder} stopped before it was whole"
+        return ""
 
     def _missing(self) -> list[str]:
         """Everything that is not installed, found without importing any of it."""
@@ -149,9 +164,9 @@ class TripoSGGenerator:
             return False, self._loading
         if self._load_error:
             return False, self._load_error
-        if not self._weights_complete():
-            return False, (f"the model is not loaded yet, and the weights are not complete (no {_WEIGHTS_MARKER} "
-                           f"in {self.weights_dir()}): they are downloaded first")
+        gap = self.weights_gap()
+        if gap:
+            return False, f"the model is not loaded yet, and the weights are not complete ({gap}): they are downloaded first"
         return False, "the model is not loaded yet"
 
     def gpu(self) -> Optional[str]:
@@ -208,26 +223,49 @@ class TripoSGGenerator:
             raise _NotReady(f"the TripoSG package cannot be imported from {repo}: {exc}") from exc
 
         weights = self.weights_dir()
-        if not self._weights_complete():
-            # No folder, or a folder a stopped download left behind: fetch what is missing.
-            self._loading = f"the weights are being downloaded to {weights}"
-            log.info("downloading the TripoSG weights to %s", weights)
-            try:
-                runtime.download(str(weights))
-            except Exception as exc:
-                raise _NotReady(f"the weights could not be downloaded to {weights}: {exc}") from exc
-            if not self._weights_complete():
-                raise _NotReady(f"the download left no {_WEIGHTS_MARKER} in {weights}")
-
-        self._loading = "the model is being loaded"
         dtype = torch.float16 if settings.triposg_half_precision else torch.float32
+
+        def read():
+            self._loading = "the model is being loaded"
+            return pipeline_class.from_pretrained(str(weights)).to("cuda", dtype)
+
+        fetched = bool(self.weights_gap())
+        if fetched:
+            # No folder, no marker, or a file a stopped download left half-way: fetch what is missing.
+            self._fetch(weights)
         try:
-            pipe = pipeline_class.from_pretrained(str(weights)).to("cuda", dtype)
+            pipe = read()
         except Exception as exc:
-            raise _NotReady(f"the model could not be loaded from {weights}: {exc}") from exc
+            if fetched:
+                raise _NotReady(f"the model could not be loaded from {weights}: {exc}") from exc
+            # The folder looked whole and did not load. A download that stopped leaves the marker
+            # and not the weights, so fetch what is missing (a whole folder costs a few requests)
+            # and read once more.
+            log.warning("TripoSG did not load from %s (%s); fetching what is missing and loading once more",
+                        weights, exc)
+            try:
+                self._fetch(weights)
+                pipe = read()
+            except _NotReady as fetch:
+                raise _NotReady(f"the model could not be loaded from {weights}: {exc}; {fetch}") from exc
+            except Exception as again:
+                raise _NotReady(f"the model could not be loaded from {weights}: {again}") from again
         self._torch = torch
         log.info("TripoSG loaded on %s", self._gpu_name)
         return pipe
+
+    def _fetch(self, weights: Path) -> None:
+        """Download what the weights folder lacks; `snapshot_download` resumes the files it left half-way."""
+        self._loading = f"the weights are being downloaded to {weights}"
+        log.info("downloading the TripoSG weights to %s", weights)
+        try:
+            self._runtime.download(str(weights))
+        except Exception as exc:
+            raise _NotReady(f"the weights could not be downloaded to {weights}: {exc}") from exc
+        gap = self.weights_gap()
+        if gap:
+            # Without a network the library hands back the folder as it is.
+            raise _NotReady(f"the weights are still not complete after the download ({gap})")
 
     # -- one object --------------------------------------------------------------------
 
@@ -255,6 +293,9 @@ class TripoSGGenerator:
         faces = np.ascontiguousarray(sample[1]).astype(np.int64)
         if vertices.ndim != 2 or vertices.shape[1] != 3 or faces.ndim != 2 or faces.shape[1] != 3 or not len(faces):
             raise GeneratorError("it returned no mesh")
+        if self._settings.triposg_inside_out:
+            # Measured on the Station: its faces are wound clockwise seen from outside. Turn them round.
+            faces = np.ascontiguousarray(faces[:, ::-1])
         return vertices, faces
 
     def generate(self, request: GenerationRequest) -> RawMesh:

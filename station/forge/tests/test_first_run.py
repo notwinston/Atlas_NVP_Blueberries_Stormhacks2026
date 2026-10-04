@@ -129,6 +129,33 @@ def glb_mesh(glb: bytes):
             file.accessor(primitive["indices"]).reshape(-1, 3).astype(np.int64))
 
 
+def test_the_winding_is_read_from_the_sign_of_the_volume():
+    v, f = chair(0)
+    assert first_run.winding(v, f)[0] == "outwards" and first_run.winding(v * 7.0 + 30.0, f)[0] == "outwards"
+    label, share = first_run.winding(v, f[:, ::-1])
+    assert label == "inwards" and share < -0.1
+    # Turning a mesh does not turn its faces inside out; mirroring it does.
+    assert first_run.winding(turn(v, 90) @ dict(_UP)["Z"], f)[0] == "outwards"
+    assert first_run.winding(v * [-1.0, 1.0, 1.0], f)[0] == "inwards"
+    # An open sheet encloses nothing, whatever the sum says; nor does a mesh wound both ways.
+    sheet = np.array([[0.0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0.2, 1]])
+    assert first_run.winding(sheet, np.array([[0, 1, 2], [0, 2, 3]]))[0] == "unclear"
+    both = np.vstack([f[: len(f) // 2], f[len(f) // 2:, ::-1]])
+    assert first_run.winding(v, both)[0] == "unclear"
+    assert first_run.winding(v, f[:0]) == ("unclear", 0.0)
+
+    # The reading says it, and names the setting when the mesh is inside out.
+    right = first_run.read_frame(v, f)
+    assert right["winding"] == "outwards" and "wound outwards" in " ".join(right["notes"])
+    wrong = first_run.read_frame(v, f[:, ::-1])
+    assert wrong["winding"] == "inwards" and (wrong["up"], wrong["front"]) == ("Y", "canonical")
+    assert "FORGE_TRIPOSG_INSIDE_OUT=1" in " ".join(wrong["notes"])
+    # Clean-up keeps the winding it is given, so a GLB reads the same way.
+    for faces, expected in ((f, "outwards"), (f[:, ::-1], "inwards")):
+        glb = clean(v, faces, DIMS, 5000).glb
+        assert first_run.read_frame(*glb_mesh(glb), "Y", 0)["winding"] == expected
+
+
 def test_photo_and_form():
     small = jpeg()
     path_bytes = io.BytesIO(small).getvalue()
