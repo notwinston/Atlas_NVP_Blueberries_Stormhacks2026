@@ -10,6 +10,10 @@ namespace Atlas.Safety
     /// A plain class: it reads no clock, no link, no parameter and no file, and has no off switch. It works
     /// with no depth image (the static map alone) and with no room (live depth alone, in the head frame).
     /// Tick allocates nothing, except on the one frame a room becomes active again.
+    /// <para>A sensor frame may carry a depth mask: where the walker's own hands are in its depth image
+    /// (documents/ATLAS_Hands_Design.md section 7.1). Bump Guard does not know or ask who made it, and trusts
+    /// none of it: a mask built for another image is ignored here, and the depth kernel holds the rest to the
+    /// limits in <see cref="BumpConstants"/>. A frame with no mask is handled exactly as before masks existed.</para>
     /// </summary>
     public sealed unsafe class BumpGuard : IBumpGuard, IClearanceQuery, IDisposable
     {
@@ -74,6 +78,22 @@ namespace Atlas.Safety
             return _disposed ? float.PositiveInfinity : _core.ClearAt(p, _time);
         }
 
+        /// <summary>
+        /// A depth mask as the depth kernel takes it, for the depth image numbered
+        /// <paramref name="depthSequence"/>: plain numbers, at most <see cref="BumpConstants.MaskMaxRegions"/>
+        /// regions, and empty unless the mask was built for exactly that image (its DepthSequence). A mask for
+        /// an older or a later image would cover the wrong pixels, so it is dropped whole.
+        /// </summary>
+        public static DepthKernelMask KernelMask(in DepthMask mask, int depthSequence)
+        {
+            DepthKernelMask kernel = default;
+            if (mask.Count <= 0 || mask.DepthSequence != depthSequence) return kernel;
+            kernel.Count = mask.Count < BumpConstants.MaskMaxRegions ? mask.Count : BumpConstants.MaskMaxRegions;
+            kernel.Region0 = KernelRegion(mask.Region0);
+            if (kernel.Count > 1) kernel.Region1 = KernelRegion(mask.Region1);
+            return kernel;
+        }
+
         /// <summary>The first call of the frame. Never awaits.</summary>
         public void Tick(in SensorFrame sensors)
         {
@@ -136,21 +156,39 @@ namespace Atlas.Safety
 
             var intrinsics = new DepthIntrinsics(sensors.Depth.Fx, sensors.Depth.Fy, sensors.Depth.Cx, sensors.Depth.Cy);
             // The frame's own time, not the image's: the core compares it with the time of Step.
+            DepthKernelInput input = _core.MakeDepthInput(width, height, intrinsics, sensors.Depth.Position,
+                sensors.Depth.Rotation, sensors.Time, trackingNormal, sensors.AnchorTracked);
+            // The walker's hands, if the frame says where they are in this very image.
+            input.Mask = KernelMask(sensors.Mask, sensors.Depth.Sequence);
             if (_useBurstJob && count > InlineMaxPixels)
             {
                 if (_runner == null) _runner = new BumpDepthRunner();
-                DepthKernelInput input = _core.MakeDepthInput(width, height, intrinsics, sensors.Depth.Position,
-                    sensors.Depth.Rotation, sensors.Time, trackingNormal, sensors.AnchorTracked);
                 _runner.Run(_core, pixels, input);
             }
             else
             {
                 fixed (float* p = pixels)
                 {
-                    _core.ProcessDepth(p, width, height, intrinsics, sensors.Depth.Position, sensors.Depth.Rotation,
-                        sensors.Time, trackingNormal, sensors.AnchorTracked);
+                    _core.ProcessDepth(p, input);
                 }
             }
+        }
+
+        static DepthKernelMaskRegion KernelRegion(in DepthMaskRegion region)
+        {
+            return new DepthKernelMaskRegion
+            {
+                MinU = region.MinU,
+                MinV = region.MinV,
+                MaxU = region.MaxU,
+                MaxV = region.MaxV,
+                ArmU0 = region.ArmU0,
+                ArmV0 = region.ArmV0,
+                ArmU1 = region.ArmU1,
+                ArmV1 = region.ArmV1,
+                ArmHalfWidth = region.ArmHalfWidth,
+                MaxDepth = region.MaxDepth
+            };
         }
     }
 }

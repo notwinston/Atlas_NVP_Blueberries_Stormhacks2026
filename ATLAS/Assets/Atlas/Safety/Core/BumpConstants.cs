@@ -103,6 +103,35 @@ namespace Atlas.Safety
         /// <summary>Sector ranges older than this are not used by the head-frame fallback, seconds (four images at 15 Hz).</summary>
         public const double DepthResultMaxAgeSeconds = 0.25;
 
+        // ---- Depth mask: the walker's own hands (documents/ATLAS_Hands_Design.md section 7.1 and its review) ----
+        // Bump Guard holds a mask to every one of these itself, whatever built the mask.
+
+        /// <summary>Regions of a depth mask that are read: one for each hand. A mask that claims more is cut to this.</summary>
+        public const int MaskMaxRegions = 2;
+        /// <summary>No sample deeper than this is ever masked, metres, whatever gate a region asks for (7.1: "never beyond 0.80 m").</summary>
+        public const float MaskMaxDepth = 0.80f;
+        /// <summary>
+        /// A mask that would take out more than this share of an image's valid samples (those with a return) is
+        /// ignored for that image. Counted over the samples it would really take, inside a region and inside its
+        /// gate, not over the regions' area. Measured in BumpGuard_Mask_Limits: two open hands with their
+        /// forearms take 12 to 18 % at arm's length (0.45 to 0.60 m) and 31 % at 0.32 m, the nearest LiDAR sees
+        /// them, where every sample has a return, and up to 31 % at arm's length where a third of the picture is
+        /// beyond LiDAR's range; the same hands with a wall inside their gate, which would hide most of the view,
+        /// take 44 to 76 %.
+        /// </summary>
+        public const float MaskMaxShare = 0.35f;
+        /// <summary>
+        /// A dynamic cell under a masked sample is forgotten only if it was first stamped less than this long ago,
+        /// seconds: long enough for the cells a hand leaves before it is detected, too short for an obstacle that
+        /// has been in view. Counted from the first stamp, never from the last hit, which every image renews.
+        /// </summary>
+        public const double MaskYoungSeconds = 1.0;
+        /// <summary>
+        /// ... and only if its stored height is within this of the masked sample's own height, metres. A cell
+        /// whose top is lower or higher than that belongs to something else standing in the same 5 cm of floor.
+        /// </summary>
+        public const float MaskHeightTolerance = 0.15f;
+
         // ---- Rescan check (4.10, "Static map") ----
 
         /// <summary>Median disagreement of live depth and static map that advises a rescan, metres (4.10: "exceeds 0.15 m").</summary>
