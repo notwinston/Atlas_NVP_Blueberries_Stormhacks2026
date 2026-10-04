@@ -1,0 +1,12 @@
+{
+  "task": "P2-B05",
+  "criterion": "switch at a chamber keeps the address unchanged",
+  "runs": [
+    {"from": "CurvedWalk", "to": "AlignedCells", "when": "InChamber", "routes_ok": 10, "routes": 10},
+    {"from": "CurvedWalk", "to": "AlignedCells", "when": "WhileWalking", "routes_ok": 10, "routes": 10},
+    {"from": "AlignedCells", "to": "CurvedWalk", "when": "InChamber", "routes_ok": 10, "routes": 10},
+    {"from": "AlignedCells", "to": "CurvedWalk", "when": "WhileWalking", "routes_ok": 10, "routes": 10}
+  ],
+  "runs_passing": 40,
+  "runs_total": 40
+}

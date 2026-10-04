@@ -1,0 +1,13 @@
+{
+    "name": "Atlas.World.Lint.Editor",
+    "rootNamespace": "Atlas.World.Lint",
+    "references": [
+        "Atlas.Kernel",
+        "Atlas.World",
+        "Atlas.Rendering",
+        "Unity.Mathematics"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ]
+}

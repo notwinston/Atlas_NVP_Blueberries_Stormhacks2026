@@ -1,0 +1,11 @@
+{
+  "task": "P2-B03",
+  "criterion": "100 routes x 3 rooms: head >= 0.4 m from walls; rotation only while opaque",
+  "rooms": [
+    {"room": "room_3x3", "routes_ok": 100, "min_wall_distance_m": 0.5000, "reaims": 800, "frames": 146400},
+    {"room": "room_3x4_L", "routes_ok": 100, "min_wall_distance_m": 0.5000, "reaims": 800, "frames": 146400},
+    {"room": "room_4x5_table", "routes_ok": 100, "min_wall_distance_m": 0.5000, "reaims": 800, "frames": 79300}
+  ],
+  "routes_passing": 300,
+  "routes_total": 300
+}

@@ -1,0 +1,265 @@
+% ATLAS: what needs your hands now -- the run-book of the jobs that only a person can do (jobs A to E).
+% Written by hand; compile with pdflatex. The look (fonts, colours, grey command blocks, tick boxes, note boxes) is the
+% one of the Station PC guide. Facts are the team lead's, as of 19:50 on 3 October 2026.
+\documentclass[10pt]{article}
+\usepackage[a4paper,top=13mm,bottom=17mm,left=16mm,right=16mm,footskip=9mm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\input{glyphtounicode}\pdfgentounicode=1
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage[varqu,varl]{zi4}
+\usepackage[table]{xcolor}
+\usepackage{array,booktabs}
+\usepackage{enumitem}
+\usepackage{needspace}
+\usepackage{listings}
+
+\pdfinfo{/Title (ATLAS: what needs your hands now)}
+
+% ---------- colours (the palette of the other ATLAS handouts) ----------
+\definecolor{ink}{HTML}{1F2933}
+\definecolor{mute}{HTML}{56616B}
+\definecolor{laneD}{HTML}{E3EDFC}
+\definecolor{accC}{HTML}{9A4A00}
+\definecolor{accD}{HTML}{1B55B0}
+\definecolor{cmdbg}{HTML}{F1F3F5}
+\definecolor{trapbg}{HTML}{FDF3E7}
+\definecolor{laterbg}{HTML}{EEF2F6}
+
+% ---------- footer ----------
+\makeatletter
+\def\ps@atlas{%
+  \def\@oddhead{}\def\@evenhead{}%
+  \def\@oddfoot{\parbox{\textwidth}{\footnotesize\color{mute}ATLAS: what needs your hands now\hfill 3 October 2026\hspace{6mm}Page \thepage}}%
+  \let\@evenfoot\@oddfoot}
+\makeatother
+\pagestyle{atlas}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+\color{ink}
+
+% ---------- commands to type, and what they print ----------
+% Commands are set so that copying them out of the PDF gives exactly what is printed:
+% plain ASCII quotes and hyphens, one command per line, no prompt characters, no wrapped lines.
+\lstdefinestyle{cmd}{basicstyle=\ttfamily\fontsize{8.35}{11.3}\selectfont\color{ink},columns=fullflexible,
+  keepspaces=true,upquote=true,showstringspaces=false,backgroundcolor=\color{cmdbg},frame=none,
+  aboveskip=3.5pt,belowskip=3.5pt,xleftmargin=6pt,framexleftmargin=6pt,breaklines=false}
+\lstdefinestyle{inl}{basicstyle=\ttfamily\fontsize{8.8}{11}\selectfont,columns=fullflexible,keepspaces=true,
+  upquote=true,showstringspaces=false,breaklines=true}
+\lstnewenvironment{cmd}{\lstset{style=cmd}}{}
+\newcommand{\cc}{\lstinline[style=inl]}
+\newcommand{\code}[1]{{\ttfamily\fontsize{8.8}{11}\selectfont #1}}
+\newcommand{\see}{\par\vspace{0.6mm}{\footnotesize\color{mute}You should see:}}
+
+% ---------- jobs and their steps ----------
+\newlength{\cbw}      % width of a tick box and its gap; measured after \begin{document}
+\newcommand{\jobletter}{}
+% \Job{letter}{title}{one line: why}   the blue band of the Station guide's parts, with the letter of the job
+\newcommand{\Job}[3]{%
+  \par\vspace{6mm}\needspace{52mm}\gdef\jobletter{#1}%
+  {\setlength{\fboxsep}{0pt}\colorbox{laneD}{\parbox{\linewidth}{\vspace{2.2mm}\hspace{3mm}%
+    {\fontsize{17}{19}\selectfont\bfseries\color{accD}#1}\hspace{3mm}%
+    {\fontsize{13.5}{16}\selectfont\bfseries\color{ink}#2}\vspace{2.2mm}}}}\par\nopagebreak
+  \vspace{1.8mm}{\small\color{mute}#3\par}\nopagebreak\vspace{1.4mm}}
+% the steps of a job: a tick box, then the job letter and a number (A1, A2, ...)
+\newlist{jsteps}{enumerate}{1}
+\setlist[jsteps]{label=\cb\textbf{\jobletter\arabic*},leftmargin=12.5mm,labelwidth=10.4mm,labelsep=2.1mm,align=left,itemsep=2.8mm,topsep=1.5mm,parsep=0.8mm}
+\newcommand{\act}[1]{\textbf{#1}\enskip}
+% a step keeps its first lines and its first command on one page
+\newcommand{\step}{\needspace{21mm}\item}
+% ticked sub-steps inside one step
+\newlist{ticks}{itemize}{1}
+\setlist[ticks]{label=\cb,leftmargin=\cbw,labelsep=0mm,align=left,itemsep=1.6mm,topsep=1.2mm,parsep=0.6mm}
+
+% ---------- boxes: a trap, and a thing that waits ----------
+\newsavebox{\notebox}
+\newenvironment{trap}[1][If it fails]{\par\vspace{1.4mm}\begin{lrbox}{\notebox}%
+  \begin{minipage}{\dimexpr\linewidth-5mm\relax}\small\raggedright{\bfseries\color{accC}#1}\enskip}
+  {\end{minipage}\end{lrbox}{\setlength{\fboxsep}{2.5mm}\colorbox{trapbg}{\usebox{\notebox}}}\par\vspace{1.4mm}}
+\newenvironment{later}[1][Waits for code]{\par\vspace{1.4mm}\begin{lrbox}{\notebox}%
+  \begin{minipage}{\dimexpr\linewidth-5mm\relax}\small\raggedright{\bfseries\color{accD}#1}\enskip}
+  {\end{minipage}\end{lrbox}{\setlength{\fboxsep}{2.5mm}\colorbox{laterbg}{\usebox{\notebox}}}\par\vspace{1.4mm}}
+
+% ---------- small furniture ----------
+\newcommand{\cb}{\raisebox{-0.25ex}{\setlength{\fboxsep}{0pt}\setlength{\fboxrule}{0.7pt}\fcolorbox{mute}{white}{\rule{0pt}{1.75ex}\rule{1.75ex}{0pt}}}\hspace{2mm}}
+\newcommand{\h}[1]{\par\vspace{4mm}{\fontsize{11.5}{14}\selectfont\bfseries\color{ink}#1}\par\vspace{1.4mm}}
+\newcommand{\m}{\,\textrm{\guilsinglright}\,}
+% one row of the overview: a tick box, then the letter of the job
+\newcommand{\jobrow}[1]{{\normalsize\cb}\textbf{\color{accD}#1}}
+
+\begin{document}
+\raggedright
+\settowidth{\cbw}{\cb}
+
+% =====================================================================
+% PAGE 1: the title, the state of the Mac, and the five jobs
+% =====================================================================
+{\fontsize{26}{30}\selectfont\bfseries ATLAS: what needs your hands now\par}
+\vspace{2.5mm}
+{\large\color{mute}What only a person can do right now, step by step.\\
+Everything else is being written by the agent sessions.\par}
+\vspace{2.5mm}
+{\small\color{mute}State at 19:50 on 3 October 2026. The Station PC is set up. On the Mac: Xcode 26.1 is selected; no Apple account
+is signed in to Xcode; there is no Apple~Development~certificate; no phone has shown as ready yet.\par}
+
+\h{The five jobs}
+{\small
+\renewcommand{\arraystretch}{1.45}
+\begin{tabular}{@{}l@{\hspace{3mm}}>{\bfseries\raggedright\arraybackslash}p{50mm}@{\hspace{3mm}}>{\raggedright\arraybackslash}p{108mm}@{}}
+\toprule
+ & Job & What it is, and what it blocks\\
+\midrule
+\jobrow{A} & Sign in to Xcode & Blocks every phone build.\\
+\jobrow{B} & Prepare the phones & Blocks the first build and all testing on a phone.\\
+\jobrow{C} & First build to the phones & The first proof that signing and the phones work.\\
+\jobrow{D} & Decisions only you can make & Four decisions. None is urgent this hour.\\
+\jobrow{E} & The agent sessions & Neither branch has reached GitHub yet.\\
+\bottomrule
+\end{tabular}}
+
+\begin{later}[How to read it.]
+Tick a box when a step is done. Grey blocks are copied out of this PDF and used exactly as printed. Unless a step says
+otherwise, they go into Terminal on the Mac. A small line that says \emph{You should see:} tells you what a good result
+looks like.
+\end{later}
+
+% =====================================================================
+\Job{A}{Sign in to Xcode}{Blocks every phone build.}
+{\small\color{mute}Already done: the command-line tools point at Xcode, and \code{xcodebuild -version} prints \code{Xcode 26.1}.\par}
+\vspace{0.5mm}
+\begin{jsteps}
+\step \act{Open Xcode\m Settings (Cmd + ,)\m Accounts.} Click +\m Apple Account and sign in. A free account gives a
+      Personal Team.
+      \see\ the account in the list, with ``(Personal Team)'' after the name.
+
+\step \act{Select the team\m Manage Certificates...\m +\m Apple Development.}
+      \see\ a new line ``Apple Development'' in the list.
+
+\step \act{Read the Team ID and write it down:}
+\begin{cmd}
+security find-certificate -a -c "Apple Development" -p | openssl x509 -noout -subject
+\end{cmd}
+      \see\ a line that contains \code{OU=} followed by ten characters. Those ten characters are the Team ID.
+\end{jsteps}
+\begin{trap}[Free Personal Team rules.]
+One signing owner and one bundle id (\code{com.winstonthov.atlas}) for the whole team. A build signed by another account
+cannot install over the existing one. An installed build stops launching after 7 days; reinstalling renews it. Ten new
+app ids per 7 days. At most three registered devices.
+\end{trap}
+
+% =====================================================================
+\Job{B}{Prepare the phones}{The iPhone 15 Pro Max first, then the iPhone 14 Pro Max. Do every step for each phone.}
+\begin{jsteps}
+\step \act{Plug the phone into the Mac, unlock it, tap Trust.}
+
+\step \act{In Xcode: Window\m Devices and Simulators.} Select the phone in the list.
+
+\step \act{On the phone: Settings\m Privacy \& Security\m Developer Mode\m on.} The phone restarts; unlock it and confirm.
+
+\step \act{Back in Xcode, wait until it has finished preparing the phone.} Then check:
+\begin{cmd}
+xcrun devicectl list devices
+\end{cmd}
+      \see\ the phone with the state \code{available (paired)}. \code{unavailable} means it is not plugged in.
+      \code{connected (no DDI)} usually means Developer Mode is off or Xcode has not finished preparing it: repeat B2 and B3.
+
+\step \act{Write down the phone's iOS version} (Settings\m General\m About) for \code{docs/versions.md}.
+
+\step \act{Put the phone in the headset:} the rear camera and the LiDAR must not be covered.
+\end{jsteps}
+\begin{later}[Note.]
+The Mac also remembers an iPhone 16e. It has no LiDAR and is not one of the plan's phones.
+\end{later}
+
+% =====================================================================
+\Job{C}{First build to the phones}{Do it once A and B are done and the lanes A and C session reports that the project compiles.}
+\begin{jsteps}
+\step \act{Close the project in the Unity Editor.}
+
+\step \act{In Terminal, from the repository root.} Replace the X's with the Team ID; it is needed on the first build only:
+\begin{cmd}
+ATLAS_TEAM_ID=XXXXXXXXXX tools/build_ios.sh
+\end{cmd}
+      \see\ the app installed on every connected phone. Logs are in \code{ATLAS/Build/}.
+
+\step \act{If the script cannot install:} open \code{ATLAS/Build/iOS/Unity-iPhone.xcodeproj} in Xcode and press Run.
+
+\step \act{First launch on each phone,} with a free account: Settings\m General\m VPN \& Device Management\m trust the
+      developer profile.
+
+\step \act{Accept the camera prompt} with the phone in your hand, not in the headset.
+\end{jsteps}
+\begin{later}[Note.]
+The build script and the app code are still uncommitted work of that session. A compile error there is its code
+mid-change, not your signing.
+\end{later}
+
+% =====================================================================
+\Job{D}{Decisions only you can make}{Four decisions. None is urgent this hour.}
+\begin{jsteps}
+\step \act{The organisers' rules.} Needed before the contracts freeze (gate G0).
+\begin{ticks}
+\item Read the event's rules and FAQ, and the challenge brief in the repository
+      (\cc!documents/Huawei_Custom_Challenge_1_Beyond_Euclid_2016.docx.pdf!), for what they say about work done before the event.
+\item If they do not say, ask the organisers in writing: may code and assets be prepared before the event; what must be
+      declared as prior work; how long a slot is; one judge or a panel; live demo or video; the space, light and power at
+      the venue; whether our own Wi-Fi router is allowed.
+\item Tell the team the answer and write it under open item 15 in section 14 of the master plan.
+\end{ticks}
+
+\step \act{The headset.} Needed by gate G4.
+\begin{ticks}
+\item Find the model name, on the headset or its box.
+\item Get its three lens numbers: the distortion coefficients, the lens separation and the screen-to-lens distance.
+\item Check the fit with both phones and with someone who wears glasses.
+\item Give the model and the numbers to lane A. The lens correction (task \textbf{P1-A05}) needs them; without them
+      straight lines bow.
+\end{ticks}
+
+\step \act{A hosted image-to-3D service,} for when TripoSG fails on the Station. Needed by gate G6.
+\begin{ticks}
+\item Start from the result of the TripoSG test on the Station (Part 6 of the Station guide,
+      \cc!documents/ATLAS_Station_Setup.pdf!): whether TripoSG runs on the RTX 5070, and how many seconds one object takes.
+\item Choose the service. For each candidate note its cost, the licence of what it returns, and how long it keeps the
+      photos sent to it.
+\item Create the account and the key, and give the key to lane D. Never commit it.
+\item Tell lane D what a walker must be told before the scan: with a hosted service, crops of the object photos leave the
+      Station.
+\end{ticks}
+
+\step \act{The non-commercial licences inside the TripoSG stack.} Needed before the Forge's package list is frozen.
+
+      \textbf{The facts:} TripoSG is MIT. \code{diso} is CC BY-NC 4.0. TripoSG's own background remover (RMBG-1.4) is
+      non-commercial. The default model of \code{rembg} (\code{bria-rmbg}) is non-commercial too.
+\begin{ticks}
+\item Check whether the event or the challenge restricts non-commercial parts.
+\item Decide: accept them for the entry, or have lane D avoid them.
+\item Either way, have lane D enter all four in the licence ledger.
+\end{ticks}
+\end{jsteps}
+
+% =====================================================================
+\Job{E}{The agent sessions}{Nothing else to do by hand.}
+\noindent Two sessions are writing code: lanes A and C on the branch \code{phase1-acd}, and the lung data pipeline on the
+branch \code{p2-lung-data}. At 19:50 neither branch was on GitHub: \code{phase1-acd} had one commit that was not pushed and 173 uncommitted files, and \code{p2-lung-data} had no commit.\par
+\vspace{0.5mm}
+\begin{jsteps}
+\step \act{In each of the two sessions, paste this line:}
+\begin{cmd}
+Commit your work to your branch and push the branch to origin. Do not push to main.
+\end{cmd}
+
+\step \act{Check that both branches reached GitHub.} In Terminal, from the repository root:
+\begin{cmd}
+git fetch origin
+git branch -r
+\end{cmd}
+      \see\ \code{origin/phase1-acd} and \code{origin/p2-lung-data} in the list.
+
+\step \act{When a session reports that it has finished,} read its report and have its branch reviewed before it is merged
+      into main.
+\end{jsteps}
+
+\end{document}

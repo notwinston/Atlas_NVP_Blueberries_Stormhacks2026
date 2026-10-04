@@ -1,0 +1,276 @@
+% ATLAS: starting visual testing -- the seven jobs for the first time anyone opens the Phase 1 code.
+% Written by hand; compile with pdflatex. The look (fonts, colours, grey command blocks, tick boxes, note boxes) is the
+% one of the Station PC guide. Facts are the team lead's, as of 20:25 on 3 October 2026.
+\documentclass[10pt]{article}
+\usepackage[a4paper,top=13mm,bottom=17mm,left=16mm,right=16mm,footskip=9mm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\input{glyphtounicode}\pdfgentounicode=1
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage[varqu,varl]{zi4}
+\usepackage[table]{xcolor}
+\usepackage{array,booktabs}
+\usepackage{enumitem}
+\usepackage{needspace}
+\usepackage{listings}
+
+\pdfinfo{/Title (ATLAS: starting visual testing)}
+
+% ---------- colours (the palette of the other ATLAS handouts) ----------
+\definecolor{ink}{HTML}{1F2933}
+\definecolor{mute}{HTML}{56616B}
+\definecolor{laneD}{HTML}{E3EDFC}
+\definecolor{accC}{HTML}{9A4A00}
+\definecolor{accD}{HTML}{1B55B0}
+\definecolor{cmdbg}{HTML}{F1F3F5}
+\definecolor{trapbg}{HTML}{FDF3E7}
+\definecolor{laterbg}{HTML}{EEF2F6}
+
+% ---------- footer ----------
+\makeatletter
+\def\ps@atlas{%
+  \def\@oddhead{}\def\@evenhead{}%
+  \def\@oddfoot{\parbox{\textwidth}{\footnotesize\color{mute}ATLAS: starting visual testing\hfill 3 October 2026\hspace{6mm}Page \thepage}}%
+  \let\@evenfoot\@oddfoot}
+\makeatother
+\pagestyle{atlas}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+\color{ink}
+
+% ---------- commands to type, and what they print ----------
+% Commands are set so that copying them out of the PDF gives exactly what is printed:
+% plain ASCII quotes and hyphens, one command per line, no prompt characters, no wrapped lines.
+\lstdefinestyle{cmd}{basicstyle=\ttfamily\fontsize{8.35}{11.3}\selectfont\color{ink},columns=fullflexible,
+  keepspaces=true,upquote=true,showstringspaces=false,backgroundcolor=\color{cmdbg},frame=none,
+  aboveskip=3.5pt,belowskip=3.5pt,xleftmargin=6pt,framexleftmargin=6pt,breaklines=false}
+\lstdefinestyle{inl}{basicstyle=\ttfamily\fontsize{8.8}{11}\selectfont,columns=fullflexible,keepspaces=true,
+  upquote=true,showstringspaces=false,breaklines=true}
+\lstnewenvironment{cmd}{\lstset{style=cmd}}{}
+\newcommand{\cc}{\lstinline[style=inl]}
+\newcommand{\code}[1]{{\ttfamily\fontsize{8.8}{11}\selectfont #1}}
+\newcommand{\see}{\par\vspace{0.6mm}{\footnotesize\color{mute}You should see:}}
+
+% ---------- jobs and their steps ----------
+\newlength{\cbw}      % width of a tick box and its gap; measured after \begin{document}
+\newcommand{\jobletter}{}
+% \Job{letter}{title}{one line: why}   the blue band of the Station guide's parts, with the letter of the job
+\newcommand{\Job}[3]{%
+  \par\vspace{6mm}\needspace{52mm}\gdef\jobletter{#1}%
+  {\setlength{\fboxsep}{0pt}\colorbox{laneD}{\parbox{\linewidth}{\vspace{2.2mm}\hspace{3mm}%
+    {\fontsize{17}{19}\selectfont\bfseries\color{accD}#1}\hspace{3mm}%
+    {\fontsize{13.5}{16}\selectfont\bfseries\color{ink}#2}\vspace{2.2mm}}}}\par\nopagebreak
+  \vspace{1.8mm}{\small\color{mute}#3\par}\nopagebreak\vspace{1.4mm}}
+% the steps of a job: a tick box, then the job letter and a number (A1, A2, ...)
+\newlist{jsteps}{enumerate}{1}
+\setlist[jsteps]{label=\cb\textbf{\jobletter\arabic*},leftmargin=12.5mm,labelwidth=10.4mm,labelsep=2.1mm,align=left,itemsep=2.8mm,topsep=1.5mm,parsep=0.8mm}
+\newcommand{\act}[1]{\textbf{#1}\enskip}
+% a step keeps its first lines and its first command on one page
+\newcommand{\step}{\needspace{21mm}\item}
+% ticked sub-steps inside one step
+\newlist{ticks}{itemize}{1}
+\setlist[ticks]{label=\cb,leftmargin=\cbw,labelsep=0mm,align=left,itemsep=1.6mm,topsep=1.2mm,parsep=0.6mm}
+
+% ---------- boxes: a trap, and a thing that waits ----------
+\newsavebox{\notebox}
+\newenvironment{trap}[1][If it fails]{\par\vspace{1.4mm}\begin{lrbox}{\notebox}%
+  \begin{minipage}{\dimexpr\linewidth-5mm\relax}\small\raggedright{\bfseries\color{accC}#1}\enskip}
+  {\end{minipage}\end{lrbox}{\setlength{\fboxsep}{2.5mm}\colorbox{trapbg}{\usebox{\notebox}}}\par\vspace{1.4mm}}
+\newenvironment{later}[1][Waits for code]{\par\vspace{1.4mm}\begin{lrbox}{\notebox}%
+  \begin{minipage}{\dimexpr\linewidth-5mm\relax}\small\raggedright{\bfseries\color{accD}#1}\enskip}
+  {\end{minipage}\end{lrbox}{\setlength{\fboxsep}{2.5mm}\colorbox{laterbg}{\usebox{\notebox}}}\par\vspace{1.4mm}}
+
+% ---------- small furniture ----------
+\newcommand{\cb}{\raisebox{-0.25ex}{\setlength{\fboxsep}{0pt}\setlength{\fboxrule}{0.7pt}\fcolorbox{mute}{white}{\rule{0pt}{1.75ex}\rule{1.75ex}{0pt}}}\hspace{2mm}}
+\newcommand{\h}[1]{\par\vspace{4mm}{\fontsize{11.5}{14}\selectfont\bfseries\color{ink}#1}\par\vspace{1.4mm}}
+\newcommand{\m}{\,\textrm{\guilsinglright}\,}
+% one row of the overview: a tick box, then the letter of the job
+\newcommand{\jobrow}[1]{{\normalsize\cb}\textbf{\color{accD}#1}}
+
+\begin{document}
+\raggedright
+\settowidth{\cbw}{\cb}
+
+{\fontsize{27}{31}\selectfont\bfseries ATLAS: starting visual testing\par}
+\vspace{2.5mm}
+{\large\color{mute}The first time anyone looks at the Phase 1 code: in the Unity Editor on the Mac, then on a phone.\par}
+\vspace{2mm}
+{\small\color{mute}State at 20:25 on 3 October 2026. About 800 logic tests pass without the engine. Unity has not compiled
+any of this code (its last compile was at 16:36, before the code existed), the six Atlas shaders have never been
+compiled, and nothing has been rendered. The folder is on the branch \code{phase1-acd}.\par}
+
+\h{The seven jobs}
+%% OVERVIEW TABLE: header row "Job" and "Why", then these rows
+{\small
+\renewcommand{\arraystretch}{1.45}
+\begin{tabular}{@{}l@{\hspace{3mm}}>{\bfseries\raggedright\arraybackslash}p{50mm}@{\hspace{3mm}}>{\raggedright\arraybackslash}p{108mm}@{}}
+\toprule
+ & Job & Why\\
+\midrule
+\jobrow{A} & Tell the Phase 1 session & It is writing files in the same folder, and it knows what you should see.\\
+\jobrow{B} & Open the project in Unity & The first real compile of the scripts.\\
+\jobrow{C} & Check the six shaders & A shader error shows only in Unity.\\
+\jobrow{D} & Run the tests in the Editor & Five test groups need the engine and have never run.\\
+\jobrow{E} & First look in play mode & The first rendered frame.\\
+\jobrow{F} & Keep the evidence and report & The session can fix only what it is told.\\
+\jobrow{G} & On a phone & Gate G1, first light. Needs signing first.\\
+\bottomrule
+\end{tabular}}
+
+% =====================================================================
+\Job{A}{Tell the Phase 1 session}{It is writing files in the same folder, and it knows what you should see.}
+\begin{jsteps}
+\step \act{Paste these two lines into the session that works on the branch \code{phase1-acd}:}
+\begin{cmd}
+I am opening this branch in the Unity Editor on the Mac now. Unity will write .meta and settings files.
+Tell me what I should see in play mode in Atlas_Boot today, and which checks you want from me.
+\end{cmd}
+
+\step \act{Keep its answer open.} It is the description of a correct picture for today's code.
+\end{jsteps}
+
+% =====================================================================
+\Job{B}{Open the project in Unity}{The first real compile of the scripts.}
+\begin{jsteps}
+\step \act{Open Unity Hub and open the project \code{ATLAS}} with Editor 6000.3.25f1. If it is not in the Hub's list:
+      Add\m Add project from disk, and pick the \code{ATLAS} folder of the repository. Unity now imports every new file.
+
+\step \act{If Unity offers Safe Mode,} it has found script errors. Either choice is fine: what matters is the Console.
+
+\step \act{Open the Console:} Window\m General\m Console. Press Clear, and look for red lines.
+      \see\ no red line. Yellow warnings are not failures.
+
+\step \act{If there is a red line,} click the first one and copy its full text from the lower pane, then go to job F.
+      Later errors usually follow from the first.
+\end{jsteps}
+\begin{later}[Note.]
+Unity writes files of its own into the folder: a \code{.meta} file for anything new, and some settings. Leave them.
+The session was told in job A.
+\end{later}
+
+% =====================================================================
+\Job{C}{Check the six shaders}{A shader error shows only in Unity.}
+\begin{jsteps}
+\step \act{In the Project window, click each shader} and read the Inspector:
+
+      \cc!Assets/Atlas/Rendering/Shaders/Resources/AtlasSurface.shader!\par
+      \cc!Assets/Atlas/Rendering/Shaders/Resources/AtlasBackground.shader!\par
+      \cc!Assets/Atlas/Rendering/Stereo/Resources/AtlasLensBlit.shader!\par
+      \cc!Assets/Atlas/Rendering/Portals/Resources/AtlasPortalMask.shader!\par
+      \cc!Assets/Atlas/Safety/Resources/AtlasCue.shader!\par
+      \cc!Assets/Atlas/Input/Resources/AtlasReticle.shader!\par
+      \see\ no list of errors in the Inspector, and no Console line that starts with \code{Shader error}.
+
+\step \act{Copy any shader error in full} for job F. It names the file and the line.
+\end{jsteps}
+\begin{later}[Note.]
+Four include files sit beside the first two shaders: \code{AtlasCore}, \code{AtlasWarp}, \code{AtlasGates} and
+\code{AtlasPortalClip}. An error in one of them is reported against the shader that includes it. The Editor compiles
+the shaders for the Mac; the phone build of job G compiles them for the iPhone.
+\end{later}
+
+% =====================================================================
+\Job{D}{Run the tests in the Editor}{About 800 already pass without the engine. Five groups need it and have never run.}
+\begin{jsteps}
+\step \act{Open the Test Runner:} Window\m General\m Test Runner.
+
+\step \act{EditMode tab\m Run All.}
+      \see\ every test green.
+
+\step \act{PlayMode tab\m Run All,} if that tab lists any tests.
+      \see\ every test green.
+
+\step \act{Find the five engine groups in the results:} \code{BootstrapUnityTests}, \code{AtlasActionMapTests},
+      \code{HomeSpaceTests}, \code{SlicerUnityTests} and \code{LookUnityTests}. They must be green too.
+
+\step \act{For each red test,} write down its full name and the first line of its message, for job F.
+\end{jsteps}
+
+% =====================================================================
+\Job{E}{First look in play mode}{The first rendered frame.}
+\begin{jsteps}
+\step \act{Open the boot scene.} It is the only Atlas scene; the app builds everything else in code when play starts.
+
+      \cc!Assets/Atlas/Scenes/Atlas_Boot.unity!
+
+\step \act{Set the Game view to the phones' screen.} In the Game view's resolution menu, add a fixed resolution of
+      2796 x 1290.
+
+\step \act{Press Play.} Compare the picture with the session's answer from job A, and tick:
+\begin{ticks}
+\item Nothing is magenta. Magenta means a shader failed.
+\item The picture is two eye images side by side.
+\item The Console stays free of red lines while it plays, and no message repeats every frame.
+\item Game view\m Stats: Batches at most 300 and Tris at most 500k. That is the plan's budget for both eyes together.
+\end{ticks}
+
+\step \act{Press Play again to stop.}
+      \see\ no red line on stopping.
+\end{jsteps}
+
+% =====================================================================
+\Job{F}{Keep the evidence and report}{The session can fix only what it is told.}
+\begin{jsteps}
+\step \act{Take a screenshot of the Game view for each check:} Cmd + Shift + 4, then Space, then click the Game window.
+
+\step \act{Move the pictures into \code{docs/evidence/visual/}} and name them by date and check, for example
+      \code{20261003\_editor\_play.png}.
+
+\step \act{Paste into the Phase 1 session:} the first red Console line in full, any shader error, the full names of
+      the red tests, and one line for each tick of job E that failed.
+
+\step \act{After its fix, repeat jobs B to E.} Stop when the results sheet at the end is all ticks.
+\end{jsteps}
+
+% =====================================================================
+\Job{G}{On a phone}{Gate G1, first light. Signing and the phones must be ready first: jobs A to C of the by-hand document.}
+\begin{jsteps}
+\step \act{Close the project in Unity.} The build script needs it closed.
+
+\step \act{Build with the frame-rate display on,} in Terminal, from the repository root. The team id is needed on the
+      first build only.
+\begin{cmd}
+ATLAS_TEAM_ID=XXXXXXXXXX ATLAS_DEV=1 tools/build_ios.sh
+\end{cmd}
+
+\step \act{Start the app with the phone in your hand} and accept the camera prompt. Then tick:
+\begin{ticks}
+\item The frame-rate display reads 60.
+\item There are two eye images, and both move when you move the phone.
+\item Nothing is magenta.
+\end{ticks}
+
+\step \act{To see and record the phone's screen on the Mac:} with the phone on its cable, open QuickTime Player\m
+      File\m New Movie Recording, and choose the iPhone as the camera.
+\end{jsteps}
+\begin{later}[Optional: let an agent drive the Editor.]
+The project includes the package MCP for Unity. With the Editor open, a Claude session started on this Mac, not in the
+container, can be connected to it (Window\m MCP for Unity). It can then enter play mode, read the Console and run the
+tests for you.
+\end{later}
+
+% =====================================================================
+\needspace{75mm}
+\h{Results sheet}
+{\small
+\renewcommand{\arraystretch}{1.6}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{92mm}@{\hspace{4mm}}p{10mm}@{\hspace{4mm}}p{66mm}@{}}
+\toprule
+\textbf{Check} & \textbf{Pass} & \textbf{Note, or the screenshot's name}\\
+\midrule
+The scripts compile in Unity (job B) & \cb & \\
+The six shaders compile (job C) & \cb & \\
+EditMode tests are green (job D) & \cb & \\
+PlayMode tests are green (job D) & \cb & \\
+Play mode: nothing is magenta (job E) & \cb & \\
+Play mode: two eye images side by side (job E) & \cb & \\
+Play mode: the Console stays clean, also on stopping (job E) & \cb & \\
+Play mode: Batches at most 300, Tris at most 500k (job E) & \cb & \\
+Phone: 60 frames a second (job G) & \cb & \\
+Phone: both eye images follow the phone (job G) & \cb & \\
+\bottomrule
+\end{tabular}}
+
+\end{document}

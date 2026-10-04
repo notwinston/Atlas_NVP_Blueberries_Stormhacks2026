@@ -9,6 +9,11 @@
         "Atlas.Telemetry",
         "Atlas.Scan",
         "Atlas.Safety",
-        "Atlas.Link"
+        "Atlas.Spaces.AlignedCells",
+        "Atlas.Link",
+        "Unity.Mathematics",
+        "Unity.Burst",
+        "Unity.Collections",
+        "Unity.TextMeshPro"
     ]
 }

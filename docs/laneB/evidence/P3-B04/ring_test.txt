@@ -1,0 +1,5 @@
+P3-B04 TunnelEdge_10Deg_RingTestScene (CPU mirror of FieldFitBlit, D_test, 360 rays x 2 eyes, 0.25 px steps)
+c_Morph_nomask: rays=720 max_err_deg=0.0568 mean_err_deg=0.0231 (limit 0.2)
+b_Morph_mask: rays=720 max_err_deg=0.0807 mean_err_deg=0.0271 (limit 0.2)
+d_None_laneD_preset: rays=720 max_err_deg=0.1314 mean_err_deg=0.0394 (limit 0.2)
+a_None_mask: rays=720 max_err_deg=0.0820 mean_err_deg=0.0322 (limit 0.2)

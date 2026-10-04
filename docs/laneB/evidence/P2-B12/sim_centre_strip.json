@@ -1,0 +1,13 @@
+{
+  "criterion": "P2-B12 centre strip 8 tile steps, no WARN on straight sides",
+  "target_address": "RRRLLR", "route_forks": 6, "tile_steps": 12,
+  "note": "4-fork route acceptance blocked on PH-39",
+  "runs": [
+    {"room":"room_3x3","speed":0.7,"tree_route":{"straight_warn":0,"corner_cues":11,"strong":0},"hundred_routes":{"straight_warn":0,"corner_cues":700,"strong":0}},
+    {"room":"room_3x3","speed":1.0,"tree_route":{"straight_warn":0,"corner_cues":12,"strong":0},"hundred_routes":{"straight_warn":0,"corner_cues":800,"strong":0}},
+    {"room":"room_3x4_L","speed":0.7,"tree_route":{"straight_warn":0,"corner_cues":11,"strong":0},"hundred_routes":{"straight_warn":0,"corner_cues":700,"strong":0}},
+    {"room":"room_3x4_L","speed":1.0,"tree_route":{"straight_warn":0,"corner_cues":12,"strong":0},"hundred_routes":{"straight_warn":0,"corner_cues":800,"strong":0}},
+    {"room":"room_4x5_table","speed":0.7,"tree_route":{"straight_warn":0,"corner_cues":0,"strong":0},"hundred_routes":{"straight_warn":0,"corner_cues":0,"strong":0}},
+    {"room":"room_4x5_table","speed":1.0,"tree_route":{"straight_warn":0,"corner_cues":1,"strong":0},"hundred_routes":{"straight_warn":0,"corner_cues":100,"strong":0}}
+  ]
+}

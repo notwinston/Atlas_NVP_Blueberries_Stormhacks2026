@@ -1,0 +1,30 @@
+{
+    "name": "Atlas.Spaces.CurvedWalk.Tests",
+    "rootNamespace": "Atlas.Spaces.CurvedWalk.Tests",
+    "references": [
+        "Atlas.Kernel",
+        "Atlas.World",
+        "Atlas.Link",
+        "Atlas.Rendering",
+        "Atlas.Scan",
+        "Atlas.Input",
+        "Atlas.Telemetry",
+        "Atlas.Spaces.CurvedWalk",
+        "Atlas.Spaces.SmallPlanet",
+        "Atlas.World.Lint.Editor",
+        "Unity.Mathematics",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ]
+}

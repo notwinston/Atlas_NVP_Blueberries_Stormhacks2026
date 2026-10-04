@@ -1,0 +1,28 @@
+{
+    "name": "Atlas.Blades.Lung.Tests",
+    "rootNamespace": "Atlas.Blades.Lung.Tests",
+    "references": [
+        "Atlas.Blades.Lung",
+        "Atlas.Kernel",
+        "Atlas.Telemetry",
+        "Atlas.Link",
+        "Atlas.World",
+        "Atlas.Rendering",
+        "Atlas.Safety",
+        "Atlas.Spaces.AlignedCells",
+        "Unity.Mathematics",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ]
+}

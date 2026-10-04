@@ -1,0 +1,12 @@
+P3-B05 AutoOff_Within1Frame_10Of10 (Editor simulation, 60 Hz, +-2 mm noise)
+trial 0: speed 0.2 m/s first frame over 0.5 m = 150: pass
+trial 1: speed 0.5 m/s first frame over 0.5 m = 61: pass
+trial 2: speed 0.8 m/s first frame over 0.5 m = 38: pass
+trial 3: speed 1 m/s first frame over 0.5 m = 31: pass
+trial 4: speed 1.5 m/s first frame over 0.5 m = 20: pass
+trial 5: speed 0.2 m/s first frame over 0.5 m = 150: pass
+trial 6: speed 0.5 m/s first frame over 0.5 m = 60: pass
+trial 7: speed 0.8 m/s first frame over 0.5 m = 38: pass
+trial 8: speed 1 m/s first frame over 0.5 m = 30: pass
+trial 9: speed 1.5 m/s first frame over 0.5 m = 20: pass
+passed 10 of 10

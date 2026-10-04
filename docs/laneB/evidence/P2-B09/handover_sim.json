@@ -1,0 +1,7 @@
+{
+  "criterion": "P2-B09 no frame > 33 ms (Editor simulation; phone deferred)",
+  "frames": 344,
+  "max_ms": 0.002,
+  "p95_ms": 0.002,
+  "ramp_still_s": 4.0000
+}

@@ -1,0 +1,25 @@
+{
+    "name": "Atlas.Blades.FieldFit.Tests",
+    "rootNamespace": "Atlas.Blades.FieldFit.Tests",
+    "references": [
+        "Atlas.Kernel",
+        "Atlas.Blades.FieldFit",
+        "Unity.Mathematics",
+        "Unity.Burst",
+        "Unity.Collections",
+        "Unity.TextMeshPro",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ]
+}
