@@ -96,6 +96,17 @@ namespace Atlas.Spaces.AlignedCells.Tests
         }
 
         [Test]
+        public void DuckMaze_DuckIsADeadEnd()
+        {
+            var grid = Grid4(); var graph = new TileGraph(5);
+            for (int seed = 1; seed <= 200; seed++)
+            {
+                var maze = DuckMaze.Generate(grid, graph, new int2(seed % 4, (seed / 4) % 4), seed);
+                Assert.That(math.countbits(maze.WallMask(maze.DuckTile)), Is.EqualTo(3), "seed " + seed);
+            }
+        }
+
+        [Test]
         public void DuckMaze_CodeRoundTrips()
         {
             var maze = DuckMaze.Generate(Grid4(), new TileGraph(5), new int2(3, 2), DuckMaze.MaxSeed);
