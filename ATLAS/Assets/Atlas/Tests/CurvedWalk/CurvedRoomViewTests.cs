@@ -199,6 +199,25 @@ namespace Atlas.Spaces.CurvedWalk.Tests
             Assert.IsNotNull(registry.Find(CurvedWalkCore.ParamStrong));
         }
 
+        // The curvature of the ramp's first frame: linear in K over 4 s from 0 to -1 / L^2 (MP §10.1.4), one frame in.
+        static double FirstRampFrame(List<HeadPose> log, double L) => -(log[1].Time - log[0].Time) / 4.0 / (L * L);
+
+        // The room is exactly Home on the frame the walker is registered; standing, the ramp starts on the next one.
+        [Test]
+        public void Ramp_BeginsTheFrameAfterRegistration()
+        {
+            using (var h = new Rig(Room(RoomFixtures.Sample4x5Table)))
+            {
+                var log = Load("walk_still_60s.poselog");
+                h.Step(log[0]);
+                Assert.AreEqual(0.0, h.Kernel.CurvatureNow);
+                Assert.Less(h.Kernel.CurvatureTarget, 0.0);
+                Assert.AreEqual(Iso2.Identity.M, h.S.TileZeroInCurrent.M);
+                h.Step(log[1]);
+                Assert.AreEqual(FirstRampFrame(log, h.S.LengthScale(5)), h.Kernel.CurvatureNow, 1e-12);
+            }
+        }
+
 #if !ATLAS_HEADLESS
         // ---- the engine half: the real RoomContent, driven by CurvedRoomView and by the module ----
 
@@ -305,10 +324,20 @@ namespace Atlas.Spaces.CurvedWalk.Tests
                     FrameContext f = StepKernel(kernel, i, log[i]);
                     module.Tick(in f);
                     module.Upload(in f);
+                    if (i == 0)
+                    {
+                        // Frame 0 registers the walker under the head at K = 0 and only asks for the ramp.
+                        Assert.AreEqual(0.0, kernel.CurvatureNow, "the room is Home until the ramp begins");
+                        Assert.Less(kernel.CurvatureTarget, 0.0, "the ramp is asked for");
+                        Assert.AreEqual(WallMode.Full, content.Walls, "the room is Home until the ramp begins");
+                        Assert.IsTrue(content.FloorVisible);
+                        Assert.AreEqual(0f, content.ShellMaterial.GetFloat(AtlasShaderIDs.WarpMode));
+                    }
                     if (i == 1)
                     {
-                        Assert.AreEqual(0.0, kernel.CurvatureNow, 1e-3);
-                        Assert.AreEqual(WallMode.Full, content.Walls, "the room is Home until the ramp begins");
+                        // The walker stands, so frame 1 is the ramp's first: K = -(dt / 4 s) / L^2 (MP §10.1.4).
+                        Assert.AreEqual(FirstRampFrame(log, module.Core.LengthScale(5)), kernel.CurvatureNow, 1e-12);
+                        Assert.AreEqual(WallMode.Kerbs, content.Walls, "curved from the ramp's first frame");
                     }
                 }
                 Assert.Less(kernel.CurvatureNow, 0.0);

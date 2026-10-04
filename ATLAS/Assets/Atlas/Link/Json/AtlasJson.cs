@@ -366,7 +366,8 @@ namespace Atlas.Link
 
                 string token = _s.Substring(start, _i - start);
                 long whole;
-                if (integral && long.TryParse(token, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out whole))
+                // "-0" is a double: as a whole number it would lose its sign.
+                if (integral && token != "-0" && long.TryParse(token, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out whole))
                 {
                     value = JsonValue.From(whole);
                     return true;
@@ -377,6 +378,8 @@ namespace Atlas.Link
                     _i = start;
                     return Fail("Invalid number");
                 }
+                // Mono's parser returns +0 for "-0.0" and for "-1e-400"; the sign is part of the number.
+                if (number == 0.0 && token[0] == '-') number = -0.0;
                 value = JsonValue.From(number);
                 return true;
             }

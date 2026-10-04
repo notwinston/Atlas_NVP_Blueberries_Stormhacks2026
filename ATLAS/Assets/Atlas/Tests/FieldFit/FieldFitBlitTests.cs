@@ -132,8 +132,20 @@ namespace Atlas.Blades.FieldFit.Tests
                     }
                 Debug.Log($"P3-B03 GPU shader vs CPU mirror: max uv difference {worst:E3} over {checkedPx} pixels");
                 Assert.Less(worst, 2e-3, "GPU uv vs CPU mirror");
-                // orientation probe: the top screen row reads g > 0.5 (Brief §9)
-                Assert.Greater(data[(H - 1) * W + W / 4].y, 0.5f, "top row green > 0.5");
+                // Orientation probe (Brief §9): the top of the screen reads g > 0.5 and the bottom g < 0.5. Under D_test the
+                // top row itself is outside the frustum (q.y = 1 maps to eye uv.y = 0.5 + 0.5 * (1 + 0.22 + 0.24) = 1.23), so
+                // the shader writes black there, as the CPU mirror says; the probe rows are at 15% from each edge, inside
+                // the image (eye uv.y = 0.5 +- 0.35 * 1.165 = 0.908 and 0.092). Blue is 1 wherever the source was sampled.
+                int xProbe = W / 4, yTop = (int)(0.85f * H), yBottom = H - 1 - yTop;
+                Assert.IsFalse(rf.Eval(0, new Vector2(0.5f, (H - 0.5f) / H), out _), "CPU mirror: the top row is outside the D_test frustum");
+                Assert.AreEqual(0f, data[(H - 1) * W + xProbe].z, 1e-6f, "top row outside the frustum is black");
+                Assert.IsTrue(rf.Eval(0, new Vector2(0.5f, (yTop + 0.5f) / H), out var uvTop), "CPU mirror: upper probe is inside the image");
+                Assert.IsTrue(rf.Eval(0, new Vector2(0.5f, (yBottom + 0.5f) / H), out var uvBottom), "CPU mirror: lower probe is inside the image");
+                Assert.Greater(uvTop.y, 0.5f); Assert.Less(uvBottom.y, 0.5f);
+                Vector4 top = data[yTop * W + xProbe], bottom = data[yBottom * W + xProbe];
+                Assert.AreEqual(1f, top.z, 1e-3f, "upper probe samples the source"); Assert.AreEqual(1f, bottom.z, 1e-3f, "lower probe samples the source");
+                Assert.Greater(top.y, 0.5f, "upper screen rows green > 0.5");
+                Assert.Less(bottom.y, 0.5f, "lower screen rows green < 0.5");
                 UnityEngine.Object.DestroyImmediate(rt); UnityEngine.Object.DestroyImmediate(mat);
                 cmd.Release();
             }

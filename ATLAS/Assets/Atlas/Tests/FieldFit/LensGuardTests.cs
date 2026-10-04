@@ -185,8 +185,14 @@ namespace Atlas.Blades.FieldFit.Tests
                 lut.SetEyeGeometry(0, TestGeometry.Dtest); lut.SetEyeGeometry(1, TestGeometry.Dtest);
                 using (var none = LensBadge.Create(null, TestGeometry.Dtest, TestGeometry.Dtest, lut)) Assert.IsFalse(none.Ready);
                 if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null) Assert.Ignore("needs a graphics device (DV-B03-g)");
-                var font = TMP_FontAsset.CreateFontAsset(Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"));
+                // The font the app draws text with: the default font asset of the project's TextMeshPro resources (AtlasHud,
+                // CurvedWalkHud), which is also the one FieldFitSettings.asset assigns to the badge. LegacyRuntime.ttf is an
+                // operating-system font without font data, so TMP cannot build a font asset from it.
+                var font = TMP_Settings.defaultFontAsset;
                 Assert.IsNotNull(font, "TMP font (TMP Essentials must be in the project)");
+                var settings = UnityEditor.AssetDatabase.LoadAssetAtPath<FieldFitSettings>("Assets/Atlas/Blades/FieldFit/FieldFitSettings.asset");
+                Assert.IsNotNull(settings, "FieldFitSettings.asset");
+                Assert.AreSame(font, settings.badgeFont, "the badge uses the HUD's font, not a second font");
                 using (var b = LensBadge.Create(font, TestGeometry.Dtest, TestGeometry.Dtest, lut)) { Assert.IsTrue(b.Ready); Assert.AreEqual(256, b.Texture.width); Assert.AreEqual(64, b.Texture.height); }
             }
         }

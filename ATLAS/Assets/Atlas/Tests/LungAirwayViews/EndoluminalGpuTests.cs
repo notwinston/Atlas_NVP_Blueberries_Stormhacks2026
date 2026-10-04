@@ -23,6 +23,11 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
             var px = new Color32[128 * 128]; for (int i = 0; i < px.Length; i++) px[i] = new Color32(230, 140, 128, 255);
             palette.SetPixels32(px); palette.Apply();
             Shader.SetGlobalTexture(AtlasShaderIDs.Palette, palette);
+            // The look globals the draw reads, so the result does not depend on what ran before: the booted shade floor, and
+            // a world fade of 0 (black), which the window must ignore because it renders once per fork.
+            Vector4 oldShade = Shader.GetGlobalVector(AtlasShaderIDs.Shade); float oldFade = Shader.GetGlobalFloat(AtlasShaderIDs.Fade);
+            Shader.SetGlobalVector(AtlasShaderIDs.Shade, AtlasLookState.Default().Shade);
+            Shader.SetGlobalFloat(AtlasShaderIDs.Fade, 0f);
             var w = EndoTestUtil.NewWindow(out var go);
             RenderTexture flat = null; Texture2D img = null;
             try
@@ -36,6 +41,7 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
             finally
             {
                 Shader.SetGlobalTexture(AtlasShaderIDs.Palette, null);
+                Shader.SetGlobalVector(AtlasShaderIDs.Shade, oldShade); Shader.SetGlobalFloat(AtlasShaderIDs.Fade, oldFade);
                 Object.DestroyImmediate(palette);
                 if (flat != null) { flat.Release(); Object.DestroyImmediate(flat); }
                 if (img != null) Object.DestroyImmediate(img);

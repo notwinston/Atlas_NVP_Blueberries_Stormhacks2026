@@ -207,11 +207,17 @@ namespace Atlas.Scan.Tests.Routes
         {
             RoomObject[] objects = RoomModelBuilder.Objects(GridWithBoxes(Boxes(80)));
             Assert.That(objects.Length, Is.EqualTo(RoomModel.MaxObjects));
-            // The sixteen that were dropped are the smallest.
+            // The sixteen that were dropped are the smallest. A kept object's size is rounded to six decimals, so its
+            // volume differs from the box's own by float noise and rounding: the side is at most 1.1 m, so one side
+            // moves by at most 5e-7 and the volume 0.5 * side * side by at most about 6e-7; with the float noise of
+            // the three products (Mono and .NET order and widen them differently) that stays under 1e-5. Two
+            // different boxes differ by at least 0.5 * (2 * 0.3 * 0.01 + 0.01 * 0.01) = 0.00305. A margin of 1e-4
+            // therefore counts the boxes that are really larger, and exactly the 63 larger than the smallest kept
+            // one remain.
             float smallestKept = objects[objects.Length - 1].Volume;
             int larger = 0;
-            foreach (ObstacleBox box in Boxes(80)) if (box.Size.x * box.Size.y * box.Size.z > smallestKept) larger++;
-            Assert.That(larger, Is.LessThan(RoomModel.MaxObjects));
+            foreach (ObstacleBox box in Boxes(80)) if (box.Size.x * box.Size.y * box.Size.z > smallestKept + 1e-4f) larger++;
+            Assert.That(larger, Is.EqualTo(RoomModel.MaxObjects - 1));
         }
 
         [Test]

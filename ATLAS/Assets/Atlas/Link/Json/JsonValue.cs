@@ -72,8 +72,13 @@ namespace Atlas.Link
         public static JsonValue From(float value)
         {
             if (float.IsNaN(value) || float.IsInfinity(value)) return From((double)value);
-            double shortest = double.Parse(value.ToString("R", CultureInfo.InvariantCulture),
-                NumberStyles.Float, CultureInfo.InvariantCulture);
+            if (value == 0f) return From(IsNegative(value) ? -0.0 : 0.0);   // Mono prints -0 as "0": keep the sign here
+            string text = value.ToString("R", CultureInfo.InvariantCulture);
+            float back;
+            // "R" is meant to read back exactly; where a runtime's is not, 9 digits always do.
+            if (!float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out back) || back != value)
+                text = value.ToString("G9", CultureInfo.InvariantCulture);
+            double shortest = double.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture);
             return new JsonValue(JsonKind.Number) { _number = shortest };
         }
 
@@ -389,12 +394,26 @@ namespace Atlas.Link
             if (_isInteger) { sb.Append(_integer.ToString(CultureInfo.InvariantCulture)); return; }
             // JSON has no NaN or infinity; null is the conventional stand-in and reads back as a fallback.
             if (double.IsNaN(_number) || double.IsInfinity(_number)) { sb.Append("null"); return; }
-            // "R" is the shortest text that parses back to the same double, on Mono and on .NET alike.
+            // Negative zero: Mono formats it as "0", .NET as "-0". Written the same way on both, and read back as -0.
+            if (_number == 0.0)
+            {
+                sb.Append(IsNegative(_number) ? "-0.0" : "0.0");
+                return;
+            }
+            // "R" is meant to be the shortest text that parses back to the same double. Where a runtime's is not
+            // (Mono's has been wrong), 17 significant digits always are.
             string text = _number.ToString("R", CultureInfo.InvariantCulture);
+            double back;
+            if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out back) || back != _number)
+                text = _number.ToString("G17", CultureInfo.InvariantCulture);
             sb.Append(text);
             // Keep a whole-valued double recognisable as a double so that it does not come back as an integer.
             if (text.IndexOf('.') < 0 && text.IndexOf('E') < 0 && text.IndexOf('e') < 0) sb.Append(".0");
         }
+
+        static bool IsNegative(double value) { return BitConverter.DoubleToInt64Bits(value) < 0; }
+
+        static bool IsNegative(float value) { return IsNegative((double)value); }
 
         static void NewLine(StringBuilder sb, int depth)
         {

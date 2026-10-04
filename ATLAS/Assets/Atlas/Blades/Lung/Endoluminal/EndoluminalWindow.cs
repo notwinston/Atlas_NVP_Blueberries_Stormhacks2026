@@ -60,7 +60,7 @@ namespace Atlas.Blades.Lung.Endoluminal
         }
 
         // Idempotent. Does all allocation, once. The tube material is one Atlas/Surface instance rented from the pool (never a new Material),
-        // returned by Release. Warp off, and fog off for this draw (D-19): the material's fog weight is 0.
+        // returned by Release. Warp off, and fog and world fade off for this draw (D-19): the material's fog and fade weights are 0.
         public void Initialise(MaterialPool materials, Shader display, TMP_FontAsset font)
         {
             if (IsInitialised) return;
@@ -79,7 +79,9 @@ namespace Atlas.Blades.Lung.Endoluminal
             pool = materials;
             surfaceMat = pool.Rent();
             MaterialPool.SetWarpMode(surfaceMat, 0);
-            MaterialPool.SetSurface(surfaceMat, fogWeight: 0f);
+            // Fade weight 0 as well: the texture is drawn once per fork, so the world fade of that instant (_AtlasFade,
+            // which SpaceLab animates) must not be baked into it.
+            MaterialPool.SetSurface(surfaceMat, fogWeight: 0f, fadeWeight: 0f);
             displayMat = new Material(display) { name = "EndoluminalWindow.Display", hideFlags = HideFlags.HideAndDontSave };
             displayMat.mainTexture = rt;
 

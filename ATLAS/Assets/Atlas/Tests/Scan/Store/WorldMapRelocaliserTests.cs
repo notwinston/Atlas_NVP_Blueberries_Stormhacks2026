@@ -260,10 +260,34 @@ namespace Atlas.Scan.Tests.Store
         [Test]
         public void NeutralPlatform_HasNoWorldMap()
         {
+            // The neutral stand-in is what Current is with nothing registered. Whether the ARKit provider
+            // registered itself depends on the build (Editor and iOS assemblies do), so remove it for this test.
+            IArWorldMapPlatform registered = ArWorldMapPlatform.Current;
+            try
+            {
+                ArWorldMapPlatform.Register(null);
+                IArWorldMapPlatform platform = ArWorldMapPlatform.Current;
+                Assert.That(platform, Is.Not.Null);
+                Assert.That(platform.WorldMapSupported, Is.False);
+                Assert.That(platform.Name, Is.EqualTo("none"));
+            }
+            finally
+            {
+                ArWorldMapPlatform.Register(registered);   // the stand-in itself when nothing was registered: the same answers
+            }
+        }
+
+        [Test]
+        public void CurrentPlatform_InTheEditorOrHeadless_HasNoWorldMap()
+        {
+            // Lane C section 10.6: "True on an ARKit device. False in the Editor, in XR Simulation and on Windows."
+            // With the iOS build target UNITY_IOS is defined in the Editor too, and the ARKit provider registers
+            // itself there (Name "ARKit"), but it still answers "no world map" because there is no ARKit session.
+            // Only a phone build reports support, so this holds wherever the tests run.
             IArWorldMapPlatform platform = ArWorldMapPlatform.Current;
             Assert.That(platform, Is.Not.Null);
             Assert.That(platform.WorldMapSupported, Is.False);
-            Assert.That(platform.Name, Is.EqualTo("none"));
+            Assert.That(platform.Name, Is.EqualTo("none").Or.EqualTo("ARKit"));
         }
     }
 }

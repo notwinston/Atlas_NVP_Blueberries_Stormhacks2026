@@ -19,6 +19,15 @@ namespace Atlas.App.Tests
     [Category("Unity")]
     public class BootstrapUnityTests
     {
+        // An edit-mode test is resumed by the Editor's own update, which in batch mode runs several times per
+        // play-mode frame (the app paces itself to its target frame rate): a count of yields is neither a
+        // count of frames nor a time. Every wait below is therefore for a state, an app frame or an engine
+        // event, bounded by this real time so that a flow that hangs still fails at its own assertion.
+        const double WaitSeconds = 30.0;
+
+        static double Deadline() { return Time.realtimeSinceStartupAsDouble + WaitSeconds; }
+        static bool Before(double deadline) { return Time.realtimeSinceStartupAsDouble < deadline; }
+
         [UnityTest]
         public IEnumerator Boot_InPlayMode_WalksTheWholeFlow_ThenStopsCleanly()
         {
@@ -52,7 +61,8 @@ namespace Atlas.App.Tests
             Assert.That(app.Spaces.IsAvailable(SpaceId.Home), Is.True, "Home is available: its own module, or the built-in grid space when Home is not in the build");
 
             // The fixture room is handed over and Home is entered through a fade.
-            for (int i = 0; i < 300 && app.Spaces.State != SpaceHostState.Running; i++) yield return null;
+            double deadline = Deadline();
+            while (app.Spaces.State != SpaceHostState.Running && Before(deadline)) yield return null;
             Assert.That(app.Spaces.State, Is.EqualTo(SpaceHostState.Running));
             Assert.That(app.Spaces.Current, Is.EqualTo(SpaceId.Home));
             Assert.That(app.Spaces.Room.Id, Is.Not.Empty);
@@ -69,10 +79,15 @@ namespace Atlas.App.Tests
             // Operator commands are local calls.
             int rented = app.Pool.Rented;
             app.Commands.Cue();
-            yield return null;
+            deadline = Deadline();
+            while (BumpCue.Shown != BumpLevel.Strong && Before(deadline)) yield return null;
             Assert.That(BumpCue.Shown, Is.EqualTo(BumpLevel.Strong));
             app.Commands.SwitchSpace((SpaceId)SpaceIds.Count, null);
-            yield return null;
+            // Two whole app frames: a switch that had wrongly begun would have left Running by then.
+            int refusedAt = app.LoopCore.FrameCount;
+            deadline = Deadline();
+            while (app.LoopCore.FrameCount < refusedAt + 2 && Before(deadline)) yield return null;
+            Assert.That(app.LoopCore.FrameCount, Is.GreaterThanOrEqualTo(refusedAt + 2), "the app's frames stopped");
             Assert.That(app.Spaces.Current, Is.EqualTo(SpaceId.Home), "a space no build has is refused");
             Assert.That(app.Spaces.State, Is.EqualTo(SpaceHostState.Running));
 
@@ -81,17 +96,22 @@ namespace Atlas.App.Tests
             for (int i = 0; i < SpaceIds.Count; i++)
                 Assert.That(app.Spaces.IsAvailable((SpaceId)i), Is.True, SpaceIds.Code((SpaceId)i) + " is registered");
             app.Commands.SwitchSpace(SpaceId.CurvedWalk, null);
-            for (int i = 0; i < 300 && !(app.Spaces.State == SpaceHostState.Running && app.Spaces.Current == SpaceId.CurvedWalk); i++) yield return null;
+            deadline = Deadline();
+            while (!(app.Spaces.State == SpaceHostState.Running && app.Spaces.Current == SpaceId.CurvedWalk) && Before(deadline)) yield return null;
+            Assert.That(app.Spaces.State, Is.EqualTo(SpaceHostState.Running));
             Assert.That(app.Spaces.Current, Is.EqualTo(SpaceId.CurvedWalk));
             Assert.That(app.WalkerKernel.Graph.Q, Is.EqualTo(5));
             app.Commands.Home();
-            for (int i = 0; i < 300 && !(app.Spaces.State == SpaceHostState.Running && app.Spaces.Current == SpaceId.Home); i++) yield return null;
+            deadline = Deadline();
+            while (!(app.Spaces.State == SpaceHostState.Running && app.Spaces.Current == SpaceId.Home) && Before(deadline)) yield return null;
+            Assert.That(app.Spaces.State, Is.EqualTo(SpaceHostState.Running));
             Assert.That(app.Spaces.Current, Is.EqualTo(SpaceId.Home));
             Assert.That(app.WalkerKernel.Graph.Q, Is.EqualTo(4));
             app.Commands.Home();
             app.Commands.Recentre();
             app.Commands.SetQuality(2);
-            for (int i = 0; i < 90; i++) yield return null;
+            deadline = Deadline();
+            while (app.Ladder.Tier != Atlas.World.QualityTier.Serious && Before(deadline)) yield return null;
             Assert.That(app.Ladder.Tier, Is.EqualTo(Atlas.World.QualityTier.Serious));
             Assert.That(app.Pool.Rented, Is.EqualTo(rented));
 
@@ -99,7 +119,9 @@ namespace Atlas.App.Tests
             Assert.That(AtlasBootstrap.App, Is.Null);
             Assert.That(AtlasServices.BootCompleted, Is.False);
             Assert.That(AtlasServices.Has<ISpaceHost>(), Is.False);
-            yield return null;
+            // Destroy takes effect at the end of a play-mode frame.
+            deadline = Deadline();
+            while (app.Boot.Root != null && Before(deadline)) yield return null;
             Assert.That(app.Boot.Root == null, Is.True, "the Atlas objects are gone");
 
             yield return new ExitPlayMode();
