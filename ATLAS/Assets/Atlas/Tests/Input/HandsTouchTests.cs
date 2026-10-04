@@ -1110,11 +1110,14 @@ namespace Atlas.Input.Tests
         [Test]
         public void Input_HandsTouch_StateMachine_RepeatFiresOnThePressAndRepeatsWhileHeld()
         {
-            GazeTargetData slow = HandsRig.Row(AtlasAction.NavRight, HandsRig.Panel, mode: GazeMode.Repeat);
+            GazeTargetData usual = HandsRig.Row(AtlasAction.NavRight, HandsRig.Panel, mode: GazeMode.Repeat);
             GazeTargetData quick = HandsRig.Row(AtlasAction.NavLeft, HandsRig.Panel - new float3(0f, 0.10f, 0f), mode: GazeMode.Repeat);
             quick.RepeatSeconds = 0.25f;
-            GazeTargetId plus = _rig.Add(slow);
+            GazeTargetData slow = HandsRig.Row(AtlasAction.DialRight, HandsRig.Panel + new float3(0f, 0.10f, 0f), mode: GazeMode.Repeat);
+            slow.RepeatSeconds = 1.5f;
+            GazeTargetId plus = _rig.Add(usual);
             GazeTargetId minus = _rig.Add(quick);
+            GazeTargetId dial = _rig.Add(slow);
             HandsRig.Face face = _rig.FaceOf(plus);
 
             // A tap: in, three tenths of a second, out. One step.
@@ -1126,6 +1129,8 @@ namespace Atlas.Input.Tests
             // Held: the press, then after a second at the target's own interval (0.4 s by default).
             Assert.That(HeldFiringTimes(face, 2.5f), Is.EqualTo(new[] { 0f, 1.0f, 1.4f, 1.8f, 2.2f }).Within(Dt + 1e-4f));
             Assert.That(HeldFiringTimes(_rig.FaceOf(minus), 1.6f), Is.EqualTo(new[] { 0f, 1.0f, 1.25f, 1.5f }).Within(Dt + 1e-4f));
+            // A target whose own interval is longer than a second never repeats sooner than that interval.
+            Assert.That(HeldFiringTimes(_rig.FaceOf(dial), 3.2f), Is.EqualTo(new[] { 0f, 1.5f, 3.0f }).Within(Dt + 1e-4f));
         }
 
         /// <summary>Presses, holds for a time and lets go; returns when the target fired, in seconds after the press.</summary>
