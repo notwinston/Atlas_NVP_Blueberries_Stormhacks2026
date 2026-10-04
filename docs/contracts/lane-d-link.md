@@ -103,15 +103,15 @@ Naming:
 
 - `<area>.<name>`, lower camel case per segment. One exception, kept from §12.4: `demoLock`. The registry
   enforces only that the name is not empty; the form is a convention.
-- The first segment is the owning area: `space`, `render`, `thermal`, `pose`, `replay`, `scan`, `input`, `link`,
-  `telemetry`, `forge`, `hud`, `dev`, `perf`, or a space's own: `home`, `glued`, `curved`, `cells`, `planet`,
+- The first segment is the owning area: `space`, `render`, `thermal`, `pose`, `replay`, `scan`, `input`, `hands`,
+  `link`, `telemetry`, `forge`, `hud`, `dev`, `perf`, or a space's own: `home`, `glued`, `curved`, `cells`, `planet`,
   `portal`, `rooms`, `slicer`. A use case (Phase 2) takes its own first segment (`playground`, `lung`, …).
 - A space's parameters are written as §12.2 and §12.4 write them: `glued.copies`, not `space.glued.copies`. The
   only name that starts with `space.` is `space.id`.
 - The **group** is a lower-case key. For a space it is `SpaceIds.ParamGroup(id)` (lane A §1): `home`, `glued`,
   `curved`, `cells`, `planet`, `portal`, `slicer`. Others in use: `app`, `render`, `pose`, `scan`, `input`,
-  `link`, `forge`, `hud`, `dev`, `perf`. The Console and the menu show it as a heading. The group of an entry is
-  the one of its first declaration.
+  `hands`, `link`, `forge`, `hud`, `dev`, `perf`. The Console and the menu show it as a heading. The group of an
+  entry is the one of its first declaration.
 - A group is **active** or **inactive** (lane A §4.3). SpaceLab marks a space's group inactive on `Exit` and
   active on `Enter` (`SetGroupActive`). An inactive group is shown folded and greyed; its parameters keep their
   values and can still be set.
@@ -279,6 +279,9 @@ Who declares what (README F6):
 - Each space declares its own through the delegate it gave `SpaceRegistry.Register`
   (`SpaceRegistry.DeclareAllParams` at boot, in `SpaceId` order) and again in `Configure` (lane A §4.3, §5).
 - Lane D's installers declare theirs (`TelemetryInstaller`, `FlatTwinHud`, `AssetClientInstaller`).
+- The tracked hands declare theirs, the `hands.*` area of 1.4, through `Atlas.Hands.HandsSystem.DeclareParams`, which
+  `Atlas.App.AtlasApp` calls after `AppParams`, the spaces, lane D's installers and the dev rows (lane A §8.2).
+  `Atlas.Hands` may reference `Atlas.Link` for parameter types only, as a space does (README F1).
 - The thermal ladder lives in `Atlas.Rendering`; `AppParams` writes each rung's values back with
   `ParamSource.Local` (lane A §9.5).
 
@@ -296,8 +299,8 @@ registry.DeclareFloat(AppParams.Ipd, "render", StereoRig.MinIpd, StereoRig.MaxIp
 ## 1.4 Names declared in this build
 
 In the order of a full boot of the phone app: `AppParams` (lane A §8.2 step 16), the spaces, lane D's
-installers (step 18), then the dev and perf-tour rows. The wire id follows that order but is read from the
-manifest, never from this table. **R** = `onRelease`. **K** = kill switch (1.5). Names, ranges and defaults of
+installers (step 18), then the dev rows, the tracked hands' rows and the perf tour's. The wire id follows that order
+but is read from the manifest, never from this table. **R** = `onRelease`. **K** = kill switch (1.5). Names, ranges and defaults of
 lane A's rows are those of lane A §9.6 and §14.
 
 | Name | Kind | Range or options | Default | Unit | | Group | Declared by · drives |
@@ -355,6 +358,14 @@ lane A's rows are those of lane A §9.6 and §14.
 | `hud.visible` | Bool | | false | – | | `hud` | `TelemetryInstaller` · HUD |
 | `dev.room` | Enum | `none`, then the fixture rooms | by start options | – | R | `dev` | `AppParams.DeclareDev` · the rehearsal flow |
 | `dev.overlay` | Bool | | on in the Editor and in a development build | – | | `dev` | `AppParams.DeclareDev` |
+| `hands.enabled` | Bool | | false | – | K | `hands` | `HandsSystem.DeclareParams` · `HandsRuntime.Enabled`: the kill switch of the tracked hands. Off, the hands' gate is closed (event `hands.off`, reason `param`): no detector, no hand drawn, no touch, no mask, and the panels stand where they always have |
+| `hands.rate` | Enum | `auto`, `30`, `15` | 0 (`auto`) | – | | `hands` | the same · `HandsRuntime.RateOverride` (0, 30, 15 detections a second). `auto` follows the tier (30 at Nominal and High, 15 at Fair) with the self-governor and the idle stop; 30 and 15 fix the rate and switch both off. For the bench |
+| `hands.reach` | Float | 0.40 … 0.60 | 0.48 | m | | `hands` | the same · `HandsRuntime.Reach`: how far from the rear camera the near anchor stands, where panels come to in a hands session |
+| `hands.sound` | Bool | | true | – | | `hands` | the same · `HandsRuntime.Sound`: the three clicks (a press, a contact with a surface, a pinch) |
+| `hands.draw` | Bool | | true | – | | `hands` | the same · `HandsRuntime.Draw`: off, the hands and their marks are not drawn while tracking, touch and the mask go on (the blind-reach check of the camera-to-eye offset) |
+| `hands.editor` | Bool | | false | – | | `hands` | the same · `EditorHandsSource.Enabled`: the Editor's mouse-and-keys hands (verification brief, step 3i). Nothing happens on a phone or where there is no tracked camera: no such source is made there |
+| `hands.bench` | Bool | | false | – | | `hands` | the same · `HandsRuntime.Bench`: one `hands.bench` event a second while a session runs (§2.6) |
+| `hands.record` | Bool | | false | – | | `hands` | the same · `HandsRuntime.Record`: writes the detections to `hands_<UTC time>.handlog` in the phone's `logs` folder (`recordings/README.md`) |
 | `perf.run` | Enum | `off`, `tour`, `soak`, `soakNoDepth`, `ladder` | 0 | – | R | `perf` | the perf tour (`App/PerfTour`) |
 | `perf.visitSeconds`, `perf.soakMinutes`, `perf.soakIntervalSeconds` | Int | 5 … 120, 1 … 30, 15 … 300 | by start options | s, min, s | R | `perf` | the perf tour |
 | `perf.pose` | Enum | `auto`, `tracked`, `replay`, `synthetic` | by start options | – | R | `perf` | the perf tour |
@@ -378,29 +389,45 @@ Notes:
   (`LinkPump`, §2.6).
 - `pose.gyroPredict` is the on/off switch of §12.4 and `pose.gyroLeadMs` the lead; lane C's page writes the
   lead as one number.
+- The eight `hands.*` entries are declared in the order of the table by `HandsSystem.DeclareParams`. `AtlasApp` calls
+  it after `AppParams`, the spaces, lane D's installers and `DeclareDev`, and before the menu, onboarding and the perf
+  tour are installed at row 19 of lane A §8.2: the hands take the eight wire ids that follow the dev rows, and the
+  `perf.*` rows, which the tour declares when it is installed, come after them.
+- `hands.enabled` is off at the start (decision R8 of the hands brief): a build with the tracked hands does nothing
+  different until it is switched on, from the Console or from the on-device menu. Under the demo lock the Station
+  cannot change it, so in a locked demo it is changed from the menu (1.5). `hands.editor`, `hands.bench` and
+  `hands.record` are developer parameters and no kill switch.
+- The hands add nothing to `State`, no message and no operator command: their parameters travel in the manifest and
+  `ParamSet` like any other, and their events (§2.6) are ordinary `Event` messages (§2.3 here; §8.3 of the hands
+  design).
 
 ## 1.5 Kill switches
 
-The union of the "Switch" column of §12.2 and the list of §12.4. It is a list of names, in menu order
-(`Atlas.App.Menu.MenuModel.KillSwitchIds`), not a flag on the entry:
+The union of the "Switch" column of §12.2 and the list of §12.4, and after them the switch of the tracked hands. It is
+a list of names, in menu order (`Atlas.App.Menu.MenuModel.KillSwitchIds`), not a flag on the entry:
 
 `space.id`, `demoLock`, `thermal.pinTier`, `render.scale`, `render.msaa`, `curved.cullRho`, `curved.mode`,
 `cells.viewDepth`, `planet.R`, `planet.fogRho`, `glued.mode`, `glued.copies`, `rooms.count`, `portal.depth`,
 `slicer.source`, `pose.gyroPredict`, `scan.route`, `link.enabled`, `link.stateHz`, `telemetry.mode`,
-`forge.backend`.
+`forge.backend`, `hands.enabled`.
 
 `cells.viewDepth`, `planet.R` and `planet.fogRho` are lane B's, declared by `AlignedCellsCore.DeclareParams` and `SmallPlanetCore.DeclareParams`
-through `SpaceRegistry.DeclareAllParams` at boot, so the menu lists all 21 from the first frame. `cells.viewDepth` is Int 0 … 2 (default 2, the
+through `SpaceRegistry.DeclareAllParams` at boot, so the menu lists all 21 of the plan's from the first frame, and
+`hands.enabled` with them (`HandsSystem.DeclareParams` runs before the frame loop is enabled). `cells.viewDepth` is Int 0 … 2 (default 2, the
 view range of `SightLines`), `planet.R` Float 0 … 4 m (0 = the loop-fit value, on release) and `planet.fogRho` Float 0.5π … 0.8π rad
 (default 0.8π, the opaque end of the fog; the start is 0.3π below it). The dial's own `curved.q` (Int 3 … 6, default 5) and
 `curved.strong` (Bool, on release) are declared once by `CurvedDialParams` for S2 and S4 and are not kill switches.
 
-The list stays these 21 names. `scan.wallBridge` (§1.4) does what a kill switch does, since the Console or the menu can
-switch the RoomPlan wall bridge off and the walls are then the outline's, but it is not in the list: the list is by
-definition the union of the "Switch" column of §12.2 and the list of §12.4, and `MenuModelTests` asserts its length
-(21) against this section. `render.furniture` is not in it either. Both are on the menu's Parameters page, which shows
-every group of the registry, and in the Console. Putting either on the menu's Quality page is a change to this
-section, to `MenuModel.KillSwitchIds` and to that test together (open item 14).
+The list is these 22 names: the 21 of the plan, and `hands.enabled` after them, so that no switch changes its place
+and the hands can be switched off in the headset with the Station away (hands design §3.7, E11). The Quality page
+shows `hands.enabled` last, above the reset row. `scan.wallBridge` (§1.4) does what a kill switch does, since the
+Console or the menu can switch the RoomPlan wall bridge off and the walls are then the outline's, but it is not in the
+list: the list is the union of the "Switch" column of §12.2 and the list of §12.4 with the hands' switch, and
+`MenuModelTests` asserts its length (22, `QualityPage_HoldsTheDeclaredKillSwitches_InContractOrder`) and that
+`hands.enabled` is the last (`QualityPage_HoldsTheHandsSwitch_AfterTheOthers`) against this section.
+`render.furniture` is not in it either. Both are on the menu's Parameters page, which shows every group of the
+registry, and in the Console. Putting either on the menu's Quality page is a change to this section, to
+`MenuModel.KillSwitchIds` and to those tests together (open item 14).
 
 Rules (§12.4):
 
@@ -413,7 +440,10 @@ Rules (§12.4):
   menu sets it directly. The phone's `State.flags` carries the lock, and the Hub follows it.
 - `link.enabled` set to off from the Console closes the link (`Bye {"reason": "link.enabled off"}`). It can then
   only be set back from the menu, and the link starts again only on a phone that has paired before.
-- **Bump Guard has no kill switch, no parameter and no off state.**
+- `hands.enabled` starts off (decision R8 of the hands brief), and "Reset switches to defaults" (§5.7) puts it off
+  again.
+- **Bump Guard has no kill switch, no parameter and no off state.** The hands' switch does not reach it: with the
+  hands off, or not installed, Bump Guard runs as it always has (lane C §8.8).
 
 ## 1.6 `AtlasParamAttribute` and the binder
 
@@ -839,6 +869,11 @@ Everything the Spectator needs to redraw the walker's frame (§7.3.1, Appendix B
 | 200 | 2 | `worldVer` | u16 | | +1 on every regeneration; wraps |
 
 Total 1 + 1 + 2 + 4 + 8 + 12 + 16 + 1 + 1 + 48 + 2 + 72 + 32 + 2 = **202**.
+
+The tracked hands change none of this: `State` has no field, no flag bit (bit 7 stays zero) and no message for them,
+and the telemetry row keeps its columns (§5.3). The hands' state reaches the Station only as parameters (1.4) and
+events (§2.6), so a recorded session replays on the Hub and the Spectator as it always did, and `tools/ReplayPhone`
+needs no change.
 
 ```csharp
 // File: ATLAS/Assets/Atlas/Link/Messages/StateMessage.cs
@@ -1417,8 +1452,25 @@ Events in this build. A lane adds a name by adding a row.
 | `portal.cross`, `rooms.loop`, `slicer.object` | `{from, to}`, `{room, laps}`, `{object}` | A (S5, S6) | Space milestones |
 | `asset` | `{step, boxId, …}`; `step`: `room`, `upload`, `requested`, `cached`, `ready`, `placed`, `builtin`, `failed`, `rejected`, `unreachable`, `reachable`, `light_placed`, `light_dropped`, `light_deferred`, `light_same`; with `jobId`, `sha256`, `reason`, `attempt`, `tris`, `loadMs` and, for `builtin`, `placed`, `kept` and `shape`, as the step has them (§4.3, step 8) | D (`AssetClientCore`) | Asset client (§4.3; §11.4.7 reads these) |
 | `menu` | `{state: "open" \| "close"}` | D (`MenuModel`) | On-device menu opened or closed |
+| `hands.on` | `{hz}` | Hands (`HandsRuntime`) | The hands' gate became active and the detector started, at 30 or 15 detections a second, or at the fixed rate of `hands.rate` |
+| `hands.off` | `{reason: "mode" \| "pad" \| "param" \| "source" \| "pose" \| "heat"}` | Hands | The gate left active: the display is not the headset, a gamepad is connected, `hands.enabled` is off, the source is unavailable, the head does not come from the AR camera, or the tier is Serious or Critical. `hands.stats` follows at once |
+| `hands.rate` | `{hz, why: "tier" \| "governor" \| "idle" \| "override"}` | Hands | The detector's rate changed while the gate stayed active: 30 and 15 by the tier, 15 when the self-governor found results older than 0.060 s or the hands' own frame time over 0.6 ms for 2 s, 5 after 20 s with no hand in view, or `hands.rate` fixed it |
+| `hands.enter` | `{hand: "L" \| "R"}` | Hands | A hand became tracked. At most one a second for each hand: an enter that comes sooner is not logged and is counted in `quietEvents` of `hands.stats` |
+| `hands.exit` | `{hand, cause: "edge" \| "lost", visibleMs}` | Hands | A hand stopped being tracked, 0.40 s after its last detection. `cause` is `edge` when its palm was within the picture's border band when it went, `lost` otherwise; `visibleMs` counts from its enter. Every exit is logged |
+| `hands.touch` | `{hand, label, tag}` | Hands | A fingertip fired a gaze target: on the press, and on each repeat of a `Repeat` target. `label` and `tag` are the target's (`label` is `none` when it has none). The firing itself is an ordinary gaze firing (lane C §13.7); this event is the only record that a hand did it |
+| `hands.pinch` | `{hand, label}` | Hands | A pinch fired the target under the gaze. A pinch with nothing under the gaze fires nothing and logs nothing |
+| `hands.two` | `{phase: "start"}`, then `{phase: "end", dist, angle}` | Hands | A two-hand pinch started and ended: at the end the change of the distance between the two pinch points, metres, and of their angle, degrees. Recognised and reported; nothing is bound to it |
+| `hands.stats` | `{hz, ageMsP50, ageMsP95, requestMs, mainMs, visibleL, visibleR, presses, pinches, maskFrames, scale, image, depth, fx, fy, quietEvents, source}` | Hands | With every `hands.off`, and when the app stops during a session as far as the event log is still open (the app shuts the telemetry down before the hands). `hz` is detections a second over the session so far, `ageMsP50` and `ageMsP95` the age of the last 256 results at the poll, `requestMs` the detector's last request, `mainMs` the hands' own main-thread time a frame (smoothed), `visibleL` and `visibleR` the shares of the session each hand was shown, `presses` and `pinches` the firings, `maskFrames` the frames that had a depth mask, `scale` the walker's hand size against the template, `image` and `depth` the sizes of the last picture and depth image as text (`<width>x<height>`), `fx` and `fy` the picture's focal lengths, `quietEvents` the enters not logged, `source` the source's name (`vision`, `editor`, `replay`, `none`). The counters start again after the event |
+| `hands.bench` | the members of `hands.stats` | Hands | While `hands.bench` is on and a session runs, once a second, with the figures of the session so far |
+| `hands.fault` | `{code}`: a number or text | Hands | The detector's fault code as a number (−1 not started, −2 the AR session is gone, −3 no new camera frame for 2 s, −4 thirty failed requests in a row, −5 the plugin's record is not `HandsDetection`'s), once when the code differs from the last one reported: the hands then ask the detector to start again every 5 s. Or text: `sense: …`, `upload: …` or `after: …` with the exception's type and message, once, after which the hands are off until the app restarts (decision R9); or `mask`, once, when Bump Guard's step first caught the mask source throwing and ran unmasked |
 | `perf.runBegin`, `perf.runEnd`, `perf.summary`, `perf.note` | the perf tour's | A (`App/PerfTour`) | The scripted performance tour |
 | `fms`, `seq`, `pg.fmsAlert`, `note`, `asset_ack` | `{score}` (0 to 20), `{score}` (1 to 7), `{score, stop}`, `{text}`, the `AssetAck` body | Hub | Console entries (§3.5) and acknowledgements; written by the Hub with the Hub clock and `"scene": "hub"`, never sent to the phone. `pg.fmsAlert` is written right after an `fms` whose score is at or above `pg.fmsStop` (the phone's value from the manifest and snapshot; 4 until the phone declares it); the phone never writes `fms`, `seq` or `pg.fmsAlert` (P2-C09, P2-C17) |
+
+The hands log edges only, through `IEventLog`, and nothing per frame; the Hub records every event and the Console lists
+one it does not know, so no Station code was needed. The gate's events (`hands.on`, `hands.off` with the `hands.stats`
+that follows it, `hands.rate`) are logged at step 1, where the gate is decided; the others at step 8b, and a
+`hands.fault` where the exception was caught (steps 1, 6 or 8b). No world-touch mark is logged. `State` is not touched
+(§2.3).
 
 Lane B's spaces log `walk.corner`, `walk.lap` and `walk.closed` (S2 and S4: `{q, corner or laps or corners, flag_m or closure_m, turn_deg}`), `cells.enter` (S3) and `curved.objectScale` (S2); the Lung and FieldFit blades log their own (`fork`, `compass_choice`, `blindspot_*`, `ff.*` and others) under their own scene through `EventLog.LogJson(scene, …)`.
 
@@ -3423,6 +3475,9 @@ keeps one folder.)
 - `Application.persistentDataPath` is read once on the main thread and cached (it is not thread-safe, U-net §6).
 - `UIFileSharingEnabled` makes the folder readable from the Mac (C.5).
 - No camera frame and no crop is ever written (rule 10).
+- The pose logs and hand logs that `pose.record` and `hands.record` start (`walk_<UTC time>.poselog`,
+  `hands_<UTC time>.handlog`) go to the same folder. They are not named by the session and `LogFileWriter` does
+  not touch them (`recordings/README.md`).
 - §13.5: `LogFileWriter.DeleteSession(sessionId)` removes the three log files of a session;
   `AssetClient.ForgetRoom` removes a room's GLBs from the cache, the light copies as well as the full ones.
 
@@ -3574,7 +3629,7 @@ namespace Atlas.App.Menu
         public const float FloatStepFraction = 1f / 20f;
         public const string EventMenu = "menu";
         public const string EventParamSet = "param.set";
-        public static readonly string[] KillSwitchIds;     // the 21 names of 1.5, in order
+        public static readonly string[] KillSwitchIds;     // the 22 names of 1.5, in order
 
         public MenuModel(Atlas.Link.ParamRegistry registry, Atlas.World.ISpaceHost spaces = null, IMenuActions actions = null);
         public Atlas.World.IEventLog Events { get; set; }
@@ -3612,13 +3667,14 @@ namespace Atlas.App.Menu
 | Row | Name and value (the option's name for an `Enum`, the number otherwise). Headings and status lines are skipped by the focus. An inactive group is marked "(inactive)" in its heading; its rows can be changed |
 | A step | `Float`: ± 1/20 of the range, on the grid that starts at `min`. `Int`: ± 1. `Bool`: toggles. `Enum`: the next option, no wrap. A space or command row runs on "+" |
 | Applying | At once, except a parameter with `OnRelease` (`space.id`, `glued.mode`, …): its row shows the pending value and `Confirm` applies it. That is the menu's "release". `Confirm` on a `Bool` toggles it |
-| Reset | "Reset switches to defaults" resets the kill switches except `space.id`, which would walk the wearer out of the space they stand in. It does not touch the rest of the registry |
+| Reset | "Reset switches to defaults" resets the kill switches except `space.id`, which would walk the wearer out of the space they stand in; `hands.enabled` goes back to off with the others. It does not touch the rest of the registry |
 | Input | The service `IAtlasInput`, taken from the app at `Install` (lane C §13.3) |
 | Open and close | Lane C's action `AtlasAction.ParamMenu`: the gamepad chord `start` while `select` is held, F1 in the Editor (lane C §13.1). `ParamMenu` again or `AtlasAction.Back` closes. On open `IAtlasInput.PushContext(InputContext.Menu)`, on close `PopContext`. A space switch that is accepted, "Return to Home" and "Rescan" close the menu; so does leaving `DisplayMode.Headset` |
 | Gamepad | `NavUp`, `NavDown` move the focus; `NavLeft`, `NavRight` step the row; `Confirm` applies; `Back` closes. Read with `IAtlasInput.Pressed` |
 | Gaze dwell (rule 5) | While a space runs: one chip for `ParamMenu`, down and to the left at (−0.55, −0.40, 1.0) m in the menu frame, radius 0.06 m (proposed). While open: each visible focusable row is a target that selects it (`NavDown` with the row's slot + 1 in `Tag`); the focused row has a "−" and a "+" target (`NavLeft`, `NavRight`, `GazeMode.Repeat`); one chip each for `Confirm` ("apply") and `Back` ("close"). All registered with `IAtlasInput.RegisterGazeTarget` in the room frame, context `Menu`, and moved with the head's position |
 | Where it stands | The gaze ray is the head's forward axis, so a panel that turned with the head could never be looked at off its centre. The menu follows the head's **position** and keeps its own heading, level (`MenuFrame`). Closed: the heading trails the walker's at 90°/s, never by more than 40°, and holds still while they look down past −8° or the gaze is on the chip. Open: the heading is fixed, and is brought round when the walker has turned 75° away |
 | Panel | Under `boot.Hud`, 1.2 m ahead, 0.70 × 0.50 m: one mesh of flat quads (`Atlas/Surface`, pooled material) for the panel, the focused row and the chips, and text objects. Eight rows visible; the list scrolls with the focus. Six draw calls while open, two while closed. Text is legacy `TextMesh` with the built-in font, not TextMeshPro (open item 6) |
+| In a hands session | The panel and the chip come within reach of the hands. They stand at their slots about the near anchor (`ReachSlot.MenuPanel` and `MenuChip`; lane A §10.9, lane C §7.7), their layout times `IReachLayout.Scale` (0.75: the panel 0.525 × 0.375 m, a row 3 cm tall), on the world layer 0 instead of `AtlasHud`, with their text on `Atlas/NearText` so that a finger in front of a row covers the row and its text. Their gaze targets stand with them, none under 3 cm across, and are turned in place while the anchor turns, so a dwell or a press that is under way survives it. A menu that opens within reach opens at once, at the anchor. With no layout, or one that says far (the hands are off, a gamepad is connected, the display is not the headset), the menu is exactly as the rows above say; it also goes back, and closes, when the display leaves the headset. When the hands stop for heat the panels stay near and work by gaze |
 | The world | Keeps running. Bump Guard and its cue are unaffected and are drawn over the menu's layer order by lane C |
 | Logging | `menu` event `{state}` on open and close; `param.set` `{name, value, src: "menu"}` per change |
 | Cost | Closed: one action read at step 8b, one target and one transform moved at step 6. Open: text is rebuilt only when `Revision` moved; the status lines are read every 0.5 s |
@@ -3880,7 +3936,7 @@ are the rows of §11.1. Each row names the test class (the file of the same name
 | `SpectatorCoreTests`, `SpectatorAssetsTests` | `Atlas.Telemetry.Tests` | Room fetch, world check and mismatch, space following, banners; the bytes of the `State`s of a lap in S2 and of a walk round S4 give the phone's tile and pose; a world generated differently is not shown; furniture from events and job lists; a first shape for every object, including those that get no mesh |
 | `StationReplayTests` | `Atlas.Spaces.CurvedWalk.Tests` | The recorded 5-corner lap through the real Spectator core, host and loop into `CurvedWalkCore.ReadState`: the same tile, pose, tile zero and content hash on every frame; the dial to 6 |
 | `ScanWallBridgeParamTests`, `FurnitureLevelPolicyTests` | `Atlas.App.Tests` (`Tests/App/`) | `scan.wallBridge` is a Bool in group `scan`, declared on, right after `scan.teamPrescan`, and switches the bridge on and off where it is available and not where it is not. `render.furniture` has the three values and defaults to `auto`; the space table is Full in Home and Curved Walk and Light elsewhere; the ladder's first step forces Light and nominal gives Full back; `light` and `full` override; rebuilding the room puts the level back |
-| `MenuModelTests` | `Atlas.App.Tests` (`Tests/App/Menu/`) | The pages; the kill switches in the order of 1.5, 21 of them; stepping per kind; an `OnRelease` row changes only on `Confirm`; every change goes through the registry with `ParamSource.Local` and logs `param.set` |
+| `MenuModelTests` | `Atlas.App.Tests` (`Tests/App/Menu/`) | The pages; the kill switches in the order of 1.5, 22 of them, `hands.enabled` last and above the reset row; stepping per kind; an `OnRelease` row changes only on `Confirm`; every change goes through the registry with `ParamSource.Local` and logs `param.set` |
 | Forge | `python -m pytest station/forge/tests` | With the `procedural` generator, built shapes and a fake TripoSG pipeline (no GPU, no PyTorch): a crop becomes a pair of GLBs that pass `validator.py` at their levels; the same input gives the same hash; a corrupt JPEG ends as `failed`; a second identical upload is a cache hit with no job, whose answer names the light copy; a 33rd box is answered `placeholder`, the queue is largest first and capped at 32; `backend` `cache` with a miss fails at once; the hosted fallback is off by default and has no vendor; a restart keeps rooms, finished jobs and assets, and drops a light copy whose file is gone. `test_budget`: the rule of §4.1 on the vectors of the brief (the fourth sums to 119,990) and the table of equal sizes. `test_validator`: the two levels, file limits per level, `palette.cell` and `palette.face`, `--level`. `test_api`: `meta.profile` and `triTargetLight` and their 422 cases, what a job keeps, the `JobStatus` members, a room record planned again. `test_imaging`: the framed picture is square, centred, white, with a margin of a tenth of the long side. `test_triposg` (fake pipeline): what `GET /health` says for each missing piece, the load at start-up, weights without `model_index.json`, the default call as upstream makes it, the fallback decoder and its order switch, matting required, views that cannot be matted passed over. `test_config`: the settings, their variables and their checks. `test_profile`, `test_colour`: the phone's rays on a mesh (the test vectors of `ObjectProfile`), the fit score, the seen test, smoothing, the speckle fallback. `test_fit`: a mesh turned by each quarter turn is turned back, ties and the up-axis rule, `triposg_front`, two colours in the right places, both copies validate, a full copy within the light target is its own light copy. `test_attempts`: a poor fit runs views 1 and 2 and publishes the best, a mesh is published however poor its fit, how failures count, no second photo for the hosted service, the next best published when the best cannot be finished, the light copy as an asset of its own, `reclean` reproducing the published bytes. `test_meshcheck`, `test_first_run`: the numbers of `tools/meshcheck/check.py` and the reading of the generator's frame. `tools/e2e/station_rehearsal.py` checks the Forge's targets against `tools/rooms/roommath.py` and both copies of every mesh against their limits |
 | Hub | `dotnet test station/hub.tests` | Relay of `State` unchanged; `perf.csv` equal to `TelemetryCsv`; presets saved, loaded as one `ParamSet`, baked; `/internal/job` relayed, with the four light members of an `AssetReady` passed through to the phone and the spectator unchanged (`ForgeJob_LightCopyFields_ArePassedThroughUnchanged`); session adoption and continuation; watchdogs; ReplayPhone against the Hub |
 | Console | `node --test station/console-tests` | The Console's modules: controls, commands, formats, jobs, map maths, telemetry |
@@ -3943,5 +3999,9 @@ L22 of §7.6.
     cannot keep every edge under 0.25 m. Three generations of one object take three times its time on the Station, and
     with 32 objects of poor fit the queue is long; neither is measured.
 14. **The kill-switch list and the two new parameters.** `scan.wallBridge` and `render.furniture` are on the menu's
-    Parameters page and in the Console but not in the 21 names of §1.5. Whether they belong on the menu's Quality page
+    Parameters page and in the Console but not in the 22 names of §1.5. Whether they belong on the menu's Quality page
     is a change to §1.5, to `MenuModel.KillSwitchIds` and to `MenuModelTests` together.
+15. **The last `hands.stats` of a session is lost.** `AtlasApp.Shutdown` shuts the telemetry down, which stops the event
+    log's writer thread and closes its files, before it shuts the hands down, so the `hands.stats` that the hands log
+    when the app stops during a session is queued to a log nothing writes any more, and the link has said goodbye. The
+    one that follows `hands.off` is not affected. Reorder the two calls, or have the hands log it first.

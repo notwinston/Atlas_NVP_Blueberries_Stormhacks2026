@@ -904,7 +904,7 @@ Other changes [merge]:
 | 2 | `Step` is called once per frame at step 4 with the filtered head and the frame's time, costs microseconds, allocates nothing in the flat case and never throws |
 | 3 | `Pose` is always valid. In a flat space `Pose.Local` is a pure translation with entries below one tile side |
 | 4 | Every kernel type is a blittable value type; `TileId` works as a dictionary key; `ContentSeed` will not change without notice |
-| 5 | Every material that never sets `_WarpMode`, `_Anchor` or a gate renders unwarped and unclipped. Unity's own culling and bounds are valid for every renderer except those of a curved space |
+| 5 | Every material that never sets `_WarpMode`, `_Anchor` or a gate renders unwarped and unclipped. Unity's own culling and bounds are valid for every renderer except those of a curved space. The tracked hands' meshes and marks rely on this: they stay in room coordinates in every space (lane A §10.9) |
 | 6 | Bump Guard needs nothing from the kernel, and the kernel needs nothing from Bump Guard |
 
 Do not assume:
