@@ -16,6 +16,7 @@ namespace Atlas.Blades.Playground
         static readonly Color s_text = new Color(0.92f, 0.95f, 0.92f, 1f);
         // Neutral ramp cell used by the menu for its panel.
         const int PanelCell = 1;
+        const float CornerRadius = 0.035f;
 
         readonly MaterialPool _pool;
         readonly Material _material;
@@ -44,9 +45,10 @@ namespace Atlas.Blades.Playground
                 _material = pool.Rent();
                 // Head-locked: no fog, and the fade of a space switch does not touch it. A sign in the room takes both.
                 MaterialPool.SetSurface(_material, 1f, headLocked ? 0f : 1f, 0f, headLocked ? 0f : 1f);
-                var builder = new AtlasMeshBuilder(8, 12);
-                builder.AddQuad(new float3(-halfWidth, -halfHeight, 0f), new float3(2f * halfWidth, 0f, 0f),
-                                new float3(0f, 2f * halfHeight, 0f), AtlasPalette.Uv(PanelCell));
+                var builder = new AtlasMeshBuilder(40, 112);
+                // Squircle corners; a one-line chip comes out a capsule.
+                builder.AddSquircle(float3.zero, halfWidth, halfHeight, math.min(CornerRadius, halfHeight),
+                                    AtlasPalette.Uv(PanelCell));
                 _mesh = AtlasMesh.Create(builder, name);
                 _root.AddComponent<MeshFilter>().sharedMesh = _mesh;
                 MeshRenderer renderer = _root.AddComponent<MeshRenderer>();

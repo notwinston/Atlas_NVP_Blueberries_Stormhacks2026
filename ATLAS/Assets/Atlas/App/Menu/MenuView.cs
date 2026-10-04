@@ -7,7 +7,7 @@ namespace Atlas.App.Menu
 {
     /// <summary>
     /// What the menu draws (lane D contract, section 5.7), built in code under the HUD parent (contract README
-    /// F3): one mesh of flat quads in the look's shader for the panel, the focused row and the chips, and five
+    /// F3): one flat mesh in the look's shader (squircle panel, capsule row and chips) and five
     /// text objects made the way the HUD makes its own. Six draw calls while open, two while closed. Nothing
     /// here decides anything: it shows the model, and only when the model's revision moved.
     /// Legacy text spaces its lines by the font's line height, not by the row pitch, and hangs from the top of
@@ -24,14 +24,18 @@ namespace Atlas.App.Menu
         const float MarkZ = -Layer, GlyphZ = -2f * Layer, TextZ = -3f * Layer;
         const float ChipWidth = 0.14f, ChipHeight = 0.06f;
 
-        // Cells of the palette's neutral ramp (row 0): the panel, a chip, the focused row, a glyph.
-        const int PanelCell = 1, ChipCell = 3, FocusCell = 5, GlyphCell = AtlasPalette.Text;
+        // Cells of the palette's neutral ramp (row 0): the panel, its glass rim, a chip, the focused row, a glyph.
+        const int PanelCell = 1, RimCell = 4, ChipCell = 3, FocusCell = 5, GlyphCell = AtlasPalette.Text;
+        /// <summary>The panel's corner radius; rows and chips inside are capsules, so the curves stay concentric.</summary>
+        const float PanelRadius = 0.045f;
+        /// <summary>How far the rim shows round a squircle, behind it: the lit edge of a pane of glass.</summary>
+        const float Rim = 0.003f;
 
         static readonly Color s_text = new Color(0.92f, 0.95f, 0.92f, 1f);
 
         readonly MaterialPool _pool;
         readonly Material _material;
-        readonly AtlasMeshBuilder _builder = new AtlasMeshBuilder(64, 128);
+        readonly AtlasMeshBuilder _builder = new AtlasMeshBuilder(512, 1536);
         readonly StringBuilder _text = new StringBuilder(512);
         readonly GameObject _panel, _chip;
         readonly Mesh _panelMesh, _chipMesh;
@@ -48,7 +52,7 @@ namespace Atlas.App.Menu
 
             _panel = NewObject("AtlasMenu", hud, layer);
             _builder.Clear();
-            AddRect(0f, 0f, 0f, MenuLayout.Width * 0.5f, MenuLayout.Height * 0.5f, PanelCell);
+            AddPanel();
             _panelMesh = AtlasMesh.Create(_builder, "Atlas Menu");
             AddMesh(_panel, _panelMesh);
 
@@ -57,7 +61,7 @@ namespace Atlas.App.Menu
             float3 corner = MenuLayout.OpenChip;
             _chipFacing = Quaternion.LookRotation(new Vector3(corner.x, corner.y, corner.z));
             _builder.Clear();
-            AddRect(0f, 0f, 0f, ChipWidth * 0.5f, ChipHeight * 0.5f, ChipCell);
+            AddRimmed(0f, 0f, ChipWidth * 0.5f, ChipHeight * 0.5f, ChipHeight * 0.5f, ChipCell);
             _chipMesh = AtlasMesh.Create(_builder, "Atlas Menu Chip");
             AddMesh(_chip, _chipMesh);
 
@@ -77,9 +81,9 @@ namespace Atlas.App.Menu
                 _title = NewText(_panel.transform, "Title", font,
                     new Vector3(MenuLayout.NamesX, MenuLayout.TitleY - capCentre, TextZ), TextAnchor.UpperLeft);
                 float footer = MenuLayout.FooterY - capCentre;
-                NewText(_panel.transform, "Close", font, new Vector3(MenuLayout.CloseX, footer, TextZ), TextAnchor.UpperCenter).text = "close";
-                NewText(_panel.transform, "Apply", font, new Vector3(MenuLayout.ApplyX, footer, TextZ), TextAnchor.UpperCenter).text = "apply";
-                NewText(_chip.transform, "Label", font, new Vector3(0f, -capCentre, TextZ), TextAnchor.UpperCenter).text = "menu";
+                NewText(_panel.transform, "Close", font, new Vector3(MenuLayout.CloseX, footer, TextZ), TextAnchor.UpperCenter).text = "Close";
+                NewText(_panel.transform, "Apply", font, new Vector3(MenuLayout.ApplyX, footer, TextZ), TextAnchor.UpperCenter).text = "Apply";
+                NewText(_chip.transform, "Label", font, new Vector3(0f, -capCentre, TextZ), TextAnchor.UpperCenter).text = "Menu";
             }
 
             _panel.SetActive(false);
@@ -122,21 +126,21 @@ namespace Atlas.App.Menu
             bool steps = kind == MenuRowKind.Param || kind == MenuRowKind.Page;
 
             _builder.Clear();
-            AddRect(0f, 0f, 0f, MenuLayout.Width * 0.5f, MenuLayout.Height * 0.5f, PanelCell);
+            AddPanel();
             float y = MenuLayout.RowY(slot);
-            AddRect(0f, y, MarkZ, MenuLayout.RowHalfWidth, MenuLayout.RowHalfHeight, FocusCell);
+            AddCapsule(0f, y, MarkZ, MenuLayout.RowHalfWidth, MenuLayout.RowHalfHeight, FocusCell);
             // The step chips stand in front of the focused row, as their gaze targets do.
             if (steps)
             {
-                AddRect(MenuLayout.MinusX, y, GlyphZ, MenuLayout.StepHalfWidth, MenuLayout.StepHalfHeight, ChipCell);
+                AddCapsule(MenuLayout.MinusX, y, GlyphZ, MenuLayout.StepHalfWidth, MenuLayout.StepHalfHeight, ChipCell);
                 AddRect(MenuLayout.MinusX, y, TextZ, 0.010f, 0.002f, GlyphCell);
             }
             // "+" on a value, a plain mark on a row that runs something.
-            AddRect(MenuLayout.PlusX, y, GlyphZ, MenuLayout.StepHalfWidth, MenuLayout.StepHalfHeight, ChipCell);
+            AddCapsule(MenuLayout.PlusX, y, GlyphZ, MenuLayout.StepHalfWidth, MenuLayout.StepHalfHeight, ChipCell);
             AddRect(MenuLayout.PlusX, y, TextZ, 0.010f, 0.002f, GlyphCell);
             if (steps) AddRect(MenuLayout.PlusX, y, TextZ, 0.002f, 0.010f, GlyphCell);
-            AddRect(MenuLayout.CloseX, MenuLayout.FooterY, MarkZ, MenuLayout.ChipHalfWidth, MenuLayout.ChipHalfHeight, ChipCell);
-            AddRect(MenuLayout.ApplyX, MenuLayout.FooterY, MarkZ, MenuLayout.ChipHalfWidth, MenuLayout.ChipHalfHeight,
+            AddCapsule(MenuLayout.CloseX, MenuLayout.FooterY, MarkZ, MenuLayout.ChipHalfWidth, MenuLayout.ChipHalfHeight, ChipCell);
+            AddCapsule(MenuLayout.ApplyX, MenuLayout.FooterY, MarkZ, MenuLayout.ChipHalfWidth, MenuLayout.ChipHalfHeight,
                 model.HasPending ? FocusCell : ChipCell);
             AtlasMesh.Apply(_builder, _panelMesh);
 
@@ -157,6 +161,23 @@ namespace Atlas.App.Menu
             AppObjects.Kill(_panelMesh);
             AppObjects.Kill(_chipMesh);
             if (_material != null && _pool.Owns(_material)) _pool.Return(_material);
+        }
+
+        void AddPanel()
+        {
+            AddRimmed(0f, 0f, MenuLayout.Width * 0.5f, MenuLayout.Height * 0.5f, PanelRadius, PanelCell);
+        }
+
+        // A squircle with its rim showing round it, the rim one layer behind.
+        void AddRimmed(float x, float y, float halfWidth, float halfHeight, float radius, int cell)
+        {
+            _builder.AddSquircle(new float3(x, y, Layer), halfWidth + Rim, halfHeight + Rim, radius + Rim, AtlasPalette.Uv(RimCell));
+            _builder.AddSquircle(new float3(x, y, 0f), halfWidth, halfHeight, radius, AtlasPalette.Uv(cell));
+        }
+
+        void AddCapsule(float x, float y, float z, float halfWidth, float halfHeight, int cell)
+        {
+            _builder.AddSquircle(new float3(x, y, z), halfWidth, halfHeight, halfHeight, AtlasPalette.Uv(cell));
         }
 
         // A rectangle in the panel's plane that faces the walker: the front of a quad is towards cross(v, u).
