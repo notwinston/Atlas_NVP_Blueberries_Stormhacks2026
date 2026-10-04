@@ -108,8 +108,8 @@ namespace Atlas.Spaces.SmallPlanet
             }
             else SmallPlanetSky.ApplyLook(core.View3d);
             // The furniture is laid out about where the walker stands at entry, so it is where the real furniture is until the first step.
-            // The Small Planet draws no obstacles, only the kerbs (the room outline).
-            if (room != null && room.IsBuilt) roomView = new CurvedRoomView(room) { ObjectOrigin = head, ShowObjects = false };
+            // The Small Planet draws no obstacles and no kerbs (the room outline): only the planet.
+            if (room != null && room.IsBuilt) roomView = new CurvedRoomView(room) { ObjectOrigin = head, ShowObjects = false, ShowKerbs = false };
             ApplyView();
             // Rule 5: the dial is read in Tick, so its gaze twin lives as long as the space is entered.
             ReleaseDial();
@@ -180,7 +180,7 @@ namespace Atlas.Spaces.SmallPlanet
                 markers.Visible = placed && core.Walk.Armed;
                 markers.Upload(core.Walk, core.TileZero, core.U, Curvature.Spherical, core.R, frame.HeadPosition);
             }
-            // The room is tile zero's content: kerbs and furniture, each object rigid about its own base (lane C contract, section 9.2).
+            // The room is tile zero's content, hidden here: the view keeps the flat room's floor and walls out of the planet.
             if (roomView != null) roomView.Upload(Curvature.Spherical, core.R, core.U, core.TileZero, placed);
         }
 
