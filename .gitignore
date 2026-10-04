@@ -12,6 +12,8 @@
 **/[Rr]ecordings/
 # ...but the repo-level recordings/ holds RoomModels and pose logs replayed by every lane (Master Plan C.8)
 !/recordings/
+# ...and Atlas/Scan/Build is source code (the RoomModel builder and the room store), not a Unity build folder
+!/ATLAS/Assets/Atlas/Scan/Build/
 
 # Unity asset store tools
 **/Assets/AssetStoreTools*
@@ -21,6 +23,9 @@
 .vscode/
 .idea/
 *.csproj
+# ...but the Station's and the tools' own projects are hand-written and needed to build them
+!/station/**/*.csproj
+!/tools/**/*.csproj
 *.unityproj
 *.sln
 *.slnx
