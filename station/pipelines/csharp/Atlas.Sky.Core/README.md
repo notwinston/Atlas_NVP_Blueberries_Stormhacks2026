@@ -1,0 +1,72 @@
+# Atlas.Sky.Core
+
+Engine-free core of the needle sky (Lung Mission beat g). Plain C# (netstandard2.1, C# 9, `System` plus the
+`Atlas.Cases` JSON reader), no Unity types, no per-call allocation, time-free, deterministic.
+
+## Work packages served
+
+- **P2-B10 Needle sky**: `sky.json` reader, the eleven `.r8` maps, direction -> pixel -> clearance in mm (per phase,
+  minimum over phases, robust flag), the `sky_pick {az_deg, el_deg, clear_mm, robust}` payload, HEALPix `ang2pix` (ring).
+- **P2-B11 Great-circle check**: three marked directions, three minor great-circle arcs, interior angle sum of the
+  spherical triangle, the `gc_check {angle_sum_deg}` payload.
+
+## Files
+
+| File | What |
+|---|---|
+| `SkyInfo.cs` | `sky.json` (schema `atlas.sky/1`) through `Atlas.Cases.CanonicalJson.Parse`; rejects other schema, non-`ring` ordering, non-`u8`/non-`floor` encoding, path-like file names, wrong `npix`. Carries the 20 `checks` |
+| `SkyMaps.cs` | `Load(dir)` or `FromBytes(info, risk[10], robust)`; sizes come from `sky.json` (512 x 256 for the case, anything for a fixture). `TryPick`, `ClearanceMm(phase, dir)`, `MinClearanceMm(dir)`, `IsRobust(dir)`, pixel overloads, `RobustShare()` (solid-angle share, the "robust-window share of sky" read-out), `RobustRuleViolations()` (must be 0) |
+| `SkyFrame.cs` | the direction frame, az/el, equirect pixel formulas, the Unity swap |
+| `HealpixRing.cs` | `Ang2PixRing(nside, theta, phi)`, port of `atlas_pipelines/sky.py` |
+| `GreatCircle.cs` | `Triangle(a, b, c)` -> angles, sum, area; `TryCheck` -> `GcCheck` |
+| `SkyPick.cs` | `SkyPick`, `GcCheck` structs and their JSON (`EventPayload`) |
+
+Decoding: `clearance_mm = byte * mm_per_count` (0.1, taken from `sky.json`). The byte rounds down, so the value is a lower bound
+within 0.1 mm; 255 means "25.5 mm or more". `clear_mm` of a `sky_pick` is the minimum over the ten phases at the pixel
+containing the direction; `robust` is the robust map at that pixel.
+
+## Frames (state of confirmation)
+
+- **Direction frame of the contract** (`docs/case_contract.md` sections 2 and 9.1): patient LPS, right-handed, +x left, +y posterior,
+  +z superior, a direction from the target outwards; `theta` from +z, `phi` from +x towards +y. `sky_pick` uses it: `az_deg = phi` in
+  [0, 360), `el_deg = 90 - theta` in [-90, 90] (up towards superior).
+- **Unity frame**: the contract proposes `unity = (x, z, y)` (Unity x = left, y = up = superior, z = posterior; left-handed, anatomy not
+  mirrored). `SkyFrame.PatientToUnity` / `UnityToPatient` are that swap and nothing else. **NEEDS THE EDITOR TO CONFIRM**: that the
+  inverted sky sphere, the head direction fed to `TryPick` and the lung model (which the app places with the same swap) agree, and that
+  the equirect `v` axis (row 0 at +z) matches the sphere mesh's UV in the shader. Nothing here was run in Unity.
+
+## Unity side (what the adapter still has to do)
+
+Intended home: a lane-B assembly for the lung use case (proposed name `Atlas.Spaces.Lung`; the plan names none), next to a copy of
+`Atlas.Cases` (the JSON reader). The `.cs` files move in unchanged.
+
+1. Read `sky.json` and the eleven `.r8` as bytes (StreamingAssets or the package dir) and call `SkyMaps.FromBytes`; also upload the 11
+   maps as `R8` `Texture2D`s (no mipmaps, clamped, sRGB off: plan section 8.5 "data textures") for the inverted-sphere shader.
+2. Each frame in the look-and-dwell loop: head forward vector -> `SkyFrame.UnityToPatient` -> `TryPick` for the read-out. Dwell
+   (700 ms), the green window, stick + A, the click on the sky panel and the on-screen numbers are the adapter's.
+3. On a confirmed pick, send `EventPayload.SkyPickEvent` with `SkyPick.ToJson()`; after three picks `GreatCircle.TryCheck` and
+   `EventPayload.GcCheckEvent`. **Open point for lane D**: `docs/contracts/lane-d-link.md` section 2.6 says event name segments match
+   `[a-z][A-Za-z0-9]*`, which `sky_pick` and `gc_check` (as written in the plan) do not; the names are constants in `EventPayload`.
+4. Draw the great-circle arcs (the core gives angles and area, not the polyline).
+
+## Acceptance checks
+
+Run here (`station/pipelines/tests/test_p2_b_sky_core.py` builds and runs `Atlas.Sky.Core.Tests`):
+
+- 20 test directions of `sky.json` on the real `lung101` package (`ATLAS_CASES_DIR`): clearance per phase and minimum within 0.1 mm,
+  pixel, HEALPix index and robust flag equal, in 20 of 20; robust map equals the AND of the phase maps (0 differing pixels); robust share
+  equals `stats.robust_share`. Reported `NOT RUN` when `ATLAS_CASES_DIR` is unset.
+- Octant triangle 270 degrees (plan: +/- 0.5); 20,000 random triangles: angle sum above 180 and equal to 180 + 180 * area / pi, the area
+  from two formulas independent of the angle computation (Van Oosterom-Strakhov, L'Huilier).
+- C# HEALPix equals astropy-healpix on 1,000 seeded random directions (committed `healpix_ref_random_1000.txt`, runs without Python) and on
+  a second 1,000 generated by the pytest wrapper; plus 80 seam directions.
+- No allocation in 1,000,000 lookups; synthetic 32 x 16 fixture (about 11 kB) for loader and lookup tests from a clean checkout.
+
+Still needs the Editor or the phone: the Unity frame mapping above; the sphere shader and R8 texture sampling; the 0 ms per frame claim
+on the device; "clearance shown equals `sky.json`" as the walker sees it (the plan's phone-in-headset check); dwell and input twins.
+
+## Known limit
+
+At a direction exactly on a ring boundary (z = 0 or |z| = 2/3, to the last bit) `Ang2PixRing` (and the Python baker's `ang2pix_ring`)
+can differ from astropy-healpix by one ring: astropy computes z as `sin(pi/2 - theta)`, this code as `cos(theta)`. No map lookup depends
+on it (the baked maps are read by equirectangular pixel); the seam reference list leaves those exact ties out.
