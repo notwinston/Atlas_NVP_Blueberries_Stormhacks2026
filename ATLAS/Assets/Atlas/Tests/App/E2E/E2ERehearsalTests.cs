@@ -428,8 +428,11 @@ namespace Atlas.E2E.Tests
                     else
                     {
                         Assert.That(frame.PoseJumpRejected, Is.False, at);
-                        Assert.That(rig.Guard.Core.PoseJumped, Is.False, at);
                         Assert.That(rig.HubState.PoseJumpRejected, Is.False, at);
+                        // Bump Guard takes no velocity from a pose it cannot trust, so the ground covered during
+                        // the blind second reaches it as one more jump when tracking returns: the position is
+                        // taken at once and no speed is made of it (section 4.10).
+                        Assert.That(rig.Guard.Core.PoseJumped, Is.EqualTo(k == LossFirstSample + LossSamples), at);
                     }
 
                     if (limited)
@@ -634,6 +637,8 @@ namespace Atlas.E2E.Tests
                 float startCut = rig.HubState.P3;
 
                 float last = startCut;
+                bool laneOwned = false;
+                int laneFrom = -1;
                 rig.Play(log);
                 for (int k = 0; k < log.Samples.Length; k++)
                 {
@@ -642,13 +647,23 @@ namespace Atlas.E2E.Tests
                     Assert.That(rig.HubState.P3, Is.EqualTo(slicer.Controller.W));
                     if (slicer.Controller.Owner == SlicerCutOwner.Lane)
                     {
+                        if (laneFrom < 0) laneFrom = k;
                         Assert.That(rig.HubState.P3, Is.EqualTo(slicer.Layout.CutAt(z)).Within(1e-6f), "sample " + k);
-                        Assert.That(rig.HubState.P3, Is.GreaterThanOrEqualTo(last - 1e-6f), "walking forward never moves the cut back");
+                        // Once the lane owns the cut, walking forward never moves it back.
+                        if (laneOwned) Assert.That(rig.HubState.P3, Is.GreaterThanOrEqualTo(last - 1e-6f), "sample " + k);
+                        laneOwned = true;
+                    }
+                    else
+                    {
+                        Assert.That(laneOwned, Is.False, "the lane gave the cut up with nobody asking, sample " + k);
+                        Assert.That(rig.HubState.P3, Is.EqualTo(startCut), "sample " + k);
                     }
                     last = rig.HubState.P3;
                     Assert.That(rig.Registry.GetFloat(SlicerParams.W), Is.EqualTo(rig.HubState.P3), "slicer.w follows the cut live");
                 }
                 Assert.That(slicer.Controller.Owner, Is.EqualTo(SlicerCutOwner.Lane), "the lane never took the cut");
+                // The lane takes the cut once the walker has moved 5 cm: within a few frames at 1 m/s.
+                Assert.That(laneFrom, Is.InRange(1, 10));
                 Assert.That(rig.HubState.P3, Is.EqualTo(slicer.Layout.CutAt(rig.HeadFloor.y)).Within(1e-6f));
                 Assert.That(rig.HubState.P3, Is.GreaterThan(startCut));
 
@@ -696,8 +711,13 @@ namespace Atlas.E2E.Tests
                 Assert.That(rig.StepUntil(() => rig.Registry.GetInt(AppParams.PinTier) == 2, CommandFrames), Is.GreaterThanOrEqualTo(0), "the tier pin did not arrive in 250 ms");
                 Assert.That(rig.StepUntil(() => rig.HubState.QualityTier == 2, 75), Is.GreaterThanOrEqualTo(0), "tier 2 was not in the State within a second");
                 Assert.That(rig.Frame.Tier, Is.EqualTo(Atlas.World.QualityTier.Serious));
+                // Automatic again: the pin goes at once; the ladder then climbs one rung per dwell time, never by a jump.
                 Assert.That(rig.Hub.SendCommand(OperatorCommand.Quality(OperatorCommand.TierAuto)), Is.True);
-                Assert.That(rig.StepUntil(() => rig.HubState.QualityTier == 0, 90), Is.GreaterThanOrEqualTo(0), "the ladder did not go back to automatic");
+                Assert.That(rig.StepUntil(() => rig.Registry.GetInt(AppParams.PinTier) == OperatorCommand.TierAuto, CommandFrames),
+                    Is.GreaterThanOrEqualTo(0), "the pin was not lifted in 250 ms");
+                int back = rig.StepUntil(() => rig.HubState.QualityTier == 0, 60 * 90);
+                Assert.That(back, Is.GreaterThanOrEqualTo(0), "a cool phone never came back to the nominal tier");
+                TestContext.WriteLine("ladder: nominal again {0:F1} s after the pin was lifted", back / 60.0);
 
                 // 5  STOP: the cue at STRONG, and the world does not change.
                 ushort version = rig.Lab.WorldVersion;

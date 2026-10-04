@@ -8,6 +8,18 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Atlas/Scenes/Atlas_Boot.unity
     guid: cc30e55e464384f56be765d086d4f522
+  - enabled: 1
+    path: Assets/Atlas/Scenes/Space_Home.unity
+    guid: c3a4001a997163465fe767e7ef89853f
+  - enabled: 1
+    path: Assets/Atlas/Scenes/Space_Glued.unity
+    guid: a95637b2fd309fca1c4a7d5a321019a5
+  - enabled: 1
+    path: Assets/Atlas/Scenes/Space_Portal.unity
+    guid: 54b05a12d2026e9dc20b7c99227ca017
+  - enabled: 1
+    path: Assets/Atlas/Scenes/Space_Slicer.unity
+    guid: ec278c1212edef1ab4f858537c4d0390
   m_configObjects:
     UnityEditor.XR.ARKit.ARKitSettings: {fileID: 11400000, guid: 0465d33c6aee55f44b0237db8b0e0259, type: 2}
     com.unity.xr.arfoundation.simulation_settings: {fileID: 11400000, guid: c199e683398494f32b4cde18e73ab731, type: 2}
