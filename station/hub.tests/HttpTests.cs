@@ -254,6 +254,97 @@ namespace Atlas.Station.Tests
             await _t.PostJson("/api/op", "", 400);
         }
 
+        // The relay checks the JPEG start-of-image marker only, so a few bytes stand in for a picture.
+        static readonly byte[] FrameA = { 0xFF, 0xD8, 0xFF, 0xE0, 0x41, 0x41, 0xFF, 0xD9 };
+        static readonly byte[] FrameB = { 0xFF, 0xD8, 0xFF, 0xE0, 0x42, 0x42, 0xFF, 0xD9 };
+
+        static async Task<JsonValue> PostFrame(HttpClient http, byte[] jpeg, int expect = 200)
+        {
+            using (var content = new ByteArrayContent(jpeg))
+            using (HttpResponseMessage response = await http.PostAsync("/api/view/frame?mode=headset", content))
+            {
+                Assert.That((int)response.StatusCode, Is.EqualTo(expect));
+                JsonValue json;
+                Assert.That(JsonValue.TryParse(await response.Content.ReadAsStringAsync(), out json), Is.True);
+                return json;
+            }
+        }
+
+        // Reads the MJPEG stream until it holds the bytes of jpeg; false after the timeout.
+        static async Task<bool> StreamShows(Stream stream, byte[] jpeg, List<byte> seen, int timeoutMs = 5000)
+        {
+            var buffer = new byte[4096];
+            using (var cancel = new CancellationTokenSource(timeoutMs))
+            {
+                while (true)
+                {
+                    if (IndexOf(seen, jpeg) >= 0) return true;
+                    int n;
+                    try { n = await stream.ReadAsync(buffer, 0, buffer.Length, cancel.Token); }
+                    catch (OperationCanceledException) { return false; }
+                    if (n <= 0) return false;
+                    for (int i = 0; i < n; i++) seen.Add(buffer[i]);
+                }
+            }
+        }
+
+        static int IndexOf(List<byte> haystack, byte[] needle)
+        {
+            for (int i = 0; i + needle.Length <= haystack.Count; i++)
+            {
+                int k = 0;
+                while (k < needle.Length && haystack[i + k] == needle[k]) k++;
+                if (k == needle.Length) return i;
+            }
+            return -1;
+        }
+
+        static bool HasView(List<OperatorCommand> commands, bool on)
+        {
+            foreach (OperatorCommand c in commands) if (c.Kind == OperatorCommandKind.View && c.On == on) return true;
+            return false;
+        }
+
+        [Test]
+        public async Task TheViewPage_AsksThePhoneForItsPicture_RelaysItsFrames_AndStopsIt()
+        {
+            // Nobody is watching: the frame is kept, and the answer tells the phone to stop.
+            Assert.That((await PostFrame(_t.Http, FrameA)).GetBool("watching", true), Is.False);
+            await PostFrame(_t.Http, new byte[] { 1, 2, 3 }, 400);
+
+            var commands = new List<OperatorCommand>();
+            using (var request = new HttpRequestMessage(HttpMethod.Get, "/api/view/stream"))
+            using (HttpResponseMessage response = await _t.Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead))
+            {
+                Assert.That(response.Content.Headers.ContentType.MediaType, Is.EqualTo("multipart/x-mixed-replace"));
+                Wait.Until(() => { commands.AddRange(Wait.Drain(_phone.Commands)); return HasView(commands, true); },
+                    "the phone to be asked for its view");
+                OperatorCommand on = commands.Find(c => c.Kind == OperatorCommandKind.View);
+                Assert.That(on.Port, Is.EqualTo(_t.Hub.HttpPort), "the phone is told where to post");
+
+                Stream stream = await response.Content.ReadAsStreamAsync();
+                var seen = new List<byte>();
+                Assert.That(await StreamShows(stream, FrameA, seen), Is.True, "a new viewer gets the newest frame at once");
+                Assert.That(Encoding.ASCII.GetString(seen.ToArray()), Does.Contain("Content-Type: image/jpeg"));
+
+                Assert.That((await PostFrame(_t.Http, FrameB)).GetBool("watching", false), Is.True);
+                Assert.That(await StreamShows(stream, FrameB, seen), Is.True, "and every frame after it");
+
+                JsonValue status = JsonValue.Null;
+                JsonValue.TryParse(await _t.Http.GetStringAsync("/api/view"), out status);
+                Assert.That(status.GetInt("viewers"), Is.EqualTo(1));
+                Assert.That(status.GetInt("frames"), Is.EqualTo(2));
+                Assert.That(status.GetString("mode"), Is.EqualTo("headset"));
+            }
+
+            // The last viewer left: the phone is told to stop.
+            commands.Clear();
+            Wait.Until(() => { commands.AddRange(Wait.Drain(_phone.Commands)); return HasView(commands, false); },
+                "the phone to be told to stop");
+            Wait.Until(() => _t.Hub.View.Viewers == 0, "the viewer to be gone");
+            CollectionAssert.AreEqual(FrameB, await _t.Http.GetByteArrayAsync("/api/view/latest.jpg"));
+        }
+
         [Test]
         public async Task TheMapPagesWalkInput_ReachesThePhone_Clamped()
         {

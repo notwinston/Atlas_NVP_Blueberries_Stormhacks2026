@@ -128,6 +128,19 @@ namespace Atlas.Station
             _host.RoomOutlineReceived += OnRoomOutline;
             _host.ParamSetIgnored += OnParamSetIgnored;
             _phoneWatch.StateChanged += OnPhoneLinkChanged;
+            View.WatchingChanged += OnViewWatching;
+        }
+
+        // The View page: the first viewer asks the phone for its picture and the last one to leave stops it.
+        // While anyone watches, EverySecond repeats the request, which also reaches a phone that joins later.
+        void OnViewWatching(bool watching)
+        {
+            lock (_gate)
+            {
+                bool sent = _host.HasPhone && _host.SendCommand(OperatorCommand.View(watching, HttpPort));
+                HubLog("cmd", JsonValue.Object().Set("cmd", OperatorCommand.CmdView).Set("on", watching)
+                    .Set("from", "console").Set("sent", sent));
+            }
         }
 
         // ---- what the outside may read ---------------------------------------------------------------
@@ -152,6 +165,8 @@ namespace Atlas.Station
         public SessionLog Log { get { return _log; } }
         public PresetStore Presets { get { return _presets; } }
         public ConsoleFeed Feed { get { return _feed; } }
+        /// <summary>The phone's view for the Console's View page.</summary>
+        public ViewRelay View { get; } = new ViewRelay();
         public CancellationToken Stopping { get { return _stopping.Token; } }
 
         /// <summary><c>State</c> packets received from the phone this session.</summary>
@@ -322,6 +337,7 @@ namespace Atlas.Station
                     Console.WriteLine("no packets received yet: check the firewall rule for UDP " + UdpPort + " (station/setup_firewall.ps1)");
             }
             _log.Flush();
+            if (View.Watching && _host.HasPhone) _host.SendCommand(OperatorCommand.View(true, HttpPort));
             if (_feed.Count > 0) _feed.Broadcast(LinkJson().ToJson());
             if (!_options.Quiet && _host.HasPhone)
             {

@@ -126,6 +126,8 @@ namespace Atlas.App
         public CommandRouter Commands { get; private set; }
         /// <summary>The walk input of the Station's Map page: the router writes it, the input step feeds it to the walker.</summary>
         public RemoteWalkInput RemoteWalk { get; private set; }
+        /// <summary>Sends what the phone shows to the Station's View page while the Hub asks for it.</summary>
+        public ViewStreamer ViewStream { get; private set; }
         /// <summary>Return home, next and previous space and the space menu, from the gamepad or the gaze.</summary>
         public SpaceActions SpaceActions { get; private set; }
         /// <summary>The gaze twins of the four SpaceLab actions: home beacon, previous, next and exhibit sign.</summary>
@@ -280,6 +282,12 @@ namespace Atlas.App
             // 17  Operator commands as local calls.
             Commands = new CommandRouter(Spaces, Loop, Registry, Pose.Pipeline, walk: RemoteWalk);
             AtlasServices.Register<IOperatorCommands>(Commands);
+            // The View page: frames go to the Hub the link is talking to, read when each frame is posted.
+            ViewStream = ViewStreamer.Create(boot.Systems, Rig, () =>
+                TelemetrySystems != null && TelemetrySystems.Pump != null ? TelemetrySystems.Pump.Host : null);
+            ViewStream.DeclareParams(Registry);
+            ViewStreamer viewStream = ViewStream;
+            Commands.ViewRequested = (on, port) => viewStream.Request(on, port);
 
             // 18  Link, perf probe, HUD, event log, pairing. The loop is published, so its hooks go in here:
             //     the state sink at 8a; probe, link driver and HUD at 8b.

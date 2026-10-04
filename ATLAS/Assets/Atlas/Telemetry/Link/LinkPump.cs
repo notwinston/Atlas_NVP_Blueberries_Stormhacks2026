@@ -410,6 +410,8 @@ namespace Atlas.Telemetry
         // The Map page repeats a held walk input several times a second; only a change of input is logged.
         OperatorCommand _lastWalk;
         bool _walkLogged;
+        // The Hub repeats "view on" every second while anyone watches; only a change is logged.
+        bool _viewOn;
 
         void Apply(IOperatorCommands commands, in OperatorCommand command, long now)
         {
@@ -424,6 +426,11 @@ namespace Atlas.Telemetry
                               command.Turn != _lastWalk.Turn || command.Speed != _lastWalk.Speed;
                         _lastWalk = command;
                         _walkLogged = true;
+                        break;
+                    case OperatorCommandKind.View:
+                        commands.View(command.On, command.Port);
+                        log = command.On != _viewOn;
+                        _viewOn = command.On;
                         break;
                     case OperatorCommandKind.SwitchSpace:
                         ApplyArgs(command.Args);

@@ -378,7 +378,7 @@ namespace Atlas.Link
     }
 
     /// <summary>
-    /// <c>OperatorCmd</c> (0x23, Hub to phone): <c>{cmd: home | recentre | quality | cue | lock | walk, args}</c>.
+    /// <c>OperatorCmd</c> (0x23, Hub to phone): <c>{cmd: home | recentre | quality | cue | lock | walk | view, args}</c>.
     /// </summary>
     public sealed class OperatorCmdMessage : JsonMessage
     {
