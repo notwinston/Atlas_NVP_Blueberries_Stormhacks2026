@@ -820,7 +820,12 @@ class Forge:
                 oriented = self._attempt(job, generator, index, crops, seconds, entry)
             except CleanupError as exc:
                 entry["error"] = f"clean-up: {exc}"
-            except (GeneratorError, StageTimeout, ImageError) as exc:
+            except ImageError as exc:
+                # This view cannot be used (it is not matted, its matte is empty, the file is no picture).
+                # Nothing was generated, and it says nothing about the next view: it is not a failure of
+                # the generator.
+                errors.append(str(exc))
+            except (GeneratorError, StageTimeout) as exc:
                 entry["error"] = str(exc)
             except Exception as exc:  # model code raises anything; keep the worker alive
                 entry["error"] = f"{generator.name}: {exc}"

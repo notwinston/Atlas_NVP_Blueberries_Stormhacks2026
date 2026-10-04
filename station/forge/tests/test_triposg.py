@@ -509,6 +509,23 @@ def test_a_view_whose_matting_fails_is_not_sent_and_the_next_view_is(tmp_path, m
                                    "triposg is given matted pictures only")
 
 
+def test_views_that_cannot_be_matted_are_passed_over_and_are_no_failed_generations(tmp_path, matting):
+    runtime = FakeRuntime()
+    app, _ = served(tmp_path, runtime)
+    with TestClient(app) as client:
+        wait_until(lambda: client.get("/health").json()["generatorReady"])
+        matting.fail_on = {1, 2}  # the first two photos
+        model = room_model("third", [(0.6, 0.6, 0.6)])
+        client.post("/rooms", json=model)
+        meta = meta_for(model["objects"][0], 15000)
+        meta["views"] = meta["views"] * 3
+        photos = [jpeg(seed=1), jpeg(seed=2), jpeg((40, 54, 92), seed=3)]
+        status = wait_for(client, post_object(client, "third", meta, photos).json()["jobId"])
+        # Two views gave no picture; the third was generated, and it is the only generation.
+        assert status["state"] == "ready" and status["attempts"] == 1 and len(runtime.pipe.calls) == 1
+        assert [e["view"] for e in app.state.forge.job(status["jobId"]).attemptLog] == [2]
+
+
 def test_an_empty_matte_is_not_sent(tmp_path, matting):
     runtime = FakeRuntime()
     app, _ = served(tmp_path, runtime)
