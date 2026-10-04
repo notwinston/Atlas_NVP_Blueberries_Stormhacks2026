@@ -4,6 +4,11 @@ It builds a plausible piece of furniture for the category from the box
 dimensions alone. It exists for tests and for running the whole scan and asset
 round-trip on a machine with no graphics card; the photo is not looked at.
 
+Every shape faces local +Z, as the box does once the phone has decided its
+facing (mesh design section 5.2): the back of a chair, a couch, a bed and a
+toilet stands on -Z, the doors of a cupboard are on +Z. The z of a GLB is the
+z of Unity's box frame, so nothing is mirrored on the way.
+
 The mesh is returned the way an image-to-3D model returns one: normalised to a
 unit cube around the origin, so clean-up's fit to the box is exercised.
 """
@@ -107,7 +112,7 @@ def _chair(b, w, h, d):
     leg = min(0.05, min(w, d) * 0.12)
     b.box(-w / 2, w / 2, seat_h - seat_t, seat_h, -d / 2, d / 2)
     _legs(b, w, d, seat_h - seat_t, leg)
-    b.box(-w / 2, w / 2, seat_h, h, d / 2 - min(0.06, d * 0.15), d / 2)
+    b.box(-w / 2, w / 2, seat_h, h, -d / 2, -d / 2 + min(0.06, d * 0.15))
 
 
 def _couch(b, w, h, d):
@@ -115,29 +120,29 @@ def _couch(b, w, h, d):
     back = min(0.25, d * 0.28)
     base_h = h * 0.32
     b.box(-w / 2, w / 2, 0, base_h, -d / 2, d / 2)
-    b.box(-w / 2 + arm, w / 2 - arm, base_h, h * 0.52, -d / 2, d / 2 - back)
-    b.box(-w / 2, w / 2, base_h, h, d / 2 - back, d / 2)
-    b.box(-w / 2, -w / 2 + arm, base_h, h * 0.72, -d / 2, d / 2 - back)
-    b.box(w / 2 - arm, w / 2, base_h, h * 0.72, -d / 2, d / 2 - back)
+    b.box(-w / 2 + arm, w / 2 - arm, base_h, h * 0.52, -d / 2 + back, d / 2)
+    b.box(-w / 2, w / 2, base_h, h, -d / 2, -d / 2 + back)
+    b.box(-w / 2, -w / 2 + arm, base_h, h * 0.72, -d / 2 + back, d / 2)
+    b.box(w / 2 - arm, w / 2, base_h, h * 0.72, -d / 2 + back, d / 2)
 
 
 def _bed(b, w, h, d):
     frame_h = h * 0.38
     head = min(0.1, d * 0.06)
     b.box(-w / 2, w / 2, 0, frame_h, -d / 2, d / 2)
-    b.box(-w / 2 * 0.96, w / 2 * 0.96, frame_h, h * 0.62, -d / 2 * 0.97, d / 2 - head)
-    b.box(-w / 2, w / 2, frame_h, h, d / 2 - head, d / 2)
-    b.box(-w * 0.4, w * 0.4, h * 0.62, h * 0.74, d / 2 - head - d * 0.2, d / 2 - head - d * 0.03)
+    b.box(-w / 2 * 0.96, w / 2 * 0.96, frame_h, h * 0.62, -d / 2 + head, d / 2 * 0.97)
+    b.box(-w / 2, w / 2, frame_h, h, -d / 2, -d / 2 + head)
+    b.box(-w * 0.4, w * 0.4, h * 0.62, h * 0.74, -d / 2 + head + d * 0.03, -d / 2 + head + d * 0.2)
 
 
 def _storage(b, w, h, d):
     plinth = min(0.08, h * 0.08)
     board = min(0.04, min(w, h) * 0.06)
-    b.box(-w / 2 * 0.94, w / 2 * 0.94, 0, plinth, -d / 2 * 0.9, d / 2)
-    b.box(-w / 2, w / 2, plinth, h, -d / 2 * 0.96, d / 2)
+    b.box(-w / 2 * 0.94, w / 2 * 0.94, 0, plinth, -d / 2, d / 2 * 0.9)
+    b.box(-w / 2, w / 2, plinth, h, -d / 2, d / 2 * 0.96)
     # Door fronts proud of the carcass, with a gap that reads as the split.
-    b.box(-w / 2 + board, -board / 4, plinth + board, h - board, -d / 2, -d / 2 * 0.96 + 0.001)
-    b.box(board / 4, w / 2 - board, plinth + board, h - board, -d / 2, -d / 2 * 0.96 + 0.001)
+    b.box(-w / 2 + board, -board / 4, plinth + board, h - board, d / 2 * 0.96 - 0.001, d / 2)
+    b.box(board / 4, w / 2 - board, plinth + board, h - board, d / 2 * 0.96 - 0.001, d / 2)
 
 
 def _lamp(b, w, h, d):
@@ -177,10 +182,10 @@ def _basin(b, w, h, d):
 
 
 def _toilet(b, w, h, d):
-    b.box(-w / 2, w / 2, h * 0.45, h, d / 2 - d * 0.28, d / 2)
-    b.cylinder(0, -d * 0.12, 0, h * 0.45, min(w, d * 0.72) * 0.32, min(w, d * 0.72) * 0.5)
-    b.box(-w * 0.3, w * 0.3, 0, h * 0.45, 0, d / 2)
-    b.box(-w / 2, w / 2, 0, h * 0.02, -d / 2, d / 2 - d * 0.28)
+    b.box(-w / 2, w / 2, h * 0.45, h, -d / 2, -d / 2 + d * 0.28)
+    b.cylinder(0, d * 0.12, 0, h * 0.45, min(w, d * 0.72) * 0.32, min(w, d * 0.72) * 0.5)
+    b.box(-w * 0.3, w * 0.3, 0, h * 0.45, -d / 2, 0)
+    b.box(-w / 2, w / 2, 0, h * 0.02, -d / 2 + d * 0.28, d / 2)
 
 
 def _generic(b, w, h, d):

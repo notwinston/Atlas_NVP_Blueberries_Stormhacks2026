@@ -5,8 +5,9 @@ Contract page lane-a-platform.md, sections 10.2 (mesh vertex format) and 10.7
 palette texture of 16 x 16 flat cells, and shading is baked into the vertex
 colour. The Forge may pick an object colour from cells 64 to 127 only.
 
-The bytes written per vertex come from ``encode_vertex_attributes`` alone, and
-the shade that goes into them from ``face_shade``; both mirror lane A's
+The bytes written per vertex come from ``encode_vertex_cells`` alone (and
+``encode_vertex_attributes``, the same for a mesh of one colour), and the shade
+that goes into them from ``face_shade``; both mirror lane A's
 `AtlasVertex.PackColor` and `AtlasShading.FaceShade`.
 """
 from __future__ import annotations
@@ -113,24 +114,32 @@ def face_shade(normals: np.ndarray, yaw: float = 0.0) -> np.ndarray:
     return SHADE_FLOOR + (1.0 - SHADE_FLOOR) * (0.5 + 0.5 * (room @ LIGHT_DIRECTION))
 
 
-def encode_vertex_attributes(entry: PaletteEntry, shade: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Per-vertex TEXCOORD_0 and COLOR_0 for a mesh of one palette colour.
+def encode_vertex_cells(cells, shade: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Per-vertex TEXCOORD_0 and COLOR_0 for a mesh whose vertices each point at a palette cell.
 
-    ``shade`` holds one value per vertex in [0, 1]: the face shade times the
-    ambient occlusion, 1 meaning fully lit and open.
+    ``cells`` holds one palette cell per vertex (64..127 for a furniture
+    mesh); every vertex of a face must carry that face's cell
+    (`colour.split_by_cell`). ``shade`` holds one value per vertex in [0, 1]:
+    the face shade times the ambient occlusion, 1 meaning fully lit and open.
     Returns ``(uv, colour)``. uv is (N, 2) float32 and points at the centre of
-    the palette cell. colour is (N, 4) uint8, linear: R is the shade, G the
+    the vertex's cell. colour is (N, 4) uint8, linear: R is the shade, G the
     line weight (255) and B and A are the reserved 255.
 
     A GLB stores v downwards and the importer on the phone flips it, so v is
     written as 1 - v for a cell whose Unity coordinate is (u, v).
     """
+    cells = np.asarray(cells, dtype=np.int64).reshape(-1)
     shade = np.clip(np.asarray(shade, dtype=np.float64), 0.0, 1.0)
-    n = len(shade)
-    u, v = cell_uv(entry.index)
-    uv = np.empty((n, 2), dtype=np.float32)
-    uv[:, 0] = u
-    uv[:, 1] = 1.0 - v
-    colour = np.full((n, 4), 255, dtype=np.uint8)
+    if len(cells) != len(shade):
+        raise ValueError("one cell and one shade per vertex")
+    uv = np.empty((len(cells), 2), dtype=np.float32)
+    uv[:, 0] = (cells % PALETTE_GRID + 0.5) / PALETTE_GRID
+    uv[:, 1] = 1.0 - (cells // PALETTE_GRID + 0.5) / PALETTE_GRID
+    colour = np.full((len(cells), 4), 255, dtype=np.uint8)
     colour[:, 0] = np.rint(shade * 255.0).astype(np.uint8)
     return uv, colour
+
+
+def encode_vertex_attributes(entry: PaletteEntry, shade: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """``encode_vertex_cells`` for a mesh of one palette colour."""
+    return encode_vertex_cells(np.full(len(shade), entry.index, dtype=np.int64), shade)

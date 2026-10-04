@@ -35,7 +35,7 @@ FORGE_DIR = Path(__file__).resolve().parent.parent
 if str(FORGE_DIR) not in sys.path:
     sys.path.insert(0, str(FORGE_DIR))
 
-from forge.cleanup import _UP  # noqa: E402  (the rotations FORGE_TRIPOSG_UP names)
+from forge.cleanup import _UP, _YAW90  # noqa: E402  (the rotations FORGE_TRIPOSG_UP names, and clean-up's quarter turn)
 from forge.glb import read_glb  # noqa: E402
 from forge.validator import validate_glb  # noqa: E402
 
@@ -172,7 +172,7 @@ def read_frame(vertices: np.ndarray, faces: np.ndarray, up_axis: Optional[str] =
 
     For the generator's raw output leave ``up_axis`` None: up is found from the mesh. For a GLB
     pass the clean-up report's `upAxis` and `yawDegrees`: the file is upright already, and the
-    quarter turn clean-up gave it is taken out again before the front is read.
+    turn clean-up gave it is taken out again before the front is read.
     """
     points, weights = _samples(vertices, faces)
     reading: dict = {"source": "raw" if up_axis is None else "glb", "notes": []}
@@ -193,9 +193,8 @@ def read_frame(vertices: np.ndarray, faces: np.ndarray, up_axis: Optional[str] =
             reading.update(up=None, front=None, frontAzimuth=None)
             reading["notes"].append("the file is not an upright chair; no value of FORGE_TRIPOSG_UP describes this")
             return reading
-        if yaw_degrees == 90:
-            # Clean-up turned the mesh by a quarter about +Y (x' = z, z' = -x): turn it back.
-            points = np.stack([-points[:, 2], points[:, 1], points[:, 0]], axis=1)
+        # Clean-up turned the mesh by `yawDegrees` about +Y, in quarter turns (x' = z, z' = -x): turn it back.
+        points = points @ np.linalg.matrix_power(_YAW90, (4 - yaw_degrees // 90) % 4).T
     reading["up"] = axis
     reading["map"] = draw(height_map(points))
     front, why = find_front(points, weights)
@@ -432,7 +431,7 @@ def main(argv=None) -> int:
                         help="only read the frame from a raw_view0.npz or a .glb; no service is called")
     parser.add_argument("--up-axis", choices=("Y", "Z", "X"),
                         help="with --analyse of a .glb: `upAxis` of its clean-up report")
-    parser.add_argument("--yaw-degrees", type=int, choices=(0, 90), default=0,
+    parser.add_argument("--yaw-degrees", type=int, choices=(0, 90, 180, 270), default=0,
                         help="with --analyse of a .glb: `yawDegrees` of its report")
     args = parser.parse_args(argv)
 
