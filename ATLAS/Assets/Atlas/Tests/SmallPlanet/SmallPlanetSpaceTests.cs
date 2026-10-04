@@ -465,13 +465,12 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             Assert.AreEqual(5, registry.Find(CurvedDialParams.ParamQ).Int, "and writes no parameter");
 
             Iso2[] a = new Iso2[6], b = new Iso2[6];
-            rig.Core.ComputeAnchors(a, out Iso2 beaconA);
-            station.ComputeAnchors(b, out Iso2 beaconB);
+            rig.Core.ComputeAnchors(a);
+            station.ComputeAnchors(b);
             for (int f = 0; f < 6; f++) Assert.IsTrue(ExactEq(a[f], b[f]));
-            Assert.IsTrue(ExactEq(beaconA, beaconB));
             // §4.6: anchor[t] = inverse(U) * F[t]; the walker's own tile is anchored by inverse(U)
             Assert.Less(MaxAbsDiff(a[rig.Core.Face].M, rig.Core.U.Inverse().M), 1e-15);
-            Assert.Throws<ArgumentException>(() => rig.Core.ComputeAnchors(new Iso2[5], out _));
+            Assert.Throws<ArgumentException>(() => rig.Core.ComputeAnchors(new Iso2[5]));
         }
 
 #if !ATLAS_HEADLESS
@@ -499,10 +498,15 @@ namespace Atlas.Spaces.SmallPlanet.Tests
                 module.Configure(room, registry);
                 module.Enter(kernel.Pose);
                 Assert.AreEqual(3, kernel.Q);
-                // The PlanetKit tiles from Resources: their cairn replaces the pole beacon (8 on the procedural fallback: 9).
-                Assert.IsTrue(space.View.UsesKit, "the PlanetKit tiles load from Resources");
-                Assert.IsNull(space.View.BeaconRenderer);
-                Assert.AreEqual(8, pool.Rented, "six tiles, the two lap markers");
+                // The PlanetKit tiles from Resources, under the sky: one material for its sun and clouds.
+                Assert.IsTrue(space.View.Built, "the PlanetKit tiles load from Resources");
+                Assert.IsNotNull(space.Sky);
+                Assert.AreSame(space.Sky.Material, space.Sky.CloudRenderer.sharedMaterial);
+                Assert.AreSame(space.Sky.Material, space.Sky.SunRenderer.sharedMaterial);
+                Assert.AreEqual(0f, space.Sky.Material.GetFloat(Atlas.Rendering.AtlasShaderIDs.WarpMode), "not warped");
+                Assert.AreEqual(9, pool.Rented, "six tiles, the two lap markers, the sky");
+                Assert.IsTrue(Unity.Mathematics.math.all(Atlas.Rendering.AtlasLook.State.FogColorTarget == SmallPlanetSkyMesh.HorizonLinear),
+                              "the fog is the sky's horizon");
                 double R = space.Core.R;
                 Assert.AreEqual((float)(0.5 * Math.PI * R), Atlas.Rendering.AtlasLook.State.FogStart, 1e-5f);
                 Assert.AreEqual((float)(0.8 * Math.PI * R), Atlas.Rendering.AtlasLook.State.FogEnd, 1e-5f);
@@ -513,6 +517,8 @@ namespace Atlas.Spaces.SmallPlanet.Tests
                 module.Tick(in frame);
                 ((IUploadStep)module).Upload(in frame);
                 Assert.IsTrue(space.View.Shown);
+                Assert.AreEqual(Vector3.zero, space.Sky.Root.position, "the sky is centred on the head");
+                Assert.AreEqual(Quaternion.identity, space.Sky.Root.rotation, "and keeps the world's axes");
                 Assert.AreEqual(Atlas.Rendering.WarpAnchor.ToMatrix(space.Core.U.Inverse()),
                                 space.View.TileRenderers[0].sharedMaterial.GetMatrix(Atlas.Rendering.AtlasShaderIDs.Anchor));
                 Assert.IsTrue(space.Markers.FlagRenderer.enabled, "the lap flag of the 3-corner walk");
@@ -523,6 +529,7 @@ namespace Atlas.Spaces.SmallPlanet.Tests
 
                 module.Exit();
                 Assert.AreEqual(0, pool.Rented);
+                Assert.IsNull(space.Sky);
                 Assert.IsFalse(registry.IsGroupActive(CurvedDialParams.Group));
             }
             finally
@@ -558,7 +565,7 @@ namespace Atlas.Spaces.SmallPlanet.Tests
                 module.Enter(kernel.Pose);
                 Assert.IsNotNull(space.Dial);
                 Assert.IsTrue(space.Dial.Target.IsValid);
-                Assert.AreEqual(space.View.UsesKit ? 9 : 10, pool.Rented, "six tiles, the beacon on the procedural fallback, the two lap markers, the dial chip");
+                Assert.AreEqual(10, pool.Rented, "six tiles, the two lap markers, the sky, the dial chip");
                 Assert.IsFalse(space.DialChip.activeSelf);
 
                 var missing = new List<AtlasAction>();

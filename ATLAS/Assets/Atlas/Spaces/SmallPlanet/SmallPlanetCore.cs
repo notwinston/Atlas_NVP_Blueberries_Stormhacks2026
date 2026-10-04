@@ -8,7 +8,7 @@ namespace Atlas.Spaces.SmallPlanet
 {
     /// <summary>
     /// The logic of S4 Small Planet (Master Plan §3.2, §6.5, §10.1.3; tasks P1-B08 and P1-B09), engine-free:
-    /// the radius, the fog, the dial, the 3-corner walk and the anchors. The walker itself is the app's
+    /// the radius, the fog, the dial, the 3-corner walk and the tile anchors. The walker itself is the app's
     /// kernel, configured for q = 3 on Enter; this class only reads its pose.
     /// </summary>
     /// <remarks>
@@ -58,11 +58,6 @@ namespace Atlas.Spaces.SmallPlanet
         // planet.fogRho (§12.2), clamped so that opaque < discard (deviation D8)
         public double FogOpaqueRad { get; private set; } = SmallPlanetConstants.FogOpaqueRad;
         public double FogStartRad => FogOpaqueRad - SmallPlanetConstants.FogBand;
-
-        // beacon chart -> frame of face 5: the corner of face 5 at angle pi/4 + corner*pi/2, at the circumradius (A.3)
-        public static Iso2 BeaconPlacement { get; } = Iso2.Boost(
-            CubeTiling.Circumradius * new double2(Math.Cos(Math.PI / 4 + SmallPlanetConstants.BeaconCorner * Math.PI / 2),
-                                                  Math.Sin(Math.PI / 4 + SmallPlanetConstants.BeaconCorner * Math.PI / 2)), 1);
 
         /// <summary>
         /// Group "planet": planet.fogRho (the opaque end of the fog, rad) and planet.R. The dial itself, curved.q and
@@ -234,18 +229,17 @@ namespace Atlas.Spaces.SmallPlanet
         }
 
         // §6.3 step 6; §4.6 anchor[t] = inverse(U) * F[t], in double
-        public void ComputeAnchors(Iso2[] tileAnchors, out Iso2 beaconAnchor)
+        public void ComputeAnchors(Iso2[] tileAnchors)
         {
             if (tileAnchors == null || tileAnchors.Length != CubeTiling.FaceCount) throw new ArgumentException("need 6 anchors", nameof(tileAnchors));
-            Anchors(Face, U, tileAnchors, out beaconAnchor);
+            Anchors(Face, U, tileAnchors);
         }
 
         /// <summary>The same for any pose on the sphere.</summary>
-        public static void Anchors(int face, in Iso2 u, Iso2[] tileAnchors, out Iso2 beaconAnchor)
+        public static void Anchors(int face, in Iso2 u, Iso2[] tileAnchors)
         {
             Iso2 inv = u.Inverse();
             for (int t = 0; t < CubeTiling.FaceCount; t++) tileAnchors[t] = inv * CubeTiling.Chain(face, t);
-            beaconAnchor = inv * CubeTiling.Chain(face, SmallPlanetConstants.BeaconFace) * BeaconPlacement;
         }
 
         double WantedRadius()

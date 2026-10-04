@@ -8,19 +8,16 @@ using UnityEngine.Rendering;
 
 namespace Atlas.Spaces.SmallPlanet
 {
-    // §8.3: six tiles plus the beacon, one pooled material instance each, no MaterialPropertyBlock; driven by the frame loop (§6.3), no Update().
-    // With the PlanetKit tiles modelled in Blender (PlanetKit.md) each face draws its own mesh and the kit's cairn
-    // replaces the pole beacon; without them, one procedural tile mesh is drawn six times with the beacon, as before.
+    // §8.3: the six PlanetKit tiles modelled in Blender (PlanetKit.md), one mesh and one pooled material instance a face,
+    // no MaterialPropertyBlock; driven by the frame loop (§6.3), no Update(). The kit's cairn on face 5 is the planet's
+    // landmark. There is no procedural fallback: without the kit nothing is drawn (one error is logged).
     public sealed class SmallPlanetView : MonoBehaviour
     {
         readonly List<MeshRenderer> tiles = new List<MeshRenderer>(6);
-        readonly List<Material> materials = new List<Material>(7);
-        readonly List<GameObject> children = new List<GameObject>(7);
+        readonly List<Material> materials = new List<Material>(6);
+        readonly List<GameObject> children = new List<GameObject>(6);
         readonly Mesh[] faceMeshes = new Mesh[CubeTiling.FaceCount];
-        readonly TileMeshGenerator generator = new TileMeshGenerator(TilePalette.Default);
         MaterialPool pool;
-        Mesh tileMesh, beaconMesh;
-        MeshRenderer beacon;
         PlanetKitTiles kit;
         AtlasMeshBuilder kitScratch;
         bool shown = true;
@@ -29,19 +26,16 @@ namespace Atlas.Spaces.SmallPlanet
         static bool s_SharedKitTried;
 
         public IReadOnlyList<MeshRenderer> TileRenderers => tiles;
-        /// <summary>The procedural pole beacon; null while the kit's tiles are drawn (their cairn is the beacon).</summary>
-        public MeshRenderer BeaconRenderer => beacon;
+        /// <summary>The six kit tiles are built; false when the kit could not be loaded (nothing is drawn).</summary>
         public bool Built => tiles.Count > 0;
-        /// <summary>The faces draw the PlanetKit tiles; false on the procedural fallback.</summary>
-        public bool UsesKit => kit != null;
-        /// <summary>Triangles of one procedural tile, as built; with the kit, of the largest tile.</summary>
+        /// <summary>Triangles of the largest tile, as built.</summary>
         public int TileTriangles { get; private set; }
         /// <summary>Triangles of all six tiles, as built.</summary>
         public int PlanetTriangles { get; private set; }
 
         /// <summary>
-        /// The PlanetKit tiles from Resources/PlanetKit, read once per run; null (after one warning) when they are
-        /// missing or refused, and the planet is then built from procedural tiles.
+        /// The PlanetKit tiles from Resources/PlanetKit, read once per run; null (after one error) when they are
+        /// missing or refused, and the planet is then not drawn.
         /// </summary>
         public static PlanetKitTiles SharedKit()
         {
@@ -53,12 +47,12 @@ namespace Atlas.Spaces.SmallPlanet
             return s_SharedKit;
         }
 
-        /// <summary>Reads the kit with this reader; null with one warning when it is refused.</summary>
+        /// <summary>Reads the kit with this reader; null with one error when it is refused.</summary>
         public static PlanetKitTiles LoadKit(Func<string, byte[]> read)
         {
             PlanetKitTiles loaded = PlanetKitTiles.Load(read, out string error);
             if (loaded == null)
-                Debug.LogWarning("Atlas: the Small Planet kit tiles are missing or invalid; using the procedural tiles. (" + error + ")");
+                Debug.LogError("Atlas: the Small Planet kit tiles are missing or invalid; the planet is not drawn. (" + error + ")");
             return loaded;
         }
 
@@ -96,27 +90,20 @@ namespace Atlas.Spaces.SmallPlanet
             return mr;
         }
 
-        /// <summary>The planet at this radius, from the PlanetKit tiles when they load, else procedural.</summary>
+        /// <summary>The planet at this radius from the PlanetKit tiles in Resources; nothing when they do not load.</summary>
         public void Build(double radius, MaterialPool materialPool) => Build(radius, materialPool, SharedKit());
 
-        /// <summary>The planet at this radius from these kit tiles; null builds the procedural tiles and the pole beacon.</summary>
+        /// <summary>The planet at this radius from these kit tiles; null draws nothing (<see cref="Built"/> stays false).</summary>
         public void Build(double radius, MaterialPool materialPool, PlanetKitTiles kitTiles)
         {
             Release();
             if (!(radius > 0)) throw new ArgumentOutOfRangeException(nameof(radius));
             pool = materialPool ?? throw new ArgumentNullException(nameof(materialPool));
             kit = kitTiles;
-            if (kit != null)
-            {
-                kitScratch = new AtlasMeshBuilder(kit.MaxVertices, kit.MaxIndices);
-                for (int f = 0; f < CubeTiling.FaceCount; f++)
-                    faceMeshes[f] = new Mesh { name = "SmallPlanetTile" + f, hideFlags = HideFlags.DontSave };
-            }
-            else
-            {
-                tileMesh = new Mesh { name = "SmallPlanetTile", hideFlags = HideFlags.DontSave };
-                for (int f = 0; f < CubeTiling.FaceCount; f++) faceMeshes[f] = tileMesh;
-            }
+            if (kit == null) return;
+            kitScratch = new AtlasMeshBuilder(kit.MaxVertices, kit.MaxIndices);
+            for (int f = 0; f < CubeTiling.FaceCount; f++)
+                faceMeshes[f] = new Mesh { name = "SmallPlanetTile" + f, hideFlags = HideFlags.DontSave };
             BuildTiles(radius);
             for (int f = 0; f < CubeTiling.FaceCount; f++)
             {
@@ -124,34 +111,20 @@ namespace Atlas.Spaces.SmallPlanet
                 MaterialPool.SetLines(tile.sharedMaterial, TileRenderer.EdgeLineStrength, 0f, float2.zero);
                 tiles.Add(tile);
             }
-            if (kit == null)
-            {
-                var data = new AtlasMeshBuilder(32, 96);
-                PoleBeaconMesh.Build(data);
-                beaconMesh = AtlasMesh.Create(data, "PoleBeacon");
-                beacon = MakeChild("PoleBeacon", beaconMesh);
-            }
             shown = true;
         }
 
-        /// <summary>A planet of another radius: the tile meshes are rebuilt in place.</summary>
+        /// <summary>A planet of another radius: the tile meshes are rescaled in place. Nothing to do when nothing is built.</summary>
         public void SetRadius(double radius)
         {
-            if (!Built) throw new InvalidOperationException("SetRadius before Build");
             if (!(radius > 0)) throw new ArgumentOutOfRangeException(nameof(radius));
+            if (!Built) return;
             BuildTiles(radius);
         }
 
+        // PlanetKit.md: xz is stored in units of R0, so x and z are multiplied by R; heights stay metres.
         void BuildTiles(double radius)
         {
-            if (kit == null)
-            {
-                // §3.4, §8.4: Near LOD on all six, no kerbs (§3.5 open sight lines), posts at every corner
-                TileTriangles = generator.Build(TileMeshSpec.Spherical(radius, TileLod.Near, 0, 0xF), tileMesh).TriangleCount;
-                PlanetTriangles = CubeTiling.FaceCount * TileTriangles;
-                return;
-            }
-            // PlanetKit.md: xz is stored in units of R0, so x and z are multiplied by R; heights stay metres.
             int largest = 0;
             for (int f = 0; f < CubeTiling.FaceCount; f++)
             {
@@ -174,10 +147,9 @@ namespace Atlas.Spaces.SmallPlanet
             }
         }
 
-        public void Upload(Iso2[] tileAnchors, in Iso2 beaconAnchor)
+        public void Upload(Iso2[] tileAnchors)
         {
             for (int f = 0; f < tiles.Count; f++) tiles[f].sharedMaterial.SetMatrix(AtlasShaderIDs.Anchor, WarpAnchor.ToMatrix(tileAnchors[f]));
-            if (beacon != null) beacon.sharedMaterial.SetMatrix(AtlasShaderIDs.Anchor, WarpAnchor.ToMatrix(beaconAnchor));
         }
 
         public void Release()
@@ -186,12 +158,10 @@ namespace Atlas.Spaces.SmallPlanet
             if (pool != null)
                 for (int i = 0; i < materials.Count; i++)
                     if (pool.Owns(materials[i])) pool.Return(materials[i]);
-            if (kit != null)
-                for (int f = 0; f < faceMeshes.Length; f++) Kill(faceMeshes[f]);
-            Kill(tileMesh); Kill(beaconMesh);
+            for (int f = 0; f < faceMeshes.Length; f++) Kill(faceMeshes[f]);
             Array.Clear(faceMeshes, 0, faceMeshes.Length);
             children.Clear(); materials.Clear(); tiles.Clear();
-            tileMesh = null; beaconMesh = null; beacon = null; pool = null; kit = null; kitScratch = null;
+            pool = null; kit = null; kitScratch = null;
             TileTriangles = 0; PlanetTriangles = 0;
         }
 

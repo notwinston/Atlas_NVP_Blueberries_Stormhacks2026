@@ -2,8 +2,9 @@
 
 `Resources/PlanetKit/` holds the six tiles of the Small Planet grassland world, modelled in
 `art/blender/SmallPlanet_World.blend` (built by `art/blender/smallplanet_build.py`) and exported by
-`tools/kit/export_planet.py`. `SmallPlanetView` draws them (through `PlanetKitTiles`) in place of the procedural tiles
-and the pole beacon; the wiring checklist below records how.
+`tools/kit/export_planet.py`. `SmallPlanetView` draws them (through `PlanetKitTiles`); they are the only Small Planet
+world: the procedural tiles and the pole beacon that came before them are gone, and there is no fallback. The wiring
+checklist below records how. The sky over them is `SmallPlanetSky` (see "Sky" at the end).
 
 (This note sits outside `Resources/` on purpose: everything inside a Resources folder ships in the player.)
 
@@ -35,7 +36,7 @@ Export of 2026-10-04 (PLANET_SCALE 1.5, tile side 3.6 m, R0 = 2.2918 m, ground g
   mode 2 (`AtlasWarp.hlsl`: `positionOS.xz` = chart, `positionOS.y` = height). Blender authors the four side
   tiles a quarter turn from Unity (Blender +Y points to Home, Unity +X does), so the exporter has turned them:
   Unity chart = (y_Blender, -x_Blender). Home and Beacon agree as they are. Draw tile *i* with tile *i*'s anchor,
-  exactly as the procedural tiles are drawn.
+  exactly as the procedural tiles were drawn.
 - **xz in units of R0, y in metres.** Multiply x and z by the runtime radius R (the planet.R setting) before
   uploading; leave y. The tile edge is at |x| or |z| = pi/4 (0.7854) on the axes; a few props overhang the edge
   by up to 0.06 R (they stand on the neighbour's ground, which is fine). Heights run from -0.12 m (sunk rocks)
@@ -92,16 +93,19 @@ so a re-export of the same .blend changes nothing. Missing `.meta` files are wri
    `AtlasMesh.Apply`. `SetRadius` rescales into one scratch builder sized for the largest tile and re-uploads into the
    same six meshes (no reads, no new arrays). Each face keeps its own pooled material and anchor. `Release` destroys
    the six meshes.
-3. **Done.** Any refusal (missing file, hash mismatch, unreadable GLB or manifest, a triangle count that differs, not
-   exactly six tiles, no `planet.R0`, a vertex beyond 1 R) makes `PlanetKitTiles.Load` return null with the reason;
-   the view logs one warning and builds the procedural `TileMeshGenerator` planet for all six faces, as before.
-4. **Done.** With the kit there is no pole beacon renderer (`BeaconRenderer` is null; six draws an eye); the
-   fallback keeps it. Nothing else reads the beacon: `SmallPlanetCore.BeaconPlacement` still feeds the anchor that
-   `Upload` ignores without a beacon, T7 in `SmallPlanetRenderTests` checks the procedural beacon's corner (fallback
-   only), WalkEvents, the Station and the spectator do not use it.
-5. **Done.** `SmallPlanetRenderTests.SmallPlanet_Budget` keeps the 1,200 Near cap for the procedural fallback;
-   `PlanetKitTests.PlanetKit_Budget` checks the kit against the exporter's 3,000 a tile.
-6. **Done.** Same test: 12 tile draws for two eyes and 2 x 12,936 = 25,872 planet triangles, inside 70 and 190k.
+3. **Done; no fallback since branch `smallplanet-sky`.** Any refusal (missing file, hash mismatch, unreadable GLB or
+   manifest, a triangle count that differs, not exactly six tiles, no `planet.R0`, a vertex beyond 1 R) makes
+   `PlanetKitTiles.Load` return null with the reason; the view logs one error ("the Small Planet kit tiles are missing
+   or invalid; the planet is not drawn") and draws no tiles (`Built` stays false, `SetRadius` and `Upload` do nothing).
+   The space still enters: the walk, the lap, the dial, the room, the sky and the telemetry carry on.
+4. **Done.** The procedural pole beacon (`PoleBeaconMesh`, `SmallPlanetCore.BeaconPlacement`, the beacon anchor) is
+   deleted; the kit's cairn and lantern on tile5 "Beacon" are the landmark. Nothing else read the beacon (WalkEvents,
+   the Station and the spectator never did). `SmallPlanetConstants.BeaconFace` (5) remains, naming the cairn's tile.
+5. **Done.** `PlanetKitTests.PlanetKit_Budget` checks the kit against the exporter's 3,000 a tile. The procedural
+   tests went with the procedural tiles; `SmallPlanetRenderTests` T5 (no smeared triangle beyond 2.6 rad) runs on the
+   kit tiles, and T4 (seams) on the tile-chart edges themselves.
+6. **Done.** Same test: 2 x (6 tiles + 2 sky renderers) = 16 draws for two eyes and 2 x (12,936 + the sky's 1,308)
+   = 28,488 triangles, inside 70 and 190k.
 7. **Done.** planet.R's default is now `SmallPlanetConstants.KitRadius` = 2.291831 m (this manifest's R0; a test
    checks the two agree), still a lower bound: R = max(room radius, planet.R). Setting planet.R to 0 gives the room's
    loop-fit planet again, with the props relatively taller.
@@ -117,3 +121,19 @@ Left over:
   agree before any kit is loaded; re-exporting at another scale means updating `SmallPlanetConstants.KitRadius`
   (`PlanetKitTests` fails until it matches).
 - The ground lines (uv1 on the ground) were not compared on a device against the procedural tile edges.
+
+## Sky (`SmallPlanetSky`, `SmallPlanetSkyMesh`)
+
+- **Gradient:** the look's own background (`AtlasBackground.shader`, the skybox the eye cameras clear with). On Enter
+  the space sets the fog colour, which is also the background at and below the horizon, to the Blender preview's sky
+  `#BFE3F5` (`smallplanet_build.py`, `SKY`), and the zenith (`AtlasLook.SetSkyTop`) to palette cell 199 (`0x5AC8FA`).
+  The grass therefore fades into the horizon seamlessly. SpaceLab resets both between spaces.
+- **Sun and clouds:** two renderers (sun, clouds) sharing one pooled Atlas/Surface material: warp mode 0 (a plain
+  transform, so the 2.6 rad discard of mode 2 never applies), fog weight 0, both faces drawn. The sun is a disc
+  (cell 204, white) with a halo ring (cell 196, pale gold), 35 degrees up at the azimuth of the look's fixed light,
+  52 m out. Eight low-poly cumulus clouds of 3 to 5 flat-shaded puffs, 40 m out and 12 to 44 degrees up: emissive white
+  (cell 200) bodies, flat bases in cell 15 with the baked shade. 1,308 triangles in all.
+- **Comfort:** the root follows the head's position each frame (`Upload`) with the world's rotation, so it is at
+  infinity and never swims; only the clouds turn about the vertical, 0.2 degrees a second.
+- **Clear colour:** the eye cameras' background colour (used only if the skybox were missing) is set to the horizon
+  on Enter and given back on Exit.
