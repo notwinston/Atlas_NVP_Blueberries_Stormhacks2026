@@ -4,9 +4,11 @@ Huawei's "Beyond Euclid" challenge asked for experiences where you *feel* the ge
 
 We also wanted it to be a hardware hack, not an app on a dev kit. There is no VR headset here: ATLAS is an iPhone dropped into a lens goggle, with every sensor on the phone put to work.
 
+We treat ATLAS as a research project as much as a demo. Our question: **can a person learn the shape of a non-Euclidean space by walking it, in a room they already know, on hardware they already own?** Pictures of hyperbolic space have existed for over a century and most people still cannot say what it would be like to stand in it. Our hypothesis is that the body gets there first: walk a square, fail to come home, and the idea lands.
+
 ## What it does
 
-ATLAS turns an iPhone in a lens goggle into a walk-through lab for impossible geometry.
+ATLAS turns an iPhone in a lens goggle into a walk-through lab for impossible geometry, and into an instrument for studying how people find their way in it.
 
 **1. Scan your room**
 
@@ -44,7 +46,29 @@ In curved space the virtual walls are not where the real walls are, so safety ca
 
 A teammate's PC mirrors the walker's view live beside a flat map of where they are, and an operator Console tunes the experience, changes space and can stop the walk.
 
+**8. A research instrument**
+
+Every walk is recorded: head pose, space, exact tile and walker state 60 times a second, with an event log and a performance log beside it. Any session can be replayed through the real frame loop, on the PC, with no phone. That makes each walk a data point we can study later, and each recorded walk a test.
+
 ## How we built it
+
+### Research basis
+
+- **Curved space you walk, not watch.** We work in H²×R and S²×R: only the floor is curved, height stays ordinary. Carrying a direction round a closed loop turns it by the loop's area over L² (Gauss-Bonnet), and that turn is what the walker feels as "the wrong room".
+- **Hyperbolic networks.** The Network Atlas follows Krioukov et al., *Hyperbolic Geometry of Complex Networks* (2010): nodes scattered in a hyperbolic disc and linked by hyperbolic distance give the hubs-and-rim structure of real networks, and greedy routing works on them.
+- **Image-to-3D diffusion.** The Forge uses *TripoSG: High-Fidelity 3D Shape Synthesis using Large-Scale Rectified Flow Models* (arXiv 2502.06608, 2025).
+- **4D medical data.** The lung use case is built on the public TCIA 4D-Lung dataset (Hugo et al., 2016, CC BY 3.0).
+
+### What we measured
+
+All of these were measured off the device, in tests and on recorded or synthetic walks. Measurements on the phone and with people are the next step.
+
+- **Path closure:** a recorded five-corner lap in hyperbolic space closes to under 0.25 m when replayed through the real frame loop.
+- **Tile growth:** rooms at 0, 1, 2, ... steps away number 1, 4, 12, 28, 64, 148, matching the known sequence for the {4,5} tiling: about 2.3 times more per ring, where a flat grid adds only four.
+- **Greedy routing:** on 1,000 random pairs in our generated 200-node network, routing by hyperbolic distance delivered 100% and 99.7% (two seeds); routing by distance in the flat picture delivered about 72%.
+- **Safety lead time:** on ten simulated wall approaches at 0.5 to 1.0 m/s, Bump Guard warned 0.85 to 0.93 seconds before contact.
+- **Diffusion model:** about 87 seconds per object on an RTX 4060 laptop GPU at 50 steps.
+- **Correctness:** about 2,000 automated tests, none failing, including holonomy against angle defect and 4D slice areas against known values.
 
 ### The hardware
 
@@ -168,13 +192,18 @@ Real networks like the internet or social networks actually have a hidden hyperb
 - **Walking it beats looking at it.** We'd all seen pictures of hyperbolic space before, but none of us really got it until we walked a square, turned left four times, and weren't back where we started.
 - **Keep people oriented.** We learned to keep each space simple, always give people a map, and warn them before they bump into anything.
 - **Safety has to ignore the picture.** Once the virtual walls stop matching the real ones, the only safe system is one that reads the real world and nothing else.
+- **Measure before you claim.** Writing down what is proven in tests and what is proven on a phone kept us honest about which results are real.
 - **Test without the device.** With one build machine between four people, the headless harness was what let us all keep moving.
 
 ## What's next for ATLAS - NVP
 
-**Testing with walkers**
+**A study with walkers**
 
-We want to put the headset on people who've never heard of hyperbolic space, and see whether they actually get lost, whether they feel sick, and whether that fifth-corner moment surprises them the way it surprised us. We also want real numbers from the phone: frame rate, heat and scan accuracy.
+This is the experiment the project was built for. We want to put the headset on people who've never heard of hyperbolic space and measure, not guess: can they find their way back to the first room, do they learn the five-corner rule on their own, do they feel sick, and does walking teach it better than a picture or a video of the same space? The session logs already record every step, so each walk gives us a path to analyse.
+
+**Numbers from the device**
+
+Everything we measured so far was off the phone. Next come frame rate, heat, scan accuracy against a tape measure, and Bump Guard's lead time on real approaches with a spotter.
 
 **A breathing lung as a 4D object**
 
