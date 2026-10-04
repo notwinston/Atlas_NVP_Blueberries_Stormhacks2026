@@ -38,3 +38,9 @@ Code: `ATLAS/Assets/Atlas/Blades/Lung/Sky/` (assembly `Atlas.Blades.Lung`, names
 ## Evidence
 - `docs/laneB/evidence/P2-B10/editmode_results_red.xml` (red run on throwing stubs), `editmode_results.xml` (green).
 - Headless limits: `B10_Shader_RawOrientation_GpuOnly` and `B10_Textures_R8_Linear_PointClamp_Once` are Inconclusive under -nographics, and the shader is not compiled there. Graphics sign-off run needed (see TESTING.md).
+
+## P2-B11 Great-circle check
+- Delivered: `SphericalTriangle` (atan2 vertex angle, Van Oosterom-Strackee area, Girard sum), `GreatCircleArc`, `GreatCircleCheck`, model `Check` + `gc_check` on the third pick (unrounded, D15), panel line "Triangle angle sum", shader arcs (`_ArcsOn`, half width 0.25 deg), `ArcsOn` in the frame.
+- Acceptance (Editor): octant triangle 270 deg (within 1e-9), `gc_check` via the Console twins, 1,000 random triangles within 0.5 deg of Girard (max in the test log line "B11 max |sum - Girard|"), vertex angle equals the kernel `Geometry2.Log`/`Iso2.Boost` angle at kappa = +1 to 1e-9.
+- Evidence: `docs/laneB/evidence/P2-B11/editmode_results_red.xml` (red on stubs), `editmode_results.xml` (green: 121 tests, 118 passed, 2 Inconclusive GPU, 1 Skipped pre-existing).
+- Deferred: on-device arcs and angle sum (TESTING.md step 5); the arc shader is not compiled headless (graphics sign-off).

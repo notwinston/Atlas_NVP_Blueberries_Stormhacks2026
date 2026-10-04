@@ -34,7 +34,7 @@ namespace Atlas.Blades.Lung.Sky
         /// <summary>Idempotent; Enter may be called from any state (ILungBeat).</summary>
         public void Reset()
         {
-            _count = 0; _attached = true; _armed = false; _hasLast = false; _dwellT = 0; _sinceThird = 0;
+            _count = 0; Check = null; _attached = true; _armed = false; _hasLast = false; _dwellT = 0; _sinceThird = 0;
             _cursor = new double3(0, 0, 1); _cursorAz = 0; _cursorEl = 0;
             RefreshReadout();
         }
@@ -43,6 +43,7 @@ namespace Atlas.Blades.Lung.Sky
         public bool CursorAttached => _attached;
         public int PickCount => _count;
         public double3 Pick(int index) => _picks[index];
+        public GreatCircleCheck Check { get; private set; }   // B11; null until 3 picks
         public NeedleSkyReadout Readout => _readout;
         /// <summary>D9: third pick done and 5 s elapsed.</summary>
         public bool Completed => _count == NeedleSkyConstants.PicksPerCheck && _sinceThird >= NeedleSkyConstants.CompleteAfterCheckSeconds - NeedleSkyConstants.TimeEps;
@@ -111,6 +112,12 @@ namespace Atlas.Blades.Lung.Sky
             {
                 az_deg = (float)az, el_deg = (float)el, clear_mm = Shown(_maps.MinClearanceMm(i, j)), robust = _maps.IsRobust(i, j),   // D15
             }));
+            if (_count == NeedleSkyConstants.PicksPerCheck)                                   // B11
+            {
+                Check = GreatCircleCheck.From(_picks[0], _picks[1], _picks[2]);
+                _events?.Emit("gc_check", JsonUtility.ToJson(new GcCheckData { angle_sum_deg = (float)Check.AngleSumDeg }));   // D15: unrounded
+                _sinceThird = 0;
+            }
             return true;
         }
 
@@ -120,7 +127,8 @@ namespace Atlas.Blades.Lung.Sky
         {
             SkyDirection.ToAzEl(_cursor, out double az, out double el);
             SkyDirection.Pixel(az, el, out int i, out int j);
-            _readout = new NeedleSkyReadout(Shown(_maps.MinClearanceMm(i, j)), _maps.IsRobust(i, j), _sharePct, _count, float.NaN);
+            _readout = new NeedleSkyReadout(Shown(_maps.MinClearanceMm(i, j)), _maps.IsRobust(i, j), _sharePct, _count,
+                Check != null ? Shown((float)Check.AngleSumDeg) : float.NaN);
         }
     }
 }

@@ -58,6 +58,17 @@ Shader "Atlas/NeedleSky"
             // angle between unit vectors, stable: 2 asin(|d - p| / 2)
             float AngleTo(float3 d, float3 p) { return 2.0 * asin(min(1.0, length(d - p) * 0.5)); }
 
+            // arc P->Q: distance inside the lune to the circle, else to the nearer endpoint (GreatCircleArc.DistanceRad mirror)
+            float ArcDist(float3 d, float3 P, float3 Q)
+            {
+                float3 n = cross(P, Q);
+                float nl = length(n);
+                if (nl < 1e-6) return min(AngleTo(d, P), AngleTo(d, Q));
+                n /= nl;
+                bool inLune = dot(d, cross(n, P)) >= 0.0 && dot(d, cross(Q, n)) >= 0.0;
+                return inLune ? asin(min(1.0, abs(dot(d, n)))) : min(AngleTo(d, P), AngleTo(d, Q));
+            }
+
             float4 frag(Varyings i) : SV_Target
             {
                 // per eye, so features sit at infinity (D11)
@@ -77,6 +88,12 @@ Shader "Atlas/NeedleSky"
                 float pick = 0.0;
                 float aw;
                 float rad = PI / 180.0;
+                if (_ArcsOn > 0.5)
+                {
+                    float a = min(ArcDist(d, _PickA.xyz, _PickB.xyz), min(ArcDist(d, _PickB.xyz, _PickC.xyz), ArcDist(d, _PickC.xyz, _PickA.xyz)));
+                    aw = fwidth(a);
+                    pick = 1.0 - smoothstep(0.25 * rad - aw, 0.25 * rad + aw, a);   // D10: half width 0.25 deg
+                }
                 if (_PickA.w > 0.5) { float a = AngleTo(d, _PickA.xyz); aw = fwidth(a); pick = max(pick, 1.0 - smoothstep(0.75 * rad - aw, 0.75 * rad + aw, a)); }
                 if (_PickB.w > 0.5) { float a = AngleTo(d, _PickB.xyz); aw = fwidth(a); pick = max(pick, 1.0 - smoothstep(0.75 * rad - aw, 0.75 * rad + aw, a)); }
                 if (_PickC.w > 0.5) { float a = AngleTo(d, _PickC.xyz); aw = fwidth(a); pick = max(pick, 1.0 - smoothstep(0.75 * rad - aw, 0.75 * rad + aw, a)); }
