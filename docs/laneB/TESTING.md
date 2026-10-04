@@ -98,3 +98,17 @@ Same scene and preconditions as above.
 - Expected: the switch happens only inside a chamber with the shell opaque (nothing jumps outside it); the address on the Console
   and Spectator twin (fork events) is unchanged across both switches; the walk continues to the next fork. Record: address before
   and after each switch, frame of switch. 2 of 2 switches keep the address.
+
+## P2-B07 Endoluminal window (deferred: phone in hand)
+- **Scene:** `Assets/Atlas/Blades/Lung/Endoluminal/TestScene/Lung_EndoluminalTest.unity`. It contains a Main Camera and `EndoluminalTestDriver`, whose fields reference the Atlas/AtlasSurface shader, the URP/Unlit shader and LiberationSans SDF.
+- **Build:** use the on-request slot with Build Profiles = [Lung_EndoluminalTest.unity]. Release build, phone A in hand, thermal Nominal at the start. Afterwards run `git checkout ATLAS/ProjectSettings`.
+- **Driver:**
+  1. 120 baseline frames.
+  2. Then Show for `SyntheticForks.Route(4)` (fork addresses "", "L", "LR", "LRL"), one every 300 frames.
+  3. Per frame, it logs the Stopwatch ms spent in window code and `RenderCount` to `persistentDataPath/endoluminal_timing.csv` (columns frame, fork, window_ms, render_count, frame_ms), and prints a summary to the Xcode console.
+- **Pass:**
+  - (a) For each fork, exactly 1 frame has window time > 0, and that frame's `RenderCount` step is +1.
+  - (b) In every other frame (>= 299 per fork) window time = 0.000 ms and `RenderCount` is unchanged.
+  - (c) The quad shows the bifurcation with two "N o'clock" labels, upright and readable (not mirrored or upside down); for the root fork they read 9 and 3.
+- **Record:** the render-frame CPU ms and frame time (report only), plus an optional Xcode GPU capture of the render frame.
+- **Editor GPU test:** `EndoluminalGpuTests.Endo_Render_GPU` needs a graphics device; it is skipped under `-nographics`. It passed once on this Mac without `-nographics` (`docs/laneB/evidence/P2-B07/gpu_results.xml`); rerun it in the Editor with a graphics device when the shader or the font changes.
