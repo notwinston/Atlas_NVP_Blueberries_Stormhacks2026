@@ -526,25 +526,25 @@ R14 adds a depth gate of the forearm strip's own to `DepthMaskRegion` (`ArmMaxDe
 
 New files are not listed here: they are the folders of §3.2 and their tests. This table is the whole footprint in files that existed before. All edits are additions; nothing existing changes meaning when hands are absent. The one behaviour that changes with hands off is R10: the reticle now comes to a near target's distance in every session.
 
-| # | File | Edit | State at `515d14c` |
-|---|---|---|---|
-| E1 | `App/Atlas.App.asmdef` | Reference `Atlas.Hands` | Done |
-| E2 | `docs/contracts/README.md` (F1 table), `tools/headless/verify.py` (`ALLOWED`), `Tests/Architecture/AssemblyGraphTests.cs` (`Allowed`) | A row for `Atlas.Hands` and one for `Atlas.Hands.ARKit`; `Atlas.Hands` added to the App row; `Atlas.Safety` held to naming no hands type | Done |
-| E3 | `App/AtlasApp.cs` | `HandsInstaller.Install` just before the line that adds `InputSenseStep`; the upload hook after `RigUploadStep`; the mask source handed to the Bump Guard step; a `Hands` property; the parameters declared last; the after-frame hook; `Hands.Shutdown()` before `Pose.Dispose()`. The installer is given what it may not reference itself as plain references and delegates (`HandsPorts`): "is Bump Guard warning", the AR session's native pointer and session space, the count of mask faults | Done (§3.3 has the lines) |
-| E4 | `World/Pose/SensorFrame.cs` | One new field, `public DepthMask Mask;` (empty by default) | Done (line 23) |
-| E5 | `App/Frame/FrameSteps.cs` (`BumpGuardStep`) | Copy the sensor frame, set its `Mask` from the mask source when there is one, and pass the copy to `IBumpGuard.Tick`. A source that throws is counted in `MaskFaults` and Bump Guard runs on the frame as the pipeline built it | Done |
-| E6 | `Safety/Core/BumpDepthKernel.cs`, `BumpDepthJob.cs`, `BumpGuardCore.cs`, `BumpConstants.cs`, `DynamicLayer.cs`; `Safety/BumpGuard.cs` | The depth kernel leaves out samples the mask covers and forgets very young dynamic cells under them (§7.1). The dynamic layer keeps each cell's first-stamp time. The adapter turns the shared mask into the kernel's own (`BumpGuard.KernelMask`). The mask's hard limits are constants beside the others | Done. R13 and R14 add to the same files |
-| E7 | `Input/AtlasAction.cs` | `InputSource.Hands = 5` | Not made (R1). No source is added |
-| E8 | `Input/Core/AtlasInputCore.cs`, `Input/Core/GazeDwell.cs` | `RawInput` gains the fingertips and the pinch edges of this frame (`RawInput.Hands`); `Tick` runs the touch state machine (`Input/Core/HandsTouch.cs`) against the registered targets and fires through the same `Fire` as gaze and lever, with `InputSource.Gaze`. The dwell takes the bits of targets it must wait on (R6), the pinch tap, and reports the distance along the gaze to the focused target (R10) | Done |
-| E9 | `Input/AtlasInput.cs`, `Input/GazeReticle.cs` | `AtlasInput` implements the new small interface `IHandsInput`: `SetHands(...)` before the tick, the touch state back after it, and a fired target's label and tag. `IAtlasInput` itself gains no member, so its eight test fakes are untouched. The reticle takes a distance (R10) | Done |
-| E10 | `App/Menu/MenuView.cs`, `OnDeviceMenu.cs`, `MenuLayout.cs`; `App/Commands/SpaceSigns.cs`, `SpaceSignsView.cs`; `Spaces/CurvedWalk/CurvedWalkChips.cs`, `CurvedWalkTwins.cs`; `Spaces/SmallPlanet/SmallPlanetDial.cs`, `SmallPlanetSpace.cs` | Each asks `ReachSlots.TryGetNear` where to put itself. When it answers true the view stands at its slot about the near anchor, with its targets scaled. The menu and the signs also move from the head-locked layer to the world layer, where they are depth-tested, and take `Atlas/NearText` for their text | Done for the menu, its chip, the four signs, Curved Walk's chips and Small Planet's dial. Not done: the Playground's `PromptChip` and caption views stay where they were. Curved Walk's drawn chip text keeps its size (`CurvedWalkHud.cs` was not edited) |
-| E11 | `App/Menu/MenuModel.cs` | `"hands.enabled"` added to `KillSwitchIds` | Done (line 145: the last of 22) |
-| E12 | `Spaces/Glued/GluedSpace.cs`, `GluedMeshes.cs`, `GluedCore.cs` | The shared avatar mesh carries two simple hands while `IHands` reports them (§5.6). `GluedSpace` gains an upload step; the budget counts the avatar with both hands | Done for the built-in avatar and for a kit avatar that leaves room. R15 adds the reduced hands for one that does not |
-| E13 | `Editor/AtlasUsageText.cs` | The camera usage text mentions hands | Done (line 6) |
-| E14 | Tests that mirror the composition root: `Tests/App/BootstrapUnityTests.cs`, `Tests/App/E2E/RehearsalRig.cs` | Expect the `IHands` service; add the hands step to the rehearsal | Not done at `515d14c`. The end-to-end tests are being added as `Tests/App/E2E/E2EHandsTests.cs`. `Tests/App/BumpGuardStepMaskTests.cs` tests the guard step's seam |
-| E15 | `docs/contracts/lane-d-link.md` (parameter groups, event table), `docs/contracts/lane-c-room.md` (input, the sensor frame, Bump Guard's depth kernel) | The `hands` group, the events of §8.1, `IHandsInput`, `SensorFrame.Mask`, `DepthKernelMask` | Not in `515d14c`: neither page names hands there, and `recordings/README.md` does not describe the hand logs. The second wave has a package for the contract pages and that README |
-| O1 (optional) | `Spaces/Portal/PortalSpace.cs` | Call `IHands.HideThisFrame()` while a doorway's box mask covers an eye | Not done. Nothing calls `HideThisFrame` yet |
-| O2 (optional) | `station/hub/wwwroot/js/app.js` | Fold `hands.on/off/enter/exit` into a status tile | Not done |
+| # | File | Edit | Why | State at `515d14c` |
+|---|---|---|---|---|
+| E1 | `App/Atlas.App.asmdef` | Reference `Atlas.Hands` | The composition root installs it | Done |
+| E2 | `docs/contracts/README.md` (F1 table), `tools/headless/verify.py` (`ALLOWED`), `Tests/Architecture/AssemblyGraphTests.cs` (`Allowed`) | A row for `Atlas.Hands` and one for `Atlas.Hands.ARKit`; `Atlas.Hands` added to the App row; `Atlas.Safety` held to naming no hands type | The three copies of the reference table must agree, and a test reads two of them | Done |
+| E3 | `App/AtlasApp.cs` | `HandsInstaller.Install` just before the line that adds `InputSenseStep`; the upload hook after `RigUploadStep`; the mask source handed to the Bump Guard step; a `Hands` property; the parameters declared last; the after-frame hook; `Hands.Shutdown()` before `Pose.Dispose()`. The installer is given what it may not reference itself as plain references and delegates (`HandsPorts`): "is Bump Guard warning", the AR session's native pointer and session space, the count of mask faults | Wiring | Done (§3.3 has the lines) |
+| E4 | `World/Pose/SensorFrame.cs` | One new field, `public DepthMask Mask;` (empty by default) | The mask travels to Bump Guard inside the value it already receives | Done (line 23) |
+| E5 | `App/Frame/FrameSteps.cs` (`BumpGuardStep`) | Copy the sensor frame, set its `Mask` from the mask source when there is one, and pass the copy to `IBumpGuard.Tick`. A source that throws is counted in `MaskFaults` and Bump Guard runs on the frame as the pipeline built it | Safety stays unaware of where the mask came from | Done |
+| E6 | `Safety/Core/BumpDepthKernel.cs`, `BumpDepthJob.cs`, `BumpGuardCore.cs`, `BumpConstants.cs`, `DynamicLayer.cs`; `Safety/BumpGuard.cs` | The depth kernel leaves out samples the mask covers and forgets very young dynamic cells under them (§7.1). The dynamic layer keeps each cell's first-stamp time. The adapter turns the shared mask into the kernel's own (`BumpGuard.KernelMask`). The mask's hard limits are constants beside the others | H10; R4 | Done. R13 and R14 add to the same files |
+| E7 | `Input/AtlasAction.cs` | `InputSource.Hands = 5` | It was to be a source for the event log | Not made (R1). No source is added |
+| E8 | `Input/Core/AtlasInputCore.cs`, `Input/Core/GazeDwell.cs` | `RawInput` gains the fingertips and the pinch edges of this frame (`RawInput.Hands`); `Tick` runs the touch state machine (`Input/Core/HandsTouch.cs`) against the registered targets and fires through the same `Fire` as gaze and lever, with `InputSource.Gaze`. The dwell takes the bits of targets it must wait on (R6), the pinch tap, and reports the distance along the gaze to the focused target (R10) | Touch and pinch become twins of dwell and lever by construction (§6) | Done |
+| E9 | `Input/AtlasInput.cs`, `Input/GazeReticle.cs` | `AtlasInput` implements the new small interface `IHandsInput`: `SetHands(...)` before the tick, the touch state back after it, and a fired target's label and tag. `IAtlasInput` itself gains no member, so its eight test fakes are untouched. The reticle takes a distance (R10) | The hands need a door into input that costs `IAtlasInput` no member | Done |
+| E10 | `App/Menu/MenuView.cs`, `OnDeviceMenu.cs`, `MenuLayout.cs`; `App/Commands/SpaceSigns.cs`, `SpaceSignsView.cs`; `Spaces/CurvedWalk/CurvedWalkChips.cs`, `CurvedWalkTwins.cs`; `Spaces/SmallPlanet/SmallPlanetDial.cs`, `SmallPlanetSpace.cs` | Each asks `ReachSlots.TryGetNear` where to put itself. When it answers true the view stands at its slot about the near anchor, with its targets scaled. The menu and the signs also move from the head-locked layer to the world layer, where they are depth-tested, and take `Atlas/NearText` for their text | H14 | Done for the menu, its chip, the four signs, Curved Walk's chips and Small Planet's dial. Not done: the Playground's `PromptChip` and caption views stay where they were. Curved Walk's drawn chip text keeps its size (`CurvedWalkHud.cs` was not edited) |
+| E11 | `App/Menu/MenuModel.cs` | `"hands.enabled"` added to `KillSwitchIds` | Reachable from the on-device menu with the Station off | Done (line 145: the last of 22) |
+| E12 | `Spaces/Glued/GluedSpace.cs`, `GluedMeshes.cs`, `GluedCore.cs` | The shared avatar mesh carries two simple hands while `IHands` reports them (§5.6). `GluedSpace` gains an upload step; the budget counts the avatar with both hands | H6 | Done for the built-in avatar and for a kit avatar that leaves room. R15 adds the reduced hands for one that does not |
+| E13 | `Editor/AtlasUsageText.cs` | The camera usage text mentions hands | The privacy string should say what the camera is used for | Done (line 6) |
+| E14 | Tests that mirror the composition root: `Tests/App/BootstrapUnityTests.cs`, `Tests/App/E2E/RehearsalRig.cs` | Expect the `IHands` service; add the hands step to the rehearsal | So the end-to-end tests run with hands present | Not done at `515d14c`. The end-to-end tests are being added as `Tests/App/E2E/E2EHandsTests.cs`. `Tests/App/BumpGuardStepMaskTests.cs` tests the guard step's seam |
+| E15 | `docs/contracts/lane-d-link.md` (parameter groups, event table), `docs/contracts/lane-c-room.md` (input, the sensor frame, Bump Guard's depth kernel) | The `hands` group, the events of §8.1, `IHandsInput`, `SensorFrame.Mask`, `DepthKernelMask` | Documents kept in step with code | Not in `515d14c`: neither page names hands there, and `recordings/README.md` does not describe the hand logs. The second wave has a package for the contract pages and that README |
+| O1 (optional) | `Spaces/Portal/PortalSpace.cs` | Call `IHands.HideThisFrame()` while a doorway's box mask covers an eye | Removes the one-eye flaw of §7.4 | Not done. Nothing calls `HideThisFrame` yet |
+| O2 (optional) | `station/hub/wwwroot/js/app.js` | Fold `hands.on/off/enter/exit` into a status tile | A nicer Console; no message changes | Not done |
 
 Three of these touch code that other people are changing quickly: `AtlasApp.cs`, `AtlasInputCore.cs` and the menu's views. They are kept to a few lines each for that reason.
 
@@ -717,7 +717,7 @@ The template is a right hand; the left is its mirror. Template dimensions (bone 
 
 ### 5.2 Posing it: skinning in code
 
-Every vertex is stored in the frame of what it hangs from. Each frame, in the upload step, `HandsView` calls `HandsSkin.Skin` for each visible hand (`Hands/Core/HandsSkin.cs`). It is a plain call on the main thread: the kernel takes pointers and plain data only, so a Burst job could call it, and none was needed.
+Every vertex hangs from one bone or anchor, or from two with weights that sum to one, and is stored in the frame of what it hangs from. Each frame, in the upload step, `HandsView` calls `HandsSkin.Skin` for each visible hand (`Hands/Core/HandsSkin.cs`). It is a plain call on the main thread: the kernel takes pointers and plain data only, so a Burst job could call it, and none was needed.
 
 1. **A frame per bone, from joint positions alone.** The detector gives no rotations, so they are built. The first bone of each chain runs from the wrist to the chain's base: its "up" is the palm's normal made perpendicular to it, which is always well defined because the bases lie in the palm. Every later bone takes the frame before it turned by the smallest rotation that carries the old axis onto the new: fingers bend but do not twist. The normal is never made perpendicular to a finger's own first bone, which runs along the normal when a fist is closed. The thumb starts from the palm's normal turned 60° about the line from the wrist to the index knuckle.
 2. **Rings by their joints.** A ring takes its bone's frame at the joint, turned a quarter of the way towards the bone across the joint, so a bent joint is rounded by two rings and not creased by one. A ring keeps its radius in every pose. Its distance from the joint scales with the hand and shrinks with a bone that measures short, so a short bone from a noisy lift moves the ring and does not tear the mesh.
@@ -832,7 +832,7 @@ Looking down at the panel brings it to the middle of both the view and the camer
 | Middle | Dial, down | Home beacon | Dial, up |
 | Bottom | Previous sign | Exhibit sign | Next sign |
 
-Each view lays itself out as before and then asks `ReachSlots.TryGetNear`; on true it stands at its slot with its own layout multiplied by the scale. The scale is 0.75. The grid's pitch is then 14 cm, and the eight small targets, spheres 9 to 10.5 cm across, stand at least 3.7 cm apart. The menu's 0.70 × 0.50 m panel becomes 0.53 × 0.38 m and its rows 3 cm tall on a 3.15 cm pitch. No target within reach is smaller than 3 cm across. The open menu panel is centred on the anchor and covers the grid, so everything else hides while it is open; in Curved Walk and Small Planet the chips hide while any menu holds the input. Within reach a sign is a live target only while the signs are drawn, which is while the head looks down past 10° or a sign is being dwelt on: a hidden sign would be an invisible touch target that switches space.
+Each view lays itself out as before and then asks `ReachSlots.TryGetNear`; on true it stands at its slot with its own layout multiplied by the scale. The scale is 0.75. The grid's pitch is then 14 cm, and the eight small targets, spheres 9 to 10.5 cm across, stand at least 3.7 cm apart. The menu's 0.70 × 0.50 m panel becomes 0.53 × 0.38 m and its rows 3 cm tall on a 3.15 cm pitch. At 0.48 m that is a larger angle than the same panel at 1.2 m, which is what a fingertip needs. No target within reach is smaller than 3 cm across. The open menu panel is centred on the anchor and covers the grid, so everything else hides while it is open; in Curved Walk and Small Planet the chips hide while any menu holds the input. Within reach a sign is a live target only while the signs are drawn, which is while the head looks down past 10° or a sign is being dwelt on: a hidden sign would be an invisible touch target that switches space.
 
 The Playground's prompt chips and captions were not brought within reach. They stay where they were.
 
@@ -1099,7 +1099,7 @@ Hands log edges only, through `IEventLog`, on the main thread. Nothing is logged
 | `hands.bench` | Once a second while `hands.bench` is on and the gate is active | The same fields as `hands.stats` |
 | `hands.fault` | The source reports an error code; a hook of the hands caught an exception; the guard step caught the mask source throwing | `code`: the source's negative code (§4.2), logged when it changes; or `sense: …`, `upload: …` or `after: …` with the exception's type and message; or `mask`, once |
 
-`hands.enter` is limited: an enter less than 1 s after that hand's last logged enter is not logged, and is counted in `quietEvents`. An exit is always logged. World-touch marks are not logged.
+`hands.enter` is limited, so that a hand hovering at the edge of the camera's view cannot flood the Console's list: an enter less than 1 s after that hand's last logged enter is not logged, and is counted in `quietEvents`. An exit is always logged. World-touch marks are not logged.
 
 Two things in the events are not as intended at `515d14c`. The `cause` of `hands.exit` is read after the filter has cleared the hand, so it always says `edge` (`HandsRuntime.cs:627-630`). And because exits are not limited, a hand hovering at the edge of the camera's view can log exits whose enters were held back. §12 lists both.
 
@@ -1335,7 +1335,7 @@ flowchart LR
   HG1 --> E["E. World and copies"] --> HG4{{"HG4 world and copies"}}
 ```
 
-The picture is the order in which the gates can pass. The code did not wait for them: everything headless in every area was written before the bench, as the first design allowed, and only the constants wait for it.
+The picture is the order in which the gates can pass. D does not wait for B and C: the mask needs joints and nothing drawn. The code did not wait for the gates: everything headless in every area was written before the bench, as the first design allowed, and only the constants wait for it.
 
 ### 10.2 Gates
 
@@ -1429,53 +1429,53 @@ The fine-grained layer under the five areas of §10. One row is one piece an age
 
 **A. Seeing**
 
-| ID | Work package | Depends on | Output | Acceptance test | State |
-|---|---|---|---|---|---|
-| `HD-A1` | **Plugin and bridge** | none | `Assets/Plugins/iOS/AtlasHands.swift`; `Hands/ARKit/Atlas.Hands.ARKit.asmdef`, `VisionHandsSource.cs`; `Hands/Atlas.Hands.asmdef`, `Sources/IHandsSource.cs` (with `NullHandsSource` and the registration slot `HandsPlatform`), `Core/HandsDetection.cs`, `Sources/HandsNativeMath.cs`; E1, E2 | The three headless build configurations compile; `HandsNativeLayoutTests`; the iOS build links; on the phone in the headset, results arrive at the requested rate and are logged | Code done and tested headless. Not linked in an Xcode build, not run on a phone |
-| `HD-A2` | **Bench read-out** | `HD-A1` | The `hands.bench` event and the plugin's first log line (no `HandsBench.cs` was needed); `docs/evidence/hands_bench.md` | Every row of §9.3 has a measured value | Read-out built. Bench not run; the evidence file does not exist |
-| `HD-A3` | **Hand log and replay** | none | `Hands/Sources/HandsLog.cs`, `HandsLogRecorder.cs`, `ReplayHandsSource.cs`, `HandsSynth.cs`; the generator `Tests/Hands/HandsLogFixtures.cs`; fixtures in `recordings/` | `Hands_Log_RoundTrip`, `Hands_Log_FileEqualsGenerator` | Done |
-| `HD-A4` | **Lift** | `HD-A3` | `Hands/Core/HandModel.cs` (the template's dimensions), `PalmPlane.cs`, `BoneLengths.cs`, `HandsLift.cs` | `Hands_Lift_SyntheticPoses`, `Hands_Lift_PointingAwayGoesAway`, `Hands_Lift_NoDepth`, `Hands_Lift_PressReach`, `Hands_Scale_Converges` | Done |
-| `HD-A5` | **Filter, sides, confidence** | `HD-A4` | `Hands/Core/OneEuro.cs`, `HandsFilter.cs` | `Hands_Filter_BriefLossHolds`, `Hands_Filter_PredictionBeatsNone`, `Hands_Sides_NeverShare` | Done |
-| `HD-A6` | **Editor source** | `HD-A4` | `Hands/Sources/EditorHandsSource.cs` | In the Editor two hands follow mouse and keys through the real lift | Built; `Hands_EditorSource_*` pass headless. Never run in the Editor |
-| `HD-A7` | **Types, service, installer, gate** | `HD-A5` | `World/Hands/*.cs` (§3.6); `Hands/HandsInstaller.cs` (with the three step classes), `HandsRuntime.cs`, `Core/HandsGate.cs`; the `hands.*` parameters; E3, E11, E14 | `Hands_Gate_Table`; `Runtime_*`; `verify.py rules`; `E2E_Hands_*`; `BootstrapUnityTests` finds `IHands` | Done, except E14: the end-to-end tests are being added and `BootstrapUnityTests` is unchanged |
+| ID | Work package | Depends on | Output | Acceptance test | Needs | State |
+|---|---|---|---|---|---|---|
+| `HD-A1` | **Plugin and bridge** | none | `Assets/Plugins/iOS/AtlasHands.swift`; `Hands/ARKit/Atlas.Hands.ARKit.asmdef`, `VisionHandsSource.cs`; `Hands/Atlas.Hands.asmdef`, `Sources/IHandsSource.cs` (with `NullHandsSource` and the registration slot `HandsPlatform`), `Core/HandsDetection.cs`, `Sources/HandsNativeMath.cs`; E1, E2 | The three headless build configurations compile; `HandsNativeLayoutTests`; the iOS build links; on the phone in the headset, results arrive at the requested rate and are logged | Mac, phone in headset | Code done and tested headless. Not linked in an Xcode build, not run on a phone |
+| `HD-A2` | **Bench read-out** | `HD-A1` | The `hands.bench` event and the plugin's first log line (no `HandsBench.cs` was needed); `docs/evidence/hands_bench.md` | Every row of §9.3 has a measured value | Phone in headset | Read-out built. Bench not run; the evidence file does not exist |
+| `HD-A3` | **Hand log and replay** | none | `Hands/Sources/HandsLog.cs`, `HandsLogRecorder.cs`, `ReplayHandsSource.cs`, `HandsSynth.cs`; the generator `Tests/Hands/HandsLogFixtures.cs`; fixtures in `recordings/` | `Hands_Log_RoundTrip`, `Hands_Log_FileEqualsGenerator` | Headless | Done |
+| `HD-A4` | **Lift** | `HD-A3` | `Hands/Core/HandModel.cs` (the template's dimensions), `PalmPlane.cs`, `BoneLengths.cs`, `HandsLift.cs` | `Hands_Lift_SyntheticPoses`, `Hands_Lift_PointingAwayGoesAway`, `Hands_Lift_NoDepth`, `Hands_Lift_PressReach`, `Hands_Scale_Converges` | Headless | Done |
+| `HD-A5` | **Filter, sides, confidence** | `HD-A4` | `Hands/Core/OneEuro.cs`, `HandsFilter.cs` | `Hands_Filter_BriefLossHolds`, `Hands_Filter_PredictionBeatsNone`, `Hands_Sides_NeverShare` | Headless | Done |
+| `HD-A6` | **Editor source** | `HD-A4` | `Hands/Sources/EditorHandsSource.cs` | In the Editor two hands follow mouse and keys through the real lift | Editor | Built; `Hands_EditorSource_*` pass headless. Never run in the Editor |
+| `HD-A7` | **Types, service, installer, gate** | `HD-A5` | `World/Hands/*.cs` (§3.6); `Hands/HandsInstaller.cs` (with the three step classes), `HandsRuntime.cs`, `Core/HandsGate.cs`; the `hands.*` parameters; E3, E11, E14 | `Hands_Gate_Table`; `Runtime_*`; `verify.py rules`; `E2E_Hands_*`; `BootstrapUnityTests` finds `IHands` | Headless, Editor | Done, except E14: the end-to-end tests are being added and `BootstrapUnityTests` is unchanged |
 
 **B. Drawing**
 
-| ID | Work package | Depends on | Output | Acceptance test | State |
-|---|---|---|---|---|---|
-| `HD-B1` | **Mesh template** | none | `Hands/Core/HandsMeshTemplate.cs` | `Hands_Skin_Mesh_*` (counts, mirror, closed shells) | Done |
-| `HD-B2` | **Skinning and view** | `HD-B1`, `HD-A7` | `Hands/Core/HandsSkin.cs`; `Hands/View/HandsView.cs`; `HandsUploadStep` in `HandsInstaller.cs` | `Hands_Skin_Mesh_*`; both eyes in the Editor; counters inside §5.7; pool count restored on shutdown | Skinning done and tested headless. The view is written; nothing has been looked at in the Editor |
-| `HD-B3` | **Visibility** | `HD-A7` | `Hands/Core/HandsVisibility.cs` | `Hands_Visibility_Ramps` | Done |
-| `HD-B4` | **Offset calibration** | `HD-B2` | The procedure of §5.5 carried out for phones A and B; values recorded in `docs/evidence/hands_bench.md` | Drawn fingertip within 2 cm of the virtual corner at three touch points | Not done |
+| ID | Work package | Depends on | Output | Acceptance test | Needs | State |
+|---|---|---|---|---|---|---|
+| `HD-B1` | **Mesh template** | none | `Hands/Core/HandsMeshTemplate.cs` | `Hands_Skin_Mesh_*` (counts, mirror, closed shells) | Headless | Done |
+| `HD-B2` | **Skinning and view** | `HD-B1`, `HD-A7` | `Hands/Core/HandsSkin.cs`; `Hands/View/HandsView.cs`; `HandsUploadStep` in `HandsInstaller.cs` | `Hands_Skin_Mesh_*`; both eyes in the Editor; counters inside §5.7; pool count restored on shutdown | Headless, Editor | Skinning done and tested headless. The view is written; nothing has been looked at in the Editor |
+| `HD-B3` | **Visibility** | `HD-A7` | `Hands/Core/HandsVisibility.cs` | `Hands_Visibility_Ramps` | Headless | Done |
+| `HD-B4` | **Offset calibration** | `HD-B2` | The procedure of §5.5 carried out for phones A and B; values recorded in `docs/evidence/hands_bench.md` | Drawn fingertip within 2 cm of the virtual corner at three touch points | Phone in headset | Not done |
 
 **C. Touching**
 
-| ID | Work package | Depends on | Output | Acceptance test | State |
-|---|---|---|---|---|---|
-| `HD-C1` | **Input seam** | `HD-A7` | E8, E9 (E7 was not made: R1); `Input/IHandsInput.cs`, `Input/Core/HandsTypes.cs`, `HandsTouch.cs`, `ReticleDepth.cs` | `Input_HandsTouch_StateMachine_*`, `Input_Hands_AreATwinOfDwell`; every earlier input test still green; `IAtlasInput` unchanged | Done |
-| `HD-C2` | **Pinch and two-hand** | `HD-A5` | `Hands/Core/HandsGestures.cs` | `Hands_Pinch_Hysteresis`, `Hands_TwoHand_AngleUnwraps` | Done |
-| `HD-C3` | **Reach anchor** | `HD-A7` | `Hands/Core/ReachAnchor.cs` behind `IReachLayout` | `Hands_Reach_Anchor_*`: placed as §6.1 says; moves only past 0.25 m or 40° for 0.5 s; never while a fingertip is within 0.26 m | Done |
-| `HD-C4` | **Near panels** | `HD-C3` | E10; `World/Hands/ReachSlots.cs`; `App/Menu/NearText.cs` and its shader | The Editor list of §9.2; with a gamepad connected every existing menu and sign test is green and nothing has moved | Done headless for the menu, the signs, Curved Walk and Small Planet. Not done for the Playground's chips. The Editor list has not been run |
-| `HD-C5` | **Marks and sounds** | `HD-B2` | The two marks inside `Hands/View/HandsView.cs`; `Hands/View/HandsSounds.cs` | The ring follows the fingertip on a target's face; one click per press; two marks exist | Written. Never run |
+| ID | Work package | Depends on | Output | Acceptance test | Needs | State |
+|---|---|---|---|---|---|---|
+| `HD-C1` | **Input seam** | `HD-A7` | E8, E9 (E7 was not made: R1); `Input/IHandsInput.cs`, `Input/Core/HandsTypes.cs`, `HandsTouch.cs`, `ReticleDepth.cs` | `Input_HandsTouch_StateMachine_*`, `Input_Hands_AreATwinOfDwell`; every earlier input test still green; `IAtlasInput` unchanged | Headless | Done |
+| `HD-C2` | **Pinch and two-hand** | `HD-A5` | `Hands/Core/HandsGestures.cs` | `Hands_Pinch_Hysteresis`, `Hands_TwoHand_AngleUnwraps` | Headless | Done |
+| `HD-C3` | **Reach anchor** | `HD-A7` | `Hands/Core/ReachAnchor.cs` behind `IReachLayout` | `Hands_Reach_Anchor_*`: placed as §6.1 says; moves only past 0.25 m or 40° for 0.5 s; never while a fingertip is within 0.26 m | Headless | Done |
+| `HD-C4` | **Near panels** | `HD-C3` | E10; `World/Hands/ReachSlots.cs`; `App/Menu/NearText.cs` and its shader | The Editor list of §9.2; with a gamepad connected every existing menu and sign test is green and nothing has moved | Editor | Done headless for the menu, the signs, Curved Walk and Small Planet. Not done for the Playground's chips. The Editor list has not been run |
+| `HD-C5` | **Marks and sounds** | `HD-B2` | The two marks inside `Hands/View/HandsView.cs`; `Hands/View/HandsSounds.cs` | The ring follows the fingertip on a target's face; one click per press; two marks exist | Editor | Written. Never run |
 
 **D. Staying safe and cool**
 
-| ID | Work package | Depends on | Output | Acceptance test | State |
-|---|---|---|---|---|---|
-| `HD-D1` | **Characterise the problem** | `HD-A3` | A hand-sized obstacle seen only by synthetic depth, in the Safety tests' scenario helpers (`Tests/Safety/SimHand.cs`, `BumpScenario.cs`) | `BumpGuard_HandCharacterisation` records WARN and STRONG with no mask | Done |
-| `HD-D2` | **Mask builder** | `HD-A5` | `World/Hands/DepthMask.cs`; `Hands/Core/HandsMask.cs` | `Hands_Mask_Geometry_*`, `Hands_Mask_Lifetime_*`, `Hands_Mask_ConfidenceGate_*`, `Hands_Mask_SizeLimit_*` | Done. R14 adds the forearm strip's gate |
-| `HD-D3` | **Bump Guard seam** | `HD-D1`, `HD-D2` | E4, E5, E6; `Safety/Core/DepthKernelMask.cs` | `BumpGuard_Mask_EmptyIsIdentity_*`, `BumpGuard_Mask_Limits_*`, `BumpGuard_Replay_WithHands_*`, `Safety_Independence_AssemblyHalf` | Done. R13 adds pending cells |
-| `HD-D4` | **Warning fade and heat steps** | `HD-A7`, `HD-B3` | The gate's tier rows, the self-governor, the idle rate; the warning delegate | `Hands_Gate_Table`, `Hands_Visibility_Ramps` | Done |
-| `HD-D5` | **The phone protocol** | `HD-D3`, `HD-B2` | `docs/evidence/hands_HG3.md`, filled in | The HG3 list of §9.4 | Not done |
+| ID | Work package | Depends on | Output | Acceptance test | Needs | State |
+|---|---|---|---|---|---|---|
+| `HD-D1` | **Characterise the problem** | `HD-A3` | A hand-sized obstacle seen only by synthetic depth, in the Safety tests' scenario helpers (`Tests/Safety/SimHand.cs`, `BumpScenario.cs`) | `BumpGuard_HandCharacterisation` records WARN and STRONG with no mask | Headless | Done |
+| `HD-D2` | **Mask builder** | `HD-A5` | `World/Hands/DepthMask.cs`; `Hands/Core/HandsMask.cs` | `Hands_Mask_Geometry_*`, `Hands_Mask_Lifetime_*`, `Hands_Mask_ConfidenceGate_*`, `Hands_Mask_SizeLimit_*` | Headless | Done. R14 adds the forearm strip's gate |
+| `HD-D3` | **Bump Guard seam** | `HD-D1`, `HD-D2` | E4, E5, E6; `Safety/Core/DepthKernelMask.cs` | `BumpGuard_Mask_EmptyIsIdentity_*`, `BumpGuard_Mask_Limits_*`, `BumpGuard_Replay_WithHands_*`, `Safety_Independence_AssemblyHalf` | Headless | Done. R13 adds pending cells |
+| `HD-D4` | **Warning fade and heat steps** | `HD-A7`, `HD-B3` | The gate's tier rows, the self-governor, the idle rate; the warning delegate | `Hands_Gate_Table`, `Hands_Visibility_Ramps` | Headless | Done |
+| `HD-D5` | **The phone protocol** | `HD-D3`, `HD-B2` | `docs/evidence/hands_HG3.md`, filled in | The HG3 list of §9.4 | Phone in headset, spotter | Not done |
 
 **E. World and copies**
 
-| ID | Work package | Depends on | Output | Acceptance test | State |
-|---|---|---|---|---|---|
-| `HD-E1` | **World touch** | `HD-C5` | `IHandsSurface` in `World/Hands/IHands.cs`; `Hands/Core/RoomSurfaces.cs` | `Hands_Surfaces_Closest_*`: walls with openings, floor, boxes; none in an unregistered space | Done headless. Marks never seen |
-| `HD-E2` | **Glued copies** | `HD-A7` | E12; `Spaces/Glued/GluedAvatarHands.cs` | The Glued budget test with hands: avatar at most 600 triangles, draw calls unchanged; mirrored rows in the Editor | Done headless for the built-in avatar. R15 adds the kit avatar's reduced hands. Not seen in the Editor |
-| `HD-E3` | **Events and statistics** | `HD-A7` | `HandsRuntime.AfterFrame`; `HandsAfterFrameStep` in `HandsInstaller.cs` | Edges only, the limit on enters, `hands.stats` on `hands.off` | Built; `Runtime_LogsEdgesOnly`. Two faults known (§8.1, §12 item 11) |
-| `HD-E4` | **Documents** | all | E13, E15; §0.5 if the lead accepts it | The contract pages name what the code has | E13 done. This document brought up to the code. E15 is the second wave's contracts package. §0.5 is not applied to the Master Plan |
+| ID | Work package | Depends on | Output | Acceptance test | Needs | State |
+|---|---|---|---|---|---|---|
+| `HD-E1` | **World touch** | `HD-C5` | `IHandsSurface` in `World/Hands/IHands.cs`; `Hands/Core/RoomSurfaces.cs` | `Hands_Surfaces_Closest_*`: walls with openings, floor, boxes; none in an unregistered space | Headless, Editor | Done headless. Marks never seen |
+| `HD-E2` | **Glued copies** | `HD-A7` | E12; `Spaces/Glued/GluedAvatarHands.cs` | The Glued budget test with hands: avatar at most 600 triangles, draw calls unchanged; mirrored rows in the Editor | Headless, Editor | Done headless for the built-in avatar. R15 adds the kit avatar's reduced hands. Not seen in the Editor |
+| `HD-E3` | **Events and statistics** | `HD-A7` | `HandsRuntime.AfterFrame`; `HandsAfterFrameStep` in `HandsInstaller.cs` | Edges only, the limit on enters, `hands.stats` on `hands.off` | Headless | Built; `Runtime_LogsEdgesOnly`. Two faults known (§8.1, §12 item 11) |
+| `HD-E4` | **Documents** | all | E13, E15; §0.5 if the lead accepts it | The contract pages name what the code has | none | E13 done. This document brought up to the code. E15 is the second wave's contracts package. §0.5 is not applied to the Master Plan |
 
 **The second wave.** Started from `515d14c`, each on its own branch. The packages that change what this document describes:
 
@@ -1758,7 +1758,7 @@ The joints are stored as six arrays of 21, not as an array of 21 structs. The fi
 
 The plugin imports ARKit, CoreVideo, Foundation, QuartzCore and Vision: system frameworks and no package. C# turns `cameraToSession` into Unity's left-handed convention in place: the z axis flips on both sides, which for the 16 floats is five sign changes (`HandsNativeMath.ArKitToUnity`; it holds for an app fixed to landscape left). Joint positions go from top-left pixels into camera space as `DepthFrame.Unproject` does (`HandsDetection.Unproject`).
 
-Error codes: −1 not started, −2 no session, −3 no new frame for 2 s of ticks' time, −4 the last 30 requests all failed. C# adds −5: the plugin's record is not this one (`VisionHandsSource.FaultLayout`). §4.2 has the rules.
+Error codes: −1 not started, −2 no session, −3 no new frame for 2 s of ticks' time, −4 the last 30 requests all failed. `atlas_hands_result_size` lets C# refuse to run against a plugin whose record differs, and C# adds −5 for that: the plugin's record is not this one (`VisionHandsSource.FaultLayout`). §4.2 has the rules.
 
 The plugin's own constants:
 
