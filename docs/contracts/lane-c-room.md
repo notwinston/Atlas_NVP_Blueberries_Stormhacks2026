@@ -15,7 +15,7 @@ content every space draws, the scan session, photo capture, the world map and th
 | Pose and sensor types, pose pipeline, pose log | Signatures final | `P1-C01`, `P1-C11` |
 | Bump Guard, `BumpCue`, haptics | Signatures and constants final; constants are starting values (§4.10) | `P1-C09`, `P1-C14` |
 | Room content (`IRoomContent`) | Signatures final; two meshes per generated object and a furniture level (§9.1) | `P1-C07` |
-| Scan session, routes 1 to 3 | Signatures final. Route 4 (wall bridge, `P1-C05`, Extended) is **written, tested headless and switched on by the parameter `scan.wallBridge`** (default on, a kill switch) where the bridge reports itself available. The Swift plugin is added to the Xcode project by a post-build step and has compiled and linked in a copy of an earlier export; it has never run on a device (§10.1) | `P1-C02` to `P1-C05`, `P1-C06` |
+| Scan session, routes 1 to 3 | Signatures final. Route 4 (wall bridge, `P1-C05`, Extended) is **written, tested headless and switched on by the parameter `scan.wallBridge`** (default on, a kill switch) where the bridge reports itself available. The Swift plugin is added to the Xcode project by a post-build step and has compiled and linked in Unity's export of this tree; it has never run on a device (§10.1) | `P1-C02` to `P1-C05`, `P1-C06` |
 | Photo capture and its sink | Signatures final | `P1-C08` |
 | World map | Signatures final | `P1-C13` |
 | Input actions and twins | Signatures final | `P1-C10` |
@@ -52,7 +52,7 @@ All paths are under `/workspace/ATLAS/Assets/Atlas/`. One assembly per row (READ
 | `Atlas.App`, `Atlas.App.Onboarding` | `App/Onboarding/` | `OnboardingInstaller.cs`, `OnboardingFlow.cs`, `OnboardingPorts.cs`, `OnboardingAdapters.cs`, `OnboardingScreens.cs`, `OnboardingView.cs` | Lane C files in lane A's assembly (F1). `OnboardingFlow` and `OnboardingScreens` are engine-free |
 | `Atlas.App`, `Atlas.App` | `App/Spaces/` | `FurnitureLevels.cs` | Lane C's file in lane A's assembly (F1): `SpaceFurniture` (the level each space shows), `FurnitureMode` (the values of `render.furniture`) and `FurnitureLevelPolicy` (puts the level on `IRoomContent`; §9.2). Engine-free apart from `IRoomContent` |
 | `Atlas.Editor`, `Atlas.EditorTools` | `Editor/` | `AtlasRoomPlanProject.cs` | Editor and iOS only. Called by `AtlasPostBuild`: puts `AtlasRoomPlan.swift` into the generated Xcode project (below, §10.1) |
-| native | `/workspace/ATLAS/Assets/Plugins/iOS/` | `AtlasHaptics.mm` (§8.9); `AtlasRoomPlan.swift` (route 4, §10.1) | `AtlasRoomPlan.swift` is not built by Unity on its own; the post-build step adds it to the `UnityFramework` target and links RoomPlan weakly. It has compiled and linked in a copy of an earlier export and has never run on a device. `AtlasHaptics.mm` has not been built inside Unity's generated Xcode project |
+| native | `/workspace/ATLAS/Assets/Plugins/iOS/` | `AtlasHaptics.mm` (§8.9); `AtlasRoomPlan.swift` (route 4, §10.1) | `AtlasRoomPlan.swift` is not built by Unity on its own; the post-build step adds it to the `UnityFramework` target and links RoomPlan weakly. It has compiled and linked in Unity's export of this tree and has never run on a device. `AtlasHaptics.mm` has not been built inside Unity's generated Xcode project |
 
 Tests: `Tests/World/` (`Atlas.World.Tests`), `Tests/Scan/` (`Atlas.Scan.Tests`), `Tests/Safety/`
 (`Atlas.Safety.Tests`), `Tests/Input/` (`Atlas.Input.Tests`), `Tests/Rendering/Room/` (`Atlas.Rendering.Tests`),
@@ -2695,10 +2695,11 @@ weakly, so the app starts where the framework is missing, and `OTHER_SWIFT_FLAGS
 -disable-autolink-framework -Xfrontend RoomPlan` so that Swift does not link it strongly; `SWIFT_VERSION` is 5.0,
 `CLANG_ENABLE_MODULES` YES and `ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES` YES. There is no bridging header: the four
 functions are `@_cdecl` and reached through `DllImport`. Applying it twice gives the project of applying it once
-(`Atlas.Editor.Tests`, `AtlasRoomPlanProjectTests`). Proven so far: in a copy of an earlier export (which holds none
-of this branch's code) the same edit compiled the Swift for iOS 17 and linked `UnityFramework`, which then exports
+(`Atlas.Editor.Tests`, `AtlasRoomPlanProjectTests`). Proven so far: in the export Unity made from this branch the step
+put the Swift file into `UnityFramework` once, and that target compiled and linked unsigned; its binary exports
 `AtlasRoomPlanSupported`, `AtlasRoomPlanStart`, `AtlasRoomPlanCopyJson` and `AtlasRoomPlanStop` and links RoomPlan
-weakly. Not proven: an export of this branch from Unity, a build of the app target, and anything on a phone.
+weakly. Not proven: a build of the app target (it stopped at its two launch storyboards, the iOS platform component
+not being installed on the build Mac), and anything on a phone.
 
 Each later route adds to the earlier ones. `quality.route` is the highest that contributed. The routes are one
 calculation, `ScanSolver.Solve(ScanSnapshot scan, string roomId, float defaultWallHeight, bool buildRoom, bool
@@ -3871,11 +3872,11 @@ that holds the test.
     measured on a recorded scan or a phone; the mesh design's check M1 (facing right for 90 % of chairs and couches
     and every wall-backed object) is where they are tuned. The photo factor of §11.2 (0.5 beyond 90° and 30°) is
     the same kind of value.
-16. **Device checks of the wall bridge (route 4), in this order.** (1) `tools/build_ios.sh`: the post-build step adds
-    the Swift file (or Unity already did, both are handled) and Xcode compiles and links it; the generated
-    `project.pbxproj` holds exactly one `AtlasRoomPlan.swift in Sources` in `UnityFramework` and one
-    `RoomPlan.framework` weak. (2) The app target builds unsigned: the iOS 26.1 platform component must be installed
-    in Xcode first, or the storyboards fail. (3) The app starts on a phone without LiDAR or without RoomPlan, and
+16. **Device checks of the wall bridge (route 4), in this order.** (1) Done on the build Mac for the framework
+    target: Unity's export of this tree holds exactly one `AtlasRoomPlan.swift in Sources` in `UnityFramework` and
+    one `RoomPlan.framework` weak, and that target compiles and links unsigned. Still to do with
+    `tools/build_ios.sh`: the same in a signed build. (2) The app target builds: the iOS 26.1 platform component
+    must be installed in Xcode first, or the two launch storyboards fail, as they did on the build Mac. (3) The app starts on a phone without LiDAR or without RoomPlan, and
     `AtlasRoomPlanSupported` returns 0. (4) On a LiDAR phone `WallBridge.Enabled` is true after boot (the bridge is
     registered before `Registry.PushAll()`, §14.1). (5) `RoomCaptureSession(arSession:)` on Unity's ARSession
     starts without taking frames from the furniture-box capture (AR Foundation open point D7). (6) Depth still

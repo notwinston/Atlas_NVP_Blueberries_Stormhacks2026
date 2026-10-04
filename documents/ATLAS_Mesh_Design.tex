@@ -606,12 +606,13 @@ shell lacks:
 \begin{enumerate}[leftmargin=6mm]
 \item \textbf{Build the plugin.} A post-build step, \cd{Editor/AtlasRoomPlanProject.cs} (called from \cd{AtlasPostBuild}), adds
 \cd{Plugins/iOS/AtlasRoomPlan.swift} to the sources of the \cd{UnityFramework} target of the generated Xcode project, links the
-RoomPlan framework weakly and sets the Swift build settings; applied twice it equals applied once. What was proved: the step was
-applied to a copy of an earlier Unity export (made on 3 October 2026, without the Swift file) and the \cd{UnityFramework}
-target then built (\cd{BUILD SUCCEEDED}), exporting the four \cd{AtlasRoomPlan} functions with RoomPlan linked weakly. The app
-target (\cd{Unity-iPhone}) stopped at its two storyboards, ``iOS 26.1 Platform Not Installed'': the iOS platform component is
-not installed on the build Mac. So it is proved that the file and the settings build in a framework target, not that Unity's
-export of this tree does, and nothing has run on a phone.
+RoomPlan framework weakly and sets the Swift build settings; applied twice it equals applied once. What was proved, on
+4 October 2026: Unity exported the Xcode project from this tree in batch mode, and that export holds the Swift file once in
+the sources of \cd{UnityFramework}, with RoomPlan linked weakly and the Swift settings in place. The \cd{UnityFramework}
+target then built unsigned (\cd{BUILD SUCCEEDED}), and its binary exports the four \cd{AtlasRoomPlan} functions with RoomPlan
+linked weakly. The app target (\cd{Unity-iPhone}) stopped at its two launch storyboards, ``iOS 26.1 Platform Not Installed'':
+the iOS platform component of Xcode is not installed on the build Mac. So Unity's export of this tree compiles and links the
+plugin; the whole app has not been built here, and nothing has run on a phone.
 \item \textbf{Switch it on.} \cd{WallBridge.Apply(bool)} sets \cd{WallBridge.Enabled} to the parameter \cd{scan.wallBridge}
 (default on; it is the kill switch) and the bridge's own report that it is available. The parameter is not in the on-device
 menu's kill-switch list, because the link contract fixes that list as the 21 names of its section 1.5 and a test asserts the
@@ -907,8 +908,8 @@ thousand) and 52 draw calls for the 24 stand-ins & MQ-A01\\
 MQ-C04 & C & Build the Swift plugin into the Xcode project; switch the bridge on.\newline
 \cd{Plugins/iOS/AtlasRoomPlan.swift}, an Editor post-build step, \cd{Scan/Routes/WallBridge.cs}, \cd{App/Params/AppParams.cs}
 (\cd{Atlas.Scan} cannot reach the registry, so the parameter is declared there) & The app builds; \cd{scan.wallBridge} turns it
-off. Built so far: the post-build step, tested headless, and the \cd{UnityFramework} target built from a copy of an earlier
-export; the app target stopped at storyboards on this Mac (section 5.5); the parameter is tested headless & --\\
+off. Built so far: the post-build step, tested headless, and the \cd{UnityFramework} target built from Unity's export of this
+tree; the app target stopped at storyboards on this Mac (section 5.5); the parameter is tested headless & --\\
 MQ-F01 & D & The record and \cd{tools/meshcheck/check.py}; raw generator output kept under debug-keep.\newline
 \cd{forge/service.py}, \cd{tools/meshcheck/} (new) & The script prints the numbers of M1 and M2 from a record. Built, with \cd{python -m forge.reclean}, and tested on built records (\cd{test_meshcheck.py}); no real record exists & MQ-D07\\
 MQ-F02 & Lead & Take the record; write \cd{truth.json}; run M1 to M4; fill \cd{docs/evidence/mesh/} & The four checks have a

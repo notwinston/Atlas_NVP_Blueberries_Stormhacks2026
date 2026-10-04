@@ -3071,9 +3071,9 @@ The same step also adds the RoomPlan wall bridge (scan route 4, lane C): `AtlasR
 `AtlasRoomPlanProject.Apply` (`Editor/AtlasRoomPlanProject.cs`, tested by `Atlas.Editor.Tests`) put
 `AtlasRoomPlan.swift` into the sources of the `UnityFramework` target, link `RoomPlan.framework` weakly, and set
 `OTHER_SWIFT_FLAGS`, `SWIFT_VERSION` 5.0, `CLANG_ENABLE_MODULES` and `ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES`. Applying
-it twice equals applying it once. The edit has been compiled and linked in a copy of an earlier export (the framework
+it twice equals applying it once. The edit has been compiled and linked in Unity's export of this tree (the framework
 target built; the app target stopped at its storyboards because the iOS platform component is not installed on the
-build Mac), never in an export of this tree, and the plugin has not run on a device.
+build Mac), and the plugin has not run on a device.
 
 Not written, on purpose: `NSBonjourServices`, a microphone key, a multicast entitlement, and
 `CADisableMinimumFrameDurationOnPhone` (the display stays at 60 Hz, §8.2).
