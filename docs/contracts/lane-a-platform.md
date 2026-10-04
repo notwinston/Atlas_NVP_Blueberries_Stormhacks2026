@@ -47,12 +47,12 @@ stencil table, and `Mesh4D`. Names and signatures are binding. Bodies are free.
 | `AtlasBoot`, `AtlasThermal` | `Atlas.Rendering` · `Atlas.Rendering` | `Rendering/AtlasBoot.cs`, `Rendering/AtlasThermal.cs` |
 | `AtlasShaderIDs`, `AtlasPalette`, `AtlasPaletteTexture`, `AtlasLook`, `AtlasLookState`, `AtlasMesh`, `AtlasMeshBuilder`, `AtlasMeshBudget`, `MaterialPool`, `PoolLedger` | same | `Rendering/Look/*.cs` |
 | `IStereoRig`, `DisplayMode`, `Eye`; `StereoRig`; `IEyeTextures`, `EyeTextureSet`; `EyeTextureLayout`; `LensBlit`; `LensParams`, `EyeFrustum`, `LensModel` | same | `Rendering/Stereo/IStereoRig.cs`, `StereoRig.cs`, `EyeTextureSet.cs`, `EyeTextureLayout.cs`, `LensBlit.cs`, `LensBlitPass.cs`, `LensModel.cs` |
-| `QualityApplier`; `LadderController` and its own `QualityInputs`; `FramePacing`; a second `QualityTier`, `QualityRow`, `QualityTable` with the same values as the `Atlas.World` ones (§9.5) | same | `Rendering/Quality/QualityApplier.cs`, `LadderController.cs`, `FramePacing.cs`, `QualityTier.cs` |
+| `QualityApplier`; `LadderController` and its own `QualityInputs`; `FramePacing`; a second `QualityTier`, `QualityRow`, `QualityTable` with the same values as the `Atlas.World` ones (§9.5); `QualityFurniture` (the furniture column of §9.5) | same | `Rendering/Quality/QualityApplier.cs`, `LadderController.cs`, `FramePacing.cs`, `QualityTier.cs`, `QualityFurniture.cs` |
 | `PortalRenderer`, `PortalRoom`, `PortalDoor`, `PortalFrameCore`, `PortalSwapRule`, `PortalMath`, `PortalStencilTable`, `PortalSlotAllocator` | same | `Rendering/Portals/*.cs` |
 | Shaders and includes | – | `Rendering/Shaders/Resources/*`, `Rendering/Stereo/Resources/`, `Rendering/Portals/Resources/` (§10.1) |
 | `AtlasBootstrap`; `AtlasApp`, `BootScene` | `Atlas.App` · `Atlas.App` | `App/AtlasBootstrap.cs`, `App/AtlasApp.cs` |
 | `AtlasFrameLoop`; `FrameLoopCore`, `ISpaceFrame`, `IWalkerReset`, `IStateWriter`, `IEyePositions`; `InputSenseStep`, `HeadTransformSenseStep`, `BumpGuardStep`, `LookUploadStep`, `RigUploadStep`, `RigEyePositions` | same | `App/Frame/AtlasFrameLoop.cs`, `App/Frame/FrameLoopCore.cs`, `App/Frame/FrameSteps.cs` |
-| `SpaceLab`, `ISpaceLoader`, `ISpaceStage`; `SceneSpaceLoader`; `SpaceStage`; `GridSpace` | same | `App/Spaces/SpaceLab.cs`, `SceneSpaceLoader.cs`, `SpaceStage.cs`, `GridSpace.cs` |
+| `SpaceLab`, `ISpaceLoader`, `ISpaceStage`; `SceneSpaceLoader`; `SpaceStage`; `GridSpace`; `SpaceFurniture`, `FurnitureMode`, `FurnitureLevelPolicy` (§4.2) | same | `App/Spaces/SpaceLab.cs`, `SceneSpaceLoader.cs`, `SpaceStage.cs`, `GridSpace.cs`, `FurnitureLevels.cs` |
 | `CommandRouter`; `SpaceActions`, `SpaceActionStep` | same | `App/Commands/CommandRouter.cs`, `App/Commands/SpaceActions.cs` |
 | `AppParams`, `ScanSettings`; `QualityLadder` | same | `App/Params/AppParams.cs`, `App/Params/QualityLadder.cs` |
 | `AppHooks`, `IOnboardingFlow`, `IAppMenu`, `IPerfTour` | same | `App/Hooks/AppHooks.cs` |
@@ -83,7 +83,7 @@ differently, that page wins and this one is corrected at the freeze.
 | `IBumpGuard`, `BumpLevel`, `SensorFrame`, `BumpCue.Fire`, `CueSource` | lane C | `IBumpGuard.Tick(in SensorFrame)`, `IBumpGuard.Level`, `BumpCue.Fire(BumpLevel, float2, CueSource)`, `BumpCue.Shown` |
 | `IPosePipeline` | lane C | `Atlas.World`. `Sensors` (the `SensorFrame` of this frame, with `RoomActive`), `Source`, `PredictionRotation`, `GyroPredictMs`, `ResetGeometry()` |
 | `IAtlasInput`, `AtlasAction`, `AtlasAxis`, `InputContext`, `GazeTarget` | lane C | `Atlas.Input`. `Tick(Vector3 headPosition, Quaternion headRotation, float deltaTime)`, `Pressed(AtlasAction)`, `Axis(AtlasAxis)`, `Walker`, `DwellSeconds`, `PushContext`, `PopContext`, `RegisterGazeTarget` |
-| `IRoomContent`, `WallMode`, object category | lane C | `Root`, `IsBuilt`, `SetWallMode(WallMode mode, float seconds = 0.5f)` with `WallMode.Full` and `WallMode.Kerbs`, `FloorVisible`, `ObjectsVisible`, `ResetPresentation()`; the category as an integer 0 to 31 (the order of `objects[].category` in the schema) |
+| `IRoomContent`, `WallMode`, object category | lane C | `Root`, `IsBuilt`, `SetWallMode(WallMode mode, float seconds = 0.5f)` with `WallMode.Full` and `WallMode.Kerbs`, `FloorVisible`, `ObjectsVisible`, `ResetPresentation()`, `FurnitureLevel FurnitureLevel { get; set; }` (the enum `FurnitureLevel { Full = 0, Light = 1 }` is in `Atlas.World`; `ResetPresentation()` returns it to `Full`), `Built`, `IsBuilt`; the category as an integer 0 to 31 (the order of `objects[].category` in the schema) |
 | `ParamRegistry`, `ParamEntry`, `ParamSource`, `StateMessage` | lane D | `Atlas.Link`. `DeclareFloat`, `DeclareInt`, `DeclareBool`, `DeclareEnum` (by name, idempotent, keep the current value; the last argument is `onRelease`), `Find`, `TryGet`, `Set`, `SetGroupActive(string group, bool active)`, `PushAll()` |
 | `AtlasPerfProbe` | lane D | Implements `IPerfSource` (§9.5) |
 
@@ -327,8 +327,8 @@ namespace Atlas.World
 `Atlas.App.SpaceLab` hosts exactly one space at a time. Other lanes see it only as `ISpaceHost`. It is a plain
 engine-free class, `SpaceLab : ISpaceHost, ISpaceFrame, IAfterFrameStep`, built as
 `new SpaceLab(ParamRegistry registry, IWalkerKernel kernel, IWalkerReset walker, ISpaceLoader loader, ISpaceStage stage)`:
-`SceneSpaceLoader` brings the scene-or-factory rule (§5.2) and `SpaceStage` the fade and the reset between two
-spaces. A switch advances once per frame at step 8b.
+`SceneSpaceLoader` brings the scene-or-factory rule (§5.2) and `SpaceStage` the fade, the reset between two
+spaces and the furniture level (below); `SpaceStage(IRoomContent room, FurnitureLevelPolicy furniture = null)`. A switch advances once per frame at step 8b.
 
 ```csharp
 // File: World/Spaces/ISpaceHost.cs
@@ -409,7 +409,7 @@ first fade frame starts within 250 ms of an operator command (test L10).
 |---|---|---|
 | 1 | `FadingOut` | Ramps `_AtlasFade` 1 → 0 over `FadeOutSeconds`. The old module keeps ticking. Skipped when no space was entered |
 | 2 | `Loading` | `old.Exit()`; raises `SpaceExited`; marks the old parameter group inactive; `ISpaceLoader.Unload`: destroys the old root, or `SceneManager.UnloadSceneAsync` for a scene |
-| 3 | `Loading` | `ISpaceStage.ResetForSpace()`: `AtlasLook.ResetForSpace()` (§10.8) and `IRoomContent.ResetPresentation()` when the room content is built. A module that uses a `PortalRenderer` clears it in its own `Exit` |
+| 3 | `Loading` | `ISpaceStage.ResetForSpace(SpaceId? next)`, with `next` the space about to be entered, or null when the switch ends in `Empty`: `AtlasLook.ResetForSpace()` (§10.8), `IRoomContent.ResetPresentation()` when the room content is built, and then `FurnitureLevelPolicy.EnterSpace(next)`, which sets the room's furniture level (below). A module that uses a `PortalRenderer` clears it in its own `Exit` |
 | – | `Loading` | Waits here while `IWalkerReset.RoomResetPending`: a room was just made active and the head is not in its frame yet, so the walker cannot be placed |
 | 4 | `Loading` | Creates the module by the scene-or-factory rule of §5.2. On failure, or when `Configure` or `Enter` throws: logs `space.loadFailed` and continues once with Home; if Home fails too, ends in `Empty` with the fade at 1 and the room content visible |
 | 5 | `Loading` | `module.Configure(Room, registry)`; `WorldVersion += 1`; marks the new parameter group active |
@@ -421,6 +421,30 @@ Steps 2 to 6 run in one step 8b when the module comes from a factory, and over t
 load when it comes from a scene. Bump Guard and its cue run in every one of those frames.
 
 **The kernel in a switch.** The walker's kernel is the app's one `HolonomyWalkerKernel` (lane B §4.11, §7.2). It is flat between two spaces. A curved space (S2, S4) configures it on `Enter` through `IDialKernel` and never restores it; SpaceLab does that after the space's `Exit` (step 2), with `kernel.Configure(KernelConfig.Flat(s))` and `ResetWalkerToFloor()` (the walker stays unplaced while a room reset is latched, and the frame loop places it). One switch keeps the walker instead: S2 to S3 (Mode 1 to Mode 2, plan §4.8 and §4.9). When S2 is entered at q = 5 with κ = −1 and no room reset pending, SpaceLab reads `kernel.Pose` before `Exit`, restores the flat kernel as above, and enters S3 with that tile and frame through `module.Enter(in keptPose)` in place of the registered start. The rule is inside SpaceLab: `ISpaceHost` and `ISpaceModule` gained nothing for it.
+
+**The furniture level.** A generated object has a full and a light copy (mesh design §5.4). Each space asks
+for one level, and the room content draws that copy. The level is set between frames, never inside one; on a
+switch it is set in `ResetForSpace`, while the screen is black. The table is `SpaceFurniture.Level(SpaceId)`
+(`App/Spaces/FurnitureLevels.cs`), and it is the single place the levels are written:
+
+| Space | Level |
+|---|---|
+| S0 Home, S2 Curved Walk | `Full` |
+| S1 Glued, S3 Aligned Cells, S4 Small Planet, S5 Impossible Rooms, S6 Slicer | `Light`, until the phone measurement of check M3 says a space holds 60 frames per second with `Full` |
+
+`FurnitureLevelPolicy(IRoomContent room, QualityLadder ladder)` combines three inputs into the level it puts on
+`room.FurnitureLevel`, and applies it again when any of them changes: on `EnterSpace`, on a ladder tier change
+(`QualityLadder.TierChanged`), when `render.furniture` changes and when the room content raises `Built`. It does
+nothing while the room is not built. `room` may be null (a sandbox with no room) and `ladder` may be null (the
+space's level then stands). With no space entered the space's own level is `Full`.
+
+| `render.furniture` | Level in force |
+|---|---|
+| `auto` (default) | The space's level, held down to `Light` when the ladder's furniture column (§9.5) says `Light` |
+| `light` | `Light` in every space |
+| `full` | `Full` in every space, whatever the ladder says |
+
+The Spectator does not take part: `SpectatorApp` composes its own root, sets no level and shows the full copy.
 
 SpaceLab never calls `Resources.UnloadUnusedAssets`: a module destroys what it created (rule 5 of §2). Twenty
 switches leave memory within ±5 % (`P1-A08`).
@@ -974,8 +998,8 @@ head-locked parent and returns the input service, which the root publishes. The 
 | 12 | Bump Guard and its cue (the cue under `boot.Hud`) | `SafetyInstaller.Install(boot, material)` | C | `Systems` | `IBumpGuard`; the root wraps it in `BumpGuardStep` → `SetGuard`. If it throws: `Display.HeadsetLocked` on a device |
 | 13 | Room content | `RoomContentInstaller.Install(boot, pool)` (`Atlas.Rendering.Room`, lane C files) | C | `Atlas/Room` | `IRoomContent` |
 | 14 | Upload hooks of lane A, in this order: `LookUploadStep`, `RigUploadStep` | `AtlasApp` | A | – | `AddUpload` × 2 |
-| 15 | `QualityLadder` round a `QualityApplier` on the eye textures | `AtlasApp` | A | – | `IQualityState` |
-| 16 | `GridSpace` registered as Home when there is no Home space; `SpaceLab` with `SceneSpaceLoader` and `SpaceStage`; then the parameters of §9.6 (`AppParams`) and `SpaceRegistry.DeclareAllParams(registry)` | `AtlasApp` | A | – | `ISpaceHost` |
+| 15 | `QualityLadder` round a `QualityApplier` on the eye textures; then `FurnitureLevelPolicy(RoomContent, Ladder)`, made here because it needs the room content (row 13) and the ladder, and kept as `AtlasApp.Furniture` | `AtlasApp` | A | – | `IQualityState` |
+| 16 | `GridSpace` registered as Home when there is no Home space; `SpaceLab` with `SceneSpaceLoader` and `SpaceStage(RoomContent, Furniture)`; then the parameters of §9.6 (`AppParams`, with `DeclareRender` given `Furniture` as its last argument) and `SpaceRegistry.DeclareAllParams(registry)` | `AtlasApp` | A | – | `ISpaceHost` |
 | 17 | `CommandRouter` | `AtlasApp` | A | – | `IOperatorCommands` |
 | 18 | Link client, perf probe, HUD, event log, pairing; the asset client; then `RoomHandOver`, `RehearsalFlow`, `DevOverlay` and the `dev.*` parameters | `TelemetryInstaller.Install(boot)`, `AssetClientInstaller.Install(boot, telemetry)`; `AtlasApp` | D, A | `Systems`; HUD under `boot.Hud` | `SetStateSink`; `IPerfSource`, `IEventLog`, `IObjectPhotoSink`; `AddAfterFrame` × 3 (probe, pump, HUD); `RoomHandOver` |
 | 19 | On-device menu, onboarding, perf tour | `AppHooks.CreateMenu()`, `CreateOnboarding()`, `CreatePerfTour()`, then `Install(app)` on each | D, C, A | `Systems` | their own |
@@ -1432,13 +1456,21 @@ namespace Atlas.World
 
 The ladder (§8.6):
 
-| Tier | Value | Trigger | Eye set (scale) | MSAA | ρ | Glued copies | Frame rate | Console |
-|---|---|---|---|---|---|---|---|---|
-| `High` | 4 | Only `thermal.pinTier = 4` | 0.8 | 4× | 3.5 | 7 × 7 | 60 | – |
-| `Nominal` | 0 | – | 0.8 | 4× | 3 | 5 × 5 | 60 | – |
-| `Fair` | 1 | Thermal Fair, or GPU p95 over 9 ms | 0.7 | 4× | 3 | 5 × 5 | 60 | Amber; swap at the next change of walker |
-| `Serious` | 2 | Thermal Serious, or GPU p95 over 12 ms | 0.6 | 2× | 2 | 3 × 3 | 60 | "Swap phone" |
-| `Critical` | 3 | Thermal Critical, or still missing 60 fps on `Serious` | 0.6 | off | 2 | 3 × 3 | 30 | "End the session" |
+| Tier | Value | Trigger | Eye set (scale) | MSAA | ρ | Glued copies | Furniture | Frame rate | Console |
+|---|---|---|---|---|---|---|---|---|---|
+| `High` | 4 | Only `thermal.pinTier = 4` | 0.8 | 4× | 3.5 | 7 × 7 | Full allowed | 60 | – |
+| `Nominal` | 0 | – | 0.8 | 4× | 3 | 5 × 5 | Full allowed | 60 | – |
+| `Fair` | 1 | Thermal Fair, or GPU p95 over 9 ms | 0.7 | 4× | 3 | 5 × 5 | Light | 60 | Amber; swap at the next change of walker |
+| `Serious` | 2 | Thermal Serious, or GPU p95 over 12 ms | 0.6 | 2× | 2 | 3 × 3 | Light | 60 | "Swap phone" |
+| `Critical` | 3 | Thermal Critical, or still missing 60 fps on `Serious` | 0.6 | off | 2 | 3 × 3 | Light | 30 | "End the session" |
+
+The Furniture column (mesh design §5.4) is the highest furniture level the tier allows. `Nominal` and `High` allow
+`Full`, so a space keeps the level it asks for (§4.2). `Fair` and every tier below it force `Light` in every space,
+so the first step below nominal drops the furniture to its light copies before any step lowers the render scale.
+The column is a table in `Rendering/Quality/QualityFurniture.cs` (`QualityFurniture.Cap(QualityTier)` and
+`QualityFurniture.Limit(FurnitureLevel spaceLevel, QualityTier)`), not a field of `QualityRow`, which lives in
+`Atlas.World`; moving the column onto the row is a later change in that assembly. `FurnitureLevel` is `Atlas.World.FurnitureLevel`
+(`Full = 0`, `Light = 1`).
 
 T³ is 3 × 3 × 3 on every rung. `State.flags` bits 4 to 5 carry the value 0 to 3; `High` is sent as 0 (it shares
 the Nominal texture set). `Telemetry.tier` carries the value 0 to 4 (decided here).
@@ -1448,7 +1480,7 @@ Inputs and stepping rule. Three classes carry the ladder:
 - `Atlas.Rendering.LadderController` is the engine-free stepping rule the app runs.
 - `Atlas.Rendering.QualityApplier` owns one, polls the thermal state every 2 s, evaluates the rule once per
   second (at once when the forced tier changes) and puts a tier into force: it swaps the eye-texture set, sets
-  `FramePacing.TargetFrameRate` and holds the rung's `CullRho` and `GluedCopies` as plain properties.
+  `FramePacing.TargetFrameRate` and holds the rung's `CullRho` and `GluedCopies` as plain properties and its `FurnitureCap` as a read-only one.
 - `Atlas.App.QualityLadder : IQualityState, IAfterFrameStep` wraps the applier, feeds it the perf probe's
   percentiles at step 8b and publishes the tier in the `Atlas.World` types.
 
@@ -1509,6 +1541,8 @@ namespace Atlas.Rendering
         public int Msaa { get; }
         public float CullRho { get; set; }
         public int GluedCopies { get; set; }
+        /// <summary>The highest furniture level of the tier: QualityFurniture.Cap(Tier). Read-only.</summary>
+        public Atlas.World.FurnitureLevel FurnitureCap { get; }
         public int FrameRate { get; }
         public event System.Action<QualityTier> TierChanged;
         public void SetPerf(bool valid, float gpuP95Ms, float frameP95Ms);
@@ -1528,6 +1562,8 @@ namespace Atlas.App
         public Atlas.Rendering.QualityApplier Applier { get; }
         /// <summary>Frame-time percentiles; null until the perf probe is published (thermal state alone then).</summary>
         public Atlas.World.IPerfSource Perf { get; set; }
+        /// <summary>The applier's FurnitureCap: the highest furniture level of the tier in force.</summary>
+        public Atlas.World.FurnitureLevel FurnitureCap { get; }
     }
 }
 ```
@@ -1558,7 +1594,8 @@ else, and only when Time − time of the last automatic step ≥ 20 s, move ONE 
   `AppParams.DeclareRender` installed then writes what is in force back into `render.scale`, `render.msaa`,
   `curved.cullRho` and `glued.copies`. The handler of `curved.cullRho` sets `IWalkerKernel.CullRho`; the Glued
   module reads `glued.copies` from its handle. The registry therefore always shows what is in force, and
-  `State.p[2]` follows. Between two tier changes a manual change of one of the four stands (§12.2 of the plan:
+  `State.p[2]` follows. The furniture column takes the other route: nothing is written back, and
+  `FurnitureLevelPolicy` (§4.2) listens to `QualityLadder.TierChanged` and reads `QualityLadder.FurnitureCap`. Between two tier changes a manual change of one of the four stands (§12.2 of the plan:
   "the Console can pin any rung").
 
 ### 9.6 Parameters declared by the composition root
@@ -1584,6 +1621,7 @@ order of declaration); the names, ranges and defaults are binding here.
 | `render.screenToLens` | `render` | 0.025 | 0.060 | 0.039 | m | no | `LensModel.ScreenToLens` |
 | `render.lensOffsetY` | `render` | −0.02 | 0.02 | 0 | m | no | `LensModel.VerticalOffset` |
 | `render.headOffsetX`, `…Y`, `…Z` | `render` | −0.10 | 0.10 | 0 | m | no | `IStereoRig.HeadOffset` |
+| `render.furniture` | `render` | 0 | 2 | 0 | `auto`, `light`, `full` (enum) | no | `FurnitureLevelPolicy.Mode` (§4.2). Not written by the ladder; `full` overrides it |
 | `curved.cullRho` | `curved` | 2 | 3.5 | 3 | kernel units | no | `IWalkerKernel.CullRho`; written by the ladder |
 | `glued.copies` | `glued` | 3 | 7 | 5 | per side (3, 5, 7) | yes | Glued lattice; written by the ladder |
 | `curved.mode`, `portal.depth`, `slicer.source`, `forge.backend` | `curved`, `portal`, `slicer`, `forge` | | | 0, 1, 0, 0 | | yes, no, yes, no | The kill switches of §12.4, declared here only when their owner has not declared them, so the Console and the menu list them from the first frame. `curved.mode` is read by S2 (Mode 1 or Mode 2) |
@@ -1591,6 +1629,7 @@ order of declaration); the names, ranges and defaults are binding here.
 | `pose.source` | `pose` | 0 | 2 | 0 | `tracked`, `replay`, `walker` | yes | `PoseSourceSwitch.SetSource` |
 | `replay.speed`, `replay.loop`, `pose.record` | `pose` | 0 | 4 | 1, on, off | | no | `PoseSourceSwitch`, the pose log recorder |
 | `scan.route`, `scan.teamPrescan` | `scan` | 1 | 4 | 3, off | | no | `ScanSettings.Route`, `ScanSettings.TeamPrescan` |
+| `scan.wallBridge` | `scan` | 0 | 1 | on | bool | no | `Atlas.Scan.WallBridge.Apply(bool)`: `WallBridge.Enabled` is the parameter and the bridge's own `Available`. A kill switch: off gives the outline's walls as they were |
 | `input.dwell` | `input` | 0.6 | 0.8 | 0.7 | s | no | `IAtlasInput.DwellSeconds` |
 | `dev.room` | `dev` | 0 | fixtures | `none`, or a fixture where there is no AR provider | enum | yes | The fixture RoomModel the rehearsal flow uses |
 | `dev.overlay` | `dev` | 0 | 1 | on in the Editor and in a debug build | bool | no | `DevOverlay.Visible` |
@@ -1697,6 +1736,13 @@ namespace Atlas.Kernel
 | `COLOR.b`, `COLOR.a` | UNorm8 | Reserved. Write 255. The shader does not read them |
 | `TEXCOORD0` | float2 | **Palette coordinate** (§10.7). For a flat colour, the centre of the palette cell. Along a gradient strip, u runs along the strip |
 | `TEXCOORD1` | float2 | **Line coordinates**. A line is drawn wherever either component crosses an integer. The generator scales them so integers fall where lines belong: metres ÷ 0.5 for the 0.5 m floor grid, tile-edge coordinates for tile edges. Absent or (0, 0) everywhere: no lines, and the material's line strengths must be 0 |
+
+**One or more object cells per asset** (mesh design §5.3, §5.4). A generated object may use more than
+one cell of the object block of the palette (cells 64 to 127, §10.7), so that it can show the colours of its parts.
+Each face has one cell, and every vertex of that face carries the centre of that cell in `TEXCOORD0`, so
+the interpolated coordinate is constant over a face. A vertex shared by two faces
+of different cells is split into one vertex per cell. The vertex format, the 44-byte stride and the shader are
+unchanged: `AtlasCore.hlsl` reads the palette at the vertex's own `uv0` and nothing else, as before.
 
 - Vertex colour is linear data, not sRGB.
 - A grey colour (s, s, s, 255) from a tool that knows only "ambient occlusion" is accepted: the shade is read
@@ -2129,7 +2175,7 @@ Layout: 16 × 16 cells of 8 × 8 pixels. Cell index = row · 16 + column. Row 0 
 | 0 | 0 – 15 | Neutrals (the dark base) | HSV(215°, 0.25 − 0.01·i, 0.03 + 0.05·i) for i = 0 … 15 |
 | 1 | 16 – 31 | Structure | Named cells, table below |
 | 2 – 3 | 32 – 63 | Object category tints | `CategoryBase` = 32. Cell 32 + c for category c (lane C's order; 0 = unknown). Category 0: HSV(0°, 0, 0.45). Others: HSV((c · 137.5°) mod 360°, 0.40, 0.50) |
-| 4 – 7 | 64 – 127 | Object colours | `ObjectBase` = 64. What the Forge and the built-in set may pick (`AssetReady.palette`). Row 4 + k has value V = 0.28, 0.42, 0.58, 0.74 for k = 0 … 3. Columns 0 – 11: HSV(column · 30°, 0.50, V). Column 12: HSV(30°, 0.12, V). 13: HSV(210°, 0.12, V). 14: HSV(28°, 0.35, V). 15: HSV(0°, 0, V) |
+| 4 – 7 | 64 – 127 | Object colours | `ObjectBase` = 64. What the Forge and the built-in set may pick. An asset may use one or more of these cells (§10.2); `AssetReady.palette` names the cell that covers the most surface. Row 4 + k has value V = 0.28, 0.42, 0.58, 0.74 for k = 0 … 3. Columns 0 – 11: HSV(column · 30°, 0.50, V). Column 12: HSV(30°, 0.12, V). 13: HSV(210°, 0.12, V). 14: HSV(28°, 0.35, V). 15: HSV(0°, 0, V) |
 | 8 | 128 – 143 | Region hues | `RegionBase` = 128. Region r, step t: HSV(h_r, 0.45, 0.22 + 0.12·t) with h = 200°, 150°, 35°, 320° |
 | 9 | 144 – 159 | Strip: warm | Continuous along u: HSV(15°, 0.55, 0.15 → 0.75) |
 | 10 | 160 – 175 | Strip: cool | HSV(205°, 0.55, 0.15 → 0.75) |
@@ -2922,7 +2968,7 @@ Every lane's content counts against these. A gate measures them on `budget_room`
 
 | Space | Draw calls | Triangles | Driven by |
 |---|---|---|---|
-| S0 Home | ≤ 60 | ≤ 130k | Up to 20 furniture meshes, 60,000 triangles in total; shell ≤ 3,000 |
+| S0 Home | ≤ 80 | ≤ 250k | Up to 32 furniture meshes at the full copy, 120,000 triangles in total; shell ≤ 3,000. Held by `RoomBudget.HomeDrawCallsPerFrame` and `HomeTrianglesPerFrame` and by their tests |
 | S1 Glued 5 × 5 | ≤ 150 | ≤ 250k | 25 cells, 24 avatars, the room once |
 | S1 Glued T³ | ≤ 160 | ≤ 250k | 27 cells, 26 avatars, the room once |
 | S2 Curved Walk, ρ = 3 | ≤ 210 | ≤ 250k | Up to 71 tiles, plus the room |
@@ -2930,6 +2976,16 @@ Every lane's content counts against these. A gate measures them on `budget_room`
 | S4 Small Planet | ≤ 70 | ≤ 190k | Six tiles plus the room |
 | S5 Impossible Rooms | ≤ 60 | ≤ 150k | Two rooms through one portal, plus the room |
 | S6 Slicer | ≤ 70 | ≤ 160k | Home plus the cross-section |
+
+Only Home's row is changed here, and only Home's row is held by code: `RoomBudget.Estimate` gives about 246,000
+triangles and 52 draw calls per frame for the 24 stand-ins of 5,000 triangles of `budget_room_120k` at `Full`
+(`FurnitureLevelTests`), and the Home tests assert at most 80 draw calls and 250,000 triangles. That is a count of
+the builders' output, not a phone measurement. The mesh design §5.4 proposes S2 Curved Walk at ≤ 240 draw calls
+and ≤ 370k triangles, because it also shows the full copies, and 24 more draw calls for each of S1, S3, S4, S5 and
+S6 (their triangles stay as they are, since they show the light copies). Those figures are planning figures: no
+test holds them, and check M3 on the phone (`budget_room_120k` through the PerfTour) replaces them with measured
+ones or moves the space to `Light`. The rows of S1 to S6 above are therefore still the old ones.
+`WorldLintSettings` (`World/Lint`) still counts the room as 60 draw calls and 130,000 triangles in its S2 lint.
 
 **Shares inside a frame** (so that the sums hold; phone A, p95):
 
@@ -2951,8 +3007,8 @@ Every lane's content counts against these. A gate measures them on `budget_room`
 | A space switch (`Configure` + `Enter`) | space owner | ≤ 50 ms (proposed) | §2 |
 | Pool materials rented | all | ≤ 256 | §11 |
 
-**Per asset** (§8.4): room shell ≤ 3,000 triangles; a generated object 1,500 to 5,000 and no more than its
-target; a built-in fallback object ≤ 1,500; a Glued cell ≤ 1,500; a room of S5 ≤ 2,000; the self-avatar ≤ 600;
+**Per asset** (§8.4): room shell ≤ 3,000 triangles; a generated object, full copy, 1,500 to 15,000 and no more than its
+target (3,000 to 15,000 by the area rule of the mesh design §5.4), and its light copy 1,500 to 5,000 and no more than the room's light target; a built-in fallback object ≤ 1,500; a Glued cell ≤ 1,500; a room of S5 ≤ 2,000; the self-avatar ≤ 600;
 longest edge 0.25 m where §10.2 says so. A texture other than the palette: ASTC 6 × 6 (4 × 4 for UI), mipmaps on,
 at most 1024; a data texture: uncompressed, no mipmaps, clamped, not sRGB (§8.1).
 
@@ -3011,6 +3067,14 @@ Nobody edits the generated Xcode project by hand (Appendix C.5). A lane that nee
 | `MetalHudEnabled` | `YES`, development builds only | Metal Performance HUD |
 | Build setting `ENABLE_BITCODE` | `NO` on the project and both targets | – |
 
+The same step also adds the RoomPlan wall bridge (scan route 4, lane C): `AtlasRoomPlanProject.CopySource` and
+`AtlasRoomPlanProject.Apply` (`Editor/AtlasRoomPlanProject.cs`, tested by `Atlas.Editor.Tests`) put
+`AtlasRoomPlan.swift` into the sources of the `UnityFramework` target, link `RoomPlan.framework` weakly, and set
+`OTHER_SWIFT_FLAGS`, `SWIFT_VERSION` 5.0, `CLANG_ENABLE_MODULES` and `ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES`. Applying
+it twice equals applying it once. The edit has been compiled and linked in a copy of an earlier export (the framework
+target built; the app target stopped at its storyboards because the iOS platform component is not installed on the
+build Mac), never in an export of this tree, and the plugin has not run on a device.
+
 Not written, on purpose: `NSBonjourServices`, a microphone key, a multicast entitlement, and
 `CADisableMinimumFrameDurationOnPhone` (the display stays at 60 Hz, §8.2).
 
@@ -3039,6 +3103,7 @@ also makes sure `Atlas_Boot.unity` exists with the AR Session and the XR Origin.
 | The four shaders load from their `Resources` folders in a player build | phone A |
 | The Render Objects features of §12.2 are in the renderer asset after the set-up has run, and `PortalRenderer.FeaturesFound` is true | Editor, then phone A |
 | Each ladder rung forced from the Console takes effect within 1 s | G4 |
+| Home and Curved Walk hold 60 frames per second with the full furniture copies (`budget_room_120k` through the PerfTour; mesh design check M3); the first ladder step below nominal drops the furniture to its light copies | phone A |
 
 ### 17.2 Where the repository differs from this page today
 
