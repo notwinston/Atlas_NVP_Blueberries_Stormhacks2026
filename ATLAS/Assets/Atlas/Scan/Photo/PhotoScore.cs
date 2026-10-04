@@ -53,8 +53,9 @@ namespace Atlas.Scan
 
     /// <summary>
     /// Which key frames show an object best (Master Plan sections 4.5 and 7.4, task P1-C08; contract lane C
-    /// section 11.2 and 11.3). Engine-free: projection of an oriented box, the candidate test, the score, the
-    /// choice of one to three views and the crop rectangle.
+    /// section 11.2 and 11.3; mesh design section 5.1). Engine-free: projection of an oriented box, the
+    /// candidate test, the score, the preference for views from the front, the choice of one to three views
+    /// and the crop rectangle.
     /// </summary>
     public static class PhotoScore
     {
@@ -73,6 +74,12 @@ namespace Atlas.Scan
         public const float OcclusionTolerance = 0.15f;
         /// <summary>Degrees of azimuth between any two views of one object.</summary>
         public const float MinViewSpreadDeg = 30f;
+        /// <summary>Degrees of azimuth from the front (local +Z) beyond which the camera stands in the back half of the object.</summary>
+        public const float FrontHalfDeg = 90f;
+        /// <summary>Degrees above the horizontal, seen from the box centre, beyond which the camera looks down on the object.</summary>
+        public const float MaxElevationDeg = 30f;
+        /// <summary>What the score of a view from the back half or from too high is multiplied by. Not 0: it is still a candidate.</summary>
+        public const float OffViewFactor = 0.5f;
         /// <summary>Share of the projected box added on every side of the crop.</summary>
         public const float CropGrow = 0.12f;
         /// <summary>Largest side of a delivered crop, pixels.</summary>
@@ -80,6 +87,9 @@ namespace Atlas.Scan
 
         // A corner nearer than this to the camera plane has no usable projection.
         const float NearPlane = 0.05f;
+        // Degrees a camera may stand past either limit before it counts: one exactly at the side of the box, or
+        // exactly 30 degrees up, is not put behind or above it by rounding.
+        const float AngleSlackDeg = 0.01f;
 
         /// <summary>An object of the room carried into the frame of the key frames: the room frame sits at
         /// roomOrigin, turned by roomYaw about +Y (RoomAnchor.Position and RoomAnchor.Yaw).</summary>
@@ -189,14 +199,16 @@ namespace Atlas.Scan
 
         /// <summary>
         /// The score of one frame for one box, with no depth test: 0 when the box is behind the camera, leaves
-        /// the image, is too small, too large, too near or too far.
+        /// the image, is too small, too large, too near or too far; otherwise Score, halved for a camera in
+        /// the back half of the object or more than 30 degrees above its centre (ViewFactor).
         /// </summary>
         public static float Evaluate(in PhotoCamera camera, in PhotoBox box, float sharpness, float medianSharpness,
             out BoxProjection projection)
         {
             if (!Project(in camera, in box, out projection)) return 0f;
             if (!IsCandidate(in camera, in projection)) return 0f;
-            return Score(in projection, sharpness, medianSharpness);
+            return Score(in projection, sharpness, medianSharpness) *
+                   ViewFactor(AzimuthDeg(camera.Position, in box), ElevationDeg(camera.Position, in box));
         }
 
         /// <summary>Direction from the box centre to the camera in the box's local frame, atan2(x, z), degrees in (-180, 180].</summary>
@@ -205,6 +217,28 @@ namespace Atlas.Scan
             float3 local = math.mul(math.inverse(box.Rotation), cameraPosition - box.Centre);
             if (local.x * local.x + local.z * local.z < 1e-12f) return 0f;
             return math.degrees(math.atan2(local.x, local.z));
+        }
+
+        /// <summary>The angle above the horizontal of the direction from the box centre to the camera, degrees in [-90, 90].</summary>
+        public static float ElevationDeg(float3 cameraPosition, in PhotoBox box)
+        {
+            float3 away = cameraPosition - box.Centre;
+            float flat = math.sqrt(away.x * away.x + away.z * away.z);
+            if (flat * flat + away.y * away.y < 1e-12f) return 0f;
+            return math.degrees(math.atan2(away.y, flat));
+        }
+
+        /// <summary>
+        /// What a view's score is multiplied by (mesh design section 5.1): the generator was trained on views
+        /// from the front half of the object and from no more than 30 degrees above it. 0.5 when the azimuth,
+        /// which is measured from the front once facing is decided, is more than 90 degrees from 0, or the
+        /// elevation is above 30 degrees; 1 otherwise. Never 0: a view from behind is taken when there is no other.
+        /// </summary>
+        public static float ViewFactor(float azimuthDeg, float elevationDeg)
+        {
+            bool behind = math.abs(azimuthDeg) > FrontHalfDeg + AngleSlackDeg;
+            bool above = elevationDeg > MaxElevationDeg + AngleSlackDeg;
+            return behind || above ? OffViewFactor : 1f;
         }
 
         /// <summary>The angle between two azimuths, degrees, 0..180.</summary>

@@ -9,8 +9,8 @@ from conftest import ROOT, repack_glb
 from forge.cleanup import clean
 from forge.generators.procedural import build_furniture
 from forge.glb import read_glb, write_glb
-from forge.palette import PALETTE, encode_vertex_attributes
-from forge.validator import main, validate_glb
+from forge.palette import PALETTE, cell_uv, encode_vertex_attributes
+from forge.validator import MAX_BYTES, MAX_BYTES_LIGHT, main, validate_glb
 
 BOX = (1.0, 0.75, 0.6)
 
@@ -41,8 +41,11 @@ def edited(data: bytes, change) -> bytes:
     return repack_glb(doc, glb.blob)
 
 
-def grid(nx: int, nz: int, w: float, d: float, y_top: float = 0.5) -> bytes:
-    """A flat sheet over a base triangle, with 2 * nx * nz + 1 triangles."""
+def grid(nx: int, nz: int, w: float, d: float, y_top: float = 0.5, split: bool = False) -> bytes:
+    """A flat sheet over a base triangle, with 2 * nx * nz + 1 triangles.
+
+    With ``split`` no two triangles share a vertex, which is the largest file a triangle count can make.
+    """
     xs, zs = np.linspace(-w / 2, w / 2, nx + 1), np.linspace(-d / 2, d / 2, nz + 1)
     gx, gz = np.meshgrid(xs, zs, indexing="ij")
     top = np.stack([gx.ravel(), np.full(gx.size, y_top), gz.ravel()], axis=1)
@@ -52,6 +55,8 @@ def grid(nx: int, nz: int, w: float, d: float, y_top: float = 0.5) -> bytes:
     base = np.array([[-0.05, 0, 0], [0.05, 0, 0], [0, 0, 0.05]])
     positions = np.vstack([top, base])
     faces = np.vstack([faces, [[len(top), len(top) + 1, len(top) + 2]]])
+    if split:
+        positions, faces = positions[faces.reshape(-1)], np.arange(faces.size).reshape(-1, 3)
     uv, colour = encode_vertex_attributes(PALETTE[0], np.ones(len(positions)))
     normals = np.tile([0.0, 1.0, 0.0], (len(positions), 1))
     return write_glb(positions, normals, uv, colour, faces)
@@ -70,7 +75,71 @@ def test_rejects_too_few_triangles():
 
 
 def test_rejects_too_many_triangles():
-    assert "triangles.range" in validate_glb(grid(60, 60, 1.0, 1.0)).codes
+    # 7,201 triangles: inside the full copy's 15,000, over the light copy's 5,000.
+    assert validate_glb(grid(60, 60, 1.0, 1.0)).ok
+    assert "triangles.range" in validate_glb(grid(60, 60, 1.0, 1.0), level="light").codes
+    assert "triangles.range" in validate_glb(grid(90, 90, 1.0, 1.0)).codes  # 16,201
+
+
+def test_the_two_levels():
+    full = grid(86, 87, 4.0, 4.0)  # 14,965 triangles
+    light = grid(49, 50, 4.0, 4.0)  # 4,901
+    assert validate_glb(full, tri_target=15000).ok and validate_glb(full, tri_target=15000, level="full").ok
+    assert validate_glb(full, tri_target=14000).codes == ["triangles.target"]
+    assert validate_glb(full, level="light").codes == ["triangles.range"]
+    assert validate_glb(light, tri_target=5000, level="light").ok
+    assert validate_glb(light, tri_target=4000, level="light").codes == ["triangles.target"]
+    result = validate_glb(light, level="light")
+    assert result.level == "light" and result.to_dict()["level"] == "light"
+    with pytest.raises(ValueError):
+        validate_glb(light, level="medium")
+
+
+def test_file_size_limit_of_each_level():
+    assert MAX_BYTES == 2_097_152 and MAX_BYTES_LIGHT == 1_048_576
+    # The worst full copy of the design: 15,000 triangles with every vertex split is about 1.71 MB.
+    worst = grid(75, 100, 4.0, 4.0, split=True)
+    assert validate_glb(worst).triangles == 15001  # one over, so the size is an upper bound
+    assert 1_700_000 < len(worst) < MAX_BYTES and "glb.size" not in validate_glb(worst).codes
+    # A light copy has 1 MB: 5,000 split triangles fit, the full copy's bytes do not.
+    small = grid(49, 50, 4.0, 4.0, split=True)
+    assert MAX_BYTES_LIGHT // 2 < len(small) < MAX_BYTES_LIGHT and validate_glb(small, level="light").ok
+    assert "glb.size" in validate_glb(worst, level="light").codes
+    glb = read_glb(small)
+    padded = repack_glb(glb.doc, glb.blob + b"\x00" * MAX_BYTES_LIGHT)
+    assert validate_glb(padded).ok and validate_glb(padded, level="light").codes == ["glb.size"]
+    assert validate_glb(repack_glb(glb.doc, glb.blob + b"\x00" * MAX_BYTES)).codes == ["glb.size"]
+
+
+def with_cells(data: bytes, cell_of_vertex) -> bytes:
+    """The same mesh with every vertex pointing at the palette cell ``cell_of_vertex`` gives it."""
+    p, n, uv, c, f = arrays(data)
+    for i in range(len(uv)):
+        u, v = cell_uv(int(cell_of_vertex(i, p[i])))
+        uv[i] = (u, 1.0 - v)
+    return write_glb(p, n, uv, c, f)
+
+
+def test_palette_cells():
+    one = grid(30, 30, 4.0, 4.0, split=True)
+    result = validate_glb(one)
+    assert result.ok and result.palette_cells == [64] and result.to_dict()["paletteCells"] == [64]
+    # Two colours, split along x = 0 between faces: every face keeps one cell.
+    p, _, _, _, f = arrays(one)
+    left = p[f].mean(axis=1)[:, 0] < 0
+    two = with_cells(one, lambda i, _: 110 if left[i // 3] else 75)
+    result = validate_glb(two)
+    assert result.ok, result.violations
+    assert result.palette_cells == [75, 110]
+    # One vertex of one face in another cell.
+    mixed = with_cells(one, lambda i, _: 127 if i == 4 else 64)
+    assert validate_glb(mixed).codes == ["palette.face"]
+    # A cell that is not an object colour (cells 64 to 127), and a coordinate off the texture.
+    assert validate_glb(with_cells(one, lambda i, _: 3)).codes == ["palette.cell"]
+    assert validate_glb(with_cells(one, lambda i, _: 128)).codes == ["palette.cell"]
+    p, n, uv, c, f = arrays(one)
+    uv[:3] = (1.5, 0.5)  # the three vertices of the first face
+    assert validate_glb(write_glb(p, n, uv, c, f)).codes == ["palette.cell"]
 
 
 def test_rejects_more_triangles_than_the_job_target(good):
@@ -173,3 +242,17 @@ def test_cli(tmp_path, good, capsys):
     run = subprocess.run([sys.executable, "-m", "forge.validator", str(bad), "--json"], cwd=ROOT,
                          capture_output=True, text=True)
     assert run.returncode == 1 and '"ok": false' in run.stdout
+
+
+def test_cli_level(tmp_path, capsys):
+    full, light = tmp_path / "full.glb", tmp_path / "light.glb"
+    full.write_bytes(grid(60, 60, 4.0, 4.0))
+    light.write_bytes(grid(40, 40, 4.0, 4.0))
+    assert main([str(full), "--target", "15000"]) == 0
+    assert "(full)" in capsys.readouterr().out
+    assert main([str(full), "--level", "light"]) == 1
+    assert "triangles.range" in capsys.readouterr().out
+    assert main([str(light), "--level", "light", "--target", "5000"]) == 0
+    assert "(light)" in capsys.readouterr().out
+    with pytest.raises(SystemExit):
+        main([str(light), "--level", "medium"])

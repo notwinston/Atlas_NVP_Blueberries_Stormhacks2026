@@ -30,24 +30,24 @@ namespace Atlas.Telemetry
         };
 
         const MeshUpdateFlags k_Flags = MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices;
-        // A replaced built-in mesh is still drawn while the room content fades it out.
-        const double RetireSeconds = 1.0;
-
-        struct Retired { public Mesh Mesh; public double At; }
 
         readonly AssetClientCore _core;
         readonly Dictionary<int, Mesh> _builtIn = new Dictionary<int, Mesh>();
-        readonly List<Retired> _retired = new List<Retired>();
+        // A replaced first shape is still drawn until its swap has begun and the cross-fade has ended.
+        readonly RetiredMeshes<Mesh> _retired = new RetiredMeshes<Mesh>();
+        // Made once: a method group converted every frame would allocate.
+        readonly Func<Mesh, bool> _isDrawn;
+        readonly Action<Mesh> _destroy = DestroyMesh;
         readonly Action<RoomModel> _onBuilt;
         ushort[] _index16 = new ushort[16384];
         IRoomContent _content;
-        double _now;
 
         public AssetClient(AssetClientCore core)
         {
             if (core == null) throw new ArgumentNullException("core");
             _core = core;
             _onBuilt = OnBuilt;
+            _isDrawn = IsDrawn;
         }
 
         /// <summary>
@@ -102,14 +102,8 @@ namespace Atlas.Telemetry
         /// <summary>Step 8b: advances the requests and places at most one generated mesh.</summary>
         public void AfterFrame(in FrameContext frame)
         {
-            _now = frame.Time;
             _core.Tick(frame.Time, frame.DeltaTime * 1000f);
-            for (int i = _retired.Count - 1; i >= 0; i--)
-            {
-                if (_now - _retired[i].At < RetireSeconds) continue;
-                DestroyMesh(_retired[i].Mesh);
-                _retired.RemoveAt(i);
-            }
+            _retired.Sweep(_isDrawn, _destroy);
         }
 
         /// <summary>Destroys the built-in meshes this client still owns. Call when the app shuts down.</summary>
@@ -117,8 +111,7 @@ namespace Atlas.Telemetry
         {
             Bind(null);
             ReleaseBuiltIn();
-            for (int i = 0; i < _retired.Count; i++) DestroyMesh(_retired[i].Mesh);
-            _retired.Clear();
+            _retired.DestroyAll(_destroy);
         }
 
         void OnBuilt(RoomModel room)
@@ -151,6 +144,15 @@ namespace Atlas.Telemetry
             return true;
         }
 
+        bool IAssetRoom.PlaceGeneratedLight(int objectId, MeshData data, string sha256)
+        {
+            if (_content == null || data == null || data.TriangleCount == 0) return false;
+            Mesh mesh = CreateMesh(data, "Forge Object (light) " + objectId);
+            // The room content owns a light mesh from here on, as it owns the full one.
+            if (!_content.SetGeneratedLightMesh(objectId, mesh, sha256)) { DestroyMesh(mesh); return false; }
+            return true;
+        }
+
         bool IAssetRoom.PlaceBuiltIn(int objectId, MeshData data)
         {
             if (_content == null || data == null || data.TriangleCount == 0) return false;
@@ -162,12 +164,17 @@ namespace Atlas.Telemetry
             return true;
         }
 
+        bool IsDrawn(Mesh mesh)
+        {
+            return _content != null && _content.IsMeshDrawn(mesh);
+        }
+
         void Retire(int objectId)
         {
             Mesh old;
             if (!_builtIn.TryGetValue(objectId, out old)) return;
             _builtIn.Remove(objectId);
-            _retired.Add(new Retired { Mesh = old, At = _now });
+            _retired.Add(old);
         }
 
         Mesh CreateMesh(MeshData data, string name)
@@ -214,6 +221,7 @@ namespace Atlas.Telemetry
             public IAssetRoom Target;
             public bool SetRequested(int objectId) { return Target != null && Target.SetRequested(objectId); }
             public bool PlaceGenerated(int objectId, MeshData mesh, string sha256) { return Target != null && Target.PlaceGenerated(objectId, mesh, sha256); }
+            public bool PlaceGeneratedLight(int objectId, MeshData mesh, string sha256) { return Target != null && Target.PlaceGeneratedLight(objectId, mesh, sha256); }
             public bool PlaceBuiltIn(int objectId, MeshData mesh) { return Target != null && Target.PlaceBuiltIn(objectId, mesh); }
         }
     }

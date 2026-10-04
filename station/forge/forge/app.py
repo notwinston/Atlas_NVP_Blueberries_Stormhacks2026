@@ -14,7 +14,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-from . import PIPELINE_VER
+from . import PIPELINE_VER, imaging
 from .config import Settings
 from .generators import Generator
 from .models import Health, JobCreated, JobStatus, ObjectMeta, QueueEntry, QueueView, RoomCreated, RoomModel
@@ -23,12 +23,6 @@ from .service import Forge, Job, NotFound
 _ASSET_NAME = re.compile(r"^([0-9a-f]{64})\.glb$")
 _ROOM_ID = re.compile(r"^[A-Za-z0-9_]{1,40}$")
 _JOB_ID = re.compile(r"^[0-9a-f]{16}$")
-
-
-def _matting_method() -> str:
-    import importlib.util
-
-    return "rembg" if importlib.util.find_spec("rembg") is not None else "none"
 
 
 def _entry(job: Job) -> QueueEntry:
@@ -62,7 +56,7 @@ def create_app(settings: Optional[Settings] = None, generator: Optional[Generato
 
     @app.get("/health", response_model=Health)
     def health() -> Health:
-        ready, note = forge.generator.availability()
+        ready, note = forge.generator_status()
         name = forge.generator.gpu()
         hosted = forge.hosted.availability()[0]
         return Health(
@@ -77,7 +71,7 @@ def create_app(settings: Optional[Settings] = None, generator: Optional[Generato
             generatorNote=note,
             hosted=hosted,
             hostedEnabled=hosted,
-            matting=_matting_method(),
+            matting=imaging.matting_method(),
         )
 
     @app.post("/rooms", status_code=201, response_model=RoomCreated)
@@ -145,7 +139,9 @@ def create_app(settings: Optional[Settings] = None, generator: Optional[Generato
         if job.state == "placeholder":
             return JSONResponse({"jobId": job.jobId, "placeholder": True}, status_code=200)
         if job.cached and job.state == "ready":
-            return JSONResponse({"jobId": job.jobId, "cached": True, "sha256": job.sha256}, status_code=200)
+            # The phone learns of a cached mesh from this answer alone, so both copies are named here.
+            return JSONResponse({"jobId": job.jobId, "cached": True, "sha256": job.sha256,
+                                 **forge.light_fields(job)}, status_code=200)
         return JSONResponse({"jobId": job.jobId}, status_code=202)
 
     @app.get("/jobs/{job_id}", response_model=JobStatus, response_model_exclude_none=True)

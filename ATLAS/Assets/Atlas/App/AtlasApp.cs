@@ -122,6 +122,7 @@ namespace Atlas.App
         public bool GuardInstalled { get; private set; }
         public RoomContent RoomContent { get; private set; }
         public QualityLadder Ladder { get; private set; }
+        public FurnitureLevelPolicy Furniture { get; private set; }
         public SpaceLab Spaces { get; private set; }
         /// <summary>The hexagon reveal between two spaces; null when its shader is missing (spaces fade).</summary>
         public HexTransition Transition { get; private set; }
@@ -266,13 +267,14 @@ namespace Atlas.App
             Ladder = new QualityLadder(new QualityApplier(Eyes));
             LoopCore.Quality = Ladder;
             AtlasServices.Register<IQualityState>(Ladder);
+            Furniture = new FurnitureLevelPolicy(RoomContent, Ladder);
 
             // 16  SpaceLab. While no Home space is in the build, the built-in grid space stands in for it.
             if (!SpaceRegistry.IsRegistered(SpaceId.Home) &&
                 !Application.CanStreamedLevelBeLoaded(SpaceIds.SceneName(SpaceId.Home)))
                 SpaceRegistry.Register(SpaceId.Home, GridSpace.Create);
             Spaces = new SpaceLab(Registry, WalkerKernel, LoopCore, new SceneSpaceLoader(boot.SpaceRoot),
-                new SpaceStage(RoomContent));
+                new SpaceStage(RoomContent, Furniture));
             LoopCore.Space = Spaces;
             LoopCore.Host = Spaces;
             Transition = HexTransition.Create(Display);
@@ -389,7 +391,7 @@ namespace Atlas.App
             _spaceParam = AppParams.DeclareSpace(Registry, Spaces);
             LensBlit blit = Blit;
             AppParams.DeclareRender(Registry, Ladder, WalkerKernel, Eyes, Rig, Lens, blit.Distortion,
-                on => blit.Distortion = on, AtlasLook.SetLineWidth);
+                on => blit.Distortion = on, AtlasLook.SetLineWidth, Furniture);
             AppParams.DeclareUnownedKillSwitches(Registry);
 
             // Recorded walks: the phone's own logs, and the repository's recordings folder next to the project.

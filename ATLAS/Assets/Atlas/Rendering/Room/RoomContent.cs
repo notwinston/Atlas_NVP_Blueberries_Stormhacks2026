@@ -36,6 +36,7 @@ namespace Atlas.Rendering.Room
         RoomWallSink m_Sink;
         float m_KerbHeight = RoomShellBuilder.DefaultKerbHeight;
         bool m_FloorVisible = true, m_ObjectsVisible = true;
+        FurnitureLevel m_Level = FurnitureLevel.Full;
 
         RoomObjectView[] m_Views = new RoomObjectView[0];
         int m_ViewCount;
@@ -127,6 +128,7 @@ namespace Atlas.Rendering.Room
                 if (view.Fading) FinishFade(view);
                 DropPending(view);
                 if (view.OwnsMesh) DestroyObject(view.Mesh);
+                DestroyObject(view.LightMesh);
                 m_Pool.Return(view.MaterialInternal);
                 DestroyObject(view.AnchorObject);
                 m_Views[k] = null;
@@ -214,8 +216,20 @@ namespace Atlas.Rendering.Room
             }
         }
 
+        public FurnitureLevel FurnitureLevel
+        {
+            get { return m_Level; }
+            set
+            {
+                if (value == m_Level) return;
+                m_Level = value;
+                for (int k = 0; k < m_ViewCount; k++) ApplyDrawn(m_Views[k]);
+            }
+        }
+
         public void ResetPresentation()
         {
+            FurnitureLevel = FurnitureLevel.Full;
             for (int k = 0; k < m_ViewCount; k++)
             {
                 RoomObjectView view = m_Views[k];
@@ -300,7 +314,7 @@ namespace Atlas.Rendering.Room
                 for (int k = 0; k < m_ViewCount; k++)
                 {
                     RoomObjectView view = m_Views[k];
-                    triangles += view.Triangles + (view.Fading ? view.OutTriangles : 0);
+                    triangles += view.TriangleCount + (view.Fading ? view.OutTriangles : 0);
                 }
                 return triangles;
             }
@@ -363,6 +377,44 @@ namespace Atlas.Rendering.Room
             if (index < 0 || mesh == null) return false;
             Enqueue(index, mesh, true, MeshState.Ready, assetHash ?? "", Vector3.one, fadeSeconds);
             return true;
+        }
+
+        public bool SetGeneratedLightMesh(int objectId, Mesh mesh, string assetHashLight)
+        {
+            int index = IndexOf(objectId);
+            if (index < 0 || mesh == null) return false;
+            RoomObjectView view = m_Views[index];
+            if (view.HasPending)
+            {
+                // The full copy is still waiting its turn: the light copy waits with it.
+                if (view.PendingState != MeshState.Ready) return false;
+                if (view.PendingLightMesh != null && view.PendingLightMesh != mesh) DestroyObject(view.PendingLightMesh);
+                view.PendingLightMesh = mesh;
+                view.PendingLightHash = assetHashLight ?? "";
+                return true;
+            }
+            if (view.ShownInternal != MeshState.Ready) return false;
+            Mesh old = view.LightMesh;
+            view.LightMesh = mesh;
+            view.LightTriangles = TriangleCount(mesh);
+            view.DataInternal.AssetHashLight = assetHashLight ?? "";
+            ApplyDrawn(view);
+            if (old != null && old != mesh) DestroyObject(old);
+            RaiseObjectChanged(objectId);
+            return true;
+        }
+
+        public bool IsMeshDrawn(Mesh mesh)
+        {
+            if (mesh == null) return false;
+            for (int k = 0; k < m_ViewCount; k++)
+            {
+                RoomObjectView view = m_Views[k];
+                if (view.Mesh == mesh || view.LightMesh == mesh) return true;
+                if (view.Fading && view.OutMesh == mesh) return true;
+                if (view.HasPending && view.PendingMesh == mesh) return true;
+            }
+            return false;
         }
 
         public bool SetBuiltInMesh(int objectId, Mesh sharedMesh, Vector3 scale, float fadeSeconds = 0.3f)
@@ -457,6 +509,10 @@ namespace Atlas.Rendering.Room
         {
             if (view.Fading) FinishFade(view);
             float seconds = Instant ? 0f : view.PendingSeconds;
+            // What is drawn now fades out; the other copy, if there is one, goes at once.
+            Mesh drawn = view.ShowingLight ? view.LightMesh : view.Mesh;
+            bool drawnOwned = view.ShowingLight || view.OwnsMesh;
+            int drawnTriangles = view.TriangleCount;
             if (seconds > 0f)
             {
                 // The old mesh fades out by dither on a material of its own while the new one fades in.
@@ -464,9 +520,9 @@ namespace Atlas.Rendering.Room
                 {
                     view.OutObject = CreateRenderer("Outgoing", view.AnchorObject.transform, out view.OutFilter, out view.OutRenderer);
                 }
-                view.OutMesh = view.Mesh;
-                view.OutOwned = view.OwnsMesh;
-                view.OutTriangles = view.Triangles;
+                view.OutMesh = drawn;
+                view.OutOwned = drawnOwned;
+                view.OutTriangles = drawnTriangles;
                 view.OutMaterial = m_Pool.Rent();
                 view.OutMaterial.CopyPropertiesFromMaterial(view.MaterialInternal);
                 view.OutObject.transform.localScale = view.MeshTransformInternal.localScale;
@@ -480,15 +536,22 @@ namespace Atlas.Rendering.Room
                 SetOpacity(view.MaterialInternal, 0f);
                 SetOpacity(view.OutMaterial, 1f);
             }
-            else if (view.OwnsMesh)
+            else if (drawnOwned)
             {
-                DestroyObject(view.Mesh);
+                DestroyObject(drawn);
             }
+            if (drawn != view.Mesh && view.OwnsMesh) DestroyObject(view.Mesh);
+            if (drawn != view.LightMesh) DestroyObject(view.LightMesh);
 
             view.Mesh = view.PendingMesh;
             view.OwnsMesh = view.PendingOwned;
             view.Triangles = TriangleCount(view.Mesh);
-            view.Filter.sharedMesh = view.Mesh;
+            view.LightMesh = view.PendingLightMesh;
+            view.LightTriangles = view.LightMesh != null ? TriangleCount(view.LightMesh) : 0;
+            view.DataInternal.AssetHashLight = view.LightMesh != null ? view.PendingLightHash : "";
+            view.PendingLightMesh = null;
+            view.PendingLightHash = null;
+            ApplyDrawn(view);
             view.MeshTransformInternal.localScale = view.PendingScale;
             view.ShownInternal = view.PendingState;
             view.DataInternal.Mesh = view.PendingState;
@@ -496,6 +559,16 @@ namespace Atlas.Rendering.Room
             view.HasPending = false;
             view.PendingMesh = null;
             RaiseObjectChanged(view.DataInternal.Id);
+        }
+
+        // Puts the mesh of the current level on the filter: the light copy at Light when the object has one,
+        // the full copy otherwise. At once, no cross-fade, no allocation.
+        void ApplyDrawn(RoomObjectView view)
+        {
+            bool light = RoomObjectMeshes.DrawsLight(m_Level, view.LightMesh != null);
+            view.ShowingLight = light;
+            Mesh mesh = light ? view.LightMesh : view.Mesh;
+            if (view.Filter.sharedMesh != mesh) view.Filter.sharedMesh = mesh;
         }
 
         // A curved space writes the object's anchor to its material every frame, before this runs (the space's
@@ -530,7 +603,10 @@ namespace Atlas.Rendering.Room
         {
             if (!view.HasPending) return;
             if (view.PendingOwned) DestroyObject(view.PendingMesh);
+            DestroyObject(view.PendingLightMesh);
             view.PendingMesh = null;
+            view.PendingLightMesh = null;
+            view.PendingLightHash = null;
             view.HasPending = false;
         }
 

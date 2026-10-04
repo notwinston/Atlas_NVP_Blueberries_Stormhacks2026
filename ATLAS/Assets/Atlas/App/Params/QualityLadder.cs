@@ -34,6 +34,8 @@ namespace Atlas.App
         public int PinnedTier { get { return _applier.ForcedTier; } }
         public float RenderScale { get { return _applier.RenderScale; } }
         public int Msaa { get { return _applier.Msaa; } }
+        /// <summary>The highest furniture level of the tier in force (the ladder's column for it).</summary>
+        public FurnitureLevel FurnitureCap { get { return _applier.FurnitureCap; } }
 
         public event Action<WorldTier> TierChanged;
 

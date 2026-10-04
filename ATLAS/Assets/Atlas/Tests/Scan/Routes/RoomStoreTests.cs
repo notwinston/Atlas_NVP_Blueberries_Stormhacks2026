@@ -87,6 +87,80 @@ namespace Atlas.Scan.Tests.Routes
         }
 
         [Test]
+        public void ARoomSavedUnderTheEarlierTriangleRule_LoadsWithTodaysTargets()
+        {
+            // The one-table reference room as an earlier build saved it: 60,000 / 1, cut to 5,000. Today one
+            // object has all the surface: 120,000, cut to 15,000.
+            string today = RoomFixtures.ReadTextFromProject(RoomFixtures.Sample4x5Table);
+            Assert.That(today, Does.Contain("\"triTarget\": 15000"));
+            string earlier = today.Replace("\"triTarget\": 15000", "\"triTarget\": 5000");
+
+            // Read as it is, that room breaks rule R17 and Home would refuse it.
+            RoomModel asSaved = RoomModelJson.Read(earlier);
+            Assert.That(asSaved.Objects[0].TriTarget, Is.EqualTo(5000));
+            Assert.That(string.Join("; ", RoomModelValidator.Errors(asSaved)), Does.Contain("R17"));
+
+            var store = new RoomStore(_folder);
+            Directory.CreateDirectory(_folder);
+            File.WriteAllText(store.JsonPath("earlier"), earlier);
+            RoomModel room;
+            string error;
+            Assert.That(store.TryLoad("earlier", out room, out error), Is.True, error);
+            Assert.That(room.Objects.Length, Is.EqualTo(1));
+            Assert.That(room.Objects[0].TriTarget, Is.EqualTo(15000));
+            Assert.That(RoomModelValidator.Errors(room), Is.Empty);
+            // Nothing else about the room changed, and loading wrote nothing.
+            Assert.That(RoomModelJson.GeometryHash(room), Is.EqualTo(RoomModelJson.GeometryHash(asSaved)));
+            Assert.That(RoomModelJson.Write(room), Is.EqualTo(today));
+            Assert.That(File.ReadAllText(store.JsonPath("earlier")), Is.EqualTo(earlier));
+            Assert.That(Directory.GetFiles(_folder).Length, Is.EqualTo(1));
+
+            // The list of saved rooms shows it too.
+            var list = new List<RoomSummary>();
+            Assert.That(store.List(list), Is.EqualTo(1));
+            Assert.That(list[0].ObjectCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void ARoomOfStandIns_KeepsItsTargets()
+        {
+            // The stand-in mesh has 5,000 triangles by definition (rule R17), whatever the rule for scanned objects says.
+            string text = RoomFixtures.ReadTextFromProject(RoomFixtures.BudgetRoom);
+            var store = new RoomStore(_folder);
+            Directory.CreateDirectory(_folder);
+            File.WriteAllText(store.JsonPath("standins"), text);
+            RoomModel room;
+            string error;
+            Assert.That(store.TryLoad("standins", out room, out error), Is.True, error);
+            Assert.That(room.Objects.Length, Is.EqualTo(12));
+            foreach (RoomObject o in room.Objects)
+            {
+                Assert.That(o.Mesh, Is.EqualTo(MeshState.StandIn));
+                Assert.That(o.TriTarget, Is.EqualTo(5000));
+            }
+            Assert.That(RoomModelValidator.Errors(room), Is.Empty);
+            Assert.That(RoomModelJson.Write(room), Is.EqualTo(text));
+        }
+
+        [Test]
+        public void ARoomStillQueuedForWriting_IsRefreshedToo()
+        {
+            // A room handed to Save with stale targets is read back from the queue with today's.
+            RoomModel room = RoomModelBuilder.FromOutline("queued", ScanTestRooms.Rectangle(4f, 5f),
+                new[] { new Atlas.Scan.Grid.ObstacleBox { Base = new float3(2f, 0f, 2.5f), Size = new float3(1f, 0.75f, 0.6f), Category = (int)ObjectCategory.Table } },
+                new float2(2f, 1.1f));
+            Assert.That(room.Objects[0].TriTarget, Is.EqualTo(15000));
+            room.Objects[0].TriTarget = 5000;
+            var store = new RoomStore(_folder);
+            store.Save(room);
+            RoomModel back;
+            string error;
+            Assert.That(store.TryLoad("queued", out back, out error), Is.True, error);
+            Assert.That(back.Objects[0].TriTarget, Is.EqualTo(15000));
+            Assert.That(store.WaitForWrites(5000), Is.True);
+        }
+
+        [Test]
         public void MissingAndInvalid_AreReported()
         {
             var store = new RoomStore(_folder);

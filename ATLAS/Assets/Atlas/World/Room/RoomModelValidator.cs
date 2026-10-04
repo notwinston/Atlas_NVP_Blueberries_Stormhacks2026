@@ -6,42 +6,92 @@ using Unity.Mathematics;
 namespace Atlas.World
 {
     /// <summary>
-    /// Triangle targets of scanned objects (Master Plan section 4.5): the 60,000 triangles of furniture are
-    /// shared between the objects that receive meshes, at most twenty, largest first.
+    /// Triangle targets of scanned objects (Mesh Design section 5.4): the 120,000 triangles of furniture are
+    /// shared by surface area between the objects that receive meshes, at most thirty-two, largest first.
+    /// Integer arithmetic only, so that this class, the Forge (budget.py) and tools/rooms/roommath.py agree.
     /// </summary>
     public static class ObjectMeshRules
     {
-        public const int MaxMeshedObjects = 20;
-        public const int FurnitureTriangles = 60000;
+        public const int MaxMeshedObjects = 32;
+        public const int FurnitureTriangles = 120000;
         public const int TriTargetMin = 3000;
-        public const int TriTargetMax = 5000;
+        public const int TriTargetMax = 15000;
+        public const int LightTriangles = 60000;
+        public const int LightTargetMin = 1500;
+        public const int LightTargetMax = 5000;
+        /// <summary>The target of every object of a room that is all stand-ins (the stand-in mesh has 5,000 triangles).</summary>
+        public const int StandInTriangles = 5000;
 
-        /// <summary>clamp(60000 / n, 3000, 5000) with integer division; 0 when no object receives a mesh.</summary>
+        /// <summary>
+        /// The full target when every meshed object has the same surface area: clamp(120000 / n, 3000, 15000)
+        /// with integer division; 0 when no object receives a mesh.
+        /// </summary>
         public static int TriTarget(int meshedCount)
         {
             if (meshedCount <= 0) return 0;
             return Math.Min(Math.Max(FurnitureTriangles / meshedCount, TriTargetMin), TriTargetMax);
         }
 
+        /// <summary>The light target of the room: clamp(60000 / n, 1500, 5000); 0 when no object receives a mesh.</summary>
+        public static int LightTarget(int meshedCount)
+        {
+            if (meshedCount <= 0) return 0;
+            return Math.Min(Math.Max(LightTriangles / meshedCount, LightTargetMin), LightTargetMax);
+        }
+
+        /// <summary>Metres to whole millimetres: floor(v * 1000 + 0.5), from the value as written in the file.</summary>
+        static long Mm(float metres) { return (long)Math.Floor(RoomModelJson.Widen(metres) * 1000.0 + 0.5); }
+
         /// <summary>
-        /// The target of every object, in the order of the array: the twenty largest by volume (ties to the
-        /// lower id) share the budget, the rest get 0.
+        /// The full target of every object, in the order of the array: the thirty-two largest by volume in whole
+        /// cubic millimetres (ties to the lower id) share the budget by surface area, the rest get 0.
         /// </summary>
         public static int[] Targets(RoomObject[] objects)
         {
             if (objects == null) throw new ArgumentNullException(nameof(objects));
             int n = objects.Length;
+            var w = new long[n];
+            var h = new long[n];
+            var d = new long[n];
+            var volume = new long[n];
             var order = new int[n];
-            for (int k = 0; k < n; k++) order[k] = k;
+            for (int k = 0; k < n; k++)
+            {
+                w[k] = Mm(objects[k].Size.x); h[k] = Mm(objects[k].Size.y); d[k] = Mm(objects[k].Size.z);
+                volume[k] = w[k] * h[k] * d[k];
+                order[k] = k;
+            }
             Array.Sort(order, (a, b) =>
             {
-                int byVolume = objects[b].Volume.CompareTo(objects[a].Volume);
+                int byVolume = volume[b].CompareTo(volume[a]);
                 return byVolume != 0 ? byVolume : objects[a].Id.CompareTo(objects[b].Id);
             });
             int picked = Math.Min(n, MaxMeshedObjects);
-            int target = TriTarget(picked);
             var targets = new int[n];
-            for (int k = 0; k < picked; k++) targets[order[k]] = target;
+            if (picked == 0) return targets;
+
+            var area = new long[picked];
+            long total = 0;
+            for (int k = 0; k < picked; k++)
+            {
+                int o = order[k];
+                area[k] = 2 * (w[o] * h[o] + h[o] * d[o] + w[o] * d[o]);
+                total += area[k];
+            }
+            var t = new long[picked];
+            long sum = 0;
+            for (int k = 0; k < picked; k++)
+            {
+                t[k] = Math.Min(Math.Max(FurnitureTriangles * area[k] / total, TriTargetMin), TriTargetMax);
+                sum += t[k];
+            }
+            if (sum > FurnitureTriangles)
+            {
+                long extra = sum - (long)TriTargetMin * picked;
+                long budget = FurnitureTriangles - (long)TriTargetMin * picked;
+                for (int k = 0; k < picked; k++) t[k] = TriTargetMin + (t[k] - TriTargetMin) * budget / extra;
+            }
+            for (int k = 0; k < picked; k++) targets[order[k]] = (int)t[k];
             return targets;
         }
 
@@ -55,12 +105,13 @@ namespace Atlas.World
 
     /// <summary>
     /// The consistency rules of a RoomModel that a schema cannot express: the same rules, with the same
-    /// numbers, as tools/rooms/validate_room.py (rules R1 to R19 of the room contract page). Engine-free.
+    /// numbers, as tools/rooms/validate_room.py (rules R1 to R21 of the room contract page). Engine-free.
     /// It allocates and is meant for load time, tests and tools, never for the frame path.
     /// </summary>
     public static class RoomModelValidator
     {
         const double Cell = 0.05;
+        const int ObjectProfileBytes = 256;      // R21
         const double Tol = 1e-4;                 // metres; files carry six decimals
         const double LatticeTol = 1e-5;          // metres; a float holds a 0.025 m multiple to better than this
         const double FieldTol = 0.0015;          // metres; R5
@@ -96,7 +147,7 @@ namespace Atlas.World
             WalkablePolygonMatches(room.Walkable, walk, w, h, ox, oz, errors);            // R9
             LoopFitValues(room, wf, df, errors, warnings);                                // R10 to R13
             Walls(room, outline, errors);                                                 // R14, R15
-            Objects(room, ox, oz, errors);                                                // R16, R17
+            Objects(room, ox, oz, errors);                                                // R16, R17, R21
             ObjectsOffFreeFloor(room, free, w, h, ox, oz, errors);                        // R18
             if (warnings != null && string.IsNullOrEmpty(room.Anchor.Id) && room.Quality.Route != ScanRoute.Fixture)
                 warnings.Add("R19 anchor.id is empty for a scanned room");
@@ -541,13 +592,16 @@ namespace Atlas.World
                 if (!(o.Base.x > ox && o.Base.x < xHi && o.Base.z > oz && o.Base.z < zHi))
                     errors.Add("R16 object " + I(o.Id) + " lies outside the grid");
                 if (o.Base.y < -0.05f) errors.Add("R16 object " + I(o.Id) + " starts below the floor");
+                if (!YawReadable(o.Yaw)) errors.Add("R16 object " + I(o.Id) + ": yaw is outside (-3.1415928, 3.1415928] once written");
                 if (o.Mesh == MeshState.StandIn) standIns++;
+                if (o.Profile != null && o.Profile.Length != ObjectProfileBytes)
+                    errors.Add("R21 object " + I(o.Id) + ": profile is " + I(o.Profile.Length) + " bytes, expected 256");
             }
             if (standIns > 0)
             {
                 if (standIns != objects.Length) errors.Add("R17 stand-in objects cannot be mixed with other mesh states");
                 for (int k = 0; k < objects.Length; k++)
-                    if (objects[k].Mesh == MeshState.StandIn && objects[k].TriTarget != ObjectMeshRules.TriTargetMax)
+                    if (objects[k].Mesh == MeshState.StandIn && objects[k].TriTarget != ObjectMeshRules.StandInTriangles)
                         errors.Add("R17 stand-in object " + I(objects[k].Id) + " must have triTarget 5000");
                 return;
             }
@@ -555,6 +609,18 @@ namespace Atlas.World
             for (int k = 0; k < objects.Length; k++)
                 if (objects[k].TriTarget != expected[k])
                     errors.Add("R17 object " + I(objects[k].Id) + ": triTarget = " + I(objects[k].TriTarget) + ", expected " + I(expected[k]));
+        }
+
+        /// <summary>
+        /// True when the yaw, as RoomModelJson writes it (six decimals), is inside the range the reader and the
+        /// schema accept: a room that validates must read back.
+        /// </summary>
+        static bool YawReadable(float yaw)
+        {
+            if (float.IsNaN(yaw) || float.IsInfinity(yaw)) return false;
+            double written = double.Parse(RoomModelJson.FormatNumber(RoomModelJson.Widen(yaw)), NumberStyles.Float,
+                CultureInfo.InvariantCulture);
+            return written > -3.1415928 && written <= 3.1415928;
         }
 
         static void ObjectsOffFreeFloor(RoomModel room, bool[] free, int w, int h, double ox, double oz, List<string> errors)

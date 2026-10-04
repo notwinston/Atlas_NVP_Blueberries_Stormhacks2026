@@ -22,8 +22,9 @@ namespace Atlas.Spaces.Home
     }
 
     /// <summary>
-    /// Budget accounting for Home (Master Plan section 8.5 and task P1-C07): at most 60 draw calls and
-    /// 130,000 triangles per frame for both eyes on budget_room. Engine-free: it counts with the builders
+    /// Budget accounting for Home (Master Plan section 8.5 and task P1-C07): at most 80 draw calls and
+    /// 250,000 triangles per frame for both eyes, the full furniture load of budget_room_120k. Engine-free: it
+    /// counts with the builders
     /// that draw the room and the marks.
     /// </summary>
     public static class HomeBudget

@@ -133,7 +133,8 @@ namespace Atlas.Rendering.Tests.Room
                     }
                 }
             }
-            Assert.That(checkedObjects, Is.EqualTo(13));
+            // One table, the twelve of budget_room and the twenty-four of budget_room_120k.
+            Assert.That(checkedObjects, Is.EqualTo(37));
         }
 
         [Test]
@@ -169,8 +170,8 @@ namespace Atlas.Rendering.Tests.Room
             Assert.That(home.ShellTriangles, Is.EqualTo(1280 + 1396));    // floor: 320 cells of four; walls as the contract's reference
             Assert.That(home.TrianglesPerFrame, Is.EqualTo(125352));
             Assert.That(home.TrianglesPerEye, Is.EqualTo(home.ShellTriangles + 60000));
-            Assert.That(home.DrawCallsPerFrame, Is.LessThanOrEqualTo(60));
-            Assert.That(home.TrianglesPerFrame, Is.LessThanOrEqualTo(130000));
+            Assert.That(home.DrawCallsPerFrame, Is.LessThanOrEqualTo(80));
+            Assert.That(home.TrianglesPerFrame, Is.LessThanOrEqualTo(250000));
             Assert.That(RoomBudget.FitsHome(home), Is.True);
 
             // The shell in the estimate is the shell that is built.

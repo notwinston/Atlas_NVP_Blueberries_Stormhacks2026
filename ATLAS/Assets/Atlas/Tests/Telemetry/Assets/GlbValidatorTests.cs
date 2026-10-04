@@ -83,6 +83,69 @@ namespace Atlas.Telemetry.Tests
             Assert.That(GlbValidator.Validate(glb, in under).FailedCheck, Is.EqualTo("tris_target"));
         }
 
+        static GlbExpectation Level(GlbLevel level, int triTarget)
+        {
+            GlbExpectation expect = AssetFixtures.Expect(TestGlb.Dims, triTarget);
+            expect.Level = level;
+            return expect;
+        }
+
+        [TestCase(GlbLevel.Full, 1499, "tris_min")]
+        [TestCase(GlbLevel.Full, 1500, null)]
+        [TestCase(GlbLevel.Full, 5001, null)]
+        [TestCase(GlbLevel.Full, 15000, null)]
+        [TestCase(GlbLevel.Full, 15001, "tris_max")]
+        [TestCase(GlbLevel.Light, 1499, "tris_min")]
+        [TestCase(GlbLevel.Light, 1500, null)]
+        [TestCase(GlbLevel.Light, 5000, null)]
+        [TestCase(GlbLevel.Light, 5001, "tris_max")]
+        public void Glb_TriangleLimits_DependOnTheLevel(GlbLevel level, int triangles, string failed)
+        {
+            GlbExpectation expect = Level(level, 0);
+            GlbReport report = GlbValidator.Validate(TestGlb.Make(triangles), in expect);
+            Assert.That(report.Triangles, Is.EqualTo(triangles));
+            Assert.That(report.FailedCheck, Is.EqualTo(failed));
+            Assert.That(report.Ok, Is.EqualTo(failed == null));
+        }
+
+        [TestCase(GlbLevel.Full)]
+        [TestCase(GlbLevel.Light)]
+        public void Glb_TheJobsTarget_CapsEachLevel(GlbLevel level)
+        {
+            byte[] glb = TestGlb.Make(3001);
+            GlbExpectation exact = Level(level, 3001), under = Level(level, 3000);
+            Assert.That(GlbValidator.Validate(glb, in exact).Ok, Is.True);
+            Assert.That(GlbValidator.Validate(glb, in under).FailedCheck, Is.EqualTo("tris_target"));
+        }
+
+        [Test]
+        public void Glb_FileSizeLimits_DependOnTheLevel()
+        {
+            byte[] big = TestGlb.Make(1500, 30000);                  // between 1 MiB and 2 MiB
+            Assert.That(big.Length, Is.GreaterThan(1048576).And.LessThanOrEqualTo(2097152));
+            GlbExpectation full = Level(GlbLevel.Full, 0), light = Level(GlbLevel.Light, 0);
+            Assert.That(GlbValidator.Validate(big, in full).Ok, Is.True);
+            Assert.That(GlbValidator.Validate(big, in light).FailedCheck, Is.EqualTo("size"));
+
+            byte[] huge = TestGlb.Make(1500, 55000);                 // past 2 MiB
+            Assert.That(huge.Length, Is.GreaterThan(2097152));
+            Assert.That(GlbValidator.Validate(huge, in full).FailedCheck, Is.EqualTo("size"));
+
+            Assert.That(GlbValidator.MaxBytesOf(GlbLevel.Full), Is.EqualTo(2097152));
+            Assert.That(GlbValidator.MaxBytesOf(GlbLevel.Light), Is.EqualTo(1048576));
+            Assert.That(GlbValidator.MaxTrianglesOf(GlbLevel.Full), Is.EqualTo(15000));
+            Assert.That(GlbValidator.MaxTrianglesOf(GlbLevel.Light), Is.EqualTo(5000));
+        }
+
+        [Test]
+        public void Glb_ADefaultExpectation_IsTheFullCopy()
+        {
+            // The call shape of before: no level named. A copy of 6,000 triangles is a full copy.
+            var expect = new GlbExpectation { DimX = TestGlb.Dims.x, DimY = TestGlb.Dims.y, DimZ = TestGlb.Dims.z, TriTarget = 6000 };
+            Assert.That(expect.Level, Is.EqualTo(GlbLevel.Full));
+            Assert.That(GlbValidator.Validate(TestGlb.Make(6000), in expect).Ok, Is.True);
+        }
+
         [Test]
         public void Glb_AnotherHash_IsRejected()
         {

@@ -46,11 +46,21 @@ namespace Atlas.Scan
         static IWallBridge s_current;
 
         /// <summary>
-        /// Route 4 is Extended and runs only when this is set. Off until the device check has shown that a
-        /// second RoomPlan capture on the AR session leaves the furniture boxes and the depth image alone
-        /// (AR Foundation open point D7).
+        /// Route 4 is Extended and runs only when this is set. The parameter scan.wallBridge sets it through
+        /// <see cref="Apply"/>: on, and the registered bridge available. A capture already running is not
+        /// affected; the next scan reads it.
         /// </summary>
         public static bool Enabled;
+
+        /// <summary>
+        /// The switch: Enabled becomes true when parameterOn (scan.wallBridge) is set and the registered
+        /// bridge reports itself available (RoomPlan on a device with LiDAR). With the parameter off the
+        /// bridge is not asked at all.
+        /// </summary>
+        public static void Apply(bool parameterOn)
+        {
+            Enabled = parameterOn && Current.Available;
+        }
 
         /// <summary>Never null. With nothing registered: not available, no capture.</summary>
         public static IWallBridge Current { get { return s_current ?? s_neutral; } }

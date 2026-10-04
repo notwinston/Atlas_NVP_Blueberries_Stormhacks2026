@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the RoomModel fixtures frozen with the contracts at gate G0.
 
-    python3 make_fixtures.py            write the five fixtures
+    python3 make_fixtures.py            write the six fixtures
     python3 make_fixtures.py --check    fail (exit 1) if a file on disk differs from what
                                         would be written; writes nothing
     python3 make_fixtures.py --table    also print the reference table for the contract page
@@ -83,6 +83,25 @@ def fixtures():
         obj(12, "other", 3.70, 4.75, 0.5, 0.4, 0.5, mesh=s),
     ]
     out.append(("budget_room.json", "budget_room", rectangle(4.0, 5.0), budget, (2.0, 2.5),
+                [[door(1.65)], [], [], []]))
+
+    # budget_room_120k: the room of budget_room with twelve more stand-ins in the gaps along the walls,
+    # 24 in all, 120,000 triangles (Mesh Design check M3, the full-copy load of the furniture budget).
+    more = [
+        obj(13, "plant", 0.20, 0.20, 0.4, 1.0, 0.4, mesh=s),                # south wall
+        obj(14, "other", 2.10, 0.20, 0.8, 0.6, 0.4, mesh=s),
+        obj(15, "lamp", 0.15, 4.85, 0.3, 1.5, 0.3, mesh=s),                 # north wall
+        obj(16, "other", 2.55, 4.80, 0.4, 0.5, 0.4, mesh=s),
+        obj(17, "lamp", 0.15, 0.65, 0.3, 1.5, 0.3, mesh=s),                  # west wall
+        obj(18, "lamp", 0.15, 2.07, 0.3, 1.5, 0.3, mesh=s),
+        obj(19, "plant", 0.15, 3.10, 0.3, 1.0, 0.3, mesh=s),
+        obj(20, "storage", 0.20, 4.20, 0.5, 1.0, 0.4, yaw_deg=90, mesh=s),
+        obj(21, "plant", 3.88, 0.65, 0.24, 1.0, 0.24, mesh=s),   # east wall
+        obj(22, "chair", 3.75, 1.50, 0.5, 0.9, 0.5, yaw_deg=90, mesh=s),
+        obj(23, "lamp", 3.85, 3.40, 0.3, 1.5, 0.3, mesh=s),
+        obj(24, "plant", 3.925, 0.15, 0.15, 1.0, 0.15, mesh=s),
+    ]
+    out.append(("budget_room_120k.json", "budget_room_120k", rectangle(4.0, 5.0), budget + more, (2.0, 2.5),
                 [[door(1.65)], [], [], []]))
 
     # 2 x 2 m, empty: free floor 1.4 x 1.4 m, which selects standing mode (gate G5).
