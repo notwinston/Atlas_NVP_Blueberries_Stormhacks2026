@@ -91,9 +91,9 @@ namespace Atlas.Spaces.AlignedCells
             _viewGrid = _core.Grid;
             _dirty = true;
             if (_pool == null) return;
-            // The duck modelled in Blender (kit piece "duck"; one AtlasKit for the whole app, read as Glued reads it), only when
-            // a maze can be drawn. No kit, or a refused piece: the view draws the procedural duck.
-            KitSet kit = _core.MazeMode ? KitSet.Load(ReadKitResource) : null;
+            // The duck modelled in Blender (kit piece "duck"; the app's one AtlasKit, read once per run and shared with Glued),
+            // only when a maze can be drawn. No kit, or a refused piece: the view draws the procedural duck.
+            KitSet kit = _core.MazeMode ? KitResources.Shared() : null;
             _view = new AlignedCellsView(transform, _pool, _core.Grid, kit);
         }
 
@@ -251,16 +251,6 @@ namespace Atlas.Spaces.AlignedCells
             if (_view != null) _view.Dispose();
             _view = null;
             _shownMaze = null;
-        }
-
-        // GluedSpace's reader: the kit's files are TextAssets in Resources/AtlasKit (Spaces/Glued/Resources/AtlasKit).
-        static byte[] ReadKitResource(string name)
-        {
-            var asset = Resources.Load<TextAsset>(KitSet.ResourceFolder + "/" + name);
-            if (asset == null) return null;
-            byte[] bytes = asset.bytes;
-            Resources.UnloadAsset(asset);
-            return bytes;
         }
     }
 }

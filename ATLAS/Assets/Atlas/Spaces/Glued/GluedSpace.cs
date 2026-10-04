@@ -339,8 +339,8 @@ namespace Atlas.Spaces.Glued
         {
             float sizeX = (float)_lattice.SizeX, sizeZ = (float)_lattice.SizeZ;
             // The pieces modelled in Blender, when glued.kit asks for them; a piece that is missing or refused keeps the
-            // built-in mesh.
-            KitSet kit = _kit != null && _kit.Bool ? KitSet.Load(ReadKitResource) : null;
+            // built-in mesh. The kit is the app's one AtlasKit, read once per run (KitResources).
+            KitSet kit = _kit != null && _kit.Bool ? KitResources.Shared() : null;
             MeshData landmark = kit != null ? KitPiece(kit, "landmark") : null;
             MeshData avatar = kit != null ? KitPiece(kit, "avatar") : null;
             var data = new AtlasMeshBuilder(1024, 4096);
@@ -387,15 +387,6 @@ namespace Atlas.Spaces.Glued
             if (kit.TryGet(name, mesh, out string error)) return mesh;
             Debug.LogWarning("Atlas: kit piece '" + name + "' missing or invalid; using the built-in one. (" + error + ")");
             return null;
-        }
-
-        static byte[] ReadKitResource(string name)
-        {
-            var asset = Resources.Load<TextAsset>(KitSet.ResourceFolder + "/" + name);
-            if (asset == null) return null;
-            byte[] bytes = asset.bytes;
-            Resources.UnloadAsset(asset);
-            return bytes;
         }
 
         GameObject NewRenderer(string label, Mesh mesh, Material material, out Transform child)
