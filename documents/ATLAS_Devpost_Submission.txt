@@ -4,11 +4,11 @@ Huawei's "Beyond Euclid" challenge asked for experiences where you *feel* the ge
 
 We also wanted it to be a hardware hack, not an app on a dev kit. There is no VR headset here: ATLAS is an iPhone dropped into a lens goggle, with every sensor on the phone put to work.
 
-We treat ATLAS as a research project as much as a demo. Our question: **can a person learn the shape of a non-Euclidean space by walking it, in a room they already know, on hardware they already own?** Pictures of hyperbolic space have existed for over a century and most people still cannot say what it would be like to stand in it. Our hypothesis is that the body gets there first: walk a square, fail to come home, and the idea lands.
+The question we set out to answer: **can a person learn the shape of a non-Euclidean space by walking it, in a room they already know, on hardware they already own?** Pictures of hyperbolic space have existed for over a century and most people still cannot say what it would be like to stand in it. Our bet is that the body gets there first: walk a square, fail to come home, and the idea lands.
 
 ## What it does
 
-ATLAS turns an iPhone in a lens goggle into a walk-through lab for impossible geometry, and into an instrument for studying how people find their way in it.
+ATLAS turns an iPhone in a lens goggle into a walk-through lab for impossible geometry, and into a way to see how people find their way in it.
 
 **1. Scan your room**
 
@@ -46,13 +46,13 @@ In curved space the virtual walls are not where the real walls are, so safety ca
 
 A teammate's PC mirrors the walker's view live beside a flat map of where they are, and an operator Console tunes the experience, changes space and can stop the walk.
 
-**8. A research instrument**
+**8. Every walk is recorded**
 
-Every walk is recorded: head pose, space, exact tile and walker state 60 times a second, with an event log and a performance log beside it. Any session can be replayed through the real frame loop, on the PC, with no phone. That makes each walk a data point we can study later, and each recorded walk a test.
+Each session logs the head pose, space, exact tile and walker state 60 times a second, with an event log and a performance log beside it. Any session can be replayed through the real frame loop, on the PC, with no phone. So every walk is a path we can look at afterwards, and every recorded walk doubles as a test.
 
 ## How we built it
 
-### Research basis
+### What it stands on
 
 - **Curved space you walk, not watch.** We work in H²×R and S²×R: only the floor is curved, height stays ordinary. Carrying a direction round a closed loop turns it by the loop's area over L² (Gauss-Bonnet), and that turn is what the walker feels as "the wrong room".
 - **Hyperbolic networks.** The Network Atlas follows Krioukov et al., *Hyperbolic Geometry of Complex Networks* (2010): nodes scattered in a hyperbolic disc and linked by hyperbolic distance give the hubs-and-rim structure of real networks, and greedy routing works on them.
@@ -197,9 +197,9 @@ Real networks like the internet or social networks actually have a hidden hyperb
 
 ## What's next for ATLAS - NVP
 
-**A study with walkers**
+**Walkers who have never heard of it**
 
-This is the experiment the project was built for. We want to put the headset on people who've never heard of hyperbolic space and measure, not guess: can they find their way back to the first room, do they learn the five-corner rule on their own, do they feel sick, and does walking teach it better than a picture or a video of the same space? The session logs already record every step, so each walk gives us a path to analyse.
+This is the question the project was built to answer. We want to put the headset on people who've never heard of hyperbolic space and measure, not guess: can they find their way back to the first room, do they learn the five-corner rule on their own, do they feel sick, and does walking teach it better than a picture or a video of the same space? The session logs already record every step, so each walk gives us a path to analyse.
 
 **Numbers from the device**
 
