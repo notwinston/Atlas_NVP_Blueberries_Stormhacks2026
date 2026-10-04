@@ -10,6 +10,7 @@
         "Atlas.Scan",
         "Atlas.Safety",
         "Atlas.Link",
+        "Unity.InputSystem",
         "Unity.Mathematics"
     ]
 }
