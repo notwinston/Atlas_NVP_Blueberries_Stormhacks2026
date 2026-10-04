@@ -6,6 +6,7 @@
         "Atlas.World",
         "Atlas.Rendering",
         "Atlas.Input",
+        "Atlas.Link",
         "Atlas.Telemetry",
         "Unity.Mathematics"
     ]

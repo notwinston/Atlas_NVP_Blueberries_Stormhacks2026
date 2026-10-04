@@ -96,9 +96,9 @@ namespace Atlas.Kernel
     {
         public int Q => 3;
 
-        // One place to change when P1-B04 makes VisibleTile readonly (deviation D2).
+        // Merge fix (P1-B09 worktree): P1-B04's VisibleTile is a readonly struct (Id, F, GraphDistance); F = Chain(from, face).
         static VisibleTile Make(int face, int from)
-            => new VisibleTile { Id = CubeTiling.FaceId(face), Chain = CubeTiling.Chain(from, face), GraphDistance = CubeTiling.GraphDistance(from, face) };
+            => new VisibleTile(CubeTiling.FaceId(face), CubeTiling.Chain(from, face), CubeTiling.GraphDistance(from, face));
 
         public void VisibleSet(TileId centre, double rho, List<VisibleTile> into)
         {

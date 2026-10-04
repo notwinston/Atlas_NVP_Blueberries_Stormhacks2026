@@ -37,6 +37,15 @@ namespace Atlas.Spaces.SmallPlanet
             Configured = true;
         }
 
+        // P1-B09 [D16]: the radius as the dial resolves it (R after the comfort floor, MP §4.4), not only 2s/pi.
+        public void Configure(double radius)
+        {
+            if (Entered) throw new InvalidOperationException("Configure while entered");
+            if (!(radius > 0) || double.IsInfinity(radius)) throw new ArgumentOutOfRangeException(nameof(radius), "radius must be finite and positive");
+            R = radius;
+            Configured = true;
+        }
+
         public static WalkerPose StartPose(double2 headXZ, double radius)
             => new WalkerPose { Tile = CubeTiling.FaceId(0), Local = Iso2.Boost(headXZ / radius, 1) };
 
