@@ -10,11 +10,18 @@ namespace Atlas.App.Menu
     /// F3): one mesh of flat quads in the look's shader for the panel, the focused row and the chips, and five
     /// text objects made the way the HUD makes its own. Six draw calls while open, two while closed. Nothing
     /// here decides anything: it shows the model, and only when the model's revision moved.
+    /// Legacy text spaces its lines by the font's line height, not by the row pitch, and hangs from the top of
+    /// its line box, not from its letters; both are measured from the font once, so every line sits on the
+    /// centre of its row target and every label on the centre of its chip.
     /// </summary>
     sealed class MenuView
     {
         const int FontPixels = 64;
-        const float TextHeight = MenuLayout.RowPitch;
+        /// <summary>One em of the text: the capitals fill about half of a row's height.</summary>
+        const float TextHeight = MenuLayout.RowPitch * 0.8f;
+        /// <summary>Layers in front of the panel, towards the walker (-z), so no two surfaces share a depth.</summary>
+        const float Layer = 0.001f;
+        const float MarkZ = -Layer, GlyphZ = -2f * Layer, TextZ = -3f * Layer;
         const float ChipWidth = 0.14f, ChipHeight = 0.06f;
 
         // Cells of the palette's neutral ramp (row 0): the panel, a chip, the focused row, a glyph.
@@ -41,7 +48,7 @@ namespace Atlas.App.Menu
 
             _panel = NewObject("AtlasMenu", hud, layer);
             _builder.Clear();
-            AddRect(0f, 0f, MenuLayout.Width * 0.5f, MenuLayout.Height * 0.5f, PanelCell);
+            AddRect(0f, 0f, 0f, MenuLayout.Width * 0.5f, MenuLayout.Height * 0.5f, PanelCell);
             _panelMesh = AtlasMesh.Create(_builder, "Atlas Menu");
             AddMesh(_panel, _panelMesh);
 
@@ -50,21 +57,29 @@ namespace Atlas.App.Menu
             float3 corner = MenuLayout.OpenChip;
             _chipFacing = Quaternion.LookRotation(new Vector3(corner.x, corner.y, corner.z));
             _builder.Clear();
-            AddRect(0f, 0f, ChipWidth * 0.5f, ChipHeight * 0.5f, ChipCell);
+            AddRect(0f, 0f, 0f, ChipWidth * 0.5f, ChipHeight * 0.5f, ChipCell);
             _chipMesh = AtlasMesh.Create(_builder, "Atlas Menu Chip");
             AddMesh(_chip, _chipMesh);
 
             Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             if (font != null)
             {
-                float top = MenuLayout.FirstRowY + MenuLayout.RowPitch * 0.5f;
-                _title = NewText(_panel.transform, "Title", font, new Vector3(MenuLayout.NamesX, MenuLayout.TitleY, 0f), TextAnchor.MiddleLeft);
-                _names = NewText(_panel.transform, "Names", font, new Vector3(MenuLayout.NamesX, top, 0f), TextAnchor.UpperLeft);
-                _values = NewText(_panel.transform, "Values", font, new Vector3(MenuLayout.ValuesX, top, 0f), TextAnchor.UpperRight);
+                _names = NewText(_panel.transform, "Names", font, Vector3.zero, TextAnchor.UpperLeft);
+                float lineSpacing, capCentre;
+                Measure(_names, out lineSpacing, out capCentre);
+                // Every text hangs from its top: a line's capitals are centred capCentre (negative) from where it stands.
+                float rows = MenuLayout.RowY(0) - capCentre;
+                _names.transform.localPosition = new Vector3(MenuLayout.NamesX, rows, TextZ);
+                _names.lineSpacing = lineSpacing;
+                _values = NewText(_panel.transform, "Values", font, new Vector3(MenuLayout.ValuesX, rows, TextZ), TextAnchor.UpperRight);
                 _values.alignment = TextAlignment.Right;
-                NewText(_panel.transform, "Close", font, new Vector3(MenuLayout.CloseX, MenuLayout.FooterY, 0f), TextAnchor.MiddleCenter).text = "close";
-                NewText(_panel.transform, "Apply", font, new Vector3(MenuLayout.ApplyX, MenuLayout.FooterY, 0f), TextAnchor.MiddleCenter).text = "apply";
-                NewText(_chip.transform, "Label", font, Vector3.zero, TextAnchor.MiddleCenter).text = "menu";
+                _values.lineSpacing = lineSpacing;
+                _title = NewText(_panel.transform, "Title", font,
+                    new Vector3(MenuLayout.NamesX, MenuLayout.TitleY - capCentre, TextZ), TextAnchor.UpperLeft);
+                float footer = MenuLayout.FooterY - capCentre;
+                NewText(_panel.transform, "Close", font, new Vector3(MenuLayout.CloseX, footer, TextZ), TextAnchor.UpperCenter).text = "close";
+                NewText(_panel.transform, "Apply", font, new Vector3(MenuLayout.ApplyX, footer, TextZ), TextAnchor.UpperCenter).text = "apply";
+                NewText(_chip.transform, "Label", font, new Vector3(0f, -capCentre, TextZ), TextAnchor.UpperCenter).text = "menu";
             }
 
             _panel.SetActive(false);
@@ -107,20 +122,21 @@ namespace Atlas.App.Menu
             bool steps = kind == MenuRowKind.Param || kind == MenuRowKind.Page;
 
             _builder.Clear();
-            AddRect(0f, 0f, MenuLayout.Width * 0.5f, MenuLayout.Height * 0.5f, PanelCell);
+            AddRect(0f, 0f, 0f, MenuLayout.Width * 0.5f, MenuLayout.Height * 0.5f, PanelCell);
             float y = MenuLayout.RowY(slot);
-            AddRect(0f, y, MenuLayout.RowHalfWidth, MenuLayout.RowHalfHeight, FocusCell);
+            AddRect(0f, y, MarkZ, MenuLayout.RowHalfWidth, MenuLayout.RowHalfHeight, FocusCell);
+            // The step chips stand in front of the focused row, as their gaze targets do.
             if (steps)
             {
-                AddRect(MenuLayout.MinusX, y, MenuLayout.StepHalfWidth, MenuLayout.StepHalfHeight, ChipCell);
-                AddRect(MenuLayout.MinusX, y, 0.010f, 0.002f, GlyphCell);
+                AddRect(MenuLayout.MinusX, y, GlyphZ, MenuLayout.StepHalfWidth, MenuLayout.StepHalfHeight, ChipCell);
+                AddRect(MenuLayout.MinusX, y, TextZ, 0.010f, 0.002f, GlyphCell);
             }
             // "+" on a value, a plain mark on a row that runs something.
-            AddRect(MenuLayout.PlusX, y, MenuLayout.StepHalfWidth, MenuLayout.StepHalfHeight, ChipCell);
-            AddRect(MenuLayout.PlusX, y, 0.010f, 0.002f, GlyphCell);
-            if (steps) AddRect(MenuLayout.PlusX, y, 0.002f, 0.010f, GlyphCell);
-            AddRect(MenuLayout.CloseX, MenuLayout.FooterY, MenuLayout.ChipHalfWidth, MenuLayout.ChipHalfHeight, ChipCell);
-            AddRect(MenuLayout.ApplyX, MenuLayout.FooterY, MenuLayout.ChipHalfWidth, MenuLayout.ChipHalfHeight,
+            AddRect(MenuLayout.PlusX, y, GlyphZ, MenuLayout.StepHalfWidth, MenuLayout.StepHalfHeight, ChipCell);
+            AddRect(MenuLayout.PlusX, y, TextZ, 0.010f, 0.002f, GlyphCell);
+            if (steps) AddRect(MenuLayout.PlusX, y, TextZ, 0.002f, 0.010f, GlyphCell);
+            AddRect(MenuLayout.CloseX, MenuLayout.FooterY, MarkZ, MenuLayout.ChipHalfWidth, MenuLayout.ChipHalfHeight, ChipCell);
+            AddRect(MenuLayout.ApplyX, MenuLayout.FooterY, MarkZ, MenuLayout.ChipHalfWidth, MenuLayout.ChipHalfHeight,
                 model.HasPending ? FocusCell : ChipCell);
             AtlasMesh.Apply(_builder, _panelMesh);
 
@@ -144,9 +160,9 @@ namespace Atlas.App.Menu
         }
 
         // A rectangle in the panel's plane that faces the walker: the front of a quad is towards cross(v, u).
-        void AddRect(float x, float y, float halfWidth, float halfHeight, int cell)
+        void AddRect(float x, float y, float z, float halfWidth, float halfHeight, int cell)
         {
-            _builder.AddQuad(new float3(x - halfWidth, y - halfHeight, 0f), new float3(2f * halfWidth, 0f, 0f),
+            _builder.AddQuad(new float3(x - halfWidth, y - halfHeight, z), new float3(2f * halfWidth, 0f, 0f),
                 new float3(0f, 2f * halfHeight, 0f), AtlasPalette.Uv(cell));
         }
 
@@ -169,7 +185,32 @@ namespace Atlas.App.Menu
             renderer.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
         }
 
-        // The HUD's text: legacy 3D text in the built-in font, sized so that one line is one row of the list.
+        /// <summary>
+        /// The line spacing that puts one line on each row, and how far below its top a line's capitals are
+        /// centred, from the glyphs the font really draws: the difference between one line and two is one
+        /// line's advance. Leaves the text empty.
+        /// </summary>
+        static void Measure(TextMesh text, out float lineSpacing, out float capCentre)
+        {
+            var renderer = text.GetComponent<MeshRenderer>();
+            text.lineSpacing = 1f;
+            text.text = "H";
+            Bounds one = renderer.localBounds;
+            text.text = "H\nH";
+            float advance = renderer.localBounds.size.y - one.size.y;
+            text.text = string.Empty;
+            // Nothing drawn (no font texture yet): the font's own line height of about 1.15 em.
+            if (advance <= 0f || one.size.y <= 0f)
+            {
+                lineSpacing = MenuLayout.RowPitch / (1.15f * TextHeight);
+                capCentre = -0.55f * TextHeight;
+                return;
+            }
+            lineSpacing = MenuLayout.RowPitch / advance;
+            capCentre = one.center.y;
+        }
+
+        // The HUD's text: legacy 3D text in the built-in font, one em of TextHeight.
         static TextMesh NewText(Transform parent, string name, Font font, Vector3 position, TextAnchor anchor)
         {
             GameObject go = NewObject(name, parent, parent.gameObject.layer);
