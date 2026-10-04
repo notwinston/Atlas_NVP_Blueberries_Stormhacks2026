@@ -76,6 +76,22 @@ namespace Atlas.App
         {
             return s_centres[sign];
         }
+
+        /// <summary>
+        /// A sign's place within reach of the hands (documents/ATLAS_Hands_Design.md section 6.1): about the near
+        /// anchor as it is about the head a metre away, the beacon in the middle and the three signs in a row
+        /// under it.
+        /// </summary>
+        public static ReachSlot SlotOf(int sign)
+        {
+            switch (sign)
+            {
+                case Home: return ReachSlot.SignHome;
+                case Previous: return ReachSlot.SignPrevious;
+                case Next: return ReachSlot.SignNext;
+                default: return ReachSlot.SignMenu;
+            }
+        }
     }
 
     /// <summary>What draws the signs. The engine-free logic below drives it; null draws nothing.</summary>
@@ -85,8 +101,17 @@ namespace Atlas.App
         void SetVisible(bool visible);
         /// <summary>A sign that can do nothing now is drawn dim. Called when it changes.</summary>
         void SetAvailable(int sign, bool available);
-        /// <summary>Stands the signs about the head in the heading frame. Called every frame while shown.</summary>
-        void Place(float3 head, quaternion frame);
+        /// <summary>
+        /// Stands the signs: about the head in the heading frame, or, within reach, at the near anchor in the
+        /// anchor's frame. Called every frame while shown.
+        /// </summary>
+        void Place(float3 origin, quaternion frame);
+        /// <summary>
+        /// Brings the signs within reach of the hands at this scale, on their slots about the near anchor, drawn
+        /// on the world layer and depth-tested; or puts them back about the head on the head-locked layer at
+        /// their own size. Called when it changes.
+        /// </summary>
+        void SetReach(bool near, float scale);
     }
 
     /// <summary>
@@ -95,6 +120,14 @@ namespace Atlas.App
     /// action it stands for, so a dwell lands in the same <see cref="SpaceActions.Do"/> as the gamepad. A sign is
     /// live exactly when that call would not refuse: not while the phone is in the hand, a switch is under way,
     /// or the demo lock is on, and the neighbour signs only while another space can be entered.
+    /// <para>
+    /// In a hands session the signs come within reach (documents/ATLAS_Hands_Design.md section 6.1, decision
+    /// H14): they place themselves as they always have, then ask <see cref="ReachSlots.TryGetNear"/>, and on
+    /// true each stands at its slot in the near anchor's frame with its sphere and its board times the scale.
+    /// A metre away a sign that is not drawn can still be dwelt on, because the gaze must look down to reach
+    /// it and that reveals it. Within reach a fingertip passing through the anchor would press what the walker
+    /// cannot see, so there a sign is live only while it is drawn.
+    /// </para>
     /// <para>
     /// Cost: four targets and, at step 6, four moves and one transform; four enabled flags and a neighbour
     /// search at step 8b. No allocation.
@@ -111,6 +144,9 @@ namespace Atlas.App
 
         MenuFrame _frame;
         bool _frameSet, _visible, _shutDown;
+        // Within reach of the hands, and the scale in force there (1 when far).
+        bool _near;
+        float _scale = 1f;
 
         public SpaceSigns(IAtlasInput input, SpaceActions actions, ISpaceHost host, ISpaceSignView view)
         {
@@ -121,21 +157,28 @@ namespace Atlas.App
             _actions = actions;
             _host = host;
             _view = view;
-            for (int i = 0; i < _ids.Length; i++)
-            {
-                // The room frame's origin until the first frame places them. Live in the Space context.
-                GazeTarget target = GazeTarget.World(SpaceSignLayout.ActionOf(i), Vector3.zero, SpaceSignLayout.Radius, i);
-                target.Label = SpaceSignLayout.LabelOf(i);
-                _ids[i] = _input.RegisterGazeTarget(in target);
-                _input.SetGazeTargetEnabled(_ids[i], false);
-            }
+            for (int i = 0; i < _ids.Length; i++) Register(i);
+        }
+
+        // The room frame's origin until step 6 places it. Live in the Space context. A new target starts
+        // enabled, so it takes its own flag at once.
+        void Register(int sign)
+        {
+            float radius = _near ? ReachSlots.TargetHalf(SpaceSignLayout.Radius, _scale) : SpaceSignLayout.Radius;
+            GazeTarget target = GazeTarget.World(SpaceSignLayout.ActionOf(sign), Vector3.zero, radius, sign);
+            target.Label = SpaceSignLayout.LabelOf(sign);
+            _ids[sign] = _input.RegisterGazeTarget(in target);
+            _input.SetGazeTargetEnabled(_ids[sign], IsLive(sign));
         }
 
         /// <summary>The target of a sign, for tests and tools.</summary>
         public GazeTargetId TargetOf(int sign) { return _ids[sign]; }
 
-        /// <summary>True while a sign's target is enabled.</summary>
-        public bool IsLive(int sign) { return _enabled[sign]; }
+        /// <summary>True while a sign's target is enabled: its action can act, and within reach it is also drawn.</summary>
+        public bool IsLive(int sign) { return _enabled[sign] && (!_near || _visible); }
+
+        /// <summary>True while the signs stand within reach of the hands.</summary>
+        public bool Near { get { return _near; } }
 
         /// <summary>True while the signs are drawn.</summary>
         public bool Visible { get { return _visible; } }
@@ -173,7 +216,7 @@ namespace Atlas.App
         {
             if (_enabled[sign] == live) return;
             _enabled[sign] = live;
-            _input.SetGazeTargetEnabled(_ids[sign], live);
+            _input.SetGazeTargetEnabled(_ids[sign], IsLive(sign));
             if (_view != null) _view.SetAvailable(sign, live);
         }
 
@@ -210,15 +253,51 @@ namespace Atlas.App
 
             quaternion rotation = _frame.Rotation;
             float3 head = frame.RawHeadPosition;
-            for (int i = 0; i < _ids.Length; i++)
+
+            // The signs stand as they always have; in a hands session they then come within reach instead.
+            float3 anchor;
+            quaternion facing;
+            float scale;
+            bool near = ReachSlots.TryGetNear(out anchor, out facing, out scale);
+            SetReach(near, scale);
+            if (_near)
             {
-                float3 centre = head + math.mul(rotation, SpaceSignLayout.Centre(i));
-                _input.MoveGazeTarget(_ids[i], new Vector3(centre.x, centre.y, centre.z));
+                head = anchor;
+                rotation = facing;
+                for (int i = 0; i < _ids.Length; i++)
+                {
+                    float3 centre = ReachSlots.World(anchor, facing, _scale, SpaceSignLayout.SlotOf(i));
+                    _input.MoveGazeTarget(_ids[i], new Vector3(centre.x, centre.y, centre.z));
+                }
+            }
+            else
+            {
+                for (int i = 0; i < _ids.Length; i++)
+                {
+                    float3 centre = head + math.mul(rotation, SpaceSignLayout.Centre(i));
+                    _input.MoveGazeTarget(_ids[i], new Vector3(centre.x, centre.y, centre.z));
+                }
             }
 
             // Out of the way of the menu panel, and out of sight until the walker looks down for them.
             Show(context == InputContext.Space && (dwelt || pitch < SpaceSignLayout.RevealPitch));
             if (_visible && _view != null) _view.Place(head, rotation);
+        }
+
+        // The targets are spheres, whose radius cannot be changed in place: they are made again when the signs
+        // come within reach, go back, or the scale moves, and each takes its own flag again.
+        void SetReach(bool near, float scale)
+        {
+            float size = near ? scale : 1f;
+            if (near == _near && !ReachSlots.ScaleMoved(_scale, size)) return;
+            _near = near;
+            _scale = size;
+            for (int i = 0; i < _ids.Length; i++)
+            {
+                if (_ids[i].IsValid) _input.UnregisterGazeTarget(_ids[i]);
+                Register(i);
+            }
+            if (_view != null) _view.SetReach(near, size);
         }
 
         bool OnASign()
@@ -235,6 +314,9 @@ namespace Atlas.App
             if (visible == _visible) return;
             _visible = visible;
             if (_view != null) _view.SetVisible(visible);
+            // Within reach a sign is live only while it is drawn.
+            if (!_near) return;
+            for (int i = 0; i < _ids.Length; i++) _input.SetGazeTargetEnabled(_ids[i], IsLive(i));
         }
     }
 }
