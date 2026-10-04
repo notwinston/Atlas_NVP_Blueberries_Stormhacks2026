@@ -1,0 +1,4 @@
+P3-B02 Rebuild_Under16ms (Editor, Burst, both eyes, D_test, Morph t=1)
+median_ms=0.616
+max_ms=0.644
+all_ms=0.586,0.588,0.594,0.611,0.614,0.617,0.617,0.622,0.632,0.644
