@@ -1,0 +1,242 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test-run id="2" testcasecount="15" result="Passed" total="15" passed="15" failed="0" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:07Z" duration="0.5003684">
+  <test-suite type="TestSuite" id="1000" name="ATLAS" fullname="ATLAS" runstate="Runnable" testcasecount="15" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:07Z" duration="0.500368" total="15" passed="15" failed="0" inconclusive="0" skipped="0" asserts="0">
+    <properties>
+      <property name="platform" value="EditMode" />
+    </properties>
+    <test-suite type="Assembly" id="1012" name="Atlas.Blades.FieldFit.Tests.dll" fullname="/private/tmp/claude-501/-Users-lucas-Developer-StormHacks-2026-Blueberries/1f5dd69c-395d-49f7-a84f-71990036bc33/scratchpad/wt/P3-B01/ATLAS/Library/ScriptAssemblies/Atlas.Blades.FieldFit.Tests.dll" runstate="Runnable" testcasecount="10" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.140149" total="10" passed="10" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="51091" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1013" name="Atlas" fullname="Atlas" runstate="Runnable" testcasecount="10" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.139980" total="10" passed="10" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1014" name="Blades" fullname="Atlas.Blades" runstate="Runnable" testcasecount="10" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.139876" total="10" passed="10" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestSuite" id="1015" name="FieldFit" fullname="Atlas.Blades.FieldFit" runstate="Runnable" testcasecount="10" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.139769" total="10" passed="10" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-suite type="TestSuite" id="1016" name="Tests" fullname="Atlas.Blades.FieldFit.Tests" runstate="Runnable" testcasecount="10" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.139643" total="10" passed="10" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-suite type="TestFixture" id="1001" name="LensMathTests" fullname="Atlas.Blades.FieldFit.Tests.LensMathTests" classname="Atlas.Blades.FieldFit.Tests.LensMathTests" runstate="Runnable" testcasecount="10" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.139192" total="10" passed="10" failed="0" inconclusive="0" skipped="0" asserts="0">
+                <properties />
+                <test-case id="1011" name="Constants_Default" fullname="Atlas.Blades.FieldFit.Tests.LensMathTests.Constants_Default" methodname="Constants_Default" classname="Atlas.Blades.FieldFit.Tests.LensMathTests" runstate="Runnable" seed="1137050956" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.005341" asserts="0">
+                  <properties>
+                    <property name="Description" value="P3-B01 output constants (Master Plan §10.4.3)" />
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1007" name="Dilatation_Values" fullname="Atlas.Blades.FieldFit.Tests.LensMathTests.Dilatation_Values" methodname="Dilatation_Values" classname="Atlas.Blades.FieldFit.Tests.LensMathTests" runstate="Runnable" seed="751885141" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.002196" asserts="0">
+                  <properties>
+                    <property name="Description" value="P3-B01 output K(e): values consumed by P3-D03 (Master Plan §10.4.3, §7.1)" />
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1004" name="Edge_54_MapsTo_10_00" fullname="Atlas.Blades.FieldFit.Tests.LensMathTests.Edge_54_MapsTo_10_00" methodname="Edge_54_MapsTo_10_00" classname="Atlas.Blades.FieldFit.Tests.LensMathTests" runstate="Runnable" seed="1579339877" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.000202" asserts="0">
+                  <properties>
+                    <property name="Description" value="P3-B01 acceptance: 54 deg maps to 10.00 deg (Master Plan §10.4.3)" />
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1006" name="Inverses_RoundTrip" fullname="Atlas.Blades.FieldFit.Tests.LensMathTests.Inverses_RoundTrip" methodname="Inverses_RoundTrip" classname="Atlas.Blades.FieldFit.Tests.LensMathTests" runstate="Runnable" seed="733807460" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.023871" asserts="0">
+                  <properties>
+                    <property name="Description" value="P3-B01 output inverses: round trip &lt; 1e-9 rad, 1000 values (Master Plan §10.4.3)" />
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1002" name="KStar_Default_2_918" fullname="Atlas.Blades.FieldFit.Tests.LensMathTests.KStar_Default_2_918" methodname="KStar_Default_2_918" classname="Atlas.Blades.FieldFit.Tests.LensMathTests" runstate="Runnable" seed="757021224" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.001060" asserts="0">
+                  <properties>
+                    <property name="Description" value="P3-B01 acceptance: K* = 2.918 +/- 0.001 (Master Plan §10.4.3)" />
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                  <output><![CDATA[P3-B01 K* = 2.9184646
+P3-B01 K* = 2.9184646
+]]></output>
+                </test-case>
+                <test-case id="1009" name="Morph_Endpoints_Monotone" fullname="Atlas.Blades.FieldFit.Tests.LensMathTests.Morph_Endpoints_Monotone" methodname="Morph_Endpoints_Monotone" classname="Atlas.Blades.FieldFit.Tests.LensMathTests" runstate="Runnable" seed="1638645948" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.097953" asserts="0">
+                  <properties>
+                    <property name="Description" value="P3-B01 acceptance: slider endpoints and monotonicity (Master Plan §10.4.3 Slider)" />
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1010" name="Params_Validity" fullname="Atlas.Blades.FieldFit.Tests.LensMathTests.Params_Validity" methodname="Params_Validity" classname="Atlas.Blades.FieldFit.Tests.LensMathTests" runstate="Runnable" seed="537778897" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.000366" asserts="0">
+                  <properties>
+                    <property name="Description" value="P3-B01 acceptance: parameter validity (Master Plan §10.4.3)" />
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1003" name="Rings_10_20_30_Land_5_5_7_0_8_0" fullname="Atlas.Blades.FieldFit.Tests.LensMathTests.Rings_10_20_30_Land_5_5_7_0_8_0" methodname="Rings_10_20_30_Land_5_5_7_0_8_0" classname="Atlas.Blades.FieldFit.Tests.LensMathTests" runstate="Runnable" seed="1133989679" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.000108" asserts="0">
+                  <properties>
+                    <property name="Description" value="P3-B01 acceptance: rings at 5.5, 7.0, 8.0 deg +/- 0.05 (Master Plan §10.4.3)" />
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1005" name="Tanh_K30_Between_30_And_40" fullname="Atlas.Blades.FieldFit.Tests.LensMathTests.Tanh_K30_Between_30_And_40" methodname="Tanh_K30_Between_30_And_40" classname="Atlas.Blades.FieldFit.Tests.LensMathTests" runstate="Runnable" seed="381708887" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.001382" asserts="0">
+                  <properties>
+                    <property name="Description" value="P3-B01 acceptance: tanh K at 30 deg between 30 and 40 (Master Plan §10.4.3; Spec §11.5)" />
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                  <output><![CDATA[P3-B01 tanh K(30) = 35.029
+P3-B01 tanh K(30) = 35.029
+]]></output>
+                </test-case>
+                <test-case id="1008" name="Uniform_AttainsSchwarzBound" fullname="Atlas.Blades.FieldFit.Tests.LensMathTests.Uniform_AttainsSchwarzBound" methodname="Uniform_AttainsSchwarzBound" classname="Atlas.Blades.FieldFit.Tests.LensMathTests" runstate="Runnable" seed="250159634" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.000100" asserts="0">
+                  <properties>
+                    <property name="Description" value="P3-B01 acceptance: uniform lens attains the Schwarz bound (Master Plan §10.4.2)" />
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+              </test-suite>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+    <test-suite type="Assembly" id="1019" name="Atlas.Kernel.Tests.dll" fullname="/private/tmp/claude-501/-Users-lucas-Developer-StormHacks-2026-Blueberries/1f5dd69c-395d-49f7-a84f-71990036bc33/scratchpad/wt/P3-B01/ATLAS/Library/ScriptAssemblies/Atlas.Kernel.Tests.dll" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.045321" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="51091" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1020" name="Atlas" fullname="Atlas" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.044689" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1021" name="Kernel" fullname="Atlas.Kernel" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.044615" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestSuite" id="1022" name="Tests" fullname="Atlas.Kernel.Tests" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.044538" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-suite type="TestFixture" id="1017" name="KernelDependencyTests" fullname="Atlas.Kernel.Tests.KernelDependencyTests" classname="Atlas.Kernel.Tests.KernelDependencyTests" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.044461" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1018" name="KernelReferencesNoOtherAtlasAssembly" fullname="Atlas.Kernel.Tests.KernelDependencyTests.KernelReferencesNoOtherAtlasAssembly" methodname="KernelReferencesNoOtherAtlasAssembly" classname="Atlas.Kernel.Tests.KernelDependencyTests" runstate="Runnable" seed="944589782" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.044186" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+    <test-suite type="Assembly" id="1025" name="Atlas.Link.Tests.dll" fullname="/private/tmp/claude-501/-Users-lucas-Developer-StormHacks-2026-Blueberries/1f5dd69c-395d-49f7-a84f-71990036bc33/scratchpad/wt/P3-B01/ATLAS/Library/ScriptAssemblies/Atlas.Link.Tests.dll" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.045166" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="51091" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1026" name="Atlas" fullname="Atlas" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.045027" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1027" name="Link" fullname="Atlas.Link" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.044963" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestSuite" id="1028" name="Tests" fullname="Atlas.Link.Tests" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.044899" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-suite type="TestFixture" id="1023" name="LinkDependencyTests" fullname="Atlas.Link.Tests.LinkDependencyTests" classname="Atlas.Link.Tests.LinkDependencyTests" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.044795" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1024" name="LinkHasNoEngineOrAtlasReferences" fullname="Atlas.Link.Tests.LinkDependencyTests.LinkHasNoEngineOrAtlasReferences" methodname="LinkHasNoEngineOrAtlasReferences" classname="Atlas.Link.Tests.LinkDependencyTests" runstate="Runnable" seed="765937344" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:06Z" duration="0.044540" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+    <test-suite type="Assembly" id="1031" name="Atlas.Safety.Tests.dll" fullname="/private/tmp/claude-501/-Users-lucas-Developer-StormHacks-2026-Blueberries/1f5dd69c-395d-49f7-a84f-71990036bc33/scratchpad/wt/P3-B01/ATLAS/Library/ScriptAssemblies/Atlas.Safety.Tests.dll" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:07Z" duration="0.173077" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="51091" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1032" name="Atlas" fullname="Atlas" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:07Z" duration="0.172692" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1033" name="Safety" fullname="Atlas.Safety" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:07Z" duration="0.172629" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestSuite" id="1034" name="Tests" fullname="Atlas.Safety.Tests" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:07Z" duration="0.172564" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-suite type="TestFixture" id="1029" name="SafetyDependencyTests" fullname="Atlas.Safety.Tests.SafetyDependencyTests" classname="Atlas.Safety.Tests.SafetyDependencyTests" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:07Z" duration="0.172487" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1030" name="SafetyNeverReachesLinkOrTelemetry" fullname="Atlas.Safety.Tests.SafetyDependencyTests.SafetyNeverReachesLinkOrTelemetry" methodname="SafetyNeverReachesLinkOrTelemetry" classname="Atlas.Safety.Tests.SafetyDependencyTests" runstate="Runnable" seed="1274789976" result="Passed" start-time="2026-10-04 02:10:06Z" end-time="2026-10-04 02:10:07Z" duration="0.172232" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+    <test-suite type="Assembly" id="1037" name="Atlas.Scan.Tests.dll" fullname="/private/tmp/claude-501/-Users-lucas-Developer-StormHacks-2026-Blueberries/1f5dd69c-395d-49f7-a84f-71990036bc33/scratchpad/wt/P3-B01/ATLAS/Library/ScriptAssemblies/Atlas.Scan.Tests.dll" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:07Z" end-time="2026-10-04 02:10:07Z" duration="0.051422" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="51091" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1038" name="Atlas" fullname="Atlas" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:07Z" end-time="2026-10-04 02:10:07Z" duration="0.051259" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1039" name="Scan" fullname="Atlas.Scan" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:07Z" end-time="2026-10-04 02:10:07Z" duration="0.051193" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestSuite" id="1040" name="Tests" fullname="Atlas.Scan.Tests" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:07Z" end-time="2026-10-04 02:10:07Z" duration="0.051124" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-suite type="TestFixture" id="1035" name="ScanDependencyTests" fullname="Atlas.Scan.Tests.ScanDependencyTests" classname="Atlas.Scan.Tests.ScanDependencyTests" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:07Z" end-time="2026-10-04 02:10:07Z" duration="0.051055" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1036" name="ScanReferencesOnlyKernelAndWorld" fullname="Atlas.Scan.Tests.ScanDependencyTests.ScanReferencesOnlyKernelAndWorld" methodname="ScanReferencesOnlyKernelAndWorld" classname="Atlas.Scan.Tests.ScanDependencyTests" runstate="Runnable" seed="1367543137" result="Passed" start-time="2026-10-04 02:10:07Z" end-time="2026-10-04 02:10:07Z" duration="0.050773" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+    <test-suite type="Assembly" id="1043" name="Atlas.World.Tests.dll" fullname="/private/tmp/claude-501/-Users-lucas-Developer-StormHacks-2026-Blueberries/1f5dd69c-395d-49f7-a84f-71990036bc33/scratchpad/wt/P3-B01/ATLAS/Library/ScriptAssemblies/Atlas.World.Tests.dll" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:07Z" end-time="2026-10-04 02:10:07Z" duration="0.041923" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="51091" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1044" name="Atlas" fullname="Atlas" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:07Z" end-time="2026-10-04 02:10:07Z" duration="0.041761" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1045" name="World" fullname="Atlas.World" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:07Z" end-time="2026-10-04 02:10:07Z" duration="0.041698" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestSuite" id="1046" name="Tests" fullname="Atlas.World.Tests" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:07Z" end-time="2026-10-04 02:10:07Z" duration="0.041631" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-suite type="TestFixture" id="1041" name="WorldDependencyTests" fullname="Atlas.World.Tests.WorldDependencyTests" classname="Atlas.World.Tests.WorldDependencyTests" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 02:10:07Z" end-time="2026-10-04 02:10:07Z" duration="0.041562" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1042" name="WorldReferencesOnlyKernel" fullname="Atlas.World.Tests.WorldDependencyTests.WorldReferencesOnlyKernel" methodname="WorldReferencesOnlyKernel" classname="Atlas.World.Tests.WorldDependencyTests" runstate="Runnable" seed="1734753739" result="Passed" start-time="2026-10-04 02:10:07Z" end-time="2026-10-04 02:10:07Z" duration="0.041289" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: [TestRunnerNoThrottle] Restored Interaction Mode after test run.
+<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: [TestRunnerNoThrottle] Restored Interaction Mode after test run.
+Saving results to: /Users/lucas/Library/Application Support/DefaultCompany/ATLAS/TestResults.xml
+Saving results to: /Users/lucas/Library/Application Support/DefaultCompany/ATLAS/TestResults.xml
+]]></output>
+              </test-case>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+  </test-suite>
+</test-run>
