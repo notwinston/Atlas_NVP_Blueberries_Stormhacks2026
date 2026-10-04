@@ -201,7 +201,7 @@ namespace Atlas.Spaces.AlignedCells
 
         void MakeDucks()
         {
-            duckMesh = DuckMesh.Create(kit);
+            duckMesh = CreateDuckMesh(kit);
             duckObjects = new GameObject[MaxDuckViews];
             duckTransforms = new Transform[MaxDuckViews];
             duckMaterials = new Material[MaxDuckViews];
@@ -210,6 +210,15 @@ namespace Atlas.Spaces.AlignedCells
                 duckObjects[d] = MakeObject("Duck" + d, duckMesh, out duckTransforms[d], out _);
                 duckObjects[d].SetActive(false);
             }
+        }
+
+        // The duck as a Mesh (DuckMesh). A kit whose piece is refused is reported once here and the procedural duck is used.
+        static Mesh CreateDuckMesh(KitSet kit)
+        {
+            var data = new AtlasMeshBuilder(1536, 7680);
+            if (!DuckMesh.Build(kit, data, out string error) && error != null)
+                Debug.LogWarning("Atlas: kit piece '" + DuckMesh.KitPiece + "' missing or invalid; using the built-in duck. (" + error + ")");
+            return AtlasMesh.Create(data, "Duck");
         }
 
         /// <summary>

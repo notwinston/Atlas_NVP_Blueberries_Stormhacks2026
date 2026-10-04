@@ -389,6 +389,48 @@ namespace Atlas.Rendering
             if (maxEdge > 0f && radius > maxEdge) Subdivide(maxEdge, capStart);
         }
 
+        // ---- Spheres -----------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// A latitude and longitude sphere with smooth normals, faces outwards, no lines: segments round the axis, rings from
+        /// pole to pole (the rows at the poles are one triangle per segment). Not gridded to maxEdge.
+        /// </summary>
+        public void AddSphere(float3 centre, float radius, int segments, int rings, float2 uv0)
+        {
+            Reserve((segments + 1) * (rings + 1), segments * rings * 6);
+            int first = VertexCount;
+            for (int j = 0; j <= rings; j++)
+            {
+                math.sincos(math.PI * j / rings, out float sinPolar, out float cosPolar);
+                for (int i = 0; i <= segments; i++)
+                {
+                    math.sincos(2f * math.PI * (i % segments) / segments, out float sin, out float cos);
+                    float3 normal = new float3(sinPolar * sin, cosPolar, sinPolar * cos);
+                    AddVertex(centre + radius * normal, normal, uv0, float2.zero, 1f, 0);
+                }
+            }
+            int stride = segments + 1;
+            for (int j = 0; j < rings; j++)
+            {
+                for (int i = 0; i < segments; i++)
+                {
+                    int p00 = first + j * stride + i, p10 = p00 + 1, p01 = p00 + stride, p11 = p01 + 1;
+                    // The top and bottom rows collapse to the poles: one triangle each instead of two.
+                    if (j > 0) AddTriangleOutward(centre, p00, p10, p11);
+                    if (j < rings - 1) AddTriangleOutward(centre, p00, p11, p01);
+                }
+            }
+        }
+
+        /// <summary>Adds the triangle wound so that its front (clockwise, Unity's rule) faces away from centre.</summary>
+        public void AddTriangleOutward(float3 centre, int a, int b, int c)
+        {
+            float3 pa = Vertices[a].Position, pb = Vertices[b].Position, pc = Vertices[c].Position;
+            float3 front = math.cross(pb - pa, pc - pa);
+            if (math.dot(front, (pa + pb + pc) / 3f - centre) >= 0f) AddTriangle(a, b, c);
+            else AddTriangle(a, c, b);
+        }
+
         // ---- Extruded outlines -------------------------------------------------------------------------------
 
         /// <summary>
