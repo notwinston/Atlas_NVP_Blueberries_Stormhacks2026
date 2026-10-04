@@ -171,7 +171,7 @@ namespace Atlas.Spaces.SmallPlanet.Tests
                     {
                         int t = CubeTiling.FaceOf(list[i].Id);
                         Assert.IsTrue(seen.Add(t));
-                        Assert.IsTrue(ExactEq(CubeTiling.Chain(c, t), list[i].Chain));
+                        Assert.IsTrue(ExactEq(CubeTiling.Chain(c, t), list[i].F));
                         int expT = i == 0 ? c : i <= 4 ? CubeTiling.Neighbour(c, i - 1) : CubeTiling.Antipode(c);
                         Assert.AreEqual(expT, t);
                         Assert.AreEqual(i == 0 ? 0 : i <= 4 ? 1 : 2, list[i].GraphDistance);

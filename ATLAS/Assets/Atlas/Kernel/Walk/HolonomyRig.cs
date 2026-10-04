@@ -18,6 +18,7 @@ namespace Atlas.Kernel
         internal static readonly double SinhHyst = Math.Sinh(CrossingHysteresis);
 
         readonly TileStep _step;
+        readonly TileGraph _graph;   // [B09 D9] non-null: crossings follow the graph's own in-radius (any q)
         TileId _tile;
         Iso2 _u;
         double _k, _kTarget, _kFrom, _tau;
@@ -27,6 +28,15 @@ namespace Atlas.Kernel
         public HolonomyRig(TileStep step)
         {
             _step = step ?? throw new ArgumentNullException(nameof(step));
+            _tile = TileId.Zero;
+            _u = Iso2.Identity;
+            LastFrame = long.MinValue;
+        }
+
+        // [B09 D9] Crossing through a TileGraph: ExitEdge, StepMatrix and Neighbour of the graph (q = 5 or 6), same loop as the TileStep form.
+        public HolonomyRig(TileGraph graph)
+        {
+            _graph = graph ?? throw new ArgumentNullException(nameof(graph));
             _tile = TileId.Zero;
             _u = Iso2.Identity;
             LastFrame = long.MinValue;
@@ -123,13 +133,15 @@ namespace Atlas.Kernel
             {
                 for (int n = 0; n < MaxCrossingsPerFrame; n++)
                 {
-                    int best = Exceeds(_u.M.c2);
+                    int best = ExitEdge();
                     if (best < 0) break;
-                    _tile = _step(_tile, best, out Iso2 g);
+                    Iso2 g;
+                    if (_graph != null) { g = _graph.StepMatrix(_tile, best); _tile = _graph.Neighbour(_tile, best); }   // g before the tile changes
+                    else _tile = _step(_tile, best, out g);
                     _u = new Iso2(math.mul(g.Inverse().M, _u.M), -1); // §4.6 U = inverse(G[i])*U
                     crossings++; lastEdge = best;
                 }
-                if (Exceeds(_u.M.c2) >= 0) GuardExhausted++;
+                if (ExitEdge() >= 0) GuardExhausted++;
             }
             return new HolonomyRigResult(frame, true, d, speed, still, crossings, lastEdge, changed);
         }
@@ -140,6 +152,8 @@ namespace Atlas.Kernel
             double ex = k == 0 ? 1 : k == 2 ? -1 : 0, ey = k == 1 ? 1 : k == 3 ? -1 : 0;
             return (p.x * ex + p.y * ey) * CoshR - p.z * SinhR;
         }
+
+        int ExitEdge() => _graph != null ? _graph.ExitEdge(_u) : Exceeds(_u.M.c2);
 
         static int Exceeds(double3 p)
         {
