@@ -10,6 +10,7 @@
         "Atlas.Input",
         "Atlas.Spaces.Portal",
         "Atlas.Spaces.Glued",
+        "Atlas.Spaces.Slicer",
         "Atlas.Rendering",
         "Atlas.Telemetry",
         "Unity.Mathematics",
