@@ -11,6 +11,7 @@
         "Atlas.Safety",
         "Atlas.Link",
         "Unity.InputSystem",
+        "Atlas.Spaces.Glued",
         "Unity.Mathematics"
     ]
 }

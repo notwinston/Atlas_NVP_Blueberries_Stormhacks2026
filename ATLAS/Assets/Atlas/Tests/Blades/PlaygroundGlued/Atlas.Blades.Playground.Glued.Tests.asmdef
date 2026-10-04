@@ -1,0 +1,29 @@
+{
+    "name": "Atlas.Blades.Playground.Glued.Tests",
+    "rootNamespace": "Atlas.Blades.Playground.Glued.Tests",
+    "references": [
+        "Atlas.Blades.Playground",
+        "Atlas.Spaces.Glued",
+        "Atlas.Kernel",
+        "Atlas.Link",
+        "Atlas.World",
+        "Atlas.Rendering",
+        "Atlas.Input",
+        "Atlas.Telemetry",
+        "Unity.Mathematics",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "allowUnsafeCode": true
+}
