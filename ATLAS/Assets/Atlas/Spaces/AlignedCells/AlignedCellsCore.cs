@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using Atlas.Kernel;
 using Atlas.Link;
 using Atlas.World;
@@ -14,6 +15,8 @@ namespace Atlas.Spaces.AlignedCells
         public const string ParamViewDepth = "cells.viewDepth";   // kill switch of §12.2: fewer neighbour cells drawn
         public const string ParamMode = "curved.mode";            // declared by the app (AppParams); 0 = Mode 1, 1 = Mode 2
         public const int ModeCurvedWalk = 0, ModeAlignedCells = 1;
+        public const string EventCross = "cells.cross";           // §10.1.3: one per cell edge crossed
+        public const string EventPostLoop = "cells.postLoop";     // §10.1.3: four or more quarter-turns round one interior post
 
         readonly TileGraph graph = new TileGraph(5);
         ParamEntry viewDepth, mode;
@@ -32,6 +35,9 @@ namespace Atlas.Spaces.AlignedCells
         public bool Remote => remote;
         public int Crossings { get; private set; }            // cell edges crossed since Enter
         public bool EnteredFromCurvedWalk { get; private set; }
+        public PostLoops Loops { get; private set; }           // quarter-turns round the posts of the walker's cell
+        // Where cells.cross and cells.postLoop go; null drops them. The phone's copy only: a Station copy (Remote) logs nothing.
+        public IEventLog Events { get; set; }
 
         // Group "cells" (lane D contract §1.5). Safe to call again: the entry keeps its value.
         public static void DeclareParams(ParamRegistry registry)
@@ -53,6 +59,7 @@ namespace Atlas.Spaces.AlignedCells
             }
             Grid = CellGrid.FromRoom(room);
             Walker = new CellWalker(Grid, graph);
+            Loops = new PostLoops(Grid);
             Instances.Clear();
             Entered = false; remote = false; modeTaken = false; modeArmed = false; shownDepth = -1;
         }
@@ -70,6 +77,7 @@ namespace Atlas.Spaces.AlignedCells
             if (EnteredFromCurvedWalk) Walker.EnterFromCurvedWalk(start, headXZ);
             else Walker.Reset(headXZ, new CellFrame(TileId.Zero, 0));
             Crossings = 0; Entered = true;
+            Loops.Reset(Walker.Cell, Walker.Frame);
             Rebuild();
         }
 
@@ -82,15 +90,25 @@ namespace Atlas.Spaces.AlignedCells
             {
                 var frame = new CellFrame(remoteTile, remoteTurn);
                 var cell = new int2(remoteSheet % Grid.CountX, remoteSheet / Grid.CountX);
-                if (frame != Walker.Frame || !cell.Equals(Walker.Cell)) { Walker.Place(cell, frame); changed = true; }
+                if (frame != Walker.Frame || !cell.Equals(Walker.Cell))
+                {
+                    Walker.Place(cell, frame); changed = true;
+                    Loops.Reset(Walker.Cell, Walker.Frame);
+                }
             }
             else if (IsFinite(headXZ))
             {
-                if (rejected) changed = Walker.Reseat(headXZ);
+                if (rejected)
+                {
+                    // The walker stands somewhere else on the same tile: no post was walked round.
+                    changed = Walker.Reseat(headXZ);
+                    if (changed) Loops.Reset(Walker.Cell, Walker.Frame);
+                }
                 else
                 {
                     int n = Walker.Walk(headXZ);
-                    Crossings += n; changed = n > 0;
+                    for (int i = 0; i < n; i++) OnCrossing(i);
+                    changed = n > 0;
                 }
             }
             if (changed || ViewDepth != shownDepth) { Rebuild(); return true; }
@@ -165,6 +183,25 @@ namespace Atlas.Spaces.AlignedCells
             remoteDepth = math.clamp((int)math.round(state.P3), 0, SightLines.ViewRange);
             remote = true;
         }
+
+        // Crossing i of this frame's Walk: count it, turn the posts round, and log cells.cross and, when due, cells.postLoop.
+        // Allocates only on a crossing (the event text), as the walk.* events of S2 do; a steady frame allocates nothing.
+        void OnCrossing(int i)
+        {
+            Walker.LastCrossing(i, out int2 from, out int dir, out CellFrame entered);
+            Crossings++;
+            bool loop = Loops.Cross(from, dir, entered);
+            if (Events == null) return;
+            int2 to = from + (dir == 0 ? new int2(1, 0) : dir == 1 ? new int2(0, 1) : dir == 2 ? new int2(-1, 0) : new int2(0, -1));
+            Events.LogJson(EventCross, "{\"cell\":" + I(to.y * Grid.CountX + to.x) + ",\"dir\":" + I(dir) + ",\"crossings\":" + I(Crossings)
+                + ",\"tile\":\"" + entered.Tile + "\",\"turn\":" + I(entered.Turn) + "}");
+            if (loop)
+                Events.LogJson(EventPostLoop, "{\"post_x\":" + I(Loops.LastPost.x) + ",\"post_z\":" + I(Loops.LastPost.y)
+                    + ",\"quarter_turns\":" + I(Loops.LastTurns) + ",\"same_tile\":" + (Loops.LastSameTile ? "1" : "0")
+                    + ",\"tile\":\"" + entered.Tile + "\"}");
+        }
+
+        static string I(int v) => v.ToString(CultureInfo.InvariantCulture);
 
         void Rebuild()
         {

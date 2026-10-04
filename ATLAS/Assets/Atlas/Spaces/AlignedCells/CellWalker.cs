@@ -8,20 +8,36 @@ namespace Atlas.Spaces.AlignedCells
     {
         readonly CellGrid grid;
         readonly TileGraph graph;
+        // The crossings of the last Walk, in order (the cell left, the room direction, the frame entered): read by the
+        // cells.cross and cells.postLoop events (Master Plan §10.1.3). Sized once: a Walk crosses at most CountX + CountZ edges.
+        readonly int2[] crossFrom;
+        readonly int[] crossDir;
+        readonly CellFrame[] crossFrame;
 
         public int2 Cell { get; private set; }
         public CellFrame Frame { get; private set; }
         public double2 LastHead { get; private set; }
+        /// <summary>How many cell edges the last <see cref="Walk"/> crossed; 0 after any other call.</summary>
+        public int LastCrossingCount { get; private set; }
 
         public CellWalker(CellGrid grid, TileGraph graph)
         {
             if (graph.Q != 5) throw new ArgumentException("Aligned Cells uses {4,5} only", nameof(graph));
             this.grid = grid; this.graph = graph;
+            int max = grid.CountX + grid.CountZ;
+            crossFrom = new int2[max]; crossDir = new int[max]; crossFrame = new CellFrame[max];
+        }
+
+        /// <summary>Crossing i of the last Walk: the cell left, the room direction (0 +x, 1 +z, 2 -x, 3 -z) and the frame entered.</summary>
+        public void LastCrossing(int i, out int2 from, out int direction, out CellFrame entered)
+        {
+            if ((uint)i >= (uint)LastCrossingCount) throw new ArgumentOutOfRangeException(nameof(i));
+            from = crossFrom[i]; direction = crossDir[i]; entered = crossFrame[i];
         }
 
         public void Reset(double2 headXZ, CellFrame frame)
         {
-            Cell = grid.CellAt(headXZ); Frame = frame; LastHead = headXZ;
+            Cell = grid.CellAt(headXZ); Frame = frame; LastHead = headXZ; LastCrossingCount = 0;
         }
 
         // Master Plan §4.8: switching from Mode 1 keeps the tile id.
@@ -32,7 +48,7 @@ namespace Atlas.Spaces.AlignedCells
         public void Place(int2 cell, CellFrame frame)
         {
             Cell = math.clamp(cell, int2.zero, new int2(grid.CountX - 1, grid.CountZ - 1));
-            Frame = frame; LastHead = grid.CellCentre(Cell);
+            Frame = frame; LastHead = grid.CellCentre(Cell); LastCrossingCount = 0;
         }
 
         // A head displacement the kernel refused (jump, tracking not Normal: KernelStep.Rejected) steps no tile: the walker
@@ -41,7 +57,7 @@ namespace Atlas.Spaces.AlignedCells
         {
             int2 c = grid.CellAt(headXZ);
             bool moved = !c.Equals(Cell);
-            Cell = c; LastHead = headXZ;
+            Cell = c; LastHead = headXZ; LastCrossingCount = 0;
             return moved;
         }
 
@@ -49,6 +65,7 @@ namespace Atlas.Spaces.AlignedCells
         public int Walk(double2 headXZ)
         {
             int2 target = grid.CellAt(headXZ);
+            LastCrossingCount = 0;
             if (target.Equals(Cell)) { LastHead = headXZ; return 0; }
             Span<double> tt = stackalloc double[grid.CountX + grid.CountZ];
             Span<int> dd = stackalloc int[grid.CountX + grid.CountZ];
@@ -74,10 +91,12 @@ namespace Atlas.Spaces.AlignedCells
             var f = Frame; var c = Cell;
             for (int i = 0; i < n; i++)
             {
+                crossFrom[i] = c; crossDir[i] = dd[i];
                 f = f.Cross(graph, dd[i]);
                 c += dd[i] == 0 ? new int2(1, 0) : dd[i] == 1 ? new int2(0, 1) : dd[i] == 2 ? new int2(-1, 0) : new int2(0, -1);
+                crossFrame[i] = f;
             }
-            Frame = f; Cell = c; LastHead = headXZ;
+            Frame = f; Cell = c; LastHead = headXZ; LastCrossingCount = n;
             return n;
         }
 

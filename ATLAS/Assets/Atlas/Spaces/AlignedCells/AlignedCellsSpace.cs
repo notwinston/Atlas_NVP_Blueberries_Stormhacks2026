@@ -62,6 +62,7 @@ namespace Atlas.Spaces.AlignedCells
             AtlasServices.TryGet(out _room);
             AtlasServices.TryGet(out _host);
             AtlasServices.TryGet(out _events);
+            _core.Events = _events;                            // cells.cross and cells.postLoop (Master Plan §10.1.3)
             if (!AtlasServices.TryGet(out _pool)) return;     // no look in this build: nothing to draw with
             _view = new AlignedCellsView(transform, _pool, _core.Grid);
             _dirty = true;
