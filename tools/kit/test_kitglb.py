@@ -206,7 +206,7 @@ def test_face_shade_matches_atlas_shading():
 
 def test_check_piece_accepts_a_closed_piece():
     kitglb.check_piece("landmark", cube(), kitglb.BUDGETS["landmark"])
-    assert kitglb.BUDGETS == {"landmark": 1500, "avatar": 600}
+    assert kitglb.BUDGETS == {"landmark": 1500, "avatar": 600, "duck": 2500}
 
 
 def test_check_piece_refuses_a_piece_over_budget():
