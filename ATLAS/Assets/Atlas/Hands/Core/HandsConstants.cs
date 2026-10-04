@@ -46,8 +46,15 @@ namespace Atlas.Hands
         public const float JointDepthDecides = 0.02f;
         /// <summary>A finger may bend backwards this far before the lift penalises it, degrees.</summary>
         public const float BackwardBendDegrees = 20f;
-        /// <summary>Confidence is capped here when the palm's distance came from the hand's size, not from LiDAR.</summary>
+        /// <summary>Confidence is capped here when the palm's distance came from the hand's size and the hand's size has not been measured yet.</summary>
         public const float ConfidenceWithoutDepth = 0.5f;
+        /// <summary>
+        /// Once the walker's hand size is measured, the size branch is trusted this far: a pressing palm is
+        /// nearer than LiDAR's range, and a press must still be able to fire (it needs <see cref="InteractConfidence"/>).
+        /// </summary>
+        public const float ConfidenceFromMeasuredSize = 0.7f;
+        /// <summary>For this long after a valid palm plane the size branch carries on from it, so nothing jumps where LiDAR ends, seconds.</summary>
+        public const float PlaneMemorySeconds = 1f;
         /// <summary>A hand whose palm is farther from the camera than this is someone else's, metres.</summary>
         public const float MaxHandDistance = 0.9f;
         /// <summary>The walker's hand size relative to the template stays inside this range.</summary>
@@ -69,10 +76,10 @@ namespace Atlas.Hands
         public const float AssociateMetres = 0.20f;
         /// <summary>A lost hand's coasting velocity decays with this time constant, seconds.</summary>
         public const float CoastDecaySeconds = 0.1f;
-        /// <summary>A lost hand starts to fade after this long, seconds.</summary>
-        public const float LossFadeStartSeconds = 0.10f;
-        /// <summary>A lost hand stops being tracked after this long, seconds (the grace period).</summary>
-        public const float LossGraceSeconds = 0.25f;
+        /// <summary>A lost hand holds its pose at full opacity for this long, seconds (the grace period of decision H8).</summary>
+        public const float LossFadeStartSeconds = 0.25f;
+        /// <summary>A lost hand stops being tracked after this long, seconds: the grace period plus the fade.</summary>
+        public const float LossGraceSeconds = 0.40f;
         /// <summary>A hand that returns within the grace period and this distance carries on; otherwise its filter restarts, metres.</summary>
         public const float ReacquireMetres = 0.15f;
         /// <summary>Left or right is the majority of this many labels.</summary>
@@ -115,9 +122,12 @@ namespace Atlas.Hands
 
         // ---- Reach and near panels (section 6.1) ----
 
-        /// <summary>The near anchor sits this far from the head, metres (the default of hands.reach).</summary>
-        public const float ReachMetres = 0.45f;
-        public const float ReachMinMetres = 0.30f, ReachMaxMetres = 0.60f;
+        /// <summary>
+        /// The near anchor sits this far from the rear camera, metres (the default of hands.reach). Measured from
+        /// the camera, not the eyes: a pressing palm is 7 to 13 cm nearer than its fingertip and LiDAR ends at 0.32 m.
+        /// </summary>
+        public const float ReachMetres = 0.48f;
+        public const float ReachMinMetres = 0.40f, ReachMaxMetres = 0.60f;
         /// <summary>The near anchor sits this far below the horizontal through the head, degrees.</summary>
         public const float ReachPitchDegrees = 25f;
         /// <summary>A panel's own layout is multiplied by this in near mode.</summary>
