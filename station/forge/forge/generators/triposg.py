@@ -166,7 +166,8 @@ class TripoSGGenerator:
             return False, self._load_error
         gap = self.weights_gap()
         if gap:
-            return False, f"the model is not loaded yet, and the weights are not complete ({gap}): they are downloaded first"
+            return False, (f"the model is not loaded yet, and the weights are not complete ({gap}): "
+                           "they are downloaded first")
         return False, "the model is not loaded yet"
 
     def gpu(self) -> Optional[str]:

@@ -128,7 +128,8 @@ class FakeRuntime:
         self.pipe = pipe or FakePipe()
         self.modules = set(modules)
         self.fake_torch = FakeTorch(cuda)
-        self.diso_error, self.load_errors, self.download_result, self.gate = diso_error, list(load_errors), download, gate
+        self.diso_error, self.load_errors = diso_error, list(load_errors)
+        self.download_result, self.gate = download, gate
         self.downloads, self.loads, self.repos = [], [], []
 
     def installed(self, module):
