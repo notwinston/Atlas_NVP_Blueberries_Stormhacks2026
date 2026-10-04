@@ -66,6 +66,7 @@ namespace Atlas.Blades.FieldFit
         internal Func<int> FrameSource { set { frameSource = value ?? DefaultFrame; } }
         internal FieldFitSettings Settings { get { return settings; } set { settings = value; } }
         internal LensGuard Guard => guard;
+        internal Texture TestBadgeTexture;     // tests only: a ready badge from this texture, without a font
 
         /// <summary>Master Plan §10.4.5: tap-off. B05 binds the input action here.</summary>
         public void TapOff() { guard?.RequestTapOff(); }
@@ -102,7 +103,7 @@ namespace Atlas.Blades.FieldFit
             // P3-B04 (Master Plan §10.4.6, DV6): the tunnel mask from settings when assigned; none otherwise.
             mask = settings.fieldLossMask != null ? FieldLossMask.FromTexture(settings.fieldLossMask, settings.maskHalfWidthDeg) : FieldLossMask.Absent;
             guard = new LensGuard();
-            badge = LensBadge.Create(rig.EyeGeometry(0), rig.EyeGeometry(1), lut);
+            badge = TestBadgeTexture != null ? LensBadge.CreateForTest(TestBadgeTexture, lut) : LensBadge.Create(settings.badgeFont, rig.EyeGeometry(0), rig.EyeGeometry(1), lut);
             material.SetTexture(FieldFitShaderIDs.LutL, lut.Left);
             material.SetTexture(FieldFitShaderIDs.LutR, lut.Right);
             if (badge.Texture != null) material.SetTexture(FieldFitShaderIDs.Badge, badge.Texture);

@@ -135,7 +135,7 @@ Shader "Hidden/Atlas/FieldFitBlit"
                     if (all(bq >= 0.0) && all(bq <= 1.0))
                     {
                         float4 bd = SAMPLE_TEXTURE2D_LOD(_FFBadge, sampler_FFBadge, bq, 0);
-                        col = lerp(col, bd.rgb, bd.a);
+                        col = col * (1.0 - bd.a) + bd.rgb;   // TMP writes premultiplied alpha
                     }
                 }
                 return float4(col, 1.0);   // 8.

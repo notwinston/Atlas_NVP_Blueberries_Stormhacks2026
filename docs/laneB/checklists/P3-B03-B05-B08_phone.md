@@ -7,7 +7,7 @@ Status: DEFERRED (needs phone A in the closed headset). Items 1-3 belong to P3-B
 
 - B03, B04 and B05 are merged.
 - Lane A has added `Blade_FieldFit.unity` to the build list and calls `LensParamBinding.BindRegistry(registry)` at boot (lane B may not edit `EditorBuildSettings`).
-- The tap binding is present, or item 6 is marked "pending G13 binding".
+- The tap binding is present (`FieldFitFeature.TapOff()` bound to the Confirm action, see `docs/laneB/fieldfit.md` "Integration at G13"), or item 6 is marked "pending G13 binding".
 - Hub and Console are running; the lens panel (D02) or a placeholder is reachable.
 - Release build, Frame Timing Stats on, debugger detached, Metal API Validation off, brightness about 40 %.
 - Phone A in the closed headset, thermal Nominal at the start (record it: ____).

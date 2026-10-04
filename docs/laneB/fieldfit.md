@@ -85,3 +85,23 @@ radial table inverse worst 0.0067 deg (limit 0.02); partial-morph round trip 0.0
 | DV-B04-b | One line in `FieldFitFeature.Init` (owned by B03) builds the mask from `settings.fieldLossMask`; nothing else of B03's files changed. |
 | DV-B04-c | Config (d) treats lane D's placeholder `tunnel10.png` (4 px/deg, README) as M = 64 deg, not the DV6 M = 30 deg: lane D and lane B must agree on one (set `FieldFitSettings.maskHalfWidthDeg` accordingly). `FieldFitSettings.asset` leaves `fieldLossMask` empty (StreamingAssets file, lane D's). |
 | DV-B04-d | The ring test scene is the CPU mirror of the shader (DV14, DV-B03-g). |
+
+## Lens guard (P3-B05)
+
+`LensGuard` (3D distance from the head at lens-on, strictly > 0.5 m, tap flag), `LensBadge` (TextMeshPro mesh drawn once with `DrawMesh` into a
+256 x 64 sRGB target; rect from `LensLut.InvertTangent`: nearest stage-A texel, then Newton on the bilinear interpolant; bounding box of the
+images of the 8 samples of the +-4 deg x +-1 deg box at 15 deg below fixation), `FieldFitSettings.badgeFont` (assigned to LiberationSans SDF).
+Measured (Editor): auto-off 10 of 10 simulated trials in the first frame over 0.5 m (`docs/laneB/evidence/P3-B05/auto_off_sim.txt`).
+
+### Integration at G13
+
+- Tap-off: `Atlas.Input` (placeholder) offers `IActionSource.Triggered(AtlasAction.Confirm)` but no static instance, so lane B ships `FieldFitFeature.TapOff()`.
+  One-line binding for lane A/C: `if (actions.Triggered(AtlasAction.Confirm)) fieldFit.TapOff();` in the frame loop, before `onBeforeRender`.
+- Lane A calls `LensParamBinding.BindRegistry(registry)` at boot (B03).
+
+| Id | Note |
+|---|---|
+| DV-B05-a | `Unity.TextMeshPro` is referenced by `Atlas.Blades.FieldFit` and its tests. The brief says the package is absent from the manifest; it is present transitively (`com.unity.ugui` 2.0.0, TMP Essentials already in `Assets/TextMesh Pro`), so no manifest edit was needed. |
+| DV-B05-b | The blit composites the badge as premultiplied alpha (`col*(1-a) + rgb`) because the TMP distance-field shader writes premultiplied colour. A one-line change to the B03 shader; a white opaque badge is unaffected. |
+| DV-B05-c | Test hook `FieldFitFeature.TestBadgeTexture` gives a ready badge without a font; the real-font path is tested in `Badge_FromFont` (ignored without a graphics device). |
+| DV-B05-d | `Badge_VisibleWhileActive` and `Badge_FromFont` need a graphics device and are ignored on the `-nographics` runner (DV-B03-g). |
