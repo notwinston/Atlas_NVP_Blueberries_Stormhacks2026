@@ -184,10 +184,15 @@ namespace Atlas.E2E.Tests
         public float3 Position = new float3(0f, 1.6f, 0f);
         public quaternion Rotation = quaternion.identity;
         public TrackingState Tracking = TrackingState.Normal;
+        /// <summary>
+        /// The head is the phone's AR camera, which drives the rig; false (the default) is a head from somewhere
+        /// else, as a replay's is. The hands' gate asks which it is (decision R8).
+        /// </summary>
+        public bool Camera;
 
         public string Name { get { return "standing"; } }
         public PoseFrameKind Frame { get { return PoseFrameKind.Room; } }
-        public bool DrivesRig { get { return false; } }
+        public bool DrivesRig { get { return Camera; } }
 
         public bool TryRead(double time, float deltaTime, out HeadPose pose)
         {

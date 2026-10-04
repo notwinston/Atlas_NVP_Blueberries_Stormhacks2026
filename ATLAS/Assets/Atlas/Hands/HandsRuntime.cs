@@ -100,6 +100,11 @@ namespace Atlas.Hands
 
         // Edges and statistics (section 8.1).
         bool _wasLeft, _wasRight;
+        // How far inside the picture each palm was in its hand's last detection. Kept here because the filter's
+        // hand is all zero once it is no longer tracked, which is when the exit is logged and its cause is asked.
+        float _edgeLeft, _edgeRight;
+        // The hand's last enter was counted and not logged: its exit goes the same way.
+        bool _quietLeft, _quietRight;
         double _enterLeft, _enterRight, _lastEventLeft = double.NegativeInfinity, _lastEventRight = double.NegativeInfinity;
         int _suppressedEvents;
         double _activeSince, _lastBench = double.NegativeInfinity;
@@ -320,6 +325,8 @@ namespace Atlas.Hands
             _filter.Advance(now);
             ref readonly TrackedHand left = ref _filter.Hand(HandSide.Left);
             ref readonly TrackedHand right = ref _filter.Hand(HandSide.Right);
+            if (left.Tracked) _edgeLeft = left.EdgeMargin;
+            if (right.Tracked) _edgeRight = right.EdgeMargin;
 
             // Pinch and two hands; a hand that hovers a target does not pinch (section 6.3).
             HandsTouchState inputTouch = InputTouch;
@@ -570,8 +577,8 @@ namespace Atlas.Hands
                 }
             }
 
-            EnterExit(events, now, HandSide.Left, _left.Tracked, ref _wasLeft, ref _enterLeft, ref _lastEventLeft);
-            EnterExit(events, now, HandSide.Right, _right.Tracked, ref _wasRight, ref _enterRight, ref _lastEventRight);
+            EnterExit(events, now, HandSide.Left, _left.Tracked, _edgeLeft, ref _wasLeft, ref _enterLeft, ref _lastEventLeft, ref _quietLeft);
+            EnterExit(events, now, HandSide.Right, _right.Tracked, _edgeRight, ref _wasRight, ref _enterRight, ref _lastEventRight, ref _quietRight);
 
             HandsTouchState touch = InputTouch;
             if (touch.Left.Fired) LogTouch(events, "L", touch.Left.Target);
@@ -604,19 +611,25 @@ namespace Atlas.Hands
             }
         }
 
-        void EnterExit(IEventLog events, double now, HandSide side, bool tracked, ref bool was, ref double entered,
-                       ref double lastEvent)
+        void EnterExit(IEventLog events, double now, HandSide side, bool tracked, float edgeMargin, ref bool was,
+                       ref double entered, ref double lastEvent, ref bool quiet)
         {
             if (tracked == was) return;
             was = tracked;
-            if (tracked) entered = now;
-            // At most one enter and one exit a second for each hand; the rest is counted (section 8.1).
-            if (tracked && now - lastEvent < HandsConstants.EnterExitEventSeconds)
+            if (tracked)
             {
+                entered = now;
+                // At most one enter and one exit a second for each hand, as a pair; the rest is counted (section 8.1).
+                quiet = now - lastEvent < HandsConstants.EnterExitEventSeconds;
+                if (!quiet) lastEvent = now;
+            }
+            if (quiet)
+            {
+                // Neither the enter nor, when it comes, the exit that belongs to it.
                 _suppressedEvents++;
+                if (!tracked) quiet = false;
                 return;
             }
-            if (tracked) lastEvent = now;
             if (events == null) return;
             string hand = side == HandSide.Left ? "L" : "R";
             if (tracked)
@@ -624,10 +637,10 @@ namespace Atlas.Hands
                 events.Log("hands.enter", "hand", hand);
                 return;
             }
-            ref readonly TrackedHand lost = ref _filter.Hand(side);
+            // The cause is where the hand was last seen: at the picture's border it left the view, anywhere else it was lost.
             _json.Length = 0;
             _json.Append("{\"hand\":\"").Append(hand).Append("\",\"cause\":\"")
-                 .Append(lost.EdgeMargin < HandsConstants.EdgeFadeBand ? "edge" : "lost")
+                 .Append(edgeMargin < HandsConstants.EdgeFadeBand ? "edge" : "lost")
                  .Append("\",\"visibleMs\":").Append((long)math.round((now - entered) * 1000.0)).Append('}');
             events.LogJson("hands.exit", _json.ToString());
         }
