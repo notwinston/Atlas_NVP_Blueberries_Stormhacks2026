@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   bumpName, categoryName, clamp, clampParam, decimalsFor, fixed, formatCount, formatDuration, formatMs, formatOffset, formatParam,
-  formatPercent, roundHalfAway, spaceBuilt, spaceLabel, stepFor, thermalAdvice, thermalName, tierLabel
+  formatPercent, roundHalfAway, spaceLabel, stepFor, thermalAdvice, thermalName, tierLabel
 } from '../hub/wwwroot/js/format.js';
 
 test('clamp holds a value in its range and maps NaN to the minimum', () => {
@@ -87,8 +87,6 @@ test('names of spaces, tiers, thermal states, bump levels and categories', () =>
   assert.equal(spaceLabel(0), 'S0 Home');
   assert.equal(spaceLabel(5), 'S5 Impossible Rooms');
   assert.equal(spaceLabel(9), 'S?');
-  assert.equal(spaceBuilt(1), true);
-  assert.equal(spaceBuilt(3), false);
   assert.equal(tierLabel(-1), 'auto');
   assert.match(tierLabel(2), /^tier 2 \(0\.6/);
   assert.equal(thermalName(2), 'serious');

@@ -285,7 +285,12 @@ def read_trx(folder):
             method = unit.find("t:TestMethod", TRX)
             classes[unit.get("id")] = method.get("className") if method is not None else ""
         for result in root.findall(".//t:UnitTestResult", TRX):
-            results[classes.get(result.get("testId"), "") + "." + result.get("testName")] = result.get("outcome")
+            name = classes.get(result.get("testId"), "") + "." + result.get("testName")
+            key, n = name, 1
+            while key in results:   # two assemblies may hold a test of the same full name: neither may hide the other
+                n += 1
+                key = "%s #%d" % (name, n)
+            results[key] = result.get("outcome")
     return results
 
 

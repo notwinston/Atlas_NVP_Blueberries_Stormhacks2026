@@ -4,8 +4,8 @@
 
 import { Feed } from './feed.js';
 import {
-  bumpName, fixed, formatCount, formatMs, formatOffset, formatPercent, spaceBuilt, spaceLabel, thermalAdvice,
-  thermalName, tierLabel, SPACE_COUNT
+  bumpName, fixed, formatCount, formatMs, formatOffset, formatPercent, spaceLabel, thermalAdvice, thermalName,
+  tierLabel, SPACE_COUNT
 } from './format.js';
 import {
   SendThrottle, buildGroups, displayValue, findControl, isPresetName, readEcho, requestValue
@@ -521,13 +521,6 @@ function buildOperator() {
     button.type = 'button';
     button.dataset.space = String(id);
     button.textContent = spaceLabel(id);
-    if (!spaceBuilt(id)) {
-      button.classList.add('unbuilt');
-      const small = document.createElement('small');
-      small.textContent = 'not in this build';
-      button.append(small);
-      button.title = 'The phone will refuse this space: its geometry is not built yet.';
-    }
     button.addEventListener('click', () => runCommand('space', { space: id }));
     spaces.append(button);
   }

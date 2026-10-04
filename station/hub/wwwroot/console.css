@@ -182,7 +182,6 @@ button:active:not(:disabled) { background: var(--border-strong); }
 button:disabled, input:disabled, select:disabled { opacity: 0.45; cursor: not-allowed; }
 button.quiet { background: transparent; color: var(--muted); }
 button.current { border-color: var(--accent); background: #17304a; color: #fff; }
-button.unbuilt { color: var(--muted); border-style: dashed; }
 input[type="text"], input[type="number"] { min-width: 0; }
 input::placeholder { color: #6d7785; }
 select[size] { padding: 4px; width: 100%; }

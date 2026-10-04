@@ -118,7 +118,7 @@ namespace Atlas.Rendering
         /// Step 6 of the frame: the head position, the metres per kernel unit, the time and the fog cross-fade.
         /// Writes every global, so the look survives anything that resets shader state. Allocates nothing.
         /// </summary>
-        /// <param name="headPositionWS">Raw head position (the eye midpoint), world, metres.</param>
+        /// <param name="headPositionWS">Head position (the eye midpoint), world, metres: the filtered sample that stepped the kernel (FrameContext.HeadPosition).</param>
         /// <param name="metresPerUnit">IWalkerKernel.MetresPerUnit; 1 in a flat space.</param>
         /// <param name="timeSeconds">The frame's time, seconds.</param>
         /// <param name="dt">The frame's duration, seconds.</param>

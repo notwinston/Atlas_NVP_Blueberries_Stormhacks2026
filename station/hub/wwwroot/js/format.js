@@ -124,11 +124,6 @@ export function spaceLabel(id) {
 
 export const SPACE_COUNT = SPACE_NAMES.length;
 
-/** Spaces whose geometry is lane B's and which this build cannot enter; the phone answers space.refused. */
-export function spaceBuilt(id) {
-  return id !== 2 && id !== 3 && id !== 4;
-}
-
 const THERMAL = ['nominal', 'fair', 'serious', 'critical'];
 
 /** iOS thermal state 0 to 3 by name. */

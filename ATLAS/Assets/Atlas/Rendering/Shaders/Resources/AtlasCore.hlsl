@@ -24,7 +24,7 @@ CBUFFER_END
 // Camera-wide values, set by AtlasLook and AtlasPalette. One value for both eyes.
 TEXTURE2D(_AtlasPalette);
 SAMPLER(sampler_AtlasPalette);
-float4 _HeadPosWS;        // xyz = head position (the eye midpoint), world, metres
+float4 _HeadPosWS;        // xyz = head position (the eye midpoint, the filtered sample that stepped the kernel), world, metres
 float  _HypL;             // metres per kernel unit
 float4 _AtlasFogColor;    // rgb linear; also the background at and below the horizon
 float4 _AtlasFogParams;   // x = fog start in metres from the head on the floor; y = 1 / (end - start)
