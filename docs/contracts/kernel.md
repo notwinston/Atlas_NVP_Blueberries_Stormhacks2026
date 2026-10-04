@@ -337,7 +337,12 @@ The seed never uses `string.GetHashCode()` or the default struct hash. Test `Til
 ### 5.8 Other values of q
 
 - **q = 6** [P1-B04]: tolerance-hash ids. Frames are doubles snapped to the {4,6} lattice (integers; √3·integers off the diagonal blocks). The id is the rounded centre (Xu = round(x/√3), Yu = round(z/√3), Tu = round(w)), with Xv = Yv = Tv = 0. Invariant 3(X²+Y²) − T² = −1. Tile zero (0,0,0,0,1,0) keeps the identity frame. Canonical frame: the lexicographically smallest (a11, a21, c1/√3) over M·R^j. Range ≈ 26 straight steps; beyond that, InvalidOperationException or OverflowException. Content seed: §5.7 unchanged.
-- **q = 3** (S4): six tiles, one per face of a cube blown onto the sphere. As in B.1, `tileId` carries the face index in word 0 and 0 in the other words. `P1-B08` fixes the face numbering and adds it here before it merges.
+- **q = 3** (S4): six tiles, one per face of a cube blown onto the sphere. As in B.1, `tileId` carries the face index in word 0 and 0 in the other words (`CubeTiling.FaceId`, `Atlas.Kernel`, `P1-B08`). Face numbering is settled:
+  - Exact integer matrices (A.2 with cos(π/2) = 0, sin(π/2) = 1): R = Rot(+90°) = [[0,−1,0],[1,0,0],[0,0,1]], T = Boost((π/2, 0), +1) = [[0,0,1],[0,1,0],[−1,0,0]], H = diag(−1,−1,1), S_k = R^k·T·H.
+  - Frames Φ0 = I, Φ(k+1) = S_k for k = 0..3, Φ5 = S_0·S_2. Centres Φ_f·o: 0 (0,0,1), 1 (1,0,0), 2 (0,1,0), 3 (−1,0,0), 4 (0,−1,0), 5 (0,0,−1).
+  - Neighbours N[f][k], k = edge 0..3: f0 {1,2,3,4}, f1 {0,4,5,2}, f2 {0,1,5,3}, f3 {0,2,5,4}, f4 {0,3,5,1}, f5 {1,4,3,2}. Antipodes 0↔5, 1↔3, 2↔4.
+  - Step(f,k) = Φ_fᵀ·Φ_N (neighbour frame → face frame) = S_k·R^J with J[f] = f0 {0,0,0,0}, f1 {0,1,0,3}, f2 {3,1,1,3}, f3 {2,1,2,3}, f4 {1,1,3,3}, f5 {2,2,2,2}. The edge of N that leads back is (4 − J) mod 4.
+  - `VisibleSet` always returns all six faces: the centre, its four neighbours in edge order, then the antipode.
 - **q = 4** (the dial's flat snap): the plan defines no tile graph for it.
 - `TileId.Step` is the {4,5} step. For q = 3 and q = 6, neighbours come from `ITileGraph`. Lane B may add lane-internal helpers that are not part of this contract.
 
@@ -388,7 +393,7 @@ float3 AtlasWarp(float3 positionOS);          // [P1-X06: name]  input metres, o
 ### 6.3 What the shared shader does with the output (hand-over to lane A)
 
 - **Geodesic distance for free.** In modes 1 and 2 the log map puts every vertex at its true distance from the head, so `length(posWS.xz − _HeadPosWS.xz) / _HypL` is the geodesic distance in units of L (or R) [derived; R1 §F.6]. The fog in `AtlasCore.hlsl` uses it per vertex, interpolated: it starts at ρ − 1 and is fully opaque at ρ = `curved.cullRho` (§8.5). The fog's ids are lane A's.
-- **Small Planet** (`P1-B08`): in spherical mode the fog is opaque at 0.8π, and fragments whose interpolated geodesic distance exceeds 2.6 rad are discarded, which prevents smeared triangles near the antipode. The discard sits beside the fog in `AtlasCore.hlsl`, behind `_WarpMode == 2`.
+- **Small Planet** (`P1-B08`): in spherical mode the fog is opaque at 0.8π, and fragments whose interpolated geodesic distance exceeds 2.6 rad are discarded, which prevents smeared triangles near the antipode. The discard sits beside the fog in `AtlasCore.hlsl`, behind `_WarpMode == 2`. [P1-B08] Fog starts at 0.5π and is opaque at 0.8π, in units of R (`planet.fogRho` moves the opaque end within [0.5π, 0.8π], start = opaque − 0.3π). The discard compares the interpolated per-vertex geodesic distance g = |posWS.xz − _HeadPosWS.xz| / _HypL with 2.6. `LogS2` returns distance π at the exact antipode (0,0,−1) instead of the head, as `Geometry2.Log` does.
 - **No keyword.** The mode is a per-material number (§8.3: no new keyword without lane A).
 
 ### 6.4 CPU side [plan, §8.3]

@@ -33,7 +33,8 @@ float3 ExpS2(float2 t)
 float2 LogS2(float3 p)
 {
     float s = length(p.xy);
-    return s > 1e-6 ? p.xy * (atan2(s, p.z) / s) : p.xy;
+    if (s > 1e-6) return p.xy * (atan2(s, p.z) / s);
+    return p.z < 0.0 ? float2(3.14159265, 0.0) : p.xy; // A.2 at the cut point: distance pi, as Geometry2.Log
 }
 // Master Plan §4.6 / §8.3: object position in, world position out
 float3 AtlasWarp(float3 positionOS)
