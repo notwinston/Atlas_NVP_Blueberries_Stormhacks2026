@@ -1,9 +1,10 @@
 #if !ATLAS_HEADLESS
 using System;
+using Atlas.Kernel;
 using NUnit.Framework;
 using Unity.Mathematics;
-using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine;
 
 namespace Atlas.Rendering.Tests.Look
 {

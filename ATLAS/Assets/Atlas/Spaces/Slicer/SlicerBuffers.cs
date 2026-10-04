@@ -1,5 +1,6 @@
 using System;
 using Atlas.Kernel.FourD;
+using Atlas.Kernel;
 using Atlas.Rendering;
 using Unity.Collections;
 using Unity.Mathematics;

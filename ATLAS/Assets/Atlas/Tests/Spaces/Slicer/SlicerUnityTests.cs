@@ -28,7 +28,7 @@ namespace Atlas.Spaces.Tests
             {
                 Vertices = buffers.Vertices, Tetrahedra = buffers.Tetrahedra, TetCell = buffers.TetCell, CellUv = buffers.CellUv,
                 ModelToSlice = m, Translation = t, Normal = new float4(0f, 0f, 0f, 1f), Offset = offset,
-                Centre = Centre, Scale = 0.5f, Light = Atlas.Rendering.AtlasShading.LightDirection,
+                Centre = Centre, Scale = 0.5f, Light = Atlas.Kernel.AtlasShading.LightDirection,
                 ScratchPositions = buffers.ScratchPositions, ScratchNormals = buffers.ScratchNormals,
                 ScratchCells = buffers.ScratchCells, OutVertices = buffers.SliceVertices,
                 OutBounds = buffers.SliceBounds, OutCounts = buffers.SliceCounts,
@@ -78,7 +78,7 @@ namespace Atlas.Spaces.Tests
                 {
                     Vertices = buffers.Vertices, Triangles = buffers.ShadowTriangles, TriangleCount = buffers.ShadowTriangleCount,
                     ModelToSlice = m, Translation = t, Perspective = true, Focal = 2f,
-                    Centre = Centre, Scale = 0.5f, Light = Atlas.Rendering.AtlasShading.LightDirection,
+                    Centre = Centre, Scale = 0.5f, Light = Atlas.Kernel.AtlasShading.LightDirection,
                     OutVertices = buffers.ShadowVertices, OutBounds = buffers.ShadowBounds,
                 }.Schedule().Complete();
                 Assert.That(buffers.ShadowTriangleCount, Is.GreaterThan(0));

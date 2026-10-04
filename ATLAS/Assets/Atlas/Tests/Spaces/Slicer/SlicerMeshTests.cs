@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Atlas.Kernel.FourD;
+using Atlas.Kernel;
 using Atlas.Rendering;
 using Atlas.Spaces.Slicer;
 using NUnit.Framework;

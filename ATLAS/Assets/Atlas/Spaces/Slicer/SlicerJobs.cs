@@ -1,7 +1,8 @@
+using Atlas.Kernel;
 using Atlas.Rendering;
 using Unity.Burst;
-using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Profiling;

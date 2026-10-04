@@ -20,6 +20,11 @@ namespace Atlas.Kernel
         /// <summary>Line coordinates: a line is drawn wherever either component crosses an integer. Offset 36.</summary>
         public float2 Uv1;
 
+        /// <summary>The baked shade, COLOR.r.</summary>
+        public byte Shade => (byte)(Color & 255u);
+        /// <summary>The line weight, COLOR.g.</summary>
+        public byte LineWeight => (byte)((Color >> 8) & 255u);
+
         /// <summary>Size of one vertex in bytes.</summary>
         public const int Stride = 44;
 

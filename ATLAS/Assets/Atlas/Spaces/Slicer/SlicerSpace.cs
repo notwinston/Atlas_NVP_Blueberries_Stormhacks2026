@@ -297,7 +297,7 @@ namespace Atlas.Spaces.Slicer
                     Offset = offset,
                     Centre = m_Layout.Centre,
                     Scale = m_Layout.Radius,
-                    Light = Atlas.Rendering.AtlasShading.LightDirection,
+                    Light = Atlas.Kernel.AtlasShading.LightDirection,
                     ScratchPositions = m_Buffers.ScratchPositions,
                     ScratchNormals = m_Buffers.ScratchNormals,
                     ScratchCells = m_Buffers.ScratchCells,
@@ -329,7 +329,7 @@ namespace Atlas.Spaces.Slicer
                     Focal = Projector4D.DefaultFocal,
                     Centre = m_Layout.Centre,
                     Scale = m_Layout.Radius,
-                    Light = Atlas.Rendering.AtlasShading.LightDirection,
+                    Light = Atlas.Kernel.AtlasShading.LightDirection,
                     OutVertices = m_Buffers.ShadowVertices,
                     OutBounds = m_Buffers.ShadowBounds,
                 };

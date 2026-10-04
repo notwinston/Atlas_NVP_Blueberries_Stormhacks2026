@@ -1,5 +1,6 @@
-using System;
 using System.Collections.Generic;
+using System;
+using Atlas.Kernel;
 using Unity.Mathematics;
 
 namespace Atlas.Rendering

@@ -1,6 +1,7 @@
+using Atlas.Kernel;
 using Unity.Collections;
-using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine;
 
 namespace Atlas.Rendering
 {

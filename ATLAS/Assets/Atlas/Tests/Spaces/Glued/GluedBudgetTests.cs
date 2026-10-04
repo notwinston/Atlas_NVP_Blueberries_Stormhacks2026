@@ -1,8 +1,9 @@
-using NUnit.Framework;
-using Atlas.Rendering;
+using Atlas.Kernel;
 using Atlas.Rendering.Room;
+using Atlas.Rendering;
 using Atlas.Spaces.Glued;
 using Atlas.World;
+using NUnit.Framework;
 using Unity.Mathematics;
 
 namespace Atlas.Spaces.Tests
