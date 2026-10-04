@@ -26,7 +26,7 @@ Shader "Hidden/Atlas/HexFlip"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
             // HexDome.FlipSeconds, HexDome.OutlineSeconds and HexDome.TileCount.
-            #define FLIP_SECONDS 0.6
+            #define FLIP_SECONDS 0.45
             #define OUTLINE_SECONDS 0.2
             #define TILE_COUNT 92
 
@@ -137,10 +137,10 @@ Shader "Hidden/Atlas/HexFlip"
                     float3 uvf = FaceUv(input.backDir);
                     colour = SAMPLE_TEXTURE2D_ARRAY(_NewStill, sampler_NewStill, uvf.xy, uvf.z).rgb;
                 }
-                // A light outline round a tile whose turn has come, and a turning tile darkens a little as it
+                // A black outline round a tile whose turn has come, and a turning tile darkens a little as it
                 // goes edge on.
                 half seam = smoothstep(0.88, 0.98, input.rimTurn.x) * input.rimTurn.z;
-                colour = lerp(colour, half3(1.0, 1.0, 1.0), seam * 0.22);
+                colour = lerp(colour, half3(0.0, 0.0, 0.0), seam * 0.85);
                 colour *= 1.0 - 0.35 * sin(PI * input.rimTurn.y);
                 return half4(colour, 1.0);
             }

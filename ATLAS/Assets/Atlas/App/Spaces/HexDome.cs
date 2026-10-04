@@ -22,10 +22,10 @@ namespace Atlas.App
         /// <summary>Metres from the head. The stills are painted at this distance, so it is about where the walls are.</summary>
         public const float Radius = 2.5f;
         /// <summary>Seconds one tile takes to turn over.</summary>
-        public const float FlipSeconds = 0.6f;
-        /// <summary>Seconds from a tile starting to turn to its neighbours starting: three quarters of the way
-        /// over, so each ring is seen to set off the next.</summary>
-        public const float RingSeconds = 0.45f;
+        public const float FlipSeconds = 0.45f;
+        /// <summary>Seconds from a tile starting to turn to its neighbours starting: two thirds of the way over,
+        /// so each ring is seen to set off the next.</summary>
+        public const float RingSeconds = 0.3f;
         /// <summary>A tile's outline comes up over this long just before it turns, and not before.</summary>
         public const float OutlineSeconds = 0.2f;
 

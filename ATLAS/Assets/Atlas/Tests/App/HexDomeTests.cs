@@ -103,7 +103,7 @@ namespace Atlas.App.Tests
             // Gradual: several rings, the furthest straight behind.
             Assert.That(outer, Is.GreaterThanOrEqualTo(5));
             Assert.That(rings[s_Dome.TileAt(new float3(0f, 0f, -1f))], Is.GreaterThanOrEqualTo(outer - 1));
-            Assert.That(HexDome.RevealSeconds(outer), Is.InRange(3f, 5f), "slow enough to watch it spread");
+            Assert.That(HexDome.RevealSeconds(outer), Is.InRange(2.5f, 3.5f), "slow enough to watch it spread");
         }
 
         [Test]
