@@ -29,6 +29,7 @@ namespace Atlas.App
         float _a, _b;
         float _angle;
         float _time;
+        float _hold;
 
         public string Name { get { return SourceName; } }
         public PoseFrameKind Frame { get { return PoseFrameKind.Room; } }
@@ -54,6 +55,17 @@ namespace Atlas.App
             if (standing || math.max(_a, _b) < MinHalfAxis) _a = _b = 0f;
             _angle = 0f;
             _time = 0f;
+            _hold = 0f;
+        }
+
+        /// <summary>Seconds the head still stands where it is, looking about, before it walks on.</summary>
+        public float HoldSeconds { get { return _hold; } }
+
+        /// <summary>Stands where the head is for this many seconds from now: the gaze goes on sweeping, the floor
+        /// point does not move. The dial's curvature ramps only while the walker stands (section 4.6).</summary>
+        public void HoldFor(float seconds)
+        {
+            _hold = math.max(0f, seconds);
         }
 
         public bool TryRead(double time, float deltaTime, out HeadPose pose)
@@ -73,7 +85,10 @@ namespace Atlas.App
                 float s, c;
                 math.sincos(_angle, out s, out c);
                 float tangent = math.sqrt(_a * _a * s * s + _b * _b * c * c);
-                _angle += Speed * dt / math.max(tangent, 0.05f);
+                // A hold spends its seconds first; what is left of the frame is walked.
+                float walked = math.max(0f, dt - _hold);
+                _hold = math.max(0f, _hold - dt);
+                _angle += Speed * walked / math.max(tangent, 0.05f);
                 if (_angle > 2f * math.PI) _angle -= 2f * math.PI;
                 math.sincos(_angle, out s, out c);
                 floor = new float2(_a * c, _b * s);

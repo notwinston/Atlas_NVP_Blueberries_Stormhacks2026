@@ -13,6 +13,9 @@ namespace Atlas.App
         bool PrepareRoom();
         /// <summary>Sets the parameters of a layout before its space is entered, or while it is.</summary>
         void ApplyVariant(PerfVariant variant);
+        /// <summary>The step's space was just entered: a head the run drives stands still for this many seconds.
+        /// A tracked or replayed head is not the run's to stop.</summary>
+        void Stand(float seconds);
         /// <summary>True while the space is entered and no switch is under way.</summary>
         bool InSpace(SpaceId space);
         /// <summary>Asks SpaceLab for the space. False when refused; the core asks again.</summary>
@@ -212,7 +215,11 @@ namespace Atlas.App
                     if (_driver.InSpace(step.Space))
                     {
                         if (step.Kind == PerfStepKind.Enter) NextStep();
-                        else Enter(PerfTourPhase.Settling);
+                        else
+                        {
+                            if (step.StandSeconds > 0f) _driver.Stand(step.StandSeconds);
+                            Enter(PerfTourPhase.Settling);
+                        }
                     }
                     else if (elapsed > SwitchTimeoutSeconds)
                     {
@@ -223,7 +230,7 @@ namespace Atlas.App
                     break;
 
                 case PerfTourPhase.Settling:
-                    if (elapsed >= _schedule.SettleSeconds) Enter(PerfTourPhase.Measuring);
+                    if (elapsed >= _schedule.SettleOf(in step)) Enter(PerfTourPhase.Measuring);
                     break;
 
                 case PerfTourPhase.Measuring:

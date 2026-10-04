@@ -3,16 +3,19 @@ using Atlas.App;
 using Atlas.Kernel;
 using Atlas.Link;
 using Atlas.Rendering;
+using Atlas.Spaces.AlignedCells;
+using Atlas.Spaces.CurvedWalk;
 using Atlas.Spaces.Glued;
 using Atlas.Spaces.Home;
 using Atlas.Spaces.Portal;
 using Atlas.Spaces.Slicer;
+using Atlas.Spaces.SmallPlanet;
 using Atlas.World;
 using Unity.Mathematics;
 
 namespace Atlas.E2E.Tests
 {
-    // The four built spaces as SpaceLab drives them, with no engine. Each module here is the space's own
+    // The seven spaces as SpaceLab drives them, with no engine. Each module here is the space's own
     // engine-free core behind ISpaceModule, called in the order its MonoBehaviour adapter calls it; what the
     // adapters add on top (meshes, materials, renderers) needs Unity and is left to the Unity-side check.
 
@@ -327,24 +330,170 @@ namespace Atlas.E2E.Tests
     }
 
     /// <summary>
+    /// S2 Curved Walk: <see cref="CurvedWalkCore"/> on the app's one walker kernel, called as CurvedWalkSpace
+    /// calls it. The core never steps the kernel; the frame loop does, at step 4.
+    /// </summary>
+    sealed class CurvedWalkModule : ISpaceModule, ISpaceWorld
+    {
+        readonly ISpaceHost _host;
+        readonly IDialKernel _kernel;
+        readonly IFrameLoop _loop;
+        readonly IEventLog _events;
+
+        public CurvedWalkModule(ISpaceHost host, IDialKernel kernel, IFrameLoop loop, IEventLog events)
+        {
+            _host = host;
+            _kernel = kernel;
+            _loop = loop;
+            _events = events;
+        }
+
+        public readonly CurvedWalkCore Core = new CurvedWalkCore();
+        /// <summary>What the walker asks for in the next Tick; cleared when taken.</summary>
+        public CurvedWalkInput Input;
+
+        public SpaceId Id { get { return SpaceId.CurvedWalk; } }
+        public bool Registered { get { return false; } }
+
+        public long WorldSeed { get { return CurvedWalkCore.WorldSeed; } }
+        public int GeneratorVersion { get { return CurvedWalkCore.GeneratorVersion; } }
+        public string ContentHash { get { return Core.ContentHash; } }
+
+        public void Configure(RoomModel room, ParamRegistry registry)
+        {
+            Core.Configure(room, registry, _events);
+            Core.RequestSwitch = _host.RequestSwitch;
+            Core.WorldChanged = _host.BumpWorldVersion;
+        }
+
+        public void Enter(in WalkerPose start)
+        {
+            Core.Enter(_kernel);
+            Core.Register(_loop.Current.HeadPosition.xz);
+        }
+
+        public void Tick(in FrameContext frame)
+        {
+            if (!Core.Entered) return;
+            CurvedWalkInput asked = Input;
+            Input = default(CurvedWalkInput);
+            Core.Tick(in frame, in asked);
+        }
+
+        public void Exit() { Core.Exit(); }
+        public void WriteState(ref StateMessage state) { Core.WriteState(ref state); }
+    }
+
+    /// <summary>S3 Aligned Cells: <see cref="AlignedCellsCore"/>, called as AlignedCellsSpace calls it. The kernel stays flat.</summary>
+    sealed class AlignedCellsModule : ISpaceModule
+    {
+        readonly ISpaceHost _host;
+        readonly IFrameLoop _loop;
+
+        public AlignedCellsModule(ISpaceHost host, IFrameLoop loop)
+        {
+            _host = host;
+            _loop = loop;
+        }
+
+        public readonly AlignedCellsCore Core = new AlignedCellsCore();
+        /// <summary>The pose SpaceLab entered the space with.</summary>
+        public WalkerPose Start;
+
+        public SpaceId Id { get { return SpaceId.AlignedCells; } }
+        public bool Registered { get { return true; } }
+
+        public void Configure(RoomModel room, ParamRegistry registry) { Core.Configure(room, registry); }
+
+        public void Enter(in WalkerPose start)
+        {
+            Start = start;
+            float3 head = _loop.Current.HeadPosition;
+            Core.Enter(in start, new double2(head.x, head.z));
+        }
+
+        public void Tick(in FrameContext frame)
+        {
+            if (!Core.Entered) return;
+            Core.Tick(new double2(frame.HeadPosition.x, frame.HeadPosition.z), frame.Kernel.Rejected);
+            if (Core.PollModeSwitch() && !_host.RequestSwitch(SpaceId.CurvedWalk)) Core.RefuseModeSwitch();
+        }
+
+        public void Exit() { Core.Exit(); }
+        public void WriteState(ref StateMessage state) { Core.WriteState(ref state); }
+    }
+
+    /// <summary>S4 Small Planet: <see cref="SmallPlanetCore"/> on the app's kernel at q = 3, called as SmallPlanetSpace calls it.</summary>
+    sealed class SmallPlanetModule : ISpaceModule
+    {
+        readonly ISpaceHost _host;
+        readonly IDialKernel _kernel;
+        readonly IFrameLoop _loop;
+
+        public SmallPlanetModule(ISpaceHost host, IDialKernel kernel, IFrameLoop loop)
+        {
+            _host = host;
+            _kernel = kernel;
+            _loop = loop;
+        }
+
+        public readonly SmallPlanetCore Core = new SmallPlanetCore();
+        /// <summary>The last event of the 3-corner walk.</summary>
+        public LapEvent LastEvent;
+
+        public SpaceId Id { get { return SpaceId.SmallPlanet; } }
+        public bool Registered { get { return false; } }
+
+        public void Configure(RoomModel room, ParamRegistry registry) { Core.Configure(room, registry); }
+
+        public void Enter(in WalkerPose start)
+        {
+            float3 head = _loop.Current.HeadPosition;
+            Core.Enter(_kernel, new double2(head.x, head.z));
+        }
+
+        public void Tick(in FrameContext frame)
+        {
+            if (!Core.Entered) return;
+            LapEvent ev = Core.Tick(frame.Walker, _kernel.Still, false, false);
+            if (ev != LapEvent.None) LastEvent = ev;
+            if (Core.RadiusChanged) _host.BumpWorldVersion();
+            if (Core.SwitchWanted && !_host.RequestSwitch(SpaceId.CurvedWalk)) Core.SwitchRefused();
+        }
+
+        public void Exit() { Core.Exit(); }
+        public void WriteState(ref StateMessage state) { Core.WriteState(ref state); }
+    }
+
+    /// <summary>
     /// Makes the modules above for SpaceLab, the way the scene loader makes the MonoBehaviour ones: a module
-    /// is ready on the frame after it was asked for. The three spaces of lane B are not built and are refused.
+    /// is ready on the frame after it was asked for. All seven spaces are in this build.
     /// </summary>
     sealed class RehearsalSpaceLoader : ISpaceLoader
     {
         ISpaceHost _host;
+        IDialKernel _kernel;
+        IFrameLoop _loop;
         SpaceId _target;
         bool _begun;
 
         public ISpaceModule Last { get; private set; }
         public int Loads { get; private set; }
         public int Unloads { get; private set; }
+        /// <summary>The event log the curved spaces write walk.* to; set once the link is made.</summary>
+        public IEventLog Events;
 
-        public void Bind(ISpaceHost host) { _host = host; }
+        /// <summary>What a space finds in AtlasServices on the phone: the host, the one kernel and the frame loop.</summary>
+        public void Bind(ISpaceHost host, IDialKernel kernel, IFrameLoop loop)
+        {
+            _host = host;
+            _kernel = kernel;
+            _loop = loop;
+        }
 
         public bool IsAvailable(SpaceId id)
         {
-            return id == SpaceId.Home || id == SpaceId.Glued || id == SpaceId.Portal || id == SpaceId.Slicer;
+            return (int)id >= 0 && (int)id < SpaceIds.Count;
         }
 
         public void Begin(SpaceId id)
@@ -362,6 +511,9 @@ namespace Atlas.E2E.Tests
             {
                 case SpaceId.Home: module = new HomeModule(); break;
                 case SpaceId.Glued: module = new GluedModule(_host); break;
+                case SpaceId.CurvedWalk: module = new CurvedWalkModule(_host, _kernel, _loop, Events); break;
+                case SpaceId.AlignedCells: module = new AlignedCellsModule(_host, _loop); break;
+                case SpaceId.SmallPlanet: module = new SmallPlanetModule(_host, _kernel, _loop); break;
                 case SpaceId.Portal: module = new PortalModule(_host); break;
                 case SpaceId.Slicer: module = new SlicerModule(); break;
             }

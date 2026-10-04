@@ -15,6 +15,15 @@ EditorBuildSettings:
     path: Assets/Atlas/Scenes/Space_Glued.unity
     guid: a95637b2fd309fca1c4a7d5a321019a5
   - enabled: 1
+    path: Assets/Atlas/Scenes/Space_CurvedWalk.unity
+    guid: caa48c41f2b43208200181717b4a675d
+  - enabled: 1
+    path: Assets/Atlas/Scenes/Space_AlignedCells.unity
+    guid: d4326c20cbb5d3192ddc7df246fe49d3
+  - enabled: 1
+    path: Assets/Atlas/Scenes/Space_SmallPlanet.unity
+    guid: 085692df859e627ebe3a920e03884db1
+  - enabled: 1
     path: Assets/Atlas/Scenes/Space_Portal.unity
     guid: 54b05a12d2026e9dc20b7c99227ca017
   - enabled: 1

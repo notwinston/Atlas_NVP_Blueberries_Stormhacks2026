@@ -271,6 +271,12 @@ namespace Atlas.App
             // 18  Link, perf probe, HUD, event log, pairing. The loop is published, so its hooks go in here:
             //     the state sink at 8a; probe, link driver and HUD at 8b.
             TelemetrySystems = TelemetryInstaller.Install(boot);
+            // The row's visibleTiles: what the curved world's renderer drew, copied at step 6.
+            if (TelemetrySystems != null && TelemetrySystems.Probe != null)
+            {
+                AtlasPerfProbe probe = TelemetrySystems.Probe;
+                Loop.AddUpload(new TileStatsUploadStep(tiles => probe.VisibleTiles = tiles));
+            }
             // The asset client: the photo sink of the scan, the Forge round trip and the built-in fallback set.
             // Null in the Spectator, which shows the room as the phone reports it.
             Assets = AssetClientInstaller.Install(boot, TelemetrySystems);

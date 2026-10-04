@@ -192,7 +192,6 @@ namespace Atlas.Tiles.Tests
                 var text = File.ReadAllText(f);
                 foreach (var b in banned)
                 {
-                    if (b == "Shader.Find" && f.Contains("TileRendererProbe")) continue;
                     foreach (var line in text.Split('\n'))
                         if (line.Contains(b) && !line.TrimStart().StartsWith("//")) Assert.Fail($"{Path.GetFileName(f)} contains {b}: {line.Trim()}");
                 }

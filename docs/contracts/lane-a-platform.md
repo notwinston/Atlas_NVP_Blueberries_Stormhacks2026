@@ -12,9 +12,9 @@ stencil table, and `Mesh4D`. Names and signatures are binding. Bodies are free.
 | `AtlasBootstrap`, `AtlasApp`, `AtlasFrameLoop`, SpaceLab | Built | unchanged |
 | Stereo rig, eye textures, lens blit, quality ladder | Built; lens numbers are placeholders (open item 1) | Headset numbers baked in |
 | `Atlas/Surface`, `AtlasCore.hlsl`, `AtlasPortalClip.hlsl`, palette, `MaterialPool` | Built | unchanged |
-| `AtlasWarp.hlsl`, `AtlasGates.hlsl` | Identity bodies from lane B's page | Lane B fills them (`P1-B03`, `P1-B10`) |
+| `AtlasWarp.hlsl`, `AtlasGates.hlsl` | Lane B's warp and gate clip (`P1-B03`, `P1-B10`), on lane A's property block | unchanged |
 | S1 Glued, S5 Impossible Rooms, S6 Slicer, `Mesh4D` | Built | unchanged |
-| S2, S3, S4 | Not registered; a switch to them is refused | Lane B |
+| S2, S3, S4 | Built by lane B and registered like the others (`Spaces/CurvedWalk`, `AlignedCells`, `SmallPlanet`); S2 and S4 configure the app's one walker kernel on entry and SpaceLab puts it back to flat after Exit | unchanged |
 
 ---
 
@@ -379,7 +379,7 @@ namespace Atlas.World
 | Situation | Result |
 |---|---|
 | `Room` is null | false, event `space.refused` with `{"space":"S1","reason":"noRoom"}` |
-| `IsAvailable(target)` is false (S2, S3, S4 in this build) | false, event `space.refused` with reason `unavailable`. Nothing reaches the kernel |
+| `IsAvailable(target)` is false (a space this build has neither a scene nor a factory for) | false, event `space.refused` with reason `unavailable`. Nothing reaches the kernel |
 | `target` is the entered space and `State` is `Running` | false, nothing happens (unless the entered module has faulted) |
 | `State` is `Running` or `Empty` | true. The switch state changes at once; its steps (§4.2) run from the next step 8b |
 | A switch is already under way | true. The newest request replaces the pending one and runs when the current switch reaches `Running` or `Empty` |
@@ -512,7 +512,7 @@ namespace Atlas.Spaces.Glued
 ```
 
 `BeforeSceneLoad` runs before `AtlasBootstrap` (`AfterSceneLoad`), so the registry is full when SpaceLab starts.
-S2, S3 and S4 register nothing in this build (lane B §8.2).
+All seven spaces register: S2, S3 and S4 through `CurvedWalkRegistration`, `AlignedCellsRegistration` and `SmallPlanetRegistration`.
 
 ### 5.2 Scene or factory (README F3)
 

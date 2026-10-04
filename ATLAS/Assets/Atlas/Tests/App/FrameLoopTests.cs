@@ -532,5 +532,41 @@ namespace Atlas.App.Tests
             long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
             Assert.That(allocated, Is.EqualTo(0), "steps 1 to 8 of the frame loop allocate no managed memory");
         }
+
+        sealed class DrawnTiles : Atlas.Rendering.ITileDrawStats
+        {
+            public int TilesDrawn { get; set; }
+            public int TrianglesDrawn { get; set; }
+        }
+
+        [Test]
+        public void TileStats_TheDrawnTilesReachTheTelemetryRow_AndZeroWithNoTileRenderer()
+        {
+            AtlasServices.Clear();
+            try
+            {
+                ushort written = 99;
+                var step = new TileStatsUploadStep(tiles => written = tiles);
+                var frame = new FrameContext();
+                step.Upload(in frame);
+                Assert.That(written, Is.EqualTo(0), "no curved world is drawn");
+
+                var stats = new DrawnTiles { TilesDrawn = 54 };
+                AtlasServices.Register<Atlas.Rendering.ITileDrawStats>(stats);
+                step.Upload(in frame);
+                Assert.That(written, Is.EqualTo(54));
+                stats.TilesDrawn = 100000;
+                step.Upload(in frame);
+                Assert.That(written, Is.EqualTo(ushort.MaxValue), "the row's field is 16 bits");
+
+                AtlasServices.Unregister<Atlas.Rendering.ITileDrawStats>(stats);
+                step.Upload(in frame);
+                Assert.That(written, Is.EqualTo(0), "the space was left");
+            }
+            finally
+            {
+                AtlasServices.Clear();
+            }
+        }
     }
 }

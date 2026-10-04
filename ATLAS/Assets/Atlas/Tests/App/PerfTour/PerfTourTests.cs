@@ -33,6 +33,8 @@ namespace Atlas.App.Tests
 
         public void ApplyVariant(PerfVariant variant) { Calls.Add("variant " + variant); }
 
+        public void Stand(float seconds) { Calls.Add("stand " + seconds.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)); }
+
         public bool InSpace(SpaceId space) { return HasSpace && Current == space; }
 
         public bool RequestSpace(SpaceId space)
@@ -76,15 +78,17 @@ namespace Atlas.App.Tests
     [TestFixture]
     public sealed class PerfTourScheduleTests
     {
-        static bool Built(SpaceId id)
+        /// <summary>A build that carries the four flat spaces only, as a loader without the curved scenes and
+        /// factories reports it. The app's own build has all seven.</summary>
+        static bool FlatOnly(SpaceId id)
         {
             return id == SpaceId.Home || id == SpaceId.Glued || id == SpaceId.Portal || id == SpaceId.Slicer;
         }
 
         [Test]
-        public void PerfTour_Schedule_VisitsEveryBuiltSpaceAndBothGluedLayouts()
+        public void PerfTour_Schedule_VisitsAllSevenSpaces_BothGluedLayouts_AndCurvedWalkAtQ5()
         {
-            PerfSchedule tour = PerfSchedule.Tour(30f, Built);
+            PerfSchedule tour = PerfSchedule.Tour(30f, id => true);
             Assert.That(tour.Kind, Is.EqualTo(PerfRunKind.Tour));
             Assert.That(tour.Aggregate, Is.False);
             var labels = new List<string>();
@@ -93,13 +97,37 @@ namespace Atlas.App.Tests
                 labels.Add(step.Label);
                 Assert.That(step.Kind, Is.EqualTo(PerfStepKind.Visit));
                 Assert.That(step.Seconds, Is.EqualTo(30f));
+                Assert.That(step.StandSeconds, Is.EqualTo(step.Space == SpaceId.CurvedWalk ? PerfSchedule.CurvedStandSeconds : 0f), step.Label);
             }
+            Assert.That(labels, Is.EqualTo(new[]
+            {
+                "S0 Home", "S1 Glued 5x5", "S1 Glued 3x3x3", "S2 Curved Walk", "S3 Aligned Cells", "S4 Small Planet",
+                "S5 Impossible Rooms", "S6 Slicer"
+            }));
+            Assert.That(tour.Steps[1].Variant, Is.EqualTo(PerfVariant.Glued5x5));
+            Assert.That(tour.Steps[2].Variant, Is.EqualTo(PerfVariant.GluedT3));
+            Assert.That(tour.Steps[3].Variant, Is.EqualTo(PerfVariant.CurvedQ5));
+            // Curved Walk settles for as long as the head stands: the ramp is over before a frame is measured.
+            Assert.That(tour.SettleOf(in tour.Steps[3]), Is.EqualTo(PerfSchedule.CurvedStandSeconds));
+            Assert.That(tour.SettleOf(in tour.Steps[4]), Is.EqualTo(PerfSchedule.DefaultSettleSeconds));
+            Assert.That(PerfSchedule.CurvedStandSeconds, Is.GreaterThan(4f), "the ramp takes 4 s of standing");
+            Assert.That(tour.TotalSeconds, Is.EqualTo(8 * 30f + 7 * PerfSchedule.DefaultSettleSeconds + PerfSchedule.CurvedStandSeconds).Within(1e-3));
+
+            string notes = string.Join("\n", tour.Notes);
+            Assert.That(notes, Does.Not.Contain("not in this build"));
+            Assert.That(notes, Does.Contain("S2 Curved Walk: q = 5 at rho = 3"));
+        }
+
+        [Test]
+        public void PerfTour_Schedule_ASpaceMissingFromABuildIsLeftOutAndNamed()
+        {
+            PerfSchedule tour = PerfSchedule.Tour(30f, FlatOnly);
+            var labels = new List<string>();
+            foreach (PerfStep step in tour.Steps) labels.Add(step.Label);
             Assert.That(labels, Is.EqualTo(new[]
             {
                 "S0 Home", "S1 Glued 5x5", "S1 Glued 3x3x3", "S5 Impossible Rooms", "S6 Slicer"
             }));
-            Assert.That(tour.Steps[1].Variant, Is.EqualTo(PerfVariant.Glued5x5));
-            Assert.That(tour.Steps[2].Variant, Is.EqualTo(PerfVariant.GluedT3));
             Assert.That(tour.TotalSeconds, Is.EqualTo(5 * (30f + PerfSchedule.DefaultSettleSeconds)).Within(1e-3));
 
             string notes = string.Join("\n", tour.Notes);
@@ -117,9 +145,9 @@ namespace Atlas.App.Tests
         }
 
         [Test]
-        public void PerfTour_Schedule_SoakAlternatesGluedAndHomeForFifteenMinutes()
+        public void PerfTour_Schedule_SoakAlternatesGluedAndCurvedWalkForFifteenMinutes()
         {
-            PerfSchedule soak = PerfSchedule.Soak(PerfRunKind.Soak, 900f, 60f, Built);
+            PerfSchedule soak = PerfSchedule.Soak(PerfRunKind.Soak, 900f, 60f, id => true);
             Assert.That(soak.Aggregate, Is.True);
             Assert.That(soak.Steps.Length, Is.EqualTo(15));
             Assert.That(soak.IntervalSeconds, Is.EqualTo(60f));
@@ -127,30 +155,43 @@ namespace Atlas.App.Tests
             for (int i = 0; i < soak.Steps.Length; i++)
             {
                 PerfStep step = soak.Steps[i];
-                Assert.That(step.Space, Is.EqualTo((i & 1) == 0 ? SpaceId.Glued : SpaceId.Home), "step " + i);
-                Assert.That(step.Variant, Is.EqualTo((i & 1) == 0 ? PerfVariant.Glued5x5 : PerfVariant.None));
-                Assert.That(step.Seconds, Is.EqualTo(60f - PerfSchedule.DefaultSettleSeconds));
+                bool glued = (i & 1) == 0;
+                Assert.That(step.Space, Is.EqualTo(glued ? SpaceId.Glued : SpaceId.CurvedWalk), "step " + i);
+                Assert.That(step.Variant, Is.EqualTo(glued ? PerfVariant.Glued5x5 : PerfVariant.CurvedQ5));
+                Assert.That(step.StandSeconds, Is.EqualTo(glued ? 0f : PerfSchedule.CurvedStandSeconds));
+                // The change of space stays on the minute: the stand comes off the measured time.
+                Assert.That(step.Seconds + soak.SettleOf(in step), Is.EqualTo(60f));
+                Assert.That(step.Seconds, Is.EqualTo(glued ? 60f - PerfSchedule.DefaultSettleSeconds : 60f - PerfSchedule.CurvedStandSeconds));
             }
             string notes = string.Join("\n", soak.Notes);
-            Assert.That(notes, Does.Contain("S2 Curved Walk is not in this build"));
+            Assert.That(notes, Does.Not.Contain("not in this build"));
+            Assert.That(notes, Does.Contain("S2 Curved Walk: q = 5 at rho = 3"));
             Assert.That(notes, Does.Contain("every 60 s"));
             Assert.That(notes, Does.Contain("LiDAR depth on"));
             Assert.That(notes, Does.Not.Contain("rehearsal"));
         }
 
         [Test]
-        public void PerfTour_Schedule_SoakUsesCurvedWalkOnceItIsBuilt()
+        public void PerfTour_Schedule_SoakWithoutCurvedWalkAlternatesGluedAndHome_AndSaysSo()
         {
-            PerfSchedule soak = PerfSchedule.Soak(PerfRunKind.Soak, 900f, 60f, null);
-            Assert.That(soak.Steps[0].Space, Is.EqualTo(SpaceId.Glued));
-            Assert.That(soak.Steps[1].Space, Is.EqualTo(SpaceId.CurvedWalk));
-            Assert.That(string.Join("\n", soak.Notes), Does.Not.Contain("not in this build"));
+            PerfSchedule soak = PerfSchedule.Soak(PerfRunKind.Soak, 900f, 60f, FlatOnly);
+            Assert.That(soak.Steps.Length, Is.EqualTo(15));
+            Assert.That(soak.TotalSeconds, Is.EqualTo(900f).Within(1e-2));
+            for (int i = 0; i < soak.Steps.Length; i++)
+            {
+                PerfStep step = soak.Steps[i];
+                Assert.That(step.Space, Is.EqualTo((i & 1) == 0 ? SpaceId.Glued : SpaceId.Home), "step " + i);
+                Assert.That(step.Variant, Is.EqualTo((i & 1) == 0 ? PerfVariant.Glued5x5 : PerfVariant.None));
+                Assert.That(step.StandSeconds, Is.EqualTo(0f));
+                Assert.That(step.Seconds, Is.EqualTo(60f - PerfSchedule.DefaultSettleSeconds));
+            }
+            Assert.That(string.Join("\n", soak.Notes), Does.Contain("S2 Curved Walk is not in this build"));
         }
 
         [Test]
         public void PerfTour_Schedule_ShortSoakIsCutToItsLengthAndCalledARehearsal()
         {
-            PerfSchedule soak = PerfSchedule.Soak(PerfRunKind.SoakDepthOff, 100f, 60f, Built);
+            PerfSchedule soak = PerfSchedule.Soak(PerfRunKind.SoakDepthOff, 100f, 60f, FlatOnly);
             Assert.That(soak.Kind, Is.EqualTo(PerfRunKind.SoakDepthOff));
             Assert.That(soak.Steps.Length, Is.EqualTo(2));
             Assert.That(soak.Steps[1].Seconds, Is.EqualTo(40f - PerfSchedule.DefaultSettleSeconds).Within(1e-3));
@@ -710,6 +751,32 @@ namespace Atlas.App.Tests
         }
 
         [Test]
+        public void PerfTour_Core_CurvedWalkStandsOnEntry_AndIsMeasuredOnlyAfterTheRamp()
+        {
+            var driver = new FakeTourDriver();
+            var core = new PerfTourCore(driver);
+            core.Begin(PerfSchedule.Tour(4f, id => id == SpaceId.Home || id == SpaceId.CurvedWalk, 1f), Info(), 0.0);
+            double time = Play(core, driver, 0.0, 0.2);
+            while (core.StepIndex == 0) time = Play(core, driver, time, 1.0 / 60.0);
+            Assert.That(driver.Calls, Does.Not.Contain("stand 5"), "Home needs no stand");
+            Assert.That(driver.Calls, Does.Contain("variant CurvedQ5"));
+
+            while (core.Phase != PerfTourPhase.Settling) time = Play(core, driver, time, 1.0 / 60.0);
+            Assert.That(driver.Calls[driver.Calls.Count - 1], Is.EqualTo("stand 5"), "asked as the space is entered");
+            double entered = time;
+            time = Play(core, driver, time, PerfSchedule.CurvedStandSeconds - 0.2);
+            Assert.That(core.Phase, Is.EqualTo(PerfTourPhase.Settling), "the run's own settle time of 1 s is not enough for the ramp");
+            time = Play(core, driver, time, 0.4);
+            Assert.That(core.Phase, Is.EqualTo(PerfTourPhase.Measuring));
+            Play(core, driver, time, 10.0);
+            Assert.That(core.Running, Is.False);
+            Assert.That(core.Rows.Count, Is.EqualTo(2));
+            Assert.That(core.Rows[1].Label, Is.EqualTo("S2 Curved Walk"));
+            Assert.That(core.Rows[1].Variant, Is.EqualTo("q5"));
+            Assert.That(core.Rows[1].Frames, Is.InRange(4 * 60 - 20, 4 * 60 + 20), "four measured seconds after " + entered);
+        }
+
+        [Test]
         public void PerfTour_Core_NoRoomEndsTheRun()
         {
             var driver = new FakeTourDriver { RoomNever = true };
@@ -940,6 +1007,44 @@ namespace Atlas.App.Tests
             Assert.That(track.HalfAxes, Is.EqualTo(float2.zero));
             track.SetFreeRect(0.7f, 0.8f, false);
             Assert.That(track.HalfAxes, Is.EqualTo(float2.zero), "too small to lap");
+        }
+
+        [Test]
+        public void PerfTour_Track_HoldStandsOnTheSpotThenWalksOn()
+        {
+            var track = new SyntheticPoseTrack();
+            track.SetFreeRect(2.4f, 3.4f, false);
+            HeadPose pose = HeadPose.Identity, start, held = HeadPose.Identity;
+            for (int i = 0; i < 90; i++) track.TryRead(i / 60.0, 1f / 60f, out pose);
+            start = pose;
+
+            track.HoldFor(PerfSchedule.CurvedStandSeconds);
+            int frames = (int)(PerfSchedule.CurvedStandSeconds * 60f) - 1;
+            for (int i = 0; i < frames; i++)
+            {
+                track.TryRead((90 + i) / 60.0, 1f / 60f, out held);
+                Assert.That(held.Floor, Is.EqualTo(start.Floor), "the floor point does not move: the kernel sees a standing walker");
+                Assert.That(held.Tracking, Is.EqualTo(TrackingState.Normal));
+            }
+            Assert.That(math.abs(held.Yaw - start.Yaw), Is.GreaterThan(0.05f), "the gaze goes on sweeping");
+            Assert.That(track.HoldSeconds, Is.LessThan(0.05f));
+
+            HeadPose previous = held;
+            float walked = 0f;
+            for (int i = 0; i < 120; i++)
+            {
+                track.TryRead((90 + frames + i) / 60.0, 1f / 60f, out pose);
+                float step = math.distance(pose.Floor, previous.Floor);
+                Assert.That(step, Is.LessThan(0.03f), "no jump when the walk resumes");
+                walked += step;
+                previous = pose;
+            }
+            Assert.That(walked, Is.EqualTo(SyntheticPoseTrack.Speed * 2f).Within(0.1f));
+            Assert.That(track.HoldSeconds, Is.EqualTo(0f));
+
+            track.HoldFor(3f);
+            track.SetFreeRect(2.4f, 3.4f, false);
+            Assert.That(track.HoldSeconds, Is.EqualTo(0f), "a new room starts the lap again");
         }
 
         [Test]

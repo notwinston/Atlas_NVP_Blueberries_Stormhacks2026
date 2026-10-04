@@ -36,6 +36,8 @@ Master Plan §6.2, with six clarifications marked ◆.
 | `Atlas.App` | A | Kernel, Link, World, Rendering, Scan, Safety, Input, Telemetry | ◆ Link is added to the §6.2 row: `ISpaceModule` carries `ParamRegistry` and `StateMessage`, so the caller needs the reference. ◆ Also holds the on-device menu (`App/Menu/`, lane D files) and onboarding (`App/Onboarding/`, lane C files), which need Input, Scan and Telemetry together |
 | `Atlas.Spaces.*` | per space | Kernel, Link, World, Rendering, Input, Telemetry | Spaces never reference each other, Scan, Safety or App |
 | `Atlas.Spectator` | D | Kernel, Link, World, Rendering, Telemetry, Spaces.* | Windows only (`ATLAS_SPECTATOR`) |
+| `Atlas.World.Lint.Editor` | B | Kernel, World, Rendering | Editor only. WorldLint (`World/Lint/`): the generator checked against the real tile meshes. Nothing references it but its tests |
+| `Atlas.Blades.*` | per use case | Kernel, Link, World, Rendering, Scan, Safety, Input, Telemetry, Spaces.* | The use cases, Phase 2 onwards (§6.2). Never App, never another use case. From Safety only `IClearanceQuery`, read-only: a use case never switches Bump Guard |
 | `Atlas.Editor` | A | any | Editor only |
 
 `Safety_Independence` (§11.1) checks the **direct** references of `Atlas.Safety` and its source files. The closure

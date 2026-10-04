@@ -44,6 +44,7 @@ namespace Atlas.App.Tests
 
             public bool PrepareRoom() { return true; }
             public void ApplyVariant(PerfVariant variant) { }
+            public void Stand(float seconds) { }
             public bool InSpace(SpaceId space) { return true; }
             public bool RequestSpace(SpaceId space) { return true; }
             public void ForceTier(int tier) { Router.SetQuality(tier); }

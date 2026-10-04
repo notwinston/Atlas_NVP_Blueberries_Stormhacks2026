@@ -71,9 +71,23 @@ namespace Atlas.App.Tests
             app.Commands.Cue();
             yield return null;
             Assert.That(BumpCue.Shown, Is.EqualTo(BumpLevel.Strong));
-            app.Commands.SwitchSpace(SpaceId.CurvedWalk, null);
+            app.Commands.SwitchSpace((SpaceId)SpaceIds.Count, null);
             yield return null;
-            Assert.That(app.Spaces.Current, Is.EqualTo(SpaceId.Home), "a space that is not built is refused");
+            Assert.That(app.Spaces.Current, Is.EqualTo(SpaceId.Home), "a space no build has is refused");
+            Assert.That(app.Spaces.State, Is.EqualTo(SpaceHostState.Running));
+
+            // All seven spaces are in the build. A curved one puts the app's one kernel on its tiling, and
+            // Home gets it back flat with every rented material returned.
+            for (int i = 0; i < SpaceIds.Count; i++)
+                Assert.That(app.Spaces.IsAvailable((SpaceId)i), Is.True, SpaceIds.Code((SpaceId)i) + " is registered");
+            app.Commands.SwitchSpace(SpaceId.CurvedWalk, null);
+            for (int i = 0; i < 300 && !(app.Spaces.State == SpaceHostState.Running && app.Spaces.Current == SpaceId.CurvedWalk); i++) yield return null;
+            Assert.That(app.Spaces.Current, Is.EqualTo(SpaceId.CurvedWalk));
+            Assert.That(app.WalkerKernel.Graph.Q, Is.EqualTo(5));
+            app.Commands.Home();
+            for (int i = 0; i < 300 && !(app.Spaces.State == SpaceHostState.Running && app.Spaces.Current == SpaceId.Home); i++) yield return null;
+            Assert.That(app.Spaces.Current, Is.EqualTo(SpaceId.Home));
+            Assert.That(app.WalkerKernel.Graph.Q, Is.EqualTo(4));
             app.Commands.Home();
             app.Commands.Recentre();
             app.Commands.SetQuality(2);

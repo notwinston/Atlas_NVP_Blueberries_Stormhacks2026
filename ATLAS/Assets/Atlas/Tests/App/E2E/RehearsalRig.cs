@@ -7,10 +7,13 @@ using Atlas.Link;
 using Atlas.Rendering;
 using Atlas.Safety;
 using Atlas.Scan;
+using Atlas.Spaces.AlignedCells;
+using Atlas.Spaces.CurvedWalk;
 using Atlas.Spaces.Glued;
 using Atlas.Spaces.Home;
 using Atlas.Spaces.Portal;
 using Atlas.Spaces.Slicer;
+using Atlas.Spaces.SmallPlanet;
 using Atlas.Telemetry;
 using Atlas.World;
 using Unity.Mathematics;
@@ -31,7 +34,7 @@ namespace Atlas.E2E.Tests
     /// the order of the composition root (AtlasApp.Build): registry, kernel, frame loop, pose pipeline, Bump
     /// Guard, quality ladder, SpaceLab, parameters, operator commands, link, room hand-over, then the tail of
     /// the frame. Everything that has an engine-free core is that core; only the pose pipeline's adapter and
-    /// the four space adapters are replaced by the engine-free stand-ins of this folder. The Station side is a
+    /// the seven space adapters are replaced by the engine-free stand-ins of this folder. The Station side is a
     /// real LinkHost (the Hub's link) and a Spectator client behind it.
     /// </summary>
     sealed class RehearsalRig : IDisposable
@@ -116,7 +119,7 @@ namespace Atlas.E2E.Tests
 
             // 16  SpaceLab.
             Lab = new SpaceLab(Registry, Kernel, Loop, Loader, Stage);
-            Loader.Bind(Lab);
+            Loader.Bind(Lab, Kernel, Loop);
             Loop.Space = Lab;
             Loop.Host = Lab;
 
@@ -129,6 +132,9 @@ namespace Atlas.E2E.Tests
             GluedSpace.DeclareParams(Registry);
             PortalSpaceCore.DeclareParams(Registry);
             SlicerParams.Declare(Registry);
+            CurvedWalkCore.DeclareParams(Registry);
+            AlignedCellsCore.DeclareParams(Registry);
+            SmallPlanetCore.DeclareParams(Registry);
 
             // 17  Operator commands as local calls.
             Commands = new CommandRouter(Lab, Loop, Registry, Pipeline);
@@ -138,7 +144,8 @@ namespace Atlas.E2E.Tests
             Events.Logged += Logged.Add;
             Link = new LinkClient(Network.CreateEndpoint(), Clock, LinkRole.Phone, Registry) { Device = "rehearsal", Build = "e2e" };
             Link.SetSession(Session);
-            Pump = new LinkPump(Link, Events) { Kernel = Kernel, Commands = Commands };
+            Pump = new LinkPump(Link, Events) { Kernel = Kernel, Commands = Commands, Spaces = Lab };
+            Loader.Events = Events;
             Link.Welcomed += welcome =>
             {
                 if (welcome.DemoLock) Registry.Set(TelemetryInstaller.ParamDemoLock, 1f, ParamSource.Remote);
@@ -280,7 +287,7 @@ namespace Atlas.E2E.Tests
 
         public T Module<T>() where T : class, ISpaceModule { return Lab.Module as T; }
 
-        /// <summary>Where the kernel holds the walker, as a floor point of the room frame. Metres.</summary>
+        /// <summary>Where the kernel holds the walker, as a floor point of the room frame. Metres. Flat kernel only.</summary>
         public double2 WalkerFloor
         {
             get

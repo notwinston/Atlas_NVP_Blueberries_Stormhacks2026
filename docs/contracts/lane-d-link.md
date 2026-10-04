@@ -1085,7 +1085,7 @@ One row per second (§7.3.3). The CSV has the same fields in the same order (§5
 | 63 | `setPass` | u16 | | worst frame of the last second |
 | 65 | `trisK` | u16 | thousands | worst frame of the last second, rounded |
 | 67 | `memMB` | u16 | MiB | "System Used Memory" |
-| 69 | `visibleTiles` | u16 | | tiles drawn (lane B); 0 in this build |
+| 69 | `visibleTiles` | u16 | | tiles drawn by the generated world's renderer (`ITileDrawStats`, S2 at q = 5), copied at step 6 by the app; 0 in every other space |
 | 71 | `copies` | u16 | | Glued cells drawn: n² for T² and Klein, 27 for T³ (from `State.p[3]`, `p[4]`); 0 outside S1 |
 | 73 | `rttMs` | u16 | ms | LiteNetLib round trip; 0 when offline |
 | 75 | `lossPermille` | u16 | ‰ | LiteNetLib packet loss |

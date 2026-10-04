@@ -397,6 +397,43 @@ namespace Atlas.Telemetry.Tests
         }
 
         [Test]
+        public void Spectator_verifies_a_curved_world_with_the_tiling_seed_and_length_the_phone_names()
+        {
+            // Curved Walk on the phone: {4,5}, the generator's seed 1, L of the room's loop. The Spectator's own
+            // kernel is flat; the room is what it must agree on.
+            RoomModel room = RoomFixtures.LoadFromProject(RoomFixtures.Sample3x3);
+            const int space = (int)SpaceId.CurvedWalk, q = 5, genVer = 1;
+            const long seed = 1;
+            int lMm = WorldHash.Millimetres(room.Curvature.ForDial(5, false));
+            string geometry = RoomModelJson.GeometryHash(room);
+            string hash = WorldHash.Compute(space, q, seed, genVer, geometry, lMm);
+            Assert.That(hash, Is.Not.EqualTo(SpectatorTestRooms.HashOf(room, space)), "not the hash of a flat world");
+
+            var rig = new Rig();
+            JsonValue data = JsonValue.Object().Set("worldVer", 1).Set("worldHash", hash).Set("space", space)
+                .Set("roomId", RoomFixtures.Sample3x3).Set("geomHash", geometry)
+                .Set("q", q).Set("seed", seed).Set("genVer", genVer).Set("lMm", lMm);
+            rig.Core.OnEvent(new EventMessage(1, "S2", LinkEvents.World, data));
+            rig.State((byte)SpaceId.CurvedWalk);
+            rig.Frame();
+            Assert.That(rig.Core.WorldVerified, Is.True);
+            Assert.That(rig.Core.Banner, Is.Not.EqualTo(SpectatorBanner.WorldMismatch));
+            Assert.That(rig.Host.Room, Is.Not.Null);
+
+            // The same statement about another room does not hold for the room held here.
+            RoomModel other = RoomFixtures.LoadFromProject(RoomFixtures.BudgetRoom);
+            var wrong = new Rig();
+            data = JsonValue.Object().Set("worldVer", 1).Set("space", space).Set("roomId", RoomFixtures.Sample3x3)
+                .Set("worldHash", WorldHash.Compute(space, q, seed, genVer, RoomModelJson.GeometryHash(other), lMm))
+                .Set("q", q).Set("seed", seed).Set("genVer", genVer).Set("lMm", lMm);
+            wrong.Core.OnEvent(new EventMessage(1, "S2", LinkEvents.World, data));
+            wrong.State((byte)SpaceId.CurvedWalk);
+            wrong.Frame();
+            Assert.That(wrong.Core.Banner, Is.EqualTo(SpectatorBanner.WorldMismatch));
+            Assert.That(wrong.Host.Room, Is.Null);
+        }
+
+        [Test]
         public void Spectator_takes_a_welcome_hash_for_any_space_and_marks_a_silent_phone()
         {
             var rig = new Rig();

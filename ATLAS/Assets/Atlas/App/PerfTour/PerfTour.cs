@@ -25,6 +25,9 @@ namespace Atlas.App
         public const string ParamSoakInterval = "perf.soakIntervalSeconds";
         public const string ParamPose = "perf.pose";
         public const string ParamGluedMode = "glued.mode";
+        public const string ParamCurvedQ = "curved.q";
+        /// <summary>The cull radius of the S2 row of section 11.2.</summary>
+        public const float PerfCullRho = 3f;
         public const string ParamTelemetryMode = "telemetry.mode";
         public const string FilePrefix = "tour_";
 
@@ -54,7 +57,8 @@ namespace Atlas.App
         bool _shuttingDown;
 
         // What a run changed and gives back when it ends.
-        int _savedPin, _savedGluedMode, _savedGluedCopies, _savedTelemetryMode, _savedSource;
+        int _savedPin, _savedGluedMode, _savedGluedCopies, _savedTelemetryMode, _savedSource, _savedCurvedQ;
+        float _savedCullRho;
         IDepthSource _savedDepth;
         bool _depthOff;
         bool _syntheticPose;
@@ -192,6 +196,8 @@ namespace Atlas.App
             _savedPin = registry.GetInt(AppParams.PinTier, -1);
             _savedGluedMode = registry.GetInt(ParamGluedMode, 0);
             _savedGluedCopies = registry.GetInt(AppParams.GluedCopies, 5);
+            _savedCurvedQ = registry.GetInt(ParamCurvedQ, 5);
+            _savedCullRho = registry.GetFloat(AppParams.CullRho, PerfCullRho);
             _savedTelemetryMode = registry.GetInt(ParamTelemetryMode, 0);
             _savedSource = app.SourceSwitch != null ? app.SourceSwitch.Source : AppParams.SourceTracked;
             _savedDepth = null;
@@ -289,6 +295,8 @@ namespace Atlas.App
                 app.Commands.SetQuality(_savedPin);
                 registry.Set(ParamGluedMode, _savedGluedMode);
                 registry.Set(AppParams.GluedCopies, _savedGluedCopies);
+                registry.Set(ParamCurvedQ, _savedCurvedQ);
+                registry.Set(AppParams.CullRho, _savedCullRho);
                 registry.Set(ParamTelemetryMode, _savedTelemetryMode);
                 // The head goes back to where it came from; the registry's own callback does it when the
                 // value changes, and the switch is told directly when only the built-in lap was in its place.
@@ -361,6 +369,12 @@ namespace Atlas.App
         {
             if (variant == PerfVariant.None) return;
             ParamRegistry registry = _app.Registry;
+            if (variant == PerfVariant.CurvedQ5)
+            {
+                registry.Set(ParamCurvedQ, 5);
+                registry.Set(AppParams.CullRho, PerfCullRho);
+                return;
+            }
             ParamEntry mode = registry.Find(ParamGluedMode);
             if (mode != null)
             {
@@ -369,6 +383,12 @@ namespace Atlas.App
                     if (string.Equals(mode.EnumName(i), name, StringComparison.OrdinalIgnoreCase)) registry.Set(mode, i);
             }
             registry.Set(AppParams.GluedCopies, variant == PerfVariant.GluedT3 ? 3 : 5);
+        }
+
+        public void Stand(float seconds)
+        {
+            // Only the built-in lap is the run's to stop; a person or a recorded walk stands by himself.
+            if (_syntheticPose) _track.HoldFor(seconds);
         }
 
         public bool InSpace(SpaceId space)

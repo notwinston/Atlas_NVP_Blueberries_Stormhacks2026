@@ -26,6 +26,9 @@ BOOT = SCENES + "/Atlas_Boot.unity"
 MANIFEST = [
     ("Space_Home", "Space_Home", "Assets/Atlas/Spaces/Home/HomeSpace.cs", True),
     ("Space_Glued", "Space_Glued", "Assets/Atlas/Spaces/Glued/GluedSpace.cs", True),
+    ("Space_CurvedWalk", "Space_CurvedWalk", "Assets/Atlas/Spaces/CurvedWalk/CurvedWalkSpace.cs", True),
+    ("Space_AlignedCells", "Space_AlignedCells", "Assets/Atlas/Spaces/AlignedCells/AlignedCellsSpace.cs", True),
+    ("Space_SmallPlanet", "Space_SmallPlanet", "Assets/Atlas/Spaces/SmallPlanet/SmallPlanetSpace.cs", True),
     ("Space_Portal", "Space_Portal", "Assets/Atlas/Spaces/Portal/PortalSpace.cs", True),
     ("Space_Slicer", "Space_Slicer", "Assets/Atlas/Spaces/Slicer/SlicerSpace.cs", True),
     # The Station's scene: the Spectator boots in any scene of this name, or one that holds this marker object.

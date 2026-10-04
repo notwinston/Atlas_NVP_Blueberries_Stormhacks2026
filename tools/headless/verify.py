@@ -70,6 +70,7 @@ TEST_RUNNER_REFS = ("UnityEngine.TestRunner", "UnityEditor.TestRunner")
 
 # docs/contracts/README.md, table F1: which Atlas assemblies each assembly may reference.
 SPACES = "Atlas.Spaces.*"
+BLADES = "Atlas.Blades.*"
 ALLOWED = {
     "Atlas.Kernel": [],
     "Atlas.Link": [],
@@ -84,6 +85,11 @@ ALLOWED = {
                   "Atlas.Input", "Atlas.Telemetry"],
     SPACES: ["Atlas.Kernel", "Atlas.Link", "Atlas.World", "Atlas.Rendering", "Atlas.Input", "Atlas.Telemetry"],
     "Atlas.Spectator": ["Atlas.Kernel", "Atlas.Link", "Atlas.World", "Atlas.Rendering", "Atlas.Telemetry", SPACES],
+    # World lint (lane B): the generator and the real tile meshes, in the Editor only.
+    "Atlas.World.Lint.Editor": ["Atlas.Kernel", "Atlas.World", "Atlas.Rendering"],
+    # A use case (Master Plan 6.2): the layers below the app and the spaces, never the app or another use case.
+    BLADES: ["Atlas.Kernel", "Atlas.Link", "Atlas.World", "Atlas.Rendering", "Atlas.Scan", "Atlas.Safety", "Atlas.Input",
+             "Atlas.Telemetry", SPACES],
 }
 
 
@@ -450,7 +456,9 @@ def allowed_for(name):
         return ALLOWED[name]
     if name.startswith("Atlas.Spaces."):
         return ALLOWED[SPACES]
-    return None  # Blades, Editor, tests: unrestricted
+    if name.startswith("Atlas.Blades."):
+        return ALLOWED[BLADES]
+    return None  # Editor, tests: unrestricted
 
 
 def strip_comments(text):

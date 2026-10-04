@@ -36,6 +36,8 @@ namespace Atlas.App
         Glued5x5 = 1,
         /// <summary>S1 Glued as a three-torus, 3 x 3 x 3 copies.</summary>
         GluedT3 = 2,
+        /// <summary>S2 Curved Walk on the {4,5} tiling at rho = 3, the room as tile zero (section 11.2).</summary>
+        CurvedQ5 = 3,
     }
 
     /// <summary>One step of a run.</summary>
@@ -50,8 +52,12 @@ namespace Atlas.App
         public readonly int Tier;
         /// <summary>The row's name: "S1 Glued 5x5".</summary>
         public readonly string Label;
+        /// <summary>Visit: seconds the head stands still once the space is entered, so a curvature ramp can run.
+        /// They are not measured: the step settles for these seconds when they exceed the run's settle time.</summary>
+        public readonly float StandSeconds;
 
-        public PerfStep(PerfStepKind kind, SpaceId space, PerfVariant variant, float seconds, int tier, string label)
+        public PerfStep(PerfStepKind kind, SpaceId space, PerfVariant variant, float seconds, int tier, string label,
+            float standSeconds = 0f)
         {
             Kind = kind;
             Space = space;
@@ -59,6 +65,7 @@ namespace Atlas.App
             Seconds = seconds;
             Tier = tier;
             Label = label;
+            StandSeconds = standSeconds;
         }
     }
 
@@ -77,6 +84,9 @@ namespace Atlas.App
         public const float DefaultHoldSeconds = 3f;
         /// <summary>A visit shorter than this measures too few frames for a 99th percentile.</summary>
         public const float MinVisitSeconds = 2f;
+        /// <summary>Seconds the head stands when Curved Walk is entered: the curvature ramps only while the walker
+        /// stands (section 4.6) and takes 4 s (section 10.1.4), and the stand must first be recognised.</summary>
+        public const float CurvedStandSeconds = 5f;
 
         public PerfRunKind Kind { get; private set; }
         public PerfStep[] Steps { get; private set; }
@@ -111,6 +121,7 @@ namespace Atlas.App
             {
                 case PerfVariant.Glued5x5: return "5x5";
                 case PerfVariant.GluedT3: return "3x3x3";
+                case PerfVariant.CurvedQ5: return "q5";
                 default: return "";
             }
         }
@@ -118,7 +129,8 @@ namespace Atlas.App
         public static string LabelOf(SpaceId space, PerfVariant variant)
         {
             string name = SpaceIds.Code(space) + " " + SpaceIds.DisplayName(space);
-            return variant == PerfVariant.None ? name : name + " " + VariantName(variant);
+            // Curved Walk has one row in section 11.2: its variant goes in the variant column alone.
+            return variant == PerfVariant.None || variant == PerfVariant.CurvedQ5 ? name : name + " " + VariantName(variant);
         }
 
         /// <summary>
@@ -144,6 +156,11 @@ namespace Atlas.App
                     steps.Add(Visit(space, PerfVariant.Glued5x5, visit));
                     steps.Add(Visit(space, PerfVariant.GluedT3, visit));
                 }
+                else if (space == SpaceId.CurvedWalk)
+                {
+                    steps.Add(Visit(space, PerfVariant.CurvedQ5, visit, CurvedStandSeconds));
+                    notes.Add(CurvedNote(settleSeconds));
+                }
                 else steps.Add(Visit(space, PerfVariant.None, visit));
             }
             notes.Add("visit " + Seconds(visit) + " s per space after " + Seconds(settleSeconds) + " s settle");
@@ -151,17 +168,19 @@ namespace Atlas.App
         }
 
         /// <summary>
-        /// The soak of section 11.4.1. The plan alternates S2 Curved Walk and S1 Glued 5 x 5; while Curved Walk
-        /// is not built, Home takes its place and the output says so. The run lasts totalSeconds exactly, the
+        /// The soak of section 11.4.1: S1 Glued 5 x 5 and S2 Curved Walk at q = 5 in turn. In a build without
+        /// one of them Home takes its place and the output says so. The run lasts totalSeconds exactly, the
         /// last visit being cut short if it must.
         /// </summary>
         public static PerfSchedule Soak(PerfRunKind kind, float totalSeconds, float intervalSeconds, Func<SpaceId, bool> available,
             float settleSeconds = DefaultSettleSeconds)
         {
             if (kind != PerfRunKind.SoakDepthOff) kind = PerfRunKind.Soak;
-            float interval = Math.Max(settleSeconds + MinVisitSeconds, intervalSeconds);
-            float total = Math.Max(interval, totalSeconds);
             bool curved = available == null || available(SpaceId.CurvedWalk);
+            // Curved Walk settles for as long as the head stands, so the ramp is over before a frame is measured.
+            float curvedSettle = curved ? SettleOf(settleSeconds, CurvedStandSeconds) : settleSeconds;
+            float interval = Math.Max(curvedSettle + MinVisitSeconds, intervalSeconds);
+            float total = Math.Max(interval, totalSeconds);
             bool glued = available == null || available(SpaceId.Glued);
             SpaceId first = glued ? SpaceId.Glued : SpaceId.Home;
             SpaceId second = curved ? SpaceId.CurvedWalk : SpaceId.Home;
@@ -170,15 +189,20 @@ namespace Atlas.App
             var notes = new List<string>(4);
             float left = total;
             int n = 0;
-            while (left > settleSeconds + 0.5f)
+            while (true)
             {
-                float span = Math.Min(interval, left);
                 // The same space twice in a row is one long visit to SpaceLab: only the settle time is spent again.
                 SpaceId space = (n & 1) == 0 ? first : second;
-                steps.Add(Visit(space, space == SpaceId.Glued ? PerfVariant.Glued5x5 : PerfVariant.None, span - settleSeconds));
+                float settle = space == SpaceId.CurvedWalk ? curvedSettle : settleSeconds;
+                if (left <= settle + 0.5f) break;
+                float span = Math.Min(interval, left);
+                if (space == SpaceId.Glued) steps.Add(Visit(space, PerfVariant.Glued5x5, span - settle));
+                else if (space == SpaceId.CurvedWalk) steps.Add(Visit(space, PerfVariant.CurvedQ5, span - settle, CurvedStandSeconds));
+                else steps.Add(Visit(space, PerfVariant.None, span - settle));
                 left -= span;
                 n++;
             }
+            if (curved) notes.Add(CurvedNote(settleSeconds));
             if (!curved)
                 notes.Add("S2 Curved Walk is not in this build: the soak alternates " +
                           LabelOf(first, first == SpaceId.Glued ? PerfVariant.Glued5x5 : PerfVariant.None) + " and S0 Home");
@@ -220,16 +244,35 @@ namespace Atlas.App
             }
         }
 
-        static PerfStep Visit(SpaceId space, PerfVariant variant, float seconds)
+        static PerfStep Visit(SpaceId space, PerfVariant variant, float seconds, float standSeconds = 0f)
         {
-            return new PerfStep(PerfStepKind.Visit, space, variant, seconds, -1, LabelOf(space, variant));
+            return new PerfStep(PerfStepKind.Visit, space, variant, seconds, -1, LabelOf(space, variant), standSeconds);
+        }
+
+        /// <summary>Seconds of a visit that are not measured: the run's settle time, or the step's stand when longer.</summary>
+        public static float SettleOf(float settleSeconds, float standSeconds)
+        {
+            return Math.Max(settleSeconds, standSeconds);
+        }
+
+        /// <summary>The unmeasured seconds at the start of this step's visit.</summary>
+        public float SettleOf(in PerfStep step)
+        {
+            return step.Kind == PerfStepKind.Visit ? SettleOf(SettleSeconds, step.StandSeconds) : 0f;
+        }
+
+        static string CurvedNote(float settleSeconds)
+        {
+            return "S2 Curved Walk: q = 5 at rho = 3; a built-in lap stands for " + Seconds(CurvedStandSeconds) +
+                   " s on entry so the curvature ramps, and " + Seconds(SettleOf(settleSeconds, CurvedStandSeconds)) +
+                   " s settle before it is measured; a tracked or replayed walker must stand there himself";
         }
 
         static PerfSchedule Make(PerfRunKind kind, List<PerfStep> steps, List<string> notes, float settle, float interval, bool aggregate)
         {
             float total = 0f;
             for (int i = 0; i < steps.Count; i++)
-                total += steps[i].Seconds + (steps[i].Kind == PerfStepKind.Visit ? settle : 0f);
+                total += steps[i].Seconds + (steps[i].Kind == PerfStepKind.Visit ? SettleOf(settle, steps[i].StandSeconds) : 0f);
             return new PerfSchedule
             {
                 Kind = kind,

@@ -6,9 +6,12 @@ using Atlas.Link;
 using Atlas.Rendering;
 using Atlas.Safety;
 using Atlas.Scan;
+using Atlas.Spaces.AlignedCells;
+using Atlas.Spaces.CurvedWalk;
 using Atlas.Spaces.Glued;
 using Atlas.Spaces.Portal;
 using Atlas.Spaces.Slicer;
+using Atlas.Spaces.SmallPlanet;
 using Atlas.Telemetry;
 using Atlas.World;
 using NUnit.Framework;
@@ -18,14 +21,16 @@ namespace Atlas.E2E.Tests
 {
     /// <summary>
     /// The end-to-end rehearsal with no Unity and no phone: a fixture room, a recorded walk, the pose filter,
-    /// the flat kernel, Bump Guard with a ray-cast depth image, the cores of the four built spaces, the State
-    /// of every frame through the link to a Hub and on to a Spectator (Master Plan sections 6.3, 7.6, 11.1).
+    /// the app's one walker kernel, Bump Guard with a ray-cast depth image, the cores of the seven spaces, the
+    /// State of every frame through the link to a Hub and on to a Spectator (Master Plan sections 6.3, 7.6, 11.1).
     /// </summary>
     public class E2ERehearsalTests
     {
         const string LapWalk = "walk_lap_sample_3x3";
         const string WallWalk = "walk_wall_approach";
         const string JumpWalk = "walk_jump_and_loss";
+        /// <summary>Five sides of the lap square with a stop at each corner: a closed loop on the {4,5} tiling.</summary>
+        const string Lap5Walk = "walk_lap5_3x3";
         /// <summary>Sample of the recorded jump, and the first of its sixty samples with limited tracking (recordings/README.md).</summary>
         const int JumpSample = 90, LossFirstSample = 150, LossSamples = 60;
         /// <summary>250 ms at 60 frames a second: the time an operator command or a slider may take (section 7.6, L9 and L10).</summary>
@@ -178,7 +183,8 @@ namespace Atlas.E2E.Tests
                 }
                 rig.StandAt(in lap.Samples[lap.Samples.Length - 1]);
 
-                // Every built space, asked for the Station's way, through black.
+                // Every space in which the kernel stays flat and the walker registered, asked for the Station's
+                // way, through black. The curved ones have their own rehearsal below.
                 SpaceId[] spaces = { SpaceId.Glued, SpaceId.Portal, SpaceId.Slicer };
                 for (int s = 0; s < spaces.Length; s++)
                 {
@@ -198,8 +204,13 @@ namespace Atlas.E2E.Tests
                     Assert.That(math.distance((float2)rig.WalkerFloor, rig.HeadFloor), Is.LessThan(1e-4f), "a registered space starts the walker at the head");
                 }
 
-                // A space of lane B is not built: refused, and the walker stays where he is.
-                Assert.That(rig.Hub.SendCommand(OperatorCommand.SwitchSpace((int)SpaceId.CurvedWalk)), Is.True);
+                // A space no build has. From the Station the command never reaches the host; asked for on the
+                // phone it is refused. Either way the walker stays where he is.
+                Assert.That(rig.Lab.IsAvailable((SpaceId)SpaceIds.Count), Is.False);
+                Assert.That(rig.Hub.SendCommand(OperatorCommand.SwitchSpace(SpaceIds.Count)), Is.True);
+                rig.Steps(CommandFrames);
+                Assert.That(rig.HasEvent("space.refused"), Is.False);
+                rig.Commands.SwitchSpace((SpaceId)SpaceIds.Count, null);
                 rig.Steps(CommandFrames);
                 Assert.That(rig.Lab.Current, Is.EqualTo(SpaceId.Slicer));
                 Assert.That(rig.Lab.State, Is.EqualTo(SpaceHostState.Running));
@@ -210,6 +221,201 @@ namespace Atlas.E2E.Tests
                 Assert.That(rig.StepUntil(() => rig.Lab.State == SpaceHostState.Running && rig.Lab.Current == SpaceId.Home, 120),
                     Is.GreaterThanOrEqualTo(0));
                 StepAndCheckState(rig);
+                Assert.That(rig.HubState.SpaceId, Is.EqualTo((byte)SpaceId.Home));
+                Assert.That(rig.Loader.Loads, Is.EqualTo(5));
+                Assert.That(rig.Loader.Unloads, Is.EqualTo(4));
+                AssertHealthy(rig);
+            }
+        }
+
+        // ---- the curved spaces on the one kernel ------------------------------------------------------------------
+
+        /// <summary>The State's tile words and local frame are the kernel's pose of this frame (lane D contract, section 2.3).</summary>
+        static void AssertStateIsThePose(RehearsalRig rig)
+        {
+            WalkerPose pose = rig.Kernel.Pose;
+            string at = "frame " + rig.Frames;
+            for (int i = 0; i < StateMessage.TileLength; i++) Assert.That(rig.HubState.GetTile(i), Is.EqualTo(pose.Tile[i]), at);
+            Assert.That(rig.HubState.GetXform(2), Is.EqualTo(pose.Local.M02).Within(1e-12), at);
+            Assert.That(rig.HubState.GetXform(5), Is.EqualTo(pose.Local.M12).Within(1e-12), at);
+            Assert.That(rig.HubState.GetXform(8), Is.EqualTo(pose.Local.M22).Within(1e-12), at);
+        }
+
+        /// <summary>Curved Walk entered from Home with the head standing, then the 4 s ramp to the dial's curvature.</summary>
+        static CurvedWalkModule EnterCurvedWalkAndRamp(RehearsalRig rig, RoomModel room, out double l5)
+        {
+            Switch(rig, SpaceId.CurvedWalk);
+            var s2 = rig.Module<CurvedWalkModule>();
+            Assert.That(s2, Is.Not.Null);
+            Assert.That(rig.Lab.Module.Registered, Is.False);
+            Assert.That(rig.Kernel.Q, Is.EqualTo(5), "the space put the app's kernel on the {4,5} tiling");
+            Assert.That(rig.Kernel.Pose.Tile, Is.EqualTo(TileId.Zero), "the room is tile zero");
+            l5 = room.Curvature.ForDial(5, false);
+            Assert.That(rig.Kernel.ConfiguredMetresPerUnit, Is.EqualTo(l5).Within(1e-12));
+
+            int frames = rig.StepUntil(() => rig.Kernel.CurvatureNow != 0 && !rig.Kernel.Ramping, 420);
+            Assert.That(frames, Is.GreaterThanOrEqualTo(0), "the curvature never arrived: the frame loop's timed step drives the ramp");
+            Assert.That(rig.Kernel.CurvatureNow, Is.EqualTo(-1.0 / (l5 * l5)).Within(1e-12));
+            Assert.That(rig.Kernel.Kappa, Is.EqualTo(Curvature.Hyperbolic));
+            Assert.That(rig.Kernel.MetresPerUnit, Is.EqualTo(l5).Within(1e-9));
+            Assert.That(rig.Guard.Armed, Is.True, "Bump Guard runs whatever the space");
+            return s2;
+        }
+
+        [Test]
+        public void E2E_CurvedWalk_TheFiveCornerLapClosesUnder25cm_ThroughTheFrameLoop_AndHomeIsFlatAgain()
+        {
+            RoomModel room = Room(RoomFixtures.Sample3x3);
+            PoseLog lap = RehearsalRig.LoadWalk(Lap5Walk);
+            Assert.That(lap.RoomId, Is.EqualTo(room.Id));
+
+            using (RehearsalRig rig = Enter(room, in lap.Samples[0]))
+            {
+                double l5;
+                CurvedWalkModule s2 = EnterCurvedWalkAndRamp(rig, room, out l5);
+                rig.Steps(2);       // the walk is armed once the ramp has settled
+                Assert.That(s2.Core.Walk.Armed, Is.True);
+                Assert.That(s2.Core.Walk.Q, Is.EqualTo(5));
+
+                rig.Play(lap);
+                bool left = false;
+                long steps = rig.Kernel.StepCount;
+                for (int k = 0; k < lap.Samples.Length; k++)
+                {
+                    StepAndCheckState(rig);
+                    AssertStateIsThePose(rig);
+                    Assert.That(rig.HubState.SpaceId, Is.EqualTo((byte)SpaceId.CurvedWalk));
+                    Assert.That(rig.HubState.PoseJumpRejected, Is.False, "frame " + rig.Frames);
+                    Assert.That(rig.HubState.GetParam(0), Is.EqualTo((float)l5), "p[0] is L, frame " + rig.Frames);
+                    Assert.That(rig.HubState.GetParam(CurvedWalkCore.StateQ), Is.EqualTo(5f));
+                    Assert.That(rig.HubState.GetParam(CurvedWalkCore.StateCurvature), Is.EqualTo((float)(-1.0 / (l5 * l5))));
+                    if (!rig.Kernel.Pose.Tile.Equals(TileId.Zero)) left = true;
+                }
+                rig.StandAt(in lap.Samples[lap.Samples.Length - 1]);
+                rig.Steps(30);
+                Assert.That(rig.Kernel.StepCount - steps, Is.EqualTo(lap.Samples.Length + 30), "one kernel step per frame, by the frame loop alone");
+
+                LapWalk walk = s2.Core.Walk;
+                TestContext.WriteLine("q = 5 lap through the frame loop: {0} corners, closure {1:0.000} m, world turn {2:0.0} deg",
+                    walk.Corners, walk.DistanceToFlagM, walk.WorldTurnDeg);
+                Assert.That(left, Is.True, "the lap never left tile zero");
+                Assert.That(walk.Started, Is.True);
+                Assert.That(walk.Corners, Is.EqualTo(5));
+                Assert.That(walk.Closed, Is.True, "five corners close the loop on {4,5}");
+                Assert.That(walk.DistanceToFlagM, Is.LessThan(0.25), "gate G2: closure under 0.25 m");
+                Assert.That(rig.Kernel.Pose.Tile, Is.EqualTo(TileId.Zero), "back in the room's tile");
+                Assert.That(rig.HasEvent("walk.corner"), Is.True);
+                Assert.That(rig.HasEvent("walk.closed"), Is.True);
+
+                // The world event names the generator's seed and its own content hash (task P1-B07).
+                EventMessage world = null;
+                for (int i = 0; i < rig.Logged.Count; i++) if (rig.Logged[i].Ev == LinkEvents.World) world = rig.Logged[i];
+                Assert.That(world, Is.Not.Null);
+                Assert.That(world.Data.GetString("genHash"), Is.EqualTo(s2.ContentHash));
+                Assert.That(s2.ContentHash.Length, Is.EqualTo(16));
+
+                // Return to Home: the kernel is flat for the room again and the walker stands under the head.
+                Assert.That(rig.Hub.SendCommand(OperatorCommand.Home()), Is.True);
+                Assert.That(rig.StepUntil(() => rig.Lab.State == SpaceHostState.Running && rig.Lab.Current == SpaceId.Home, 120),
+                    Is.GreaterThanOrEqualTo(0));
+                StepAndCheckState(rig);
+                Assert.That(rig.Kernel.Q, Is.EqualTo(4));
+                Assert.That(rig.Kernel.Kappa, Is.EqualTo(Curvature.Flat));
+                Assert.That(rig.Kernel.MetresPerUnit, Is.EqualTo(KernelConstants.FlatMetresPerUnit));
+                Assert.That(math.distance((float2)rig.WalkerFloor, rig.HeadFloor), Is.LessThan(1e-4f), "re-registered at the head");
+                Assert.That(rig.HubState.GetParam(0), Is.EqualTo(1f));
+                AssertHealthy(rig);
+            }
+        }
+
+        [Test]
+        public void E2E_CurvedSpaces_HomeToS2ToS3ToS4ToHome_OnTheOneKernel_WithTheStationWatching()
+        {
+            RoomModel room = Room(RoomFixtures.Sample3x3);
+            PoseLog lap = RehearsalRig.LoadWalk(Lap5Walk);
+
+            using (RehearsalRig rig = Enter(room, in lap.Samples[0]))
+            {
+                // All seven spaces are in the build, and next-space walks them in order.
+                SpaceId target = SpaceId.Home;
+                for (int i = 0; i < SpaceIds.Count; i++) Assert.That(rig.Lab.IsAvailable((SpaceId)i), Is.True, SpaceIds.Code((SpaceId)i));
+                Assert.That(SpaceActions.TryNeighbour(rig.Lab, 1, out target), Is.True);
+                Assert.That(target, Is.EqualTo(SpaceId.Glued));
+                Assert.That(SpaceActions.TryNeighbour(rig.Lab, -1, out target), Is.True);
+                Assert.That(target, Is.EqualTo(SpaceId.Slicer));
+
+                // ---- S2: the kernel on {4,5}, the ramp, then a walk out of tile zero.
+                double l5;
+                CurvedWalkModule s2 = EnterCurvedWalkAndRamp(rig, room, out l5);
+                Assert.That(rig.Registry.IsGroupActive(SpaceIds.ParamGroup(SpaceId.CurvedWalk)), Is.True);
+                rig.Play(lap);
+                int sample = 0;
+                while (sample < lap.Samples.Length && rig.Kernel.Pose.Tile.Equals(TileId.Zero))
+                {
+                    StepAndCheckState(rig);
+                    AssertStateIsThePose(rig);
+                    sample++;
+                }
+                Assert.That(sample, Is.LessThan(lap.Samples.Length), "the walk never left tile zero");
+                for (int k = 0; k < 20; k++, sample++) StepAndCheckState(rig);
+                rig.StandAt(in lap.Samples[sample - 1]);
+                rig.Steps(30);
+                WalkerPose mode1 = rig.Kernel.Pose;
+                Assert.That(mode1.Tile.Equals(TileId.Zero), Is.False);
+                Assert.That(rig.Kernel.Kappa, Is.EqualTo(Curvature.Hyperbolic));
+                TestContext.WriteLine("S2 stands in tile {0} after {1} samples", mode1.Tile, sample);
+
+                // ---- S2 to S3: Mode 1 to Mode 2 keeps the tile id and the pose (sections 4.8 and 4.9).
+                rig.Stage.WentBlack = false;
+                Switch(rig, SpaceId.AlignedCells);
+                var s3 = rig.Module<AlignedCellsModule>();
+                Assert.That(s3, Is.Not.Null);
+                Assert.That(rig.Stage.WentBlack, Is.True);
+                Assert.That(s3.Start.Tile, Is.EqualTo(mode1.Tile), "the pose Mode 1 left, handed over by SpaceLab");
+                Assert.That(s3.Start.Local.Kappa, Is.EqualTo(Curvature.Hyperbolic));
+                Assert.That(s3.Core.EnteredFromCurvedWalk, Is.True);
+                Assert.That(s3.Core.Walker.Frame.Tile, Is.EqualTo(mode1.Tile), "the same tile id in Mode 2");
+                Assert.That(rig.Kernel.Q, Is.EqualTo(4), "Aligned Cells is registered: the kernel is flat again");
+                Assert.That(math.distance((float2)rig.WalkerFloor, rig.HeadFloor), Is.LessThan(1e-4f));
+                Assert.That(rig.Registry.GetInt(AppParams.CurvedMode), Is.EqualTo(AlignedCellsCore.ModeAlignedCells));
+                for (int k = 0; k < 30; k++) StepAndCheckState(rig);
+                Assert.That(rig.HubState.SpaceId, Is.EqualTo((byte)SpaceId.AlignedCells));
+                for (int i = 0; i < StateMessage.TileLength; i++) Assert.That(rig.HubState.GetTile(i), Is.EqualTo(mode1.Tile[i]), "State.tile word " + i);
+                Assert.That(rig.HubState.GetParam(0), Is.EqualTo(1f), "p[0] is metres per unit of the flat kernel");
+
+                // ---- S3 to S4: the same kernel on the sphere, q = 3.
+                Switch(rig, SpaceId.SmallPlanet);
+                var s4 = rig.Module<SmallPlanetModule>();
+                Assert.That(s4, Is.Not.Null);
+                double r = SmallPlanetCore.RadiusFor(room, false);
+                Assert.That(rig.Kernel.Q, Is.EqualTo(3));
+                Assert.That(rig.Kernel.Kappa, Is.EqualTo(Curvature.Spherical));
+                Assert.That(rig.Kernel.MetresPerUnit, Is.EqualTo(r).Within(1e-12));
+                Assert.That(rig.Registry.GetInt(AppParams.CurvedMode), Is.EqualTo(AlignedCellsCore.ModeCurvedWalk), "Aligned Cells gave the mode back");
+                long steps = rig.Kernel.StepCount;
+                for (int k = 0; k < 30; k++) StepAndCheckState(rig);
+                Assert.That(rig.Kernel.StepCount - steps, Is.EqualTo(30));
+                Assert.That(s4.Core.Placed, Is.True);
+                Assert.That(s4.Core.R, Is.EqualTo(r).Within(1e-12));
+                AssertStateIsThePose(rig);
+                Assert.That(rig.HubState.SpaceId, Is.EqualTo((byte)SpaceId.SmallPlanet));
+                Assert.That(rig.HubState.GetTile(0), Is.InRange(0L, 5L), "the cube face");
+                Assert.That(CubeTiling.FaceOf(rig.Kernel.Pose.Tile), Is.EqualTo(s4.Core.Face));
+                Assert.That(rig.HubState.GetParam(0), Is.EqualTo((float)r), "p[0] is R");
+                Assert.That(rig.HubState.GetParam(3), Is.EqualTo(3f));
+                Assert.That(rig.HubState.GetParam(4), Is.EqualTo((float)(1.0 / (r * r))).Within(1e-6f));
+                Assert.That(rig.Guard.Armed, Is.True);
+
+                // ---- Home: flat, registered, the walker under the head.
+                Assert.That(rig.Hub.SendCommand(OperatorCommand.Home()), Is.True);
+                Assert.That(rig.StepUntil(() => rig.Lab.State == SpaceHostState.Running && rig.Lab.Current == SpaceId.Home, 120),
+                    Is.GreaterThanOrEqualTo(0));
+                StepAndCheckState(rig);
+                Assert.That(rig.Lab.Module.Registered, Is.True);
+                Assert.That(rig.Kernel.Q, Is.EqualTo(4));
+                Assert.That(rig.Kernel.Kappa, Is.EqualTo(Curvature.Flat));
+                Assert.That(((FlatTileGraph)rig.Kernel.Graph).CentreSpacing * rig.Kernel.MetresPerUnit, Is.EqualTo(room.LapSide).Within(1e-9));
+                Assert.That(math.distance((float2)rig.WalkerFloor, rig.HeadFloor), Is.LessThan(1e-4f), "re-registered at the head");
                 Assert.That(rig.HubState.SpaceId, Is.EqualTo((byte)SpaceId.Home));
                 Assert.That(rig.Loader.Loads, Is.EqualTo(5));
                 Assert.That(rig.Loader.Unloads, Is.EqualTo(4));
@@ -373,6 +579,66 @@ namespace Atlas.E2E.Tests
                 {
                     Assert.That(runs[run][i].Frame, Is.EqualTo(runs[0][i].Frame), "run " + run + ", change " + i);
                     Assert.That(runs[run][i].To, Is.EqualTo(runs[0][i].To), "run " + run + ", change " + i);
+                }
+            }
+        }
+
+        [Test]
+        public void E2E_WallApproach_InTheCurvedSpaces_BumpGuardCueIsTheOneOfHome()
+        {
+            // Bump Guard works in the room frame at step 2, before the kernel, whatever the space (Master Plan
+            // rule 1): the same walk towards the real wall gives the same levels in the same frames in Home, in
+            // Curved Walk at full curvature, in Aligned Cells and on the Small Planet.
+            RoomModel room = Room(RoomFixtures.Sample3x3);
+            PoseLog log = RehearsalRig.LoadWalk(WallWalk);
+            SpaceId[] spaces = { SpaceId.Home, SpaceId.CurvedWalk, SpaceId.AlignedCells, SpaceId.SmallPlanet };
+            const int startFrame = 900;     // the same frame in every run, so the 15 Hz depth image is in step
+            var runs = new List<BumpChange>[spaces.Length];
+
+            for (int run = 0; run < spaces.Length; run++)
+            {
+                using (RehearsalRig rig = Enter(room, in log.Samples[0]))
+                {
+                    if (spaces[run] != SpaceId.Home) Switch(rig, spaces[run]);
+                    Assert.That(rig.Frames, Is.LessThan(startFrame));
+                    while (rig.Frames < startFrame) rig.Step();
+                    if (spaces[run] == SpaceId.CurvedWalk)
+                    {
+                        Assert.That(rig.Kernel.CurvatureNow, Is.Not.EqualTo(0.0), "the walk is made at full curvature");
+                        Assert.That(rig.Kernel.Ramping, Is.False);
+                    }
+                    if (spaces[run] == SpaceId.SmallPlanet) Assert.That(rig.Kernel.Q, Is.EqualTo(3));
+
+                    rig.BumpChanges.Clear();
+                    rig.Play(log);
+                    for (int k = 0; k < log.Samples.Length; k++)
+                    {
+                        StepAndCheckState(rig);
+                        Assert.That(rig.HubState.BumpLevel, Is.EqualTo((byte)rig.Guard.Level), "the Station sees the level in the same frame");
+                    }
+                    var changes = new List<BumpChange>(rig.BumpChanges);
+                    for (int i = 0; i < changes.Count; i++)
+                    {
+                        BumpChange c = changes[i];
+                        c.Frame -= startFrame;
+                        changes[i] = c;
+                    }
+                    runs[run] = changes;
+                    Assert.That(rig.Lab.Current, Is.EqualTo(spaces[run]));
+                    AssertHealthy(rig);
+                }
+            }
+
+            Assert.That(runs[0].Count, Is.GreaterThan(0), "the walk towards the wall raises the level in Home");
+            for (int run = 1; run < spaces.Length; run++)
+            {
+                string who = SpaceIds.Code(spaces[run]);
+                Assert.That(runs[run].Count, Is.EqualTo(runs[0].Count), who);
+                for (int i = 0; i < runs[0].Count; i++)
+                {
+                    Assert.That(runs[run][i].Frame, Is.EqualTo(runs[0][i].Frame), who + ", change " + i);
+                    Assert.That(runs[run][i].From, Is.EqualTo(runs[0][i].From), who + ", change " + i);
+                    Assert.That(runs[run][i].To, Is.EqualTo(runs[0][i].To), who + ", change " + i);
                 }
             }
         }
@@ -756,9 +1022,12 @@ namespace Atlas.E2E.Tests
 
         // ---- no allocation ----------------------------------------------------------------------------------------
 
-        static readonly SpaceId[] BuiltSpaces = { SpaceId.Home, SpaceId.Glued, SpaceId.Portal, SpaceId.Slicer };
+        static readonly SpaceId[] AllSpaces =
+        {
+            SpaceId.Home, SpaceId.Glued, SpaceId.CurvedWalk, SpaceId.AlignedCells, SpaceId.SmallPlanet, SpaceId.Portal, SpaceId.Slicer
+        };
 
-        [TestCaseSource(nameof(BuiltSpaces))]
+        [TestCaseSource(nameof(AllSpaces))]
         public void E2E_SteadyState_ThePhonesFrameAllocatesNothing(SpaceId space)
         {
             RoomModel room = Room(RoomFixtures.Sample3x3);
@@ -767,6 +1036,9 @@ namespace Atlas.E2E.Tests
             using (RehearsalRig rig = Enter(room, in log.Samples[0]))
             {
                 if (space != SpaceId.Home) Switch(rig, space);
+                // Curved Walk is measured curved: the head stands until the ramp is over.
+                if (space == SpaceId.CurvedWalk)
+                    Assert.That(rig.StepUntil(() => rig.Kernel.CurvatureNow != 0 && !rig.Kernel.Ramping, 420), Is.GreaterThanOrEqualTo(0));
                 rig.Play(log);
                 // The first side warms everything up; the second is measured between its corners, where no
                 // level changes, no cell edge of the lattice is met twice and no event is due.

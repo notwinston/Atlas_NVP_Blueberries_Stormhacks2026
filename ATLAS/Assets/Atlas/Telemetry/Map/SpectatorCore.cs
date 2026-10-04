@@ -58,6 +58,10 @@ namespace Atlas.Telemetry
         // What the phone says it holds.
         string _wantRoom = string.Empty, _wantHash = string.Empty, _wantGeometry = string.Empty, _forgeUrl = string.Empty;
         int _wantSpace = -1;
+        // The tiling, the generator and the length scale the phone hashed with: named by its world event.
+        bool _wantWorld;
+        int _wantQ, _wantLMm, _wantGenVer;
+        long _wantSeed;
         bool _hasOutline;
         bool _wantDirty;
 
@@ -146,6 +150,8 @@ namespace Atlas.Telemetry
             if (!string.IsNullOrEmpty(welcome.ForgeUrl)) _forgeUrl = welcome.ForgeUrl;
             // A Welcome sent before the phone arrived names nothing; it does not unsay what a world event said.
             if (string.IsNullOrEmpty(welcome.RoomId) && string.IsNullOrEmpty(welcome.WorldHash)) return;
+            // A Welcome names the hash alone: what a world event said of it stands only while the hash is the same.
+            if (!string.Equals(welcome.WorldHash ?? string.Empty, _wantHash, StringComparison.Ordinal)) _wantWorld = false;
             Want(welcome.RoomId ?? string.Empty, welcome.WorldHash ?? string.Empty, null, -1);
         }
 
@@ -200,6 +206,16 @@ namespace Atlas.Telemetry
             // A world event of an older build carries only the version and the space.
             string room = data.GetString("roomId", null);
             Want(room ?? _wantRoom, data.GetString("worldHash", string.Empty), data.GetString("geomHash", null), data.GetInt("space", -1));
+            // A curved space hashes with its own tiling, generator seed and length scale (section 2.5). They are the
+            // phone's to choose and are taken as told; the room they are hashed with stays the one held here.
+            _wantWorld = data.Has("q") && data.Has("seed") && data.Has("genVer") && data.Has("lMm");
+            if (_wantWorld)
+            {
+                _wantQ = data.GetInt("q", 4);
+                _wantSeed = data.GetLong("seed", WorldSeed);
+                _wantGenVer = data.GetInt("genVer", GeneratorVersion);
+                _wantLMm = data.GetInt("lMm", 0);
+            }
         }
 
         /// <summary>The phone's room outline. The message object is the link's own: it is copied.</summary>
@@ -337,24 +353,33 @@ namespace Atlas.Telemetry
             ITileGraph graph = _kernel.Graph;
             int q = graph != null ? graph.Q : 4;
             int lMm = WorldHash.Millimetres(_kernel.MetresPerUnit);
+            long seed = WorldSeed;
+            int genVer = GeneratorVersion;
+            if (_wantWorld)
+            {
+                q = _wantQ;
+                lMm = _wantLMm;
+                seed = _wantSeed;
+                genVer = _wantGenVer;
+            }
             if (_wantSpace >= 0)
             {
-                if (!HashIs(_wantSpace, q, lMm)) return false;
+                if (!HashIs(_wantSpace, q, lMm, seed, genVer)) return false;
             }
             else
             {
                 // A Welcome names the hash but not the space it was made for: it must be one of them.
                 bool any = false;
-                for (int s = 0; s < SpaceIds.Count && !any; s++) any = HashIs(s, q, lMm);
+                for (int s = 0; s < SpaceIds.Count && !any; s++) any = HashIs(s, q, lMm, seed, genVer);
                 if (!any) return false;
             }
             WorldVerified = true;
             return true;
         }
 
-        bool HashIs(int space, int q, int lMm)
+        bool HashIs(int space, int q, int lMm, long seed, int genVer)
         {
-            string own = WorldHash.Compute(space, q, WorldSeed, GeneratorVersion, _roomGeometry, lMm);
+            string own = WorldHash.Compute(space, q, seed, genVer, _roomGeometry, lMm);
             return string.Equals(own, _wantHash, StringComparison.Ordinal);
         }
 

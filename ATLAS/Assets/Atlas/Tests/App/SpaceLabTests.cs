@@ -83,8 +83,9 @@ namespace Atlas.App.Tests
             int resets = rig.Walker.Resets;
             ushort version = rig.Lab.WorldVersion;
 
-            Assert.That(rig.Lab.IsAvailable(SpaceId.CurvedWalk), Is.False);
-            Assert.That(rig.Lab.RequestSwitch(SpaceId.CurvedWalk), Is.False);
+            // The loader of this build has neither a scene nor a factory for the Slicer.
+            Assert.That(rig.Lab.IsAvailable(SpaceId.Slicer), Is.False);
+            Assert.That(rig.Lab.RequestSwitch(SpaceId.Slicer), Is.False);
             Assert.That(rig.Lab.RequestSwitch((SpaceId)42), Is.False);
             rig.Frames(60);
 
@@ -94,7 +95,7 @@ namespace Atlas.App.Tests
             Assert.That(rig.Walker.Resets, Is.EqualTo(resets), "nothing reaches the kernel");
             Assert.That(rig.Lab.WorldVersion, Is.EqualTo(version));
             Assert.That(rig.Loader.Created.Count, Is.EqualTo(1));
-            Assert.That(rig.Events.Has("space.refused {\"space\":\"S2\",\"reason\":\"unavailable\"}"), Is.True);
+            Assert.That(rig.Events.Has("space.refused {\"space\":\"S6\",\"reason\":\"unavailable\"}"), Is.True);
             Assert.That(rig.Stage.Fade, Is.EqualTo(1f));
         }
 

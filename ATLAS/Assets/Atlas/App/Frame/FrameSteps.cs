@@ -103,6 +103,24 @@ namespace Atlas.App
         }
     }
 
+    /// <summary>
+    /// Step 6, after the entered module's own upload: the tiles the curved world drew this frame go to the
+    /// telemetry row's visibleTiles (Master Plan section 7.3.3). 0 while no tile renderer is configured.
+    /// Atlas.Telemetry does not reference Atlas.Rendering, so the copy is made here.
+    /// </summary>
+    public sealed class TileStatsUploadStep : IUploadStep
+    {
+        readonly System.Action<ushort> _write;
+
+        public TileStatsUploadStep(System.Action<ushort> write) { _write = write; }
+
+        public void Upload(in FrameContext frame)
+        {
+            int drawn = AtlasServices.TryGet(out ITileDrawStats stats) ? stats.TilesDrawn : 0;
+            _write((ushort)(drawn < 0 ? 0 : (drawn > ushort.MaxValue ? ushort.MaxValue : drawn)));
+        }
+    }
+
     /// <summary>Step 6: the pose pipeline's rotation prediction goes to the eyes (identity when it is off).</summary>
     public sealed class RigUploadStep : IUploadStep
     {

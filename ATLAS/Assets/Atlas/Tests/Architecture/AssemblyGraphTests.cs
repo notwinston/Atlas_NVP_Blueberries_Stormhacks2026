@@ -14,8 +14,9 @@ namespace Atlas.Architecture.Tests
     public class AssemblyGraphTests
     {
         const string Spaces = "Atlas.Spaces.*";
+        const string Blades = "Atlas.Blades.*";
 
-        // Which Atlas assemblies each assembly may reference. Use cases, the Editor assembly and tests are unrestricted.
+        // Which Atlas assemblies each assembly may reference. The Editor assembly and tests are unrestricted.
         static readonly Dictionary<string, string[]> Allowed = new Dictionary<string, string[]>
         {
             { "Atlas.Kernel", new string[0] },
@@ -30,6 +31,8 @@ namespace Atlas.Architecture.Tests
             { "Atlas.App", new[] { "Atlas.Kernel", "Atlas.Link", "Atlas.World", "Atlas.Rendering", "Atlas.Scan", "Atlas.Safety", "Atlas.Input", "Atlas.Telemetry" } },
             { Spaces, new[] { "Atlas.Kernel", "Atlas.Link", "Atlas.World", "Atlas.Rendering", "Atlas.Input", "Atlas.Telemetry" } },
             { "Atlas.Spectator", new[] { "Atlas.Kernel", "Atlas.Link", "Atlas.World", "Atlas.Rendering", "Atlas.Telemetry", Spaces } },
+            { "Atlas.World.Lint.Editor", new[] { "Atlas.Kernel", "Atlas.World", "Atlas.Rendering" } },
+            { Blades, new[] { "Atlas.Kernel", "Atlas.Link", "Atlas.World", "Atlas.Rendering", "Atlas.Scan", "Atlas.Safety", "Atlas.Input", "Atlas.Telemetry", Spaces } },
         };
 
         sealed class Asm
@@ -87,7 +90,8 @@ namespace Atlas.Architecture.Tests
         {
             if (Allowed.TryGetValue(name, out var allowed))
                 return allowed;
-            return name.StartsWith("Atlas.Spaces.") ? Allowed[Spaces] : null;
+            if (name.StartsWith("Atlas.Spaces.")) return Allowed[Spaces];
+            return name.StartsWith("Atlas.Blades.") ? Allowed[Blades] : null;
         }
 
         [Test]

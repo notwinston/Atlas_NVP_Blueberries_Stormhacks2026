@@ -108,7 +108,7 @@ namespace Atlas.App.Tests
             host.Accept = false;
             registry.Set(AppParams.Space, 2f, ParamSource.Remote);
             Assert.That(host.Calls, Is.EqualTo(new[] { "switch S2" }));
-            Assert.That(registry.GetInt(AppParams.Space), Is.EqualTo(6), "a space that is not built: the value snaps back");
+            Assert.That(registry.GetInt(AppParams.Space), Is.EqualTo(6), "the host refused the switch: the value snaps back");
         }
 
         [Test]
