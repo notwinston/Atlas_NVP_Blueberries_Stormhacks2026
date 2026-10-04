@@ -1,6 +1,5 @@
 # Lane B phone and headset testing (deferred acceptance)
 
-<<<<<<< HEAD
 One section per task: scene, steps, expected numbers. A human fills in the measured values. The master list is
 `docs/laneB/checklists/P3-B03-B05-B08_phone.md`.
 
@@ -50,7 +49,6 @@ One section per task: scene, steps, expected numbers. A human fills in the measu
   5. No flicker: every tile run is at least 0.25 s (15 frames at 60 Hz); the sequence is tile zero, then one neighbour per side, back to tile zero.
   6. The corner post is 0.17 m from the flag at L = 1.88 m (0.0920553 L) and fades once lane A's near-head fade lands (the 0.3 m fade is in lane A's AtlasCore, deviation D13).
 - Editor-proved here: `Atlas.Spaces.CurvedWalk.Tests` (`CurvedRoomViewTests`, `TileZeroTests`), `Atlas.WorldGen.Tests` (`FootprintLintTests`) and `Atlas.Kernel.Tests` (`TileZeroPlacementTests`).
-=======
 One section per task: scene, steps, expected numbers. A human fills in the measured values.
 
 ## P1-B12 Room content in Aligned Cells (DEFERRED: phone A in the headset)
@@ -79,4 +77,3 @@ Same scene and preconditions as above.
 
 - Four quarter-turns round an interior corner end in a fifth tile, and a fifth returns to the first (read the tile id on the Spectator).
 - Tile instances alone cost <= 120 draw calls per frame on the 4 x 5 m sample room (Editor worst: 34).
->>>>>>> P1-B12
