@@ -50,3 +50,4 @@ Add a line before you take the seat; fill in the result when you leave it. Newes
 | 2026-10-04 04:39 | Lucas | ui/polish @ c03cbfa | Slower hexagon ripple, outlines only at each tile's turn, flat-top front hexagon on a vertical pole (release build) | Batphone | Built and installed; not yet looked at on the phone |
 | 2026-10-04 04:43 | Lucas | ui/polish @ f8c622e | Faster hexagon ripple, black outlines (release build) | Batphone | Built and installed; not yet looked at on the phone |
 | 2026-10-04 04:50 | Lucas | ui/polish @ 0a2dd18 | Hexagon rings turn over outwards as one wave (release build) | Batphone | Built and installed; not yet looked at on the phone |
+| 2026-10-04 04:58 | Lucas | ui/polish @ 6ce9e84 | Hexagons spin on vertical poles, left and right mirrored (release build) | Batphone | Built and installed; not yet looked at on the phone |
