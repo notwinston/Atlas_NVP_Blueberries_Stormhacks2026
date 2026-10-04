@@ -1,3 +1,4 @@
+using Atlas.World;
 using NUnit.Framework;
 using Unity.Mathematics;
 
@@ -141,6 +142,22 @@ namespace Atlas.Rendering.Tests.Look
             expected = AtlasPalette.HsvToRgb(137.5f * 20f % 360f, 0.40f, 0.50f);
             actual = AtlasPalette.Srgb(AtlasPalette.Category(20));
             Assert.That(math.cmax(math.abs(expected - actual)), Is.LessThan(1e-4f));
+        }
+
+        // Cells 60 to 63 (category tints 28 to 31) hold the S3 duck's colours: a 29th object category would get a duck colour
+        // as its tint, so it must fail here first.
+        [Test]
+        public void ObjectCategories_StayBelowTheDuckCells()
+        {
+            Assert.That(AtlasPalette.CategoryTintCount, Is.EqualTo(28));
+            Assert.That(AtlasPalette.Category(AtlasPalette.CategoryTintCount), Is.EqualTo(AtlasPalette.DuckYellow));
+            Assert.That(ObjectCategories.Count, Is.LessThanOrEqualTo(AtlasPalette.CategoryTintCount),
+                "more object categories than category tints: the duck's cells 60..63 would be read as tints");
+            foreach (ObjectCategory c in System.Enum.GetValues(typeof(ObjectCategory)))
+            {
+                Assert.That((int)c, Is.LessThan(AtlasPalette.CategoryTintCount), c.ToString());
+                Assert.That(AtlasPalette.Category(ObjectCategories.TintIndex(c)), Is.LessThan(AtlasPalette.DuckYellow), c.ToString());
+            }
         }
 
         [Test]

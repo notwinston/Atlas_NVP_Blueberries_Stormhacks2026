@@ -34,6 +34,8 @@ namespace Atlas.Rendering
 
         // Blocks.
         public const int CategoryBase = 32, CategoryCount = 32;
+        /// <summary>Category tints before the duck's cells: categories 0..27.</summary>
+        public const int CategoryTintCount = DuckYellow - CategoryBase;
         public const int ObjectBase = 64, ObjectCount = 64;
         public const int RegionBase = 128, RegionCount = 4, RegionSteps = 4;
         public const int Cell4DBase = 208, Cell4DCount = 32;
@@ -93,7 +95,11 @@ namespace Atlas.Rendering
             return TexelSrgb(column * CellPixels + CellPixels / 2, row * CellPixels + CellPixels / 2);
         }
 
-        /// <summary>Tint cell of an object category (0..31): CategoryBase + category.</summary>
+        /// <summary>
+        /// Tint cell of an object category: CategoryBase + category, clamped to 0..31. Only categories 0..27
+        /// (CategoryTintCount) have a tint: the cells of 28..31 hold the duck's colours (DuckYellow, DuckOrange,
+        /// DuckWhite, DuckBlack). ObjectCategories.Count must stay at most CategoryTintCount (PaletteTests).
+        /// </summary>
         public static int Category(int category)
         {
             return CategoryBase + math.clamp(category, 0, CategoryCount - 1);
