@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using Atlas.Blades.FieldFit.ScotomaRiver;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -9,10 +10,11 @@ namespace Atlas.Blades.FieldFit.BlindSpotFinder
     /// <summary>Test-scene controller for the Blind-Spot Finder and river text (Brief §6, D13). Advanced by the confirm tap only.</summary>
     public sealed class BlindSpotTestScene : MonoBehaviour
     {
-        enum State { Booting, Intro, Running, Result }
+        enum State { Booting, Intro, Running, Result, River }
 
         State _state = State.Booting;
         BlindSpot _blindSpot;
+        RiverText _river;
         TextMeshPro _text;
         IBlindSpotRig _rig; IBlindSpotLook _look; IBlindSpotTap _tap; IBlindSpotEvents _events;
 
@@ -33,6 +35,9 @@ namespace Atlas.Blades.FieldFit.BlindSpotFinder
                 yield return null;
             }
             _blindSpot = gameObject.AddComponent<BlindSpot>();
+            var riverGo = new GameObject("FieldFitRiver");
+            riverGo.transform.SetParent(transform, false);
+            _river = riverGo.AddComponent<RiverText>();
             BuildText();
             if (!ok)
             {
@@ -69,7 +74,8 @@ namespace Atlas.Blades.FieldFit.BlindSpotFinder
             {
                 case State.Intro: SetText(BlindSpotStrings.Intro); break;
                 case State.Running: SetText(""); break;
-                            }
+                case State.River: SetText(BlindSpotStrings.RiverPrompt); break;
+            }
         }
 
         void OnTap()
@@ -82,7 +88,17 @@ namespace Atlas.Blades.FieldFit.BlindSpotFinder
                     break;
                 case State.Running: break;   // taps go to BlindSpot only
                 case State.Result:
-                    _blindSpot.End(); Enter(State.Intro);
+                    if (_blindSpot.LastResult.Found)
+                    {
+                        _river.Show(_blindSpot.LastResult, _blindSpot.LitEye, _events);
+                        Enter(State.River);
+                    }
+                    else { _blindSpot.End(); Enter(State.Intro); }
+                    break;
+                case State.River:
+                    _river.Hide();
+                    _blindSpot.End();
+                    Enter(State.Intro);
                     break;
             }
         }

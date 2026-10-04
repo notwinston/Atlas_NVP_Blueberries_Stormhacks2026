@@ -1,5 +1,6 @@
 using System.Linq;
 using Atlas.Blades.FieldFit.BlindSpotFinder;
+using Atlas.Blades.FieldFit.ScotomaRiver;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.Compilation;
@@ -28,7 +29,7 @@ namespace Atlas.Blades.FieldFit.BlindSpotTests
             // checks: G13: no clinical claim in any string (Brief §2.4 Avoid list)
             var sample = new BlindSpotResult(EyeSide.Right, 1, true, false, 0.27, -0.03, 0.048, 8.6, default, 6, 18, 0, 96, 100);
             var strings = new[] { BlindSpotStrings.Intro, BlindSpotStrings.NotFound, BlindSpotStrings.RiverPrompt, BlindSpotStrings.NoRig,
-                BlindSpotStrings.Result(sample) };
+                BlindSpotStrings.Result(sample) }.Concat(RiverText.DefaultLines);
             string all = string.Join("\n", strings).ToLowerInvariant();
             foreach (var bad in new[] { "diagnos", "detects", "treat", "rehabilit", "expands your visual field", "impair", "normal", "plans your procedure" })
                 StringAssert.DoesNotContain(bad, all);

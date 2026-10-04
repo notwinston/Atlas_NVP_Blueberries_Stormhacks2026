@@ -43,6 +43,7 @@ Stimulus: dot at 1.0 m, diameter 0.43 deg; cross 1.0 deg, 0.15 deg thick; backdr
 | D6 | The lit eye sees a dark head-locked backdrop at 1.2 m, which hides Home. Walkers stay at least 1.5 m from objects in view. |
 | D7 | "Seen" has the gamepad A and headset-lever twins only. Gaze dwell would break fixation (precedent: Shadow action, §10.1.3). |
 | D8 | Event names and payloads as above. |
+| D9 | River (P3-B07): plane perpendicular to the blind-spot direction at 1.0 m; anchor glyph at w = 0 on line 6 of 13; line height 1.0 deg; slit rule (text on the dividing line goes over the top); clamp applies when \|1 - a^2/z^2\| <= 0.5; Dickens text. No eye tracking, so the parting is correct only while the walker fixates the cross. `river_start {eye, a_deg, centre_az_deg, centre_el_deg, glyphs, min_r_over_a, scale_above}` is emitted for lane D's streamline twin. |
 | D10 | Separate test assembly, public API only, sub-namespaces. Test namespace is `Atlas.Blades.FieldFit.BlindSpotTests` because `BlindSpot.Tests` would collide with the class `BlindSpot`. |
 | D11 | asmdef gains `Unity.TextMeshPro`. |
 | D12 | The G7/P1-A04 dependencies (§10.4.8) differ from G11 (§9.7). Built against placeholders. |
@@ -52,3 +53,4 @@ Stimulus: dot at 1.0 m, diameter 0.43 deg; cross 1.0 deg, 0.15 deg thick; backdr
 | D16 | `BlindSpot` is `[ExecuteAlways]` so OnDisable/OnDestroy restore the eye in EditMode tests. |
 | D17 | Camera-based eye blanking fallback in the placeholder rig adapter (allowed for blanking only). |
 | D18 | The placeholder `EventLog.Emit` takes a scene string; the adapter passes "fieldfit". |
+| D19 | Test `River_ScaleProfile` uses tolerance 1.1e-6 at 1000a: 1/\|1 - 1e-6\| = 1 + 1.000001e-6, outside the brief's 1e-6 by arithmetic. |

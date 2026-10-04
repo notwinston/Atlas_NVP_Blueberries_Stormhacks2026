@@ -192,3 +192,12 @@ Steps:
 
 Pass: `t_find_s <= 30` for at least 4 of 5 testers. Record per tester: t_find_s, centre, radius, catch_fp / catch_trials, duration_s, thermal state.
 Also check (G13): no string makes a clinical claim. If the shared shader draws grid lines or fog on the backdrop or cross, report it as a lane-A contract issue.
+
+## P3-B07 Scotoma River, Extended (DEFERRED; feeds no gate)
+
+Scene: the same `FieldFit_BlindSpotTest.unity`, after a P3-B06 run (result screen, then A or click shows the river text).
+
+Steps: after the P3-B06 run press A; the tester keeps the eye on the cross.
+
+Pass: on the device, `river_start.min_r_over_a >= 0.999999` and `river_start.scale_above` in [0.48, 0.52] (read from events.jsonl).
+Also record (qualitative): whether the text visibly parts around an empty region on the temporal side.
