@@ -519,8 +519,8 @@ namespace Atlas.Scan.Grid
             return points;
         }
 
-        // Supplied boxes moved into the room frame, then one oriented box per obstacle blob that no supplied
-        // box explains (a blob is explained when at least half its cells lie under a supplied box).
+        // Supplied boxes moved into the room frame, then one oriented box per obstacle blob that the supplied
+        // boxes do not explain (a blob is explained when at least half its cells lie under supplied boxes).
         static ObstacleBox[] BuildBoxes(FloorGridInput input, FloorGridResult result, bool[] blob, float[] top,
             int width, int height, double originX, double originZ, double frameYaw, double y0)
         {
@@ -562,24 +562,36 @@ namespace Atlas.Scan.Grid
             return boxes.ToArray();
         }
 
+        // True when at least half the cells of a blob lie under the supplied boxes taken together, each grown
+        // by one cell. Together, not one by one: furniture that stands in a row, box touching box, is one blob
+        // that no single box covers by half, and it must not get a further box round the whole row. Something
+        // unscanned that touches a supplied box and is larger than it still leaves the blob unexplained.
         static bool Explained(List<int> members, List<ObstacleBox> boxes, int externalCount, int width,
             double originX, double originZ)
         {
+            if (externalCount == 0) return false;
+            var cos = new double[externalCount];
+            var sin = new double[externalCount];
             for (int e = 0; e < externalCount; e++)
             {
-                ObstacleBox box = boxes[e];
-                double c = Math.Cos(box.Yaw), s = Math.Sin(box.Yaw);
-                double hx = 0.5 * box.Size.x + Cell, hz = 0.5 * box.Size.z + Cell;
-                int under = 0;
-                for (int k = 0; k < members.Count; k++)
-                {
-                    double dx = originX + (members[k] % width + 0.5) * Cell - box.Base.x;
-                    double dz = originZ + (members[k] / width + 0.5) * Cell - box.Base.z;
-                    if (Math.Abs(dx * c - dz * s) <= hx && Math.Abs(dx * s + dz * c) <= hz) under++;
-                }
-                if (2 * under >= members.Count) return true;
+                cos[e] = Math.Cos(boxes[e].Yaw);
+                sin[e] = Math.Sin(boxes[e].Yaw);
             }
-            return false;
+            int under = 0;
+            for (int k = 0; k < members.Count; k++)
+            {
+                double x = originX + (members[k] % width + 0.5) * Cell, z = originZ + (members[k] / width + 0.5) * Cell;
+                for (int e = 0; e < externalCount; e++)
+                {
+                    ObstacleBox box = boxes[e];
+                    double dx = x - box.Base.x, dz = z - box.Base.z;
+                    if (Math.Abs(dx * cos[e] - dz * sin[e]) > 0.5 * box.Size.x + Cell) continue;
+                    if (Math.Abs(dx * sin[e] + dz * cos[e]) > 0.5 * box.Size.z + Cell) continue;
+                    under++;
+                    break;
+                }
+            }
+            return 2 * under >= members.Count;
         }
 
         // Smallest bounding rectangle of the blob's cells over yaws of 0 to 85 degrees in 5 degree steps. The
