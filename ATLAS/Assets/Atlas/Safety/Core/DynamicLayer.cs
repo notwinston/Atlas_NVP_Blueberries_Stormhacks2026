@@ -13,6 +13,11 @@ namespace Atlas.Safety
         public float* TopHeight;
         /// <summary>Time of the last hit in each cell, seconds.</summary>
         public double* LastHit;
+        /// <summary>
+        /// Time each cell was first stamped, seconds: written when a cell goes from empty to stamped and kept
+        /// while later hits renew <see cref="LastHit"/>. Read only by the young-cell rule of the depth mask.
+        /// </summary>
+        public double* FirstHit;
         /// <summary>Per cell: how many depth images have seen it empty since its last hit (low byte) and the sequence number of the last such image (upper bits).</summary>
         public int* EmptyState;
         /// <summary>Number of occupied cells in each block of 8 x 8 cells.</summary>
@@ -34,7 +39,8 @@ namespace Atlas.Safety
     /// The dynamic layer of Bump Guard (Master Plan section 4.10): obstacles that live depth has seen and the
     /// static map does not know. A cell keeps its highest hit and the time of its last hit. It is cleared only
     /// when later rays are seen to pass through it in three depth images, or after 30 s without a hit; going out
-    /// of view clears nothing.
+    /// of view clears nothing. One more rule exists for the walker's own hands (<see cref="ForgetIfYoung"/>):
+    /// it reaches only cells that are under a second old, and never runs without a depth mask.
     /// </summary>
     public static unsafe class DynamicLayer
     {
@@ -46,6 +52,8 @@ namespace Atlas.Safety
         /// <summary>
         /// Marks the cell under floor point <paramref name="p"/> with a hit at <paramref name="height"/> metres
         /// above the floor. Keeps the highest hit and renews the cell's time. False when the point is off the grid.
+        /// The time of a cell's first stamp is written here and nowhere else: when the cell was empty, or so
+        /// long without a hit that it no longer counts (past its 30 s, not yet swept).
         /// </summary>
         public static bool Stamp(in DynamicGrid g, float2 p, float height, double time)
         {
@@ -57,10 +65,12 @@ namespace Atlas.Safety
                 g.BlockCount[(j >> Shift) * g.BlocksX + (i >> Shift)]++;
                 (*g.ActiveCount)++;
                 g.TopHeight[idx] = height;
+                g.FirstHit[idx] = time;
             }
-            else if (height > old)
+            else
             {
-                g.TopHeight[idx] = height;
+                if (height > old) g.TopHeight[idx] = height;
+                if (g.LastHit[idx] < time - BumpConstants.DynExpirySeconds) g.FirstHit[idx] = time;
             }
             g.LastHit[idx] = time;
             g.EmptyState[idx] = 0;
@@ -93,6 +103,32 @@ namespace Atlas.Safety
             }
             g.EmptyState[idx] = (mark << 8) | seen;
             return false;
+        }
+
+        /// <summary>
+        /// The young-cell rule of the depth mask (documents/ATLAS_Hands_Design.md section 7.1, rule 2, as its
+        /// review decided it). Called for a depth sample the mask took out, with the floor point and the height
+        /// it lands at, after every other sample of the image has been stamped. The cell under
+        /// <paramref name="p"/> is forgotten only if all three hold: it was first stamped less than
+        /// <see cref="BumpConstants.MaskYoungSeconds"/> ago; no sample of this image (the one at
+        /// <paramref name="time"/>) hit it, so nothing the mask left alone stands there; and its stored height is
+        /// within <see cref="BumpConstants.MaskHeightTolerance"/> of <paramref name="height"/>. That is a cell
+        /// the hand itself stamped in the moment before it was recognised. An obstacle that has been in view for
+        /// a second keeps every cell, however long a hand then covers it. True when a cell was forgotten.
+        /// </summary>
+        public static bool ForgetIfYoung(in DynamicGrid g, float2 p, float height, double time)
+        {
+            if (!CellOf(g.Spec, p, out int i, out int j)) return false;
+            int idx = j * g.Spec.Width + i;
+            float top = g.TopHeight[idx];
+            if (top <= 0f) return false;
+            if (g.LastHit[idx] == time) return false;
+            // Written so that a time that is not a number, or a first stamp later than now, keeps the cell.
+            double age = time - g.FirstHit[idx];
+            if (!(age >= 0.0 && age < BumpConstants.MaskYoungSeconds)) return false;
+            if (!(math.abs(top - height) <= BumpConstants.MaskHeightTolerance)) return false;
+            Remove(g, i, j);
+            return true;
         }
 
         /// <summary>
@@ -206,6 +242,14 @@ namespace Atlas.Safety
         public static float TopHeightAt(in DynamicGrid g, float2 p)
         {
             return CellOf(g.Spec, p, out int i, out int j) ? g.TopHeight[j * g.Spec.Width + i] : 0f;
+        }
+
+        /// <summary>Time the cell under <paramref name="p"/> was first stamped, seconds; not a number when it is empty or off the grid.</summary>
+        public static double FirstHitAt(in DynamicGrid g, float2 p)
+        {
+            if (!CellOf(g.Spec, p, out int i, out int j)) return double.NaN;
+            int idx = j * g.Spec.Width + i;
+            return g.TopHeight[idx] > 0f ? g.FirstHit[idx] : double.NaN;
         }
 
         static void Remove(in DynamicGrid g, int i, int j)

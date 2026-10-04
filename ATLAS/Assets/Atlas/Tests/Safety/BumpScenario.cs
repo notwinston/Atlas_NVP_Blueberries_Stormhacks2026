@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Atlas.Safety;
+using Atlas.World;
 using Unity.Mathematics;
 
 namespace Atlas.Safety.Tests
@@ -78,6 +79,11 @@ namespace Atlas.Safety.Tests
         public readonly List<SimBox> Boxes = new List<SimBox>();
         /// <summary>What the walker carries in front of the camera: it moves and turns with the head.</summary>
         public readonly List<SimPlate> Body = new List<SimPlate>();
+        /// <summary>
+        /// The depth mask that comes with every depth image from now on, as the hands would hand it over; the
+        /// empty mask (the default) for none. It reaches the kernel the way the adapter passes it on.
+        /// </summary>
+        public DepthMask Mask;
         public readonly List<LevelChange> Changes = new List<LevelChange>(16);
 
         /// <summary>Half extents of the mapped room (walls at +/- these).</summary>
@@ -138,17 +144,18 @@ namespace Atlas.Safety.Tests
                 Render(head, rotation);
                 fixed (float* d = Depth)
                 {
+                    DepthKernelInput input = Core.MakeDepthInput(DepthW, DepthH, Intrinsics, head, rotation, Time,
+                        TrackingNormal, AnchorTracked);
                     if (KernelBeforeMask)
                     {
-                        DepthKernelInput input = Core.MakeDepthInput(DepthW, DepthH, Intrinsics, head, rotation, Time,
-                            TrackingNormal, AnchorTracked);
                         BumpDepthKernelBeforeMask.Process(d, input, Core.StaticField, Core.Grid, Core.Dynamic,
                             out DepthFrameResult result);
                         Core.SubmitDepthResult(result);
                     }
                     else
                     {
-                        Core.ProcessDepth(d, DepthW, DepthH, Intrinsics, head, rotation, Time, TrackingNormal, AnchorTracked);
+                        input.Mask = BumpGuard.KernelMask(Mask, Mask.DepthSequence);
+                        Core.ProcessDepth(d, input);
                     }
                 }
             }
@@ -158,6 +165,52 @@ namespace Atlas.Safety.Tests
                 Changes.Add(new LevelChange { Time = Time, From = before, To = Core.Level, Position = head.xz });
             Frame++;
             Time = Frame / (double)FrameRate;
+        }
+
+        /// <summary>The depth mask of one hand in this scenario's depth image, built the way the hands design describes.</summary>
+        public DepthMask MaskFor(in SimHand hand)
+        {
+            return SimHand.Mask(0, Intrinsics, DepthH, hand);
+        }
+
+        /// <summary>The depth mask of two hands in this scenario's depth image.</summary>
+        public DepthMask MaskFor(in SimHand first, in SimHand second)
+        {
+            return SimHand.Mask(0, Intrinsics, DepthH, first, second);
+        }
+
+        /// <summary>
+        /// The last rendered depth image as the sensor frame the app's Bump Guard is ticked with: tracking Normal,
+        /// the room frame active, the camera at the head. For tests of the adapter, which use a scenario only as
+        /// the camera: call <see cref="Render"/> first.
+        /// </summary>
+        public SensorFrame SensorsAt(float3 head, quaternion rotation, int frame, int depthSequence, in DepthMask mask)
+        {
+            double time = frame / (double)FrameRate;
+            return new SensorFrame
+            {
+                Time = time,
+                DeltaTime = frame == 0 ? 0f : 1f / FrameRate,
+                Head = new HeadPose(time, head, rotation, TrackingState.Normal),
+                RoomActive = true,
+                AnchorTracked = true,
+                HasDepth = true,
+                Depth = new DepthFrame
+                {
+                    Depth = Depth,
+                    Width = DepthW,
+                    Height = DepthH,
+                    Fx = Intrinsics.Fx,
+                    Fy = Intrinsics.Fy,
+                    Cx = Intrinsics.Cx,
+                    Cy = Intrinsics.Cy,
+                    Position = head,
+                    Rotation = rotation,
+                    Time = time,
+                    Sequence = depthSequence
+                },
+                Mask = mask
+            };
         }
 
         /// <summary>Stands at one pose for a while.</summary>

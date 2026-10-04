@@ -46,6 +46,11 @@ namespace Atlas.Safety
         /// layer stamped or cleared and the static map compared; otherwise the kernel fills the sectors only.
         /// </summary>
         public bool MapTrusted;
+        /// <summary>
+        /// The walker's own hands in this image, or the empty mask (the default). A sample it covers counts as
+        /// no return. The kernel holds the mask to the limits of <see cref="BumpConstants"/> itself.
+        /// </summary>
+        public DepthKernelMask Mask;
     }
 
     /// <summary>What one depth frame produced.</summary>
@@ -62,6 +67,12 @@ namespace Atlas.Safety
         public int Stamped;
         /// <summary>Dynamic cells seen empty and cleared this frame.</summary>
         public int Cleared;
+        /// <summary>Depth samples the mask took out this frame: they counted as no return. 0 with no mask, and with one that was refused.</summary>
+        public int Masked;
+        /// <summary>Dynamic cells forgotten this frame because a masked sample pointed at them and they were under a second old.</summary>
+        public int Forgotten;
+        /// <summary>A mask came with this frame and was ignored: it would have taken out more than its share of the valid samples.</summary>
+        public bool MaskRefused;
         /// <summary>Time of the frame, seconds.</summary>
         public double Time;
         /// <summary>Whether the frame was processed with the map trusted.</summary>
@@ -123,6 +134,11 @@ namespace Atlas.Safety
     /// image that stamps and clears the dynamic layer, fills the seven sector minima and measures how far the
     /// walls in view lie from the static map. Plain static code over raw pointers so that the Burst job and the
     /// headless tests run the same instructions (contracts F2). Allocates nothing.
+    /// <para>Samples that the frame's depth mask covers are the walker's own hands
+    /// (documents/ATLAS_Hands_Design.md section 7.1). They are left out of the sectors, the dynamic layer and the
+    /// rescan check as if they had no return, and the cells a hand stamped before it was recognised are
+    /// forgotten (<see cref="DynamicLayer.ForgetIfYoung"/>). With the empty mask every result is bit for bit
+    /// what it was before the kernel knew of masks.</para>
     /// </summary>
     public static unsafe class BumpDepthKernel
     {
@@ -174,6 +190,16 @@ namespace Atlas.Safety
             float invFy = 1f / input.Intrinsics.Fy;
             int first = FirstSample(stride);
 
+            // The walker's own hands. Decided for the whole image before any sample is used: a mask that would
+            // take out more than its share is not a pair of hands, and the image is read as if it had none.
+            bool masking = false;
+            float maskGate = 0f;
+            if (input.Mask.Count > 0)
+            {
+                maskGate = input.Mask.Gate;
+                masking = MaskWithinItsShare(depth, input, stride, first, maskGate, out result.MaskRefused);
+            }
+
             for (int v = first; v < input.Height; v += stride)
             {
                 float* row = depth + v * input.Width;
@@ -182,6 +208,13 @@ namespace Atlas.Safety
                 {
                     float d = row[u];
                     if (!(d >= BumpConstants.DepthMin && d <= BumpConstants.DepthMax)) continue;
+
+                    // A hand: no return, for everything below.
+                    if (masking && d <= maskGate && input.Mask.Covers(u + 0.5f, v + 0.5f, d))
+                    {
+                        result.Masked++;
+                        continue;
+                    }
 
                     float nx = (u + 0.5f - input.Intrinsics.Cx) * invFx;
                     float3 rel = math.mul(rot, new float3(nx * d, ny * d, d));
@@ -227,6 +260,11 @@ namespace Atlas.Safety
                     }
                 }
             }
+
+            // The cells a hand stamped before it was masked. After the loop, so that a cell which a sample outside
+            // the mask hit in this image is kept whichever of the two samples came first.
+            if (masking && trusted && *dynamic.ActiveCount > 0)
+                result.Forgotten = ForgetUnderMask(depth, input, rot, origin, dynamic, stride, first, maskGate);
 
             result.Sector0 = sector[0];
             result.Sector1 = sector[1];
@@ -285,6 +323,51 @@ namespace Atlas.Safety
                 if (s <= 0f) return false;
             }
             return t >= limit;
+        }
+
+        // Counts what the mask would take out of this image. True when it takes something and no more than its
+        // share of the valid samples; refused is set when it would take more.
+        static bool MaskWithinItsShare(float* depth, in DepthKernelInput input, int stride, int first, float gate,
+            out bool refused)
+        {
+            int valid = 0, masked = 0;
+            for (int v = first; v < input.Height; v += stride)
+            {
+                float* row = depth + v * input.Width;
+                for (int u = first; u < input.Width; u += stride)
+                {
+                    float d = row[u];
+                    if (!(d >= BumpConstants.DepthMin && d <= BumpConstants.DepthMax)) continue;
+                    valid++;
+                    if (d <= gate && input.Mask.Covers(u + 0.5f, v + 0.5f, d)) masked++;
+                }
+            }
+            refused = masked > BumpConstants.MaskMaxShare * valid;
+            return masked > 0 && !refused;
+        }
+
+        // The young-cell rule for every sample the mask took out: the cell under the point it lands at.
+        static int ForgetUnderMask(float* depth, in DepthKernelInput input, float3x3 rot, float3 origin,
+            in DynamicGrid dynamic, int stride, int first, float gate)
+        {
+            float invFx = 1f / input.Intrinsics.Fx;
+            float invFy = 1f / input.Intrinsics.Fy;
+            int forgotten = 0;
+            for (int v = first; v < input.Height; v += stride)
+            {
+                float* row = depth + v * input.Width;
+                float ny = -(v + 0.5f - input.Intrinsics.Cy) * invFy;
+                for (int u = first; u < input.Width; u += stride)
+                {
+                    float d = row[u];
+                    if (!(d >= BumpConstants.DepthMin && d <= gate)) continue;
+                    if (!input.Mask.Covers(u + 0.5f, v + 0.5f, d)) continue;
+                    float nx = (u + 0.5f - input.Intrinsics.Cx) * invFx;
+                    float3 hit = origin + math.mul(rot, new float3(nx * d, ny * d, d));
+                    if (DynamicLayer.ForgetIfYoung(dynamic, hit.xz, hit.y, input.Time)) forgotten++;
+                }
+            }
+            return forgotten;
         }
 
         static int ClearAlongRay(in DynamicGrid dynamic, float3 origin, float3 rel, float flat, int sequence, double time)

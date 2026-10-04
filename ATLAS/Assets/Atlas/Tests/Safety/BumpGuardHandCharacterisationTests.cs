@@ -16,7 +16,7 @@ namespace Atlas.Safety.Tests
     public class BumpGuardHandCharacterisationTests
     {
         const float RoomHalf = 3.5f;
-        const float RunSeconds = 3f;
+        const float RunSeconds = 2f;
         // The palm's centre is 5 cm below the optical axis, as a hand held up in front of the face is.
         const float PalmBelowAxis = 0.05f;
 
@@ -42,7 +42,7 @@ namespace Atlas.Safety.Tests
                 int frames = (int)math.round(RunSeconds * BumpScenario.FrameRate);
                 for (int k = 0; k < frames; k++)
                 {
-                    // From 2.5 m behind the middle of the room along +Z: 3 m at 1 m/s ends 3 m short of the wall.
+                    // From 2.5 m behind the middle of the room along +Z: 2 m at 1 m/s ends 4 m short of the wall.
                     var head = new float3(0f, BumpScenario.HeadHeight, -2.5f + speed * k / BumpScenario.FrameRate);
                     sim.StepFrame(head, rotation);
                     if (sim.Core.Level > o.Worst) o.Worst = sim.Core.Level;

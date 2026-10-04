@@ -155,52 +155,6 @@ namespace Atlas.Safety.Tests
             f.Add(*g.ActiveCount);
         }
 
-        static void AssertSameBits(float actual, float expected, string what)
-        {
-            if (BitConverter.SingleToInt32Bits(actual) != BitConverter.SingleToInt32Bits(expected))
-                Assert.Fail(what + ": " + actual.ToString("R") + " is not " + expected.ToString("R"));
-        }
-
-        static void AssertSameFrame(BumpGuardCore real, BumpGuardCore before, string where)
-        {
-            DepthFrameResult a = real.LastDepth, b = before.LastDepth;
-            for (int k = 0; k < BumpConstants.SectorCount; k++) AssertSameBits(a.Sector(k), b.Sector(k), where + " sector " + k);
-            AssertSameBits(a.WallDisagreement, b.WallDisagreement, where + " wall disagreement");
-            Assert.That(a.WallSamples, Is.EqualTo(b.WallSamples), where + " wall samples");
-            Assert.That(a.Stamped, Is.EqualTo(b.Stamped), where + " stamped");
-            Assert.That(a.Cleared, Is.EqualTo(b.Cleared), where + " cleared");
-            Assert.That(a.Time, Is.EqualTo(b.Time), where + " time");
-            Assert.That(a.MapTrusted, Is.EqualTo(b.MapTrusted), where + " map trusted");
-
-            Assert.That(real.Level, Is.EqualTo(before.Level), where + " level");
-            Assert.That(real.RawLevel, Is.EqualTo(before.RawLevel), where + " raw level");
-            AssertSameBits(real.Direction.x, before.Direction.x, where + " direction x");
-            AssertSameBits(real.Direction.y, before.Direction.y, where + " direction y");
-            AssertSameBits(real.Now, before.Now, where + " now");
-            AssertSameBits(real.Path04, before.Path04, where + " path(0.4 s)");
-            AssertSameBits(real.Path08, before.Path08, where + " path(0.8 s)");
-            AssertSameBits(real.Speed, before.Speed, where + " speed");
-            Assert.That(real.RescanAdvised, Is.EqualTo(before.RescanAdvised), where + " rescan advised");
-            AssertSameBits(real.Diagnostics.RescanMedian, before.Diagnostics.RescanMedian, where + " rescan median");
-            Assert.That(real.Diagnostics.RisingEdges, Is.EqualTo(before.Diagnostics.RisingEdges), where + " rising edges");
-        }
-
-        static void AssertSameLayer(BumpGuardCore real, BumpGuardCore before, string where)
-        {
-            DynamicGrid a = real.Dynamic, b = before.Dynamic;
-            Assert.That(*a.ActiveCount, Is.EqualTo(*b.ActiveCount), where + " occupied cells");
-            int cells = a.Spec.Width * a.Spec.Height;
-            for (int k = 0; k < cells; k++)
-            {
-                if (BitConverter.SingleToInt32Bits(a.TopHeight[k]) != BitConverter.SingleToInt32Bits(b.TopHeight[k]) ||
-                    a.EmptyState[k] != b.EmptyState[k] || (a.TopHeight[k] > 0f && a.LastHit[k] != b.LastHit[k]))
-                    Assert.Fail(where + " dynamic cell " + k + " differs");
-            }
-            int blocks = a.BlocksX * a.BlocksZ;
-            for (int k = 0; k < blocks; k++)
-                if (a.BlockCount[k] != b.BlockCount[k]) Assert.Fail(where + " block " + k + " differs");
-        }
-
         struct Totals
         {
             public ulong Fingerprint;
@@ -226,9 +180,10 @@ namespace Atlas.Safety.Tests
                     real.StepFrame(poses[k].Position, poses[k].Rotation);
                     before.StepFrame(poses[k].Position, poses[k].Rotation);
 
-                    string where = scene + ", frame " + k + ":";
-                    AssertSameFrame(real.Core, before.Core, where);
-                    AssertSameLayer(real.Core, before.Core, where);
+                    BumpCompare.Same(real.Core, before.Core, scene.ToString(), k);
+                    DepthFrameResult depth = real.Core.LastDepth;
+                    if (depth.Masked != 0 || depth.Forgotten != 0 || depth.MaskRefused)
+                        Assert.Fail(scene + ", frame " + k + ": the empty mask took something out");
                     AddFrame(ref print, real.Core);
                     totals.Stamped += real.Core.LastDepth.Stamped;
                     totals.Cleared += real.Core.LastDepth.Cleared;
@@ -285,6 +240,52 @@ namespace Atlas.Safety.Tests
             // held against the headless run only; the comparison above holds everywhere.
             Assert.That(t.Fingerprint, Is.EqualTo(Recorded(scene)), scene + ": not what the commit before the mask produced");
 #endif
+        }
+
+        [Test]
+        public void BumpGuard_Mask_EmptyIsIdentity_ThroughTheAdapter()
+        {
+            // The app's Bump Guard, ticked with sensor frames that carry no mask, beside a bare core whose depth
+            // step is the one from before the mask: the recorded lap in its fixture room, with a figure that is
+            // taken away half way and an unmasked hand, so that the dynamic layer is stamped and cleared.
+            RoomModel room = RoomFixtures.LoadFromProject(RoomFixtures.Sample3x3);
+            PoseLog log = BumpRecordings.Load(BumpRecordings.Lap);
+            using (var eye = new BumpScenario(BumpRecordings.RoomHalf, BumpRecordings.RoomHalf))
+            using (var guard = new BumpGuard(false))
+            using (var before = new BumpGuardCore())
+            {
+                guard.SetRoom(room);
+                RoomSdf sdf = room.Sdf;
+                before.SetRoom(sdf.Metres, sdf.Width, sdf.Height, RoomSdf.CellSize, sdf.OriginX, sdf.OriginZ);
+                eye.Boxes.Add(SimBox.OnFloor(0.2f, -0.1f, 0.40f, 0.30f, 1.70f));
+
+                int stamped = 0, cleared = 0;
+                for (int k = 0; k < log.Samples.Length; k++)
+                {
+                    if (k == 120) new SimHand(0.02f, -0.05f, 0.45f, true).AddTo(eye.Body);
+                    if (k == log.Samples.Length / 2) eye.Boxes.Clear();
+                    HeadPose sample = log.Samples[k];
+                    eye.Render(sample.Position, sample.Rotation);
+                    SensorFrame sensors = eye.SensorsAt(sample.Position, sample.Rotation, k, k + 1, default(DepthMask));
+                    guard.Tick(in sensors);
+
+                    fixed (float* depth = eye.Depth)
+                    {
+                        DepthKernelInput input = before.MakeDepthInput(BumpScenario.DepthW, BumpScenario.DepthH, eye.Intrinsics,
+                            sample.Position, sample.Rotation, sensors.Time, true, true);
+                        BumpDepthKernelBeforeMask.Process(depth, input, before.StaticField, before.Grid, before.Dynamic,
+                            out DepthFrameResult result);
+                        before.SubmitDepthResult(result);
+                    }
+                    before.Step(sensors.Time, sample.Position, sample.Rotation, true, true);
+
+                    BumpCompare.Same(guard.Core, before, "the adapter", k);
+                    stamped += guard.Core.LastDepth.Stamped;
+                    cleared += guard.Core.LastDepth.Cleared;
+                }
+                Assert.That(stamped, Is.GreaterThan(1000));
+                Assert.That(cleared, Is.GreaterThan(10));
+            }
         }
     }
 }
