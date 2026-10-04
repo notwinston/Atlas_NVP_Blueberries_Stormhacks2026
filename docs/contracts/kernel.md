@@ -213,6 +213,7 @@ At r = 0 (or ‖p_xz‖ = 0) both maps return the base point or the zero vector.
 - Counts that fix the semantics (test `VisibleSet_Counts`, viewer at a tile centre, {4,5}): 13 / 25 / 45 / 81 / 129 tile centres within ρ = 2 / 2.5 / 3 / 3.5 / 4, and 105 within 3.8425.
 - Graph distance counts (`TileId_Growth`, OEIS A377322) for depths 0–8 are 1, 4, 12, 28, 64, 148, 340, 780, 1792.
 - Which `rho` the renderer passes is `P1-B06`'s choice. A guide [derived]: the draw rule draws a tile when its centre is within ρ + 0.8425 of the walker, and the walker is within about 0.8425 of the current tile's centre. A candidate set from the current tile's centre with `rho` = ρ + 2 × 0.8425 (plus the crossing hysteresis) therefore covers every walker position in the tile.
+- **[P1-B06 D5]** The renderer passes `rho` = ρ + 2·r_c + 0.05 (units of L, r_c = 0.8424821 for q = 5), from the current tile's centre, and rebuilds the list only when the tile or ρ changes. The 0.05 covers the 0.02 crossing hysteresis at corners. Candidates: 277 at ρ = 3 and 485 at ρ = 3.5 (q = 5), 497 at ρ = 3.5 (q = 6). Test `Candidates_CoverEveryTileWithinReach`.
 
 ### 4.7 How the pieces meet each frame [plan, §4.6, §6.3, §8.5]
 
@@ -226,6 +227,12 @@ step 6 (upload)   per drawn tile: _Anchor = (float) A[t] (cast last); globals _H
 ```
 
 The draw rule (§8.5, A.3): draw t when (a) d_t ≤ ρ + 0.8425 and (b) the disc of radius 0.8425·L round c = L·d_t along the bearing of A[t]·o is not wholly outside any side plane of the view frustum, widened by 12° to each side and 4° up and down. ρ is the registry parameter `curved.cullRho` (default 3). The test runs once per frame for both eyes. It is the only culling wherever the hyperbolic warp is on.
+
+[P1-B06 D1, D2] What `Atlas.Rendering.TileDrawRule` does with the rule, so that no undrawn tile has a visible point nearer than ρ:
+
+- Test (b) is applied to the vertical shell volume, the disc extruded up to H = 2.6 m (the tallest part of a tile shell, a corner post): a tile is wholly outside a plane when `n·c + r·|n_floor| + max(0, H·n_y) < 0`. With H = 0 this is exactly the plan's formula. The literal floor-disc rule culls tiles whose posts are still in view.
+- A tile whose centre is within r_c of the walker is always drawn (the reference script's `drawn |= dc <= Rc`).
+- The disc centre is `eye.xz + L·Log(A[t]·o)` at the floor height (world y = 0), the same placement as `AtlasWarp` gives the tile's chart origin.
 
 ---
 
