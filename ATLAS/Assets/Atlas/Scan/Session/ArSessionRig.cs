@@ -26,6 +26,7 @@ namespace Atlas.Scan
 
         string _videoFormat = "none";
         bool _noFormatLogged;
+        bool _trackingLogged;
 
         /// <summary>Either argument may be null (the Station): the rig is then neutral.</summary>
         public ArSessionRig(XROrigin origin, ARSession session)
@@ -124,10 +125,31 @@ namespace Atlas.Scan
                 VideoFormatApplied = true;
                 return;
             }
+            ApplyTracking();
             ApplyDepth();
             if (Camera != null && Camera.requestedLightEstimation != LightEstimation.None)
                 Camera.requestedLightEstimation = LightEstimation.None;
             if (!VideoFormatApplied) TryApplyVideoFormat();
+        }
+
+        /// <summary>
+        /// The tracking request: position and rotation. With no mode requested ARKit picks its configuration
+        /// from the features that are on, so when the scan features go off it drops to rotation only and the
+        /// head position freezes. The boot scene's request never reaches a session that is already running:
+        /// ARSession reads the subsystem's mode back over it. Call every frame; a comparison when it holds.
+        /// </summary>
+        public void ApplyTracking()
+        {
+            if (!_hasAr) return;
+            XRSessionSubsystem subsystem = _session.subsystem;
+            if (subsystem == null || subsystem.requestedTrackingMode == Feature.PositionAndRotation) return;
+            _session.requestedTrackingMode = TrackingMode.PositionAndRotation;
+            subsystem.requestedTrackingMode = Feature.PositionAndRotation;
+            if (!_trackingLogged)
+            {
+                _trackingLogged = true;
+                Debug.Log(LogPrefix + "AR tracking mode requested: PositionAndRotation");
+            }
         }
 
         /// <summary>

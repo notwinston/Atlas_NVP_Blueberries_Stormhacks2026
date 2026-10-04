@@ -147,7 +147,11 @@ namespace Atlas.Scan
         public void Sense(ref FrameContext frame)
         {
             ArSessionRig rig = Rig;
-            if (rig != null && !rig.VideoFormatApplied) rig.ApplyBase();
+            if (rig != null)
+            {
+                if (!rig.VideoFormatApplied) rig.ApplyBase();
+                else rig.ApplyTracking();      // turning the scan features off must not drop position tracking
+            }
 
             double time = frame.Time;
             float deltaTime = frame.DeltaTime;
