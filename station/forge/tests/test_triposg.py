@@ -148,36 +148,6 @@ def station(tmp_path, weights="complete", **overrides):
     return make_settings(tmp_path / "data", generator="triposg", triposg_repo=str(repo), **overrides)
 
 
-def object_alpha(image: Image.Image) -> Image.Image:
-    """A matte for the test crops of conftest.jpeg: whatever is not the grey background."""
-    pixels = np.asarray(image.convert("RGB")).astype(np.int16)
-    return Image.fromarray(((np.abs(pixels - 96).max(axis=2) > 24) * 255).astype(np.uint8))
-
-
-@pytest.fixture
-def matting(monkeypatch):
-    """A matting model is installed: stands in for rembg, which the tests do not have."""
-    state = SimpleNamespace(calls=0, fail_on=set(), empty=False, load_error=None)
-
-    def remove(image):
-        state.calls += 1
-        if state.calls in state.fail_on:
-            raise RuntimeError("onnxruntime ran out of memory")
-        cut = image.convert("RGBA")
-        cut.putalpha(Image.new("L", image.size, 0) if state.empty else object_alpha(image))
-        return cut, "rembg"
-
-    def load():
-        if state.load_error:
-            raise OSError(state.load_error)
-        return "rembg"
-
-    monkeypatch.setattr(imaging, "matting_method", lambda: "rembg")
-    monkeypatch.setattr(imaging, "load_matting", load)
-    monkeypatch.setattr(imaging, "remove_background", remove)
-    return state
-
-
 @pytest.fixture
 def no_matting(monkeypatch):
     """No matting model is installed, whatever this machine has."""
