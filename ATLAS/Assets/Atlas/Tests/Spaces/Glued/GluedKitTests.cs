@@ -56,19 +56,19 @@ namespace Atlas.Spaces.Tests
         }
 
         [Test]
-        public void CellMesh_WithAKitLandmark_StandsItAtTheLandmarkBase_InPlaceOfTheStair()
+        public void CellMesh_WithAKitLandmark_StandsItAtTheLandmarkBase_InPlaceOfTheTetracube()
         {
             MeshData kit = Stand(new float3(0.1f, 0.6f, 0.2f));
             var built = new AtlasMeshBuilder();
             var plain = new AtlasMeshBuilder();
             GluedCellMesh.Build(1.2f, 1.7f, built, kit);
             GluedCellMesh.Build(1.2f, 1.7f, plain);
-            Assert.That(CountCells(plain, AtlasPalette.Landmark), Is.GreaterThan(0));
-            Assert.That(CountCells(plain, AtlasPalette.Flag), Is.GreaterThan(0));
+            Assert.That(CountCells(plain, GluedCellMesh.LandmarkEdge), Is.GreaterThan(0));
+            Assert.That(CountCells(plain, GluedCellMesh.LandmarkBallColour), Is.GreaterThan(0));
 
-            // The stair, its pole and the pennant are gone; the piece is the last thing added, moved to the foot.
-            Assert.That(CountCells(built, AtlasPalette.Landmark), Is.EqualTo(0));
-            Assert.That(CountCells(built, AtlasPalette.Flag), Is.EqualTo(0));
+            // The tetracube, its ball and its ring are gone; the piece is the last thing added, moved to the foot.
+            Assert.That(CountCells(built, GluedCellMesh.LandmarkEdge), Is.EqualTo(0));
+            Assert.That(CountCells(built, GluedCellMesh.LandmarkBallColour), Is.EqualTo(0));
             float2 foot = GluedCellMesh.LandmarkBase(1.2f, 1.7f);
             int first = built.VertexCount - kit.VertexCount;
             for (int v = 0; v < kit.VertexCount; v++)

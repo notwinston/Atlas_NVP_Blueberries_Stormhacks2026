@@ -6,15 +6,13 @@ using Atlas.Spaces.Glued;
 using Atlas.World;
 using NUnit.Framework;
 using Unity.Mathematics;
-#if !ATLAS_HEADLESS
-using UnityEngine;
-#endif
 
 namespace Atlas.Blades.Playground.Glued.Tests
 {
     /// <summary>
-    /// The Glued exhibit (Master Plan tasks P2-C12, P2-C13, P2-C14): the wrap counter and glued.* events, the cell
-    /// size from the RoomModel, the chiral kit on the built-in meshes, the gluing switch and the look-up in T3.
+    /// The Glued exhibit (Master Plan tasks P2-C12, P2-C13, P2-C14, P2-A03): the wrap counter and glued.* events of the
+    /// space's steps, the cell size from the RoomModel, the chiral kit on the built-in meshes, the gluing switch and its
+    /// sign, the look-up in T3, the exhibit over the space's readings and the S1 equation card.
     /// None of it needs the hero meshes of kit-hero-assets: the kit works on the cell geometry of P1-A09.
     /// </summary>
     public class GluedExhibitTests
@@ -60,7 +58,7 @@ namespace Atlas.Blades.Playground.Glued.Tests
             {
                 RoomModel room = RoomFixtures.LoadFromProject(name);
                 var log = new RecordingLog();
-                var core = new GluedExhibitCore(room, log);
+                var core = new GluedTour(room, log);
                 GluedLattice lattice = core.Lattice;
 
                 core.Step(CellHead(in lattice, 0, 0), s_Level, GluedLayout.Torus);
@@ -86,7 +84,7 @@ namespace Atlas.Blades.Playground.Glued.Tests
         {
             RoomModel room = RoomFixtures.LoadFromProject(RoomFixtures.Sample3x3);
             var log = new RecordingLog();
-            var core = new GluedExhibitCore(room, log);
+            var core = new GluedTour(room, log);
             GluedLattice lattice = core.Lattice;
             core.Step(CellHead(in lattice, 0, 0), s_Level, GluedLayout.Torus);
             core.Step(CellHead(in lattice, 1, 1), s_Level, GluedLayout.Torus);
@@ -109,7 +107,7 @@ namespace Atlas.Blades.Playground.Glued.Tests
         {
             RoomModel room = RoomFixtures.LoadFromProject(RoomFixtures.Sample3x3);
             var log = new RecordingLog();
-            var core = new GluedExhibitCore(room, log);
+            var core = new GluedTour(room, log);
             GluedLattice lattice = new GluedLattice(room, GluedLayout.Klein);
             core.Step(CellHead(in lattice, 0, 0), s_Level, GluedLayout.Klein);
             core.Step(CellHead(in lattice, 0, 1), s_Level, GluedLayout.Klein);
@@ -125,7 +123,7 @@ namespace Atlas.Blades.Playground.Glued.Tests
             foreach (string name in s_AllRooms)
             {
                 RoomModel room = RoomFixtures.LoadFromProject(name);
-                var core = new GluedExhibitCore(room, null);
+                var core = new GluedTour(room, null);
                 Assert.That(room.Glued.SizeX, Is.GreaterThan(0.0), name);
                 Assert.That(core.CellSizeX, Is.EqualTo(room.Glued.SizeX).Within(1e-9), name);
                 Assert.That(core.CellSizeZ, Is.EqualTo(room.Glued.SizeZ).Within(1e-9), name);
@@ -141,7 +139,7 @@ namespace Atlas.Blades.Playground.Glued.Tests
         public void Card_XModAndZMod_AreThePlaceInsideTheCell()
         {
             RoomModel room = RoomFixtures.LoadFromProject(RoomFixtures.Sample3x3);
-            var core = new GluedExhibitCore(room, null);
+            var core = new GluedTour(room, null);
             GluedLattice lattice = core.Lattice;
             core.Step(CellHead(in lattice, 1, 0), s_Level, GluedLayout.Torus);
             GluedCardValues card = core.Card(CellHead(in lattice, 1, 0));
@@ -158,7 +156,7 @@ namespace Atlas.Blades.Playground.Glued.Tests
         {
             RoomModel room = RoomFixtures.LoadFromProject(RoomFixtures.Sample3x3);
             var log = new RecordingLog();
-            var core = new GluedExhibitCore(room, log);
+            var core = new GluedTour(room, log);
             GluedLattice lattice = core.Lattice;
             Assert.That(core.WrapWalkAvailable, Is.True);
             Assert.That(core.Task, Is.EqualTo(GluedTask.Wrap));
@@ -190,7 +188,7 @@ namespace Atlas.Blades.Playground.Glued.Tests
             Assert.That(core.Layout, Is.EqualTo(GluedLayout.Torus));
 
             RoomModel tiny = RoomFixtures.LoadFromProject(RoomFixtures.TinyStanding);
-            var standing = new GluedExhibitCore(tiny, null);
+            var standing = new GluedTour(tiny, null);
             Assert.That(standing.WrapWalkAvailable, Is.False);
             Assert.That(standing.Task, Is.EqualTo(GluedTask.Wave));
             Assert.That(standing.Prompt, Is.EqualTo(GluedText.WrapSkipped));
@@ -327,14 +325,14 @@ namespace Atlas.Blades.Playground.Glued.Tests
                 var lattice = new GluedLattice(3.0, 3.0, layout);
                 Assert.That(GluedLookUp.AvatarVisible(in lattice, new GluedCell(0, 0), CellHead(in lattice, 0, 0), Pitched(90f)), Is.False, layout.ToString());
             }
-            Assert.That(GluedExhibitCore.LookUpPitchDeg, Is.EqualTo(60f));
+            Assert.That(GluedTour.LookUpPitchDeg, Is.EqualTo(60f));
         }
 
         [Test]
         public void T3_TheLookUpIsOnlyCountedInTheThreeTorus()
         {
             RoomModel room = RoomFixtures.LoadFromProject(RoomFixtures.Sample3x3);
-            var core = new GluedExhibitCore(room, null);
+            var core = new GluedTour(room, null);
             GluedLattice lattice = core.Lattice;
             core.Step(CellHead(in lattice, 0, 0), Pitched(90f), GluedLayout.Torus);
             Assert.That(core.LookedUp, Is.False);
@@ -344,8 +342,8 @@ namespace Atlas.Blades.Playground.Glued.Tests
             Assert.That(core.LookedUp, Is.True);
         }
 
-        // S1 stays within its rows of section 8.5. The exhibit adds no geometry (the sign is a gaze target), so the
-        // rows are those of the space. The phone's frame time and draw calls are PENDING a run in a headset.
+        // S1 stays within its rows of section 8.5. The exhibit adds no geometry; the space's info card and gluing sign are
+        // in the counted model (GluedBudget.Space). The phone's frame time and draw calls are PENDING a run in a headset.
         [Test]
         public void S1_WithTheExhibit_StaysWithinItsRowsOfSection85_InTheCountedModel()
         {
@@ -363,25 +361,108 @@ namespace Atlas.Blades.Playground.Glued.Tests
             }
         }
 
-#if !ATLAS_HEADLESS
-        [Test, Category("Unity")]
-        public void Exhibit_BindRefusesNothing()
+        // ---- the exhibit over the space's readings -------------------------------------------------------------
+
+        sealed class FakeReadings : IGluedReadings
         {
-            var go = new GameObject("GluedExhibit test");
-            try
-            {
-                var exhibit = go.AddComponent<GluedExhibit>();
-                Assert.That(exhibit.Prompt, Is.Empty);
-                Assert.That(exhibit.Caption, Is.EqualTo(GluedText.Caption));
-                Assert.Throws<System.ArgumentNullException>(() => exhibit.Bind(null, null, null));
-                exhibit.Unbind();
-                exhibit.Restart();
-            }
-            finally
-            {
-                Object.DestroyImmediate(go);
-            }
+            public GluedLayout Layout { get; set; }
+            public GluedCell WalkerCell { get; set; }
+            public int Crossings { get; set; }
+            public GluedCardValues Card { get; set; }
+            public GluedTour Tour { get; set; }
         }
-#endif
+
+        [Test]
+        public void Exhibit_RelaysTheSpacesStepsToThePromptChip_AndEndsWithThem()
+        {
+            var exhibit = new GluedExhibit();
+            Assert.That(exhibit.Prompt, Is.Empty);
+            Assert.That(exhibit.Completed, Is.False);
+            Assert.That(GluedExhibit.Caption, Is.EqualTo(GluedText.Caption));
+            Assert.Throws<System.ArgumentNullException>(() => exhibit.Bind(null));
+            exhibit.Restart();      // a no-op outside S1
+
+            RoomModel room = RoomFixtures.LoadFromProject(RoomFixtures.Sample3x3);
+            var tour = new GluedTour(room, null);
+            var space = new FakeReadings { Tour = tour };
+            var prompts = new List<string>();
+            exhibit.PromptChanged += prompts.Add;
+            exhibit.Bind(space);
+            Assert.That(exhibit.Prompt, Is.EqualTo(GluedText.WrapPrompt));
+
+            GluedLattice lattice = tour.Lattice;
+            tour.Step(CellHead(in lattice, 0, 0), s_Level, GluedLayout.Torus);
+            tour.Step(CellHead(in lattice, 1, 0), s_Level, GluedLayout.Torus);
+            Assert.That(prompts, Is.EqualTo(new[] { GluedText.WavePrompt }));
+            tour.Acknowledge();
+            tour.Step(CellHead(in lattice, 0, 1), s_Level, GluedLayout.Klein);
+            tour.Step(CellHead(in lattice, 0, 0), Pitched(80f), GluedLayout.Torus3);
+            Assert.That(exhibit.Completed, Is.True);
+
+            // A restart begins again in the gluing on screen; unbinding stops the relay.
+            space.Layout = GluedLayout.Klein;
+            exhibit.Restart();
+            Assert.That(tour.Task, Is.EqualTo(GluedTask.Wrap));
+            Assert.That(tour.Layout, Is.EqualTo(GluedLayout.Klein));
+            exhibit.Unbind();
+            int heard = prompts.Count;
+            tour.Begin();
+            tour.Step(CellHead(in lattice, 0, 0), s_Level, GluedLayout.Torus);
+            tour.Step(CellHead(in lattice, 1, 0), s_Level, GluedLayout.Torus);
+            Assert.That(prompts.Count, Is.EqualTo(heard));
+            Assert.That(exhibit.Prompt, Is.Empty);
+        }
+
+        // ---- P2-A03: the S1 equation card ----------------------------------------------------------------------
+
+        [Test]
+        public void EquationSource_RowsAreTheSpacesCardValues_AndDashesOutsideS1()
+        {
+            var exhibit = new GluedExhibit();
+            var source = new GluedEquationSource(exhibit);
+            Assert.That(source.Space, Is.EqualTo(SpaceId.Glued));
+            var rows = new EquationRow[source.MaxRows];
+            Assert.That(source.Read(rows), Is.EqualTo(6));
+            foreach (EquationRow row in rows) Assert.That(row.Available, Is.False, row.Label);
+            StringAssert.Contains("torus", source.Template);
+
+            RoomModel room = RoomFixtures.LoadFromProject(RoomFixtures.Sample3x3);
+            var space = new FakeReadings
+            {
+                Layout = GluedLayout.Klein,
+                Tour = new GluedTour(room, null),
+                Card = new GluedCardValues { A = 1.5, B = 1.4, XMod = 0.25, ZMod = 1.0, Wraps = 3, Parity = -1 },
+            };
+            exhibit.Bind(space);
+            source.Read(rows);
+            Assert.That(rows[0].Value, Is.EqualTo(0.25));
+            Assert.That(rows[1].Value, Is.EqualTo(1.0));
+            Assert.That(rows[2].Value, Is.EqualTo(1.5));
+            Assert.That(rows[3].Value, Is.EqualTo(1.4));
+            Assert.That(rows[4].Value, Is.EqualTo(3));
+            Assert.That(rows[5].Value, Is.EqualTo(-1));
+            foreach (EquationRow row in rows) Assert.That(row.Available, Is.True, row.Label);
+            StringAssert.Contains("Klein", source.Template);
+            StringAssert.Contains("−x", source.Template, "the Klein gluing flips x");
+            space.Layout = GluedLayout.Torus3;
+            StringAssert.Contains("2.6 m", source.Template);
+        }
+
+        [Test]
+        public void GluingSwitch_EachButtonOfTheSignPicksItsOwnGluing()
+        {
+            foreach (GluedLayout layout in s_Layouts)
+            {
+                int tag = GluedGluingSwitch.SignTag(layout);
+                for (int current = 0; current < 3; current++)
+                {
+                    Assert.That(GluedGluingSwitch.Next(AtlasAction.VariantNext, InputSource.Gaze, current, false, tag), Is.EqualTo((int)layout));
+                    Assert.That(GluedGluingSwitch.Next(AtlasAction.VariantPrev, InputSource.Lever, current, false, tag), Is.EqualTo((int)layout),
+                                "a lever click on a button picks that button");
+                }
+            }
+            // Tag 0 is a bumper: it steps.
+            Assert.That(GluedGluingSwitch.Next(AtlasAction.VariantNext, InputSource.Gamepad, 1, false, 0), Is.EqualTo(2));
+        }
     }
 }

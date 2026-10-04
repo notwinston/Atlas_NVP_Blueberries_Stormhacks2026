@@ -1,5 +1,6 @@
 using System;
 using Atlas.Blades.Playground.Shell;
+using Atlas.Spaces.Glued;
 
 namespace Atlas.Blades.Playground.Exhibits
 {
@@ -21,7 +22,7 @@ namespace Atlas.Blades.Playground.Exhibits
             remove { m_Exhibit.PromptChanged -= value; }
         }
         public void Restart() { m_Exhibit.Restart(); }
-        public bool Completed { get { return m_Exhibit.Core != null && m_Exhibit.Core.Task == GluedTask.Done; } }
+        public bool Completed { get { return m_Exhibit.Completed; } }
     }
 
     /// <summary>Joins <see cref="RoomsExhibit"/> to the shell's <see cref="ExhibitRelay"/> (task P2-C01 wiring).</summary>

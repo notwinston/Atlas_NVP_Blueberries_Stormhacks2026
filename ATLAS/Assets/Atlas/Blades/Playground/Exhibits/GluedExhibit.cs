@@ -1,130 +1,112 @@
 using System;
-using Atlas.Input;
-using Atlas.Link;
 using Atlas.Spaces.Glued;
 using Atlas.World;
-using UnityEngine;
 
 namespace Atlas.Blades.Playground.Exhibits
 {
     /// <summary>
-    /// The Glued exhibit of the Geometry Playground (Master Plan tasks P2-C12 to P2-C14): the wrap counter, the
-    /// <c>glued.*</c> events, the tasks, the chiral comparison and the gluing switch over
-    /// <see cref="GluedSpace"/> (S1). It adds no geometry of its own, so S1 costs what P1-A09 and P1-A15 measured
-    /// (<see cref="GluedBudget"/>); the gluing sign is a gaze target, and its look belongs to the look polish
-    /// (P2-A04). The logic is <see cref="GluedExhibitCore"/>; this is the adapter.
+    /// The Glued exhibit of the Geometry Playground (Master Plan tasks P2-C12 to P2-C14): the guided steps of the S1 space
+    /// (<see cref="GluedTour"/>) as the shell's exhibit, so its task line reaches the prompt chip and its completion ends
+    /// beat 9. The steps, the wrap counter, the glued.* events, the info card and the gluing sign live in the space
+    /// itself, so S1 teaches the same way whether it is reached from the exhibit menu, the space menu or the Station.
+    /// Engine-free: bound to the space's readings. The space adds the card and the sign to its draw count
+    /// (<see cref="GluedBudget"/>).
     /// </summary>
-    public sealed class GluedExhibit : MonoBehaviour
+    public sealed class GluedExhibit
     {
-        /// <summary>The gluing sign hangs this high and this far inside the free rectangle's far wall, metres.</summary>
-        const float SignHeight = 1.5f, SignInset = 0.3f;
-        static readonly Vector2 s_SignHalfSize = new Vector2(0.3f, 0.12f);
+        IGluedReadings m_Space;
+        GluedTour m_Tour;
+        Action<string> m_OnPrompt;
 
-        GluedExhibitCore m_Core;
-        GluedSpace m_Space;
-        ParamEntry m_Mode;
-        IAtlasInput m_Input;
-        Action<AtlasAction, InputSource, int> m_OnAction;
-        GazeTargetId m_Sign;
-        bool m_HasSign;
+        /// <summary>The caption chip of S1 (Master Plan section 10.1.3).</summary>
+        public const string Caption = CaptionTexts.Glued;
 
-        /// <summary>The logic behind this component. Null until Bind.</summary>
-        public GluedExhibitCore Core { get { return m_Core; } }
-        /// <summary>The caption chip of the exhibit.</summary>
-        public string Caption { get { return GluedText.Caption; } }
-        /// <summary>What the walker is asked to do now; empty before Bind. Raises <see cref="PromptChanged"/>.</summary>
-        public string Prompt { get { return m_Core != null ? m_Core.Prompt : string.Empty; } }
+        /// <summary>The space the exhibit follows, or null outside S1.</summary>
+        public IGluedReadings Space { get { return m_Space; } }
+        /// <summary>What the walker is asked to do now; empty outside S1.</summary>
+        public string Prompt { get { return m_Tour != null ? m_Tour.Prompt : string.Empty; } }
+        public bool Completed { get { return m_Tour != null && m_Tour.Task == GluedTask.Done; } }
         public event Action<string> PromptChanged;
-        /// <summary>The exhibit's wrap counter and the space's own crossing count agree (a check for the Editor and the logs).</summary>
-        public bool CountersAgree { get { return m_Core != null && m_Space != null && m_Core.Wraps == m_Space.Crossings; } }
 
-        /// <summary>
-        /// Wires the exhibit to a configured, entered Glued space. <paramref name="registry"/> is the registry the
-        /// space declared glued.mode in; the exhibit follows that parameter, so the operator's SceneCmd and the
-        /// gluing sign move the same value.
-        /// </summary>
-        public void Bind(GluedSpace space, RoomModel room, ParamRegistry registry)
+        /// <summary>Follows an entered Glued space, whose steps have started.</summary>
+        public void Bind(IGluedReadings space)
         {
             if (space == null) throw new ArgumentNullException(nameof(space));
-            if (room == null) throw new ArgumentNullException(nameof(room));
-            if (registry == null) throw new ArgumentNullException(nameof(registry));
             Unbind();
             m_Space = space;
-            m_Mode = registry.Find(GluedSpace.ParamMode);
-            AtlasServices.TryGet(out IEventLog log);
-            m_Core = new GluedExhibitCore(room, log);
-            m_Core.PromptChanged += OnPromptChanged;
-
-            if (AtlasServices.TryGet(out m_Input))
+            m_Tour = space.Tour;
+            if (m_Tour != null)
             {
-                m_OnAction = OnAction;
-                m_Input.ActionFired += m_OnAction;
-                RegisterSign(room);
+                m_OnPrompt = OnPrompt;
+                m_Tour.PromptChanged += m_OnPrompt;
             }
         }
 
         public void Unbind()
         {
-            if (m_Input != null)
-            {
-                if (m_OnAction != null) m_Input.ActionFired -= m_OnAction;
-                if (m_HasSign) m_Input.UnregisterGazeTarget(m_Sign);
-            }
-            m_HasSign = false;
-            m_Input = null;
-            m_OnAction = null;
-            if (m_Core != null) m_Core.PromptChanged -= OnPromptChanged;
-            m_Core = null;
+            if (m_Tour != null && m_OnPrompt != null) m_Tour.PromptChanged -= m_OnPrompt;
             m_Space = null;
-            m_Mode = null;
+            m_Tour = null;
+            m_OnPrompt = null;
         }
 
-        /// <summary>Starts the exhibit again, in the torus.</summary>
+        /// <summary>Starts the steps again, in the gluing on screen. A no-op outside S1.</summary>
         public void Restart()
         {
-            if (m_Core == null) return;
-            m_Core.Begin();
-            if (m_Mode != null && m_Mode.Int != (int)GluedLayout.Torus) m_Mode.Set((int)GluedLayout.Torus);
+            if (m_Tour != null) m_Tour.Begin(m_Space.Layout);
         }
 
-        /// <summary>Once a frame, after the space's own Tick.</summary>
-        public void Tick(in FrameContext frame)
-        {
-            if (m_Core == null) return;
-            GluedLayout layout = GluedRules.LayoutOf(m_Mode != null ? m_Mode.Int : 0);
-            m_Core.Step(frame.HeadPosition, frame.HeadRotation, layout);
-        }
-
-        void OnDestroy()
-        {
-            Unbind();
-        }
-
-        // The gluing sign: a rectangle on the far wall of the free floor, facing the room. Dwelling on it steps the
-        // gluing, the same as the right bumper.
-        void RegisterSign(RoomModel room)
-        {
-            Vector3 centre = new Vector3(0f, SignHeight, 0.5f * room.FreeRect.Df - SignInset);
-            GazeTarget sign = GazeTarget.WorldRect(AtlasAction.VariantNext, centre, Quaternion.Euler(0f, 180f, 0f), s_SignHalfSize);
-            sign.Label = GluedGluingSwitch.SignLabel;
-            m_Sign = m_Input.RegisterGazeTarget(in sign);
-            m_HasSign = m_Sign.IsValid;
-        }
-
-        void OnAction(AtlasAction action, InputSource source, int tag)
-        {
-            if (m_Core == null || m_Mode == null) return;
-            // Until the wave is done, a lever click confirms the prompt and is not the gluing switch.
-            bool leverSteps = m_Core.Task >= GluedTask.Klein;
-            if (action == AtlasAction.Confirm && m_Core.Task == GluedTask.Wave) m_Core.Acknowledge();
-            int next = GluedGluingSwitch.Next(action, source, m_Mode.Int, leverSteps);
-            if (next >= 0) m_Mode.Set(next);
-        }
-
-        void OnPromptChanged(string text)
+        void OnPrompt(string text)
         {
             Action<string> changed = PromptChanged;
             if (changed != null) changed(text);
+        }
+    }
+
+    /// <summary>
+    /// The S1 equation card (Master Plan section 10.1.3: "x mod a, z mod b; cell a x b; wraps; copy parity (-1)^row"; task
+    /// P2-A03): where the walker stands inside the cell, the cell, the edges crossed and whether this copy is mirrored.
+    /// Reads the space through the exhibit; every row is a dash outside S1. No allocation in Read.
+    /// </summary>
+    public sealed class GluedEquationSource : IEquationSource
+    {
+        readonly GluedExhibit m_Exhibit;
+
+        public GluedEquationSource(GluedExhibit exhibit)
+        {
+            if (exhibit == null) throw new ArgumentNullException(nameof(exhibit));
+            m_Exhibit = exhibit;
+        }
+
+        public SpaceId Space { get { return SpaceId.Glued; } }
+        /// <summary>The gluing in force, as the identification of the cell's points.</summary>
+        public string Template
+        {
+            get
+            {
+                IGluedReadings s = m_Exhibit.Space;
+                switch (s != null ? s.Layout : GluedLayout.Torus)
+                {
+                    case GluedLayout.Klein: return "Klein bottle:  (x, z) ~ (x + a, z) ~ (−x, z + b)";
+                    case GluedLayout.Torus3: return "3-torus:  (x, y, z) ~ (x + a, y, z) ~ (x, y, z + b) ~ (x, y + 2.6 m, z)";
+                    default: return "torus:  (x, z) ~ (x + a, z) ~ (x, z + b)";
+                }
+            }
+        }
+        public int MaxRows { get { return 6; } }
+
+        public int Read(EquationRow[] rows)
+        {
+            IGluedReadings s = m_Exhibit.Space;
+            double nan = double.NaN;
+            GluedCardValues c = s != null ? s.Card : default;
+            rows[0] = EquationRow.Number("x mod a", s != null ? c.XMod : nan, "m");
+            rows[1] = EquationRow.Number("z mod b", s != null ? c.ZMod : nan, "m");
+            rows[2] = EquationRow.Number("a", s != null ? c.A : nan, "m");
+            rows[3] = EquationRow.Number("b", s != null ? c.B : nan, "m");
+            rows[4] = EquationRow.Number("wraps", s != null ? c.Wraps : nan, "");
+            rows[5] = EquationRow.Number("(−1)^row", s != null ? c.Parity : nan, "");
+            return 6;
         }
     }
 }

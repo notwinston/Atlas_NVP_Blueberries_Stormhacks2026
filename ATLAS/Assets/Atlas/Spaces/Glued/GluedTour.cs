@@ -1,12 +1,11 @@
 using System;
 using System.Globalization;
-using Atlas.Spaces.Glued;
 using Atlas.World;
 using Unity.Mathematics;
 
-namespace Atlas.Blades.Playground.Exhibits
+namespace Atlas.Spaces.Glued
 {
-    /// <summary>Where the walker is in the Glued exhibit (Master Plan section 10.1.3, the S1 tasks).</summary>
+    /// <summary>Where the walker is in the guided steps of S1 (Master Plan section 10.1.3, the S1 tasks).</summary>
     public enum GluedTask
     {
         /// <summary>Task 1: wrap-walk through one cell edge.</summary>
@@ -21,19 +20,47 @@ namespace Atlas.Blades.Playground.Exhibits
         Done = 4,
     }
 
-    /// <summary>The words the exhibit puts in front of the walker.</summary>
+    /// <summary>The words S1 puts in front of the walker: the prompts of the Playground's chip, and the short step lines of the info card.</summary>
     public static class GluedText
     {
+        /// <summary>Steps before Done.</summary>
+        public const int StepCount = 4;
+
         /// <summary>The caption chip of S1 (Master Plan section 10.1.3).</summary>
         public const string Caption = "Every wall is a door to its opposite wall. Flat, but it wraps.";
         public const string WrapPrompt = "Walk to the chevrons on the floor and step across the line. The next cell is this room again.";
         public const string WrapSkipped = "You are standing in place, or the room is a single cell, so the wrap-walk is skipped. Look round: the room repeats in every direction. Press A to go on.";
         public const string WavePrompt = "Turn round and wave. Every copy of you waves back. Press A when you have seen your own back.";
-        public const string KleinPrompt = "Switch the gluing to Klein with the right bumper, or look at the gluing sign.";
+        public const string KleinPrompt = "Switch the gluing to Klein with the right bumper, or look down at the gluing sign under your card and dwell on Klein.";
         public const string ChiralPrompt = "Find the staircase landmark in your own cell, then the one in the next row over. That row is a mirror image: your copy waves with the other hand and no turning makes the two staircases match.";
-        public const string Torus3Prompt = "Switch the gluing to T3 with the right bumper, then look up. Your copy stands a room-height above you.";
+        public const string Torus3Prompt = "Switch the gluing to T3 with the right bumper or the gluing sign, then look up. Your copy stands a room-height above you.";
         public const string LookUpPrompt = "Look straight up. The floor above is this floor, and you are standing on it.";
         public const string DonePrompt = "Three kinds of gluing, one flat room. Open the exhibit menu for the next exhibit.";
+
+        /// <summary>
+        /// The step line of the info card: what to do now, short enough for three lines of the card. The Playground's
+        /// prompt chip has the longer <see cref="GluedTour.Prompt"/>.
+        /// </summary>
+        public static string CardStep(GluedTask task, GluedLayout layout, bool skippedWrap)
+        {
+            switch (task)
+            {
+                case GluedTask.Wrap: return "Walk across the chevrons on the floor. The next cell is this room again.";
+                case GluedTask.Wave:
+                    return skippedWrap
+                        ? "The room repeats all round you. Look, then press A or dwell on “seen it”."
+                        : "Turn round and wave: that is your own back. Then press A or dwell on “seen it”.";
+                case GluedTask.Klein:
+                    return layout == GluedLayout.Klein
+                        ? "Step into the next row. Your copy and the staircase there are mirror images."
+                        : "Pick Klein on the gluing sign below, or press a bumper.";
+                case GluedTask.Torus3:
+                    return layout == GluedLayout.Torus3
+                        ? "Look straight up: your copy stands 2.6 m above you, on this same floor."
+                        : "Pick T³ on the gluing sign below, or press a bumper.";
+                default: return "All four done. Try the gluings again, or open the exhibit menu.";
+            }
+        }
 
         /// <summary>The tasks' names, as logged in <c>glued.task</c>.</summary>
         public static string TaskName(GluedTask task)
@@ -59,15 +86,38 @@ namespace Atlas.Blades.Playground.Exhibits
         public int Wraps;
         /// <summary>(-1)^row of the walker's cell for the Klein bottle, +1 otherwise.</summary>
         public int Parity;
+
+        /// <summary>The card's numbers for a head position in a cell of a lattice, after `wraps` crossings.</summary>
+        public static GluedCardValues Of(in GluedLattice lattice, GluedCell cell, float3 head, int wraps)
+        {
+            double a = lattice.SizeX, b = lattice.SizeZ;
+            return new GluedCardValues
+            {
+                A = a,
+                B = b,
+                XMod = Mod(head.x + 0.5 * lattice.Wf, a),
+                ZMod = Mod(head.z + 0.5 * lattice.Df, b),
+                Wraps = wraps,
+                Parity = lattice.DetSign(cell),
+            };
+        }
+
+        static double Mod(double value, double side)
+        {
+            double r = value - Math.Floor(value / side) * side;
+            return r < 0.0 ? 0.0 : r;
+        }
     }
 
     /// <summary>
-    /// The wrap counter, the <c>glued.*</c> events and the tasks of the Glued exhibit (Master Plan task P2-C12). It
-    /// follows the head over the lattice of <see cref="GluedSpace"/> (P1-A09), whose cell size is the RoomModel's
-    /// (cells.glued), and counts every cell edge the head crosses the way the space does: a change of the gluing
-    /// moves the lattice but crosses nothing. Engine-free.
+    /// The guided steps of S1, its wrap counter and its <c>glued.*</c> events (Master Plan section 10.1.3 and tasks
+    /// P2-C12 to P2-C14). It follows the head over the lattice of <see cref="GluedSpace"/> (P1-A09), whose cell size is
+    /// the RoomModel's (cells.glued), and counts every cell edge the head crosses the way the space does: a change of
+    /// the gluing moves the lattice but crosses nothing. The space runs it, so S1 teaches the same way whether it is
+    /// reached from the exhibit menu, the space menu or the Station; the Playground's exhibit only relays its prompt.
+    /// Engine-free.
     /// </summary>
-    public sealed class GluedExhibitCore
+    public sealed class GluedTour
     {
         /// <summary>Head pitch above the horizon past which the walker is looking up (task P2-C14), degrees.</summary>
         public const float LookUpPitchDeg = GluedLookUp.PitchDeg;
@@ -82,13 +132,14 @@ namespace Atlas.Blades.Playground.Exhibits
         string m_Prompt = string.Empty;
 
         /// <param name="room">The scanned room: the cell size and the standing flag come from it.</param>
-        /// <param name="log">Where glued.wrap, glued.mode and glued.task go; null keeps the exhibit silent.</param>
-        public GluedExhibitCore(RoomModel room, IEventLog log)
+        /// <param name="log">Where glued.wrap, glued.mode and glued.task go; null keeps the steps silent.</param>
+        /// <param name="start">The gluing in force when the steps start.</param>
+        public GluedTour(RoomModel room, IEventLog log, GluedLayout start = GluedLayout.Torus)
         {
             if (room == null) throw new ArgumentNullException(nameof(room));
             m_Room = room;
             m_Log = log;
-            Begin();
+            Begin(start);
         }
 
         /// <summary>The lattice in force: the room's cell grid under the current gluing.</summary>
@@ -101,6 +152,12 @@ namespace Atlas.Blades.Playground.Exhibits
         public int Wraps { get; private set; }
         public GluedTask Task { get; private set; }
         public string Prompt { get { return m_Prompt; } }
+        /// <summary>The cell the head was last in; (0, 0, 0) before the first Step.</summary>
+        public GluedCell Cell { get { return m_Cell; } }
+        /// <summary>The wrap-walk was skipped: standing mode, or a room of one cell.</summary>
+        public bool SkippedWrap { get { return m_SkippedWrap; } }
+        /// <summary>The info card's line for the step in force.</summary>
+        public string CardStep { get { return GluedText.CardStep(Task, m_Lattice.Layout, m_SkippedWrap); } }
         /// <summary>The walker is looking up in T3 at a copy of themself above.</summary>
         public bool LookedUp { get; private set; }
         /// <summary>True when the room has a cell edge to walk across.</summary>
@@ -109,10 +166,11 @@ namespace Atlas.Blades.Playground.Exhibits
         /// <summary>The prompt changed.</summary>
         public event Action<string> PromptChanged;
 
-        /// <summary>Starts the exhibit again: torus, no wraps, first task. Logs the gluing it starts in.</summary>
-        public void Begin()
+        /// <summary>Starts again: no wraps, first task, in the gluing given (the torus by default). Logs that gluing.</summary>
+        public void Begin(GluedLayout start = GluedLayout.Torus)
         {
-            m_Lattice = new GluedLattice(m_Room, GluedLayout.Torus);
+            m_Lattice = new GluedLattice(m_Room, start);
+            m_Cell = default;
             m_HasCell = false;
             m_SawMirror = false;
             m_WrapDone = m_WaveDone = m_KleinDone = m_Torus3Done = m_SkippedWrap = false;
@@ -161,22 +219,9 @@ namespace Atlas.Blades.Playground.Exhibits
         /// <summary>The numbers of the equation card for a head position.</summary>
         public GluedCardValues Card(float3 head)
         {
-            double a = m_Lattice.SizeX, b = m_Lattice.SizeZ;
-            return new GluedCardValues
-            {
-                A = a,
-                B = b,
-                XMod = Mod(head.x + 0.5 * m_Lattice.Wf, a),
-                ZMod = Mod(head.z + 0.5 * m_Lattice.Df, b),
-                Wraps = Wraps,
-                Parity = m_HasCell ? m_Lattice.DetSign(m_Cell) : 1,
-            };
-        }
-
-        static double Mod(double value, double side)
-        {
-            double r = value - Math.Floor(value / side) * side;
-            return r < 0.0 ? 0.0 : r;
+            GluedCardValues card = GluedCardValues.Of(in m_Lattice, m_Cell, head, Wraps);
+            if (!m_HasCell) card.Parity = 1;
+            return card;
         }
 
         void Cross(GluedCell from, GluedCell to)
