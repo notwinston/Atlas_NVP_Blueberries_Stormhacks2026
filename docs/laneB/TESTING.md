@@ -167,3 +167,9 @@ Graphics sign-off (Editor with a graphics device, not -nographics): run `B10_Sha
 
 - Scene: `Blade_FieldFit.unity`; mask assigned in `FieldFitSettings.fieldLossMask` with `maskHalfWidthDeg` matching lane D's preset.
 - Steps: profile None with tunnel, then drag `lens.t` 0 -> 1 with Morph. Expected: black edge at about 10 deg (+-0.2); no visible pop while dragging; `LutRebuild` p95 reported (checklist item 10).
+
+## P3-B05 Lens guard (deferred: phone in the headset)
+
+- Scene: `Blade_FieldFit.unity` over `Space_Home`; badge font assigned in `FieldFitSettings.asset`.
+- Editor GPU tests to run once with a graphics device: `LensGuardTests.Badge_VisibleWhileActive`, `Badge_FromFont`.
+- Headset: checklist items 4-6. Expected: "LENS ON" readable in both eyes (None, Morph, Tanh), none when off; 10 of 10 auto-off trials (cause `displacement`, dPrev_m <= 0.5 < d_m, first frame over 0.5 m); tap-off in the tap frame; Console stop within 250 ms.

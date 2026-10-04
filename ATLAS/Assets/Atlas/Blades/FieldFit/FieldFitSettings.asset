@@ -15,4 +15,5 @@ MonoBehaviour:
   blitShader: {fileID: 4800000, guid: a314673266048448893a165e10571956, type: 3}
   fieldLossMask: {fileID: 0}
   maskHalfWidthDeg: 30
+  badgeFont: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   centreEyeSource: 0

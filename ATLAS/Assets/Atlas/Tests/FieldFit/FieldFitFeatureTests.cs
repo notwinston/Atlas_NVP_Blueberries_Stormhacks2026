@@ -19,7 +19,7 @@ namespace Atlas.Blades.FieldFit.Tests
             public FakeLensParams P = new FakeLensParams(); public FakeEvents Ev = new FakeEvents();
             public FieldFitSettings Settings; public int Frame;
 
-            public Harness(bool centreEye = false)
+            public Harness(bool centreEye = false, bool noBadge = false)
             {
                 Go = new GameObject("FieldFitTest"); Go.SetActive(false);   // OnEnable must not run: tests call Init
                 F = Go.AddComponent<FieldFitFeature>();
@@ -29,6 +29,7 @@ namespace Atlas.Blades.FieldFit.Tests
                 Assert.IsNotNull(Settings.blitShader, "FieldFitBlit shader must import");
                 F.Settings = Settings;
                 F.FrameSource = () => Frame;
+                if (!noBadge) F.TestBadgeTexture = Texture2D.whiteTexture;
                 F.Init(Rig, P, Ev);
             }
             public void Step() { Frame++; F.FrameUpdate(); }
@@ -201,7 +202,7 @@ namespace Atlas.Blades.FieldFit.Tests
             var sh = AssetDatabase.LoadAssetAtPath<Shader>(ShaderPath);
             Assert.IsNotNull(sh); Assert.IsFalse(ShaderUtil.ShaderHasError(sh), "FieldFitBlit has shader errors"); Assert.IsTrue(sh.isSupported || UnityEngine.SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Null);
             var st = AssetDatabase.LoadAssetAtPath<FieldFitSettings>("Assets/Atlas/Blades/FieldFit/FieldFitSettings.asset");
-            Assert.IsNotNull(st); Assert.AreSame(sh, st.blitShader); Assert.AreEqual(30f, st.maskHalfWidthDeg); Assert.IsFalse(st.centreEyeSource);
+            Assert.IsNotNull(st); Assert.AreSame(sh, st.blitShader); Assert.AreEqual(30f, st.maskHalfWidthDeg); Assert.IsFalse(st.centreEyeSource); Assert.IsNotNull(st.badgeFont, "badge font assigned");
             const string scenePath = "Assets/Atlas/Blades/FieldFit/Scenes/Blade_FieldFit.unity";
             var scene = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(scenePath, UnityEditor.SceneManagement.OpenSceneMode.Additive);
             try

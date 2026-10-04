@@ -84,6 +84,44 @@ namespace Atlas.Blades.FieldFit
             geo[eye] = g;
         }
 
+        /// <summary>
+        /// Per-eye screen uv q whose view tangent is `target` (Brief §8 badge): nearest stage-A texel, then Newton on the
+        /// bilinear interpolant of the tangents. Managed, once at enable.
+        /// </summary>
+        internal double2 InvertTangent(int eye, double2 target)
+        {
+            var t = tangents[eye];
+            double best = double.MaxValue; int bi = 0, bj = 0;
+            for (int j = 0; j < Size; j++)
+                for (int i = 0; i < Size; i++)
+                {
+                    var a = t[j * Size + i]; if (!math.all(math.isfinite(a))) continue;
+                    double d = math.lengthsq(a - target);
+                    if (d < best) { best = d; bi = i; bj = j; }
+                }
+            double2 p = new double2(bi, bj);                    // continuous texel coordinates (centres at integers)
+            for (int it = 0; it < 6; it++)
+            {
+                double2 f = Interp(t, p) - target;
+                double2 jx = (Interp(t, p + new double2(0.5, 0)) - Interp(t, p - new double2(0.5, 0)));
+                double2 jy = (Interp(t, p + new double2(0, 0.5)) - Interp(t, p - new double2(0, 0.5)));
+                double det = jx.x * jy.y - jy.x * jx.y;
+                if (math.abs(det) < 1e-18) break;
+                double dx = (jy.y * f.x - jy.x * f.y) / det, dy = (-jx.y * f.x + jx.x * f.y) / det;
+                p -= new double2(dx, dy);
+            }
+            return (p + 0.5) / Size;
+        }
+
+        static double2 Interp(NativeArray<double2> t, double2 p)
+        {
+            p = math.clamp(p, 0, Size - 1.000001);
+            int i = (int)math.floor(p.x), j = (int)math.floor(p.y);
+            double fx = p.x - i, fy = p.y - j;
+            return (1 - fx) * (1 - fy) * t[j * Size + i] + fx * (1 - fy) * t[j * Size + i + 1]
+                 + (1 - fx) * fy * t[(j + 1) * Size + i] + fx * fy * t[(j + 1) * Size + i + 1];
+        }
+
         static double Ang(double2 a, double2 b)
         {
             if (!math.all(math.isfinite(a)) || !math.all(math.isfinite(b))) return 0;
