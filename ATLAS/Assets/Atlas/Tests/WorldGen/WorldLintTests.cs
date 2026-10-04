@@ -40,7 +40,7 @@ namespace Atlas.WorldGen.Tests
             Assert.AreEqual(0, report.StructuralConflicts);
             Assert.AreEqual(0, report.RegionMismatches, "§9.5.6 same region on two runs");
             Assert.AreEqual(0, report.ContentMismatches, "§9.5.6 same content on two runs");
-            Assert.Greater(report.CorridorsTwoClosed, report.Corridors / 2, "§3.4 Corridor: kerbs on two opposite edges (normal case)");
+            Assert.AreEqual(0, report.CorridorsMissingKerb, "§3.4 Corridor: kerbs on two opposite edges (only Home / feature exemptions)");
             Assert.AreEqual(4, report.RegionsPresent, "§10.1.4 four regions");
             Assert.AreEqual(report.WorldHash1, report.WorldHash2, "same seed same world hash");
             Assert.IsTrue(report.Passed, report.ToString());

@@ -144,7 +144,7 @@ namespace Atlas.WorldGen.Tests
             for (int i = ball.Count - 1; i >= 0; i--) Assert.AreEqual(ca[i], b.Content(ball[i]), ball[i].ToString());
         }
 
-        // §3.4 reachability (T strictly decreasing; tree edge open outside the planned ball, kerbs opened by BFS inside it) and §3.5 kerb placement (axis edges only, never doubled)
+        // §3.4 T strictly decreasing along ParentEdge and §3.5 kerb placement (axis edges only, never doubled)
         [Test]
         public void Parent_And_Kerbs()
         {
@@ -159,7 +159,6 @@ namespace Atlas.WorldGen.Tests
                     {
                         var p = g.Parent(t);
                         Assert.Less(p.Tu + p.Tv * Phi, t.Tu + t.Tv * Phi, "T decreases");
-                        if (!g.IsPlanned(t) || !g.IsPlanned(p)) Assert.AreEqual(0, c.ClosedMask & (1 << c.ParentEdge), "tree edge open outside the planned ball");
                     }
                     else Assert.AreEqual(-1, c.ParentEdge);
                     if (c.Archetype != Archetype.Corridor) continue;
@@ -177,38 +176,68 @@ namespace Atlas.WorldGen.Tests
             }
         }
 
-        // §3.4 Corridor: "low kerb walls (0.9 m) on two opposite edges". Both axis edges are closed unless the edge touches
-        // Home, carries a feature (door/span), or is a kerb the reachability pass had to open (inside the planned ball, so not asserted per edge).
+        // §3.4 Corridor: "low kerb walls (0.9 m) on two opposite edges". Per corridor, both axis edges are closed unless the edge
+        // touches Home or carries a feature edge (D4); checked on Ball(6) and on the depth 9-10 shell, far outside any plan region.
         [Test]
         public void Corridor_TwoOppositeKerbs()
         {
             foreach (uint seed in Seeds)
             {
                 var g = new WorldGenerator(seed, R45);
-                int corridors = 0, two = 0, one = 0, none = 0, kerbs = 0;
-                foreach (var t in g.Ball(6))
+                var inner = new HashSet<TileId>(g.Ball(8));
+                int corridors = 0, shell = 0, kerbs = 0;
+                foreach (var t in g.Ball(10))
                 {
                     var c = g.Content(t);
                     if (c.Archetype != Archetype.Corridor) continue;
-                    corridors++;
+                    corridors++; if (!inner.Contains(t)) shell++;
                     int axis = (int)((c.PropSeed >> 8) & 1);
-                    int closedAxis = 0;
                     for (int e = axis; e < 4; e += 2)
                     {
+                        if ((c.ClosedMask & (1 << e)) != 0) continue;
                         var n = g.Graph.Neighbour(t, e);
-                        bool closed = (c.ClosedMask & (1 << e)) != 0;
-                        if (closed) closedAxis++;
-                        else
-                        {
-                            bool excused = g.IsHome(n) || c.FeatureEdge == e || g.Content(n).FeatureEdge == g.BackEdge(t, e) || g.IsPlanned(t);
-                            Assert.IsTrue(excused, $"corridor {t} axis edge {e} open without reason");
-                        }
+                        bool excused = g.IsHome(n) || c.FeatureEdge == e || g.Content(n).FeatureEdge == g.BackEdge(t, e);
+                        Assert.IsTrue(excused, $"corridor {t} axis edge {e} open without reason");
                     }
-                    if (closedAxis == 2) two++; else if (closedAxis == 1) one++; else none++;
                     for (int e = 0; e < 4; e++) if ((c.KerbMask & (1 << e)) != 0) kerbs++;
                 }
-                TestContext.WriteLine($"seed {seed}: corridors={corridors} two={two} one={one} none={none} kerbs={kerbs}");
-                Assert.Greater(two, corridors / 2, "most corridors carry two opposite kerbs");
+                TestContext.WriteLine($"seed {seed}: corridors={corridors} (depth 9-10 shell {shell}) kerbs={kerbs}");
+                Assert.Greater(shell, 100, "the shell holds corridors");
+            }
+        }
+
+        // §3.4 / §11.1 "100% of tiles reachable": open edges connect every tile of Ball(10) (beyond the lint's depth 8) to tile zero
+        [Test]
+        public void Reachability_Ball10()
+        {
+            foreach (uint seed in Seeds)
+            {
+                var g = new WorldGenerator(seed, R45);
+                var ball = g.Ball(10);
+                var allowed = new HashSet<TileId>(g.Ball(11)); // a rim tile may be reached around a corner just outside Ball(10)
+                var seen = new HashSet<TileId> { TileId.Zero };
+                var q = new Queue<TileId>(); q.Enqueue(TileId.Zero);
+                int maxClosed = 0;
+                while (q.Count > 0)
+                {
+                    var t = q.Dequeue(); int m = g.Content(t).ClosedMask;
+                    for (int e = 0; e < 4; e++)
+                    {
+                        if ((m & (1 << e)) != 0) continue;
+                        var n = g.Graph.Neighbour(t, e);
+                        if (allowed.Contains(n) && seen.Add(n)) q.Enqueue(n);
+                    }
+                }
+                foreach (var t in ball)
+                {
+                    var c = g.Content(t);
+                    int pc = 0; for (int m = c.ClosedMask; m != 0; m &= m - 1) pc++;
+                    maxClosed = Math.Max(maxClosed, pc);
+                    for (int e = 0; e < 4; e++)
+                        Assert.AreEqual((c.ClosedMask & (1 << e)) != 0, (g.Content(g.Graph.Neighbour(t, e)).ClosedMask & (1 << g.BackEdge(t, e))) != 0, "closed is symmetric");
+                }
+                foreach (var t in ball) Assert.IsTrue(seen.Contains(t), $"seed {seed}: {t} unreachable");
+                Assert.LessOrEqual(maxClosed, 2);
             }
         }
 

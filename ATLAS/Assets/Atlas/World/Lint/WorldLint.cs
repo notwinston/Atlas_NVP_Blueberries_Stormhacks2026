@@ -50,7 +50,16 @@ namespace Atlas.World.Lint
                 if ((c.ClosedMask & (1 << axis)) != 0 && (c.ClosedMask & (1 << (axis + 2))) != 0) rep.CorridorsTwoClosed++;
                 else if ((c.ClosedMask & ((1 << axis) | (1 << (axis + 2)))) != 0) rep.CorridorsOneClosed++;
                 for (int e = 0; e < 4; e++) if ((c.KerbMask & (1 << e)) != 0) rep.CorridorKerbs++;
+                // §3.4 Corridor: both axis edges closed, unless the edge touches Home or carries a feature edge (D4)
+                for (int e = axis; e < 4; e += 2)
+                {
+                    if ((c.ClosedMask & (1 << e)) != 0) continue;
+                    var n = g.Graph.Neighbour(t, e);
+                    if (g.IsHome(n) || c.FeatureEdge == e || g.Content(n).FeatureEdge == g.BackEdge(t, e)) continue;
+                    rep.CorridorsMissingKerb++;
+                }
             }
+            if (rep.CorridorsMissingKerb > 0) rep.Failures.Add($"{rep.CorridorsMissingKerb} corridor axis edges lack their kerb (§3.4)");
             rep.Unreachable = CountUnreachable(g, ball, s.ReachDepth, t => g.Content(t).ClosedMask);
             if (rep.Unreachable > 0) rep.Failures.Add($"{rep.Unreachable} tiles unreachable from tile zero");
             if (maxClosed > 3) rep.Failures.Add($"a tile has {maxClosed} closed edges");
