@@ -11,8 +11,11 @@ for each object, which side of its box, as the RoomModel holds it, is really the
 
 Per object it prints the facing rule that answered and whether it was right, whether the first shape is a
 plain box, the fit and the seconds of each attempt and which one was published, and both copies'
-triangles and validator verdicts. Then the totals M1 and M2 ask for. The exit code is 0 when no line
-that could be judged failed, 1 when one did, 2 when the record cannot be read.
+triangles and validator verdicts. Then the totals M1 and M2 ask for. A line has a verdict only when the
+record settles it: an object that could not be judged (it is not in truth.json, its mesh's front cannot
+be read, it has no fit, none of its generations was timed) counts against a pass and against a fail
+alike, and is named. The exit code is 0 when no line failed, 1 when one did, 2 when the record cannot
+be read.
 
 Only these numbers, and pictures rendered from the meshes (`--pictures`), go into `docs/evidence/mesh/`.
 No camera frame leaves the Station.
@@ -23,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import statistics
 import sys
 from pathlib import Path
@@ -114,6 +118,15 @@ def read_copy(data: Path, sha: str, level: str, target: int, dims) -> Optional[d
             "cells": verdict.palette_cells, "violations": [f"[{v.code}] {v.message}" for v in verdict.violations]}
 
 
+def _replaces(job: dict, held: dict) -> bool:
+    """Whether ``job`` is the better witness of its box than ``held``: one that generated before one the
+    cache answered, and of two of a kind the later."""
+    generated, held_generated = not job.get("cached"), not held.get("cached")
+    if generated != held_generated:
+        return generated
+    return job.get("seq", 0) > held.get("seq", 0)
+
+
 def read_record(data: Path, room_id: str, truth: Optional[dict]) -> dict:
     """Everything the checks need of one room, one entry per object."""
     room_dir = data / "rooms" / room_id
@@ -123,14 +136,16 @@ def read_record(data: Path, room_id: str, truth: Optional[dict]) -> dict:
     plan = json.loads((room_dir / "room.meta.json").read_text(encoding="utf-8"))
     meshed = set(plan.get("generated", []))
 
-    jobs: dict[int, dict] = {}  # the last job of each box that ran to an end
+    # The job each box is judged by: the last one that generated. An answer from the cache made no
+    # generation and holds no attempt, so it stands in only for a box that has no other job; which
+    # of the two is met first (job ids are random) must not matter.
+    jobs: dict[int, dict] = {}
     for path in sorted((data / "jobs").glob("*/job.json")):
         job = json.loads(path.read_text(encoding="utf-8"))
         if job.get("roomId") != room_id or job.get("state") not in ("ready", "failed"):
             continue
-        if job.get("cached") and job["boxId"] in jobs:
-            continue  # an answer from the cache says nothing new about the mesh
-        if job["boxId"] not in jobs or job.get("seq", 0) > jobs[job["boxId"]].get("seq", 0):
+        held = jobs.get(job["boxId"])
+        if held is None or _replaces(job, held):
             jobs[job["boxId"]] = job
 
     objects = []
@@ -159,8 +174,11 @@ def read_record(data: Path, room_id: str, truth: Optional[dict]) -> dict:
         }
         job = jobs.get(box_id)
         if job is not None:
-            full = read_copy(data, job.get("sha256", ""), "full", job.get("triTarget", 0), dims)
-            light = read_copy(data, job.get("lightSha256", ""), "light", job.get("triTargetLight", 0), dims)
+            # Only a job that ended ready has published anything.
+            ready = job["state"] == "ready"
+            full = read_copy(data, job.get("sha256", "") if ready else "", "full", job.get("triTarget", 0), dims)
+            light = read_copy(data, job.get("lightSha256", "") if ready else "", "light",
+                              job.get("triTargetLight", 0), dims)
             mesh_front = None
             if full is not None and full["ok"]:
                 try:
@@ -170,6 +188,7 @@ def read_record(data: Path, room_id: str, truth: Optional[dict]) -> dict:
                     mesh_front = None
             item["job"] = {
                 "jobId": job["jobId"],
+                "cached": bool(job.get("cached")),
                 "state": job["state"],
                 "error": job.get("error", ""),
                 "generator": job.get("generator", ""),
@@ -193,80 +212,140 @@ def read_record(data: Path, room_id: str, truth: Optional[dict]) -> dict:
 # --------------------------------------------------------------------------- the totals
 
 
-def share(right: int, total: int) -> Optional[float]:
-    return None if total == 0 else right / total
-
-
 def line(label: str, verdict: Optional[bool], text: str) -> dict:
     return {"check": label, "pass": verdict, "text": text}
 
 
-def totals(record: dict, poor_fit: float = POOR_FIT) -> dict:
-    """The lines of M1 and M2; ``pass`` is None for a line that cannot be judged from this record."""
-    objects = record["objects"]
-    judged = [o for o in objects if o["facingRight"] is not None]
+def share_verdict(right: int, wrong: int, unknown: int, asked: float) -> Optional[bool]:
+    """Whether at least ``asked`` of the objects are right, when some could not be judged.
 
-    def facing(group) -> tuple[int, int]:
-        chosen = [o for o in judged if o["category"] in group]
-        return sum(o["facingRight"] for o in chosen), len(chosen)
+    A pass only when it holds even if every unjudged object is wrong; a fail only when it fails even if
+    every one of them is right; no verdict otherwise, and none when there is nothing to judge.
+    """
+    total = right + wrong + unknown
+    if total == 0:
+        return None
+    if right / total >= asked:
+        return True
+    if (right + unknown) / total < asked:
+        return False
+    return None
+
+
+def median_verdict(fits: list[float], unmeasured: int, asked: float) -> Optional[bool]:
+    """Whether the median is at most ``asked``, when ``unmeasured`` objects have no fit.
+
+    The same rule: the objects without a fit are taken as perfect and then as the worst there can be,
+    and there is a verdict only when both give the same answer.
+    """
+    if not fits:
+        return None
+    if statistics.median(fits + [math.inf] * unmeasured) <= asked:
+        return True
+    if statistics.median(fits + [0.0] * unmeasured) > asked:
+        return False
+    return None
+
+
+def _names(objects) -> str:
+    return ", ".join(o["name"] for o in objects)
+
+
+def totals(record: dict, poor_fit: float = POOR_FIT) -> dict:
+    """The lines of M1 and M2. ``pass`` is None for a line that this record cannot settle.
+
+    No line passes on a part of what it speaks of: an object that could not be judged counts against
+    a pass and against a fail alike, and is named in the line.
+    """
+    objects = record["objects"]
+
+    def facing(group) -> tuple[int, int, list]:
+        """Right, wrong, and not judged among the objects of ``group`` (those the truth gives no front are left out)."""
+        chosen = [o for o in objects if o["category"] in group and o["truth"] != "none"]
+        right = sum(1 for o in chosen if o["facingRight"] is True)
+        wrong = sum(1 for o in chosen if o["facingRight"] is False)
+        return right, wrong, [o for o in chosen if o["facingRight"] is None]
+
+    def share_text(right: int, wrong: int) -> str:
+        judged = right + wrong
+        return f"{right} of {judged}" + ("" if judged == 0 else f" ({100 * right / judged:.0f} %; "
+                                                               f"{100 * FACING_SHARE:.0f} % asked)")
+
+    def unjudged_text(unknown) -> str:
+        if not unknown:
+            return ""
+        return f"; not in truth.json: {_names(unknown)}" if record["truth"] else "; no truth.json"
 
     # M1: the first shapes, as far as the record shows them.
-    boxes = [o["name"] for o in objects if o["profile"] and o["plainBox"]]
-    seats_right, seats = facing(SEATS)
-    walls_right, walls = facing(WALL_BACKED)
+    with_profile = [o for o in objects if o["profile"]]
+    boxes = [o for o in with_profile if o["plainBox"]]
+    seats_right, seats_wrong, seats_unknown = facing(SEATS)
+    walls_right, walls_wrong, walls_unknown = facing(WALL_BACKED)
     by_rule: dict[str, list[int]] = {}
-    for o in judged:
-        tally = by_rule.setdefault(o["facingRule"], [0, 0])
-        tally[0] += int(o["facingRight"])
-        tally[1] += 1
+    for o in objects:
+        if o["facingRight"] is not None:
+            tally = by_rule.setdefault(o["facingRule"], [0, 0])
+            tally[0] += int(o["facingRight"])
+            tally[1] += 1
     m1 = [
-        line("no object with a profile is a plain box", not boxes,
-             f"{sum(o['profile'] for o in objects)} objects have a profile; plain boxes among them: "
-             + (", ".join(boxes) or "none")),
-        line("chairs and couches face right", None if seats == 0 else seats_right / seats >= FACING_SHARE,
-             f"{seats_right} of {seats}" + ("" if seats == 0 else f" ({100 * seats_right / seats:.0f} %; "
-                                                                  f"{100 * FACING_SHARE:.0f} % asked)")
-             + ("" if record["truth"] else "; no truth.json")),
-        line("every wall-backed object faces right", None if walls == 0 else walls_right == walls,
-             f"{walls_right} of {walls}" + ("" if record["truth"] else "; no truth.json")),
+        line("no object with a profile is a plain box", None if not with_profile else not boxes,
+             f"{len(with_profile)} objects have a profile; plain boxes among them: " + (_names(boxes) or "none")),
+        line("chairs and couches face right",
+             share_verdict(seats_right, seats_wrong, len(seats_unknown), FACING_SHARE),
+             share_text(seats_right, seats_wrong) + unjudged_text(seats_unknown)),
+        line("every wall-backed object faces right",
+             share_verdict(walls_right, walls_wrong, len(walls_unknown), 1.0),
+             f"{walls_right} of {walls_right + walls_wrong}" + unjudged_text(walls_unknown)),
         line("facing by the rule that answered", None,
              ", ".join(f"{rule}: {right} of {total}" for rule, (right, total) in sorted(by_rule.items()))
              or "nothing to judge"),
         line("plain boxes with no profile", None,
-             ", ".join(o["name"] for o in objects if o["plainBox"] and not o["profile"]) or "none"),
+             _names(o for o in objects if o["plainBox"] and not o["profile"]) or "none"),
     ]
 
-    # M2: the generated meshes.
+    # M2: the generated meshes. Every line speaks of the objects that receive meshes.
     meshed = [o for o in objects if o["meshed"]]
     both = [o for o in meshed if o["job"] and o["job"]["full"] and o["job"]["full"]["ok"]
             and o["job"]["light"] and o["job"]["light"]["ok"]]
-    missing = [o["name"] for o in meshed if o not in both]
-    slow = [f"{o['name']} view {a['view']} ({a['seconds']:.0f} s)" for o in objects if o["job"]
-            for a in o["job"]["attempts"] if a["seconds"] is not None and a["seconds"] > SECONDS_PER_ATTEMPT]
-    timed = sum(1 for o in objects if o["job"] for a in o["job"]["attempts"] if a["seconds"] is not None)
-    fits = [o["job"]["fit"] for o in objects
-            if o["job"] and o["job"]["state"] == "ready" and o["job"]["fit"] is not None]
-    median = statistics.median(fits) if fits else None
-    fronted = [o for o in objects if o["job"] and o["job"]["meshFacingRight"] is not None]
-    undecided = [o["name"] for o in objects if o["job"] and o["truth"] in SIDES and o["job"]["meshFront"] is None
-                 and o["job"]["state"] == "ready"]
-    mesh_right = sum(o["job"]["meshFacingRight"] for o in fronted)
-    poor = [f"{o['name']} ({o['job']['fit']:.2f})" for o in objects
-            if o["job"] and o["job"]["state"] == "ready" and o["job"]["fit"] is not None and o["job"]["fit"] > poor_fit]
+    missing = [o for o in meshed if o not in both]
+
+    timed = [(o, a) for o in meshed if o["job"] for a in o["job"]["attempts"] if a["seconds"] is not None]
+    slow = [f"{o['name']} view {a['view']} ({a['seconds']:.0f} s)" for o, a in timed
+            if a["seconds"] > SECONDS_PER_ATTEMPT]
+    untimed = [o for o in meshed if not any(o is t for t, _ in timed)]
+    seconds_verdict = False if slow else (None if untimed or not timed else True)
+
+    ready = [o for o in meshed if o["job"] and o["job"]["state"] == "ready"]
+    fitted = [o for o in ready if o["job"]["fit"] is not None]
+    fits = [o["job"]["fit"] for o in fitted]
+    unfitted = [o for o in meshed if o not in fitted]
+    poor = [f"{o['name']} ({o['job']['fit']:.2f})" for o in fitted if o["job"]["fit"] > poor_fit]
+
+    # The front of a generated mesh: of the meshes that were made, for objects the truth gives a front
+    # or does not speak of. A front the rule cannot read, and an object the truth leaves out, are unjudged.
+    fronted = [o for o in ready if o["truth"] != "none"]
+    mesh_right = sum(1 for o in fronted if o["job"]["meshFacingRight"] is True)
+    mesh_wrong = sum(1 for o in fronted if o["job"]["meshFacingRight"] is False)
+    unread = [o for o in fronted if o["truth"] in SIDES and o["job"]["meshFront"] is None]
+    unlisted = [o for o in fronted if o["truth"] is None]
+
     m2 = [
         line("each meshed object has a full and a light copy that pass the validator",
              None if not meshed else not missing,
-             f"{len(both)} of {len(meshed)}" + (f"; without: {', '.join(missing)}" if missing else "")),
-        line(f"generation takes {SECONDS_PER_ATTEMPT:.0f} s or less per attempt", None if timed == 0 else not slow,
-             f"{timed - len(slow)} of {timed} attempts" + (f"; over: {', '.join(slow)}" if slow else "")),
-        line(f"the median fit is {MEDIAN_FIT} or better", None if median is None else median <= MEDIAN_FIT,
-             "no object has a fit" if median is None else f"{median:.3f} over {len(fits)} objects"),
+             f"{len(both)} of {len(meshed)}" + (f"; without: {_names(missing)}" if missing else "")),
+        line(f"generation takes {SECONDS_PER_ATTEMPT:.0f} s or less per attempt", seconds_verdict,
+             f"{len(timed) - len(slow)} of {len(timed)} attempts" + (f"; over: {', '.join(slow)}" if slow else "")
+             + (f"; {len(untimed)} of {len(meshed)} meshed objects have no timed attempt: {_names(untimed)}"
+                if untimed else "")),
+        line(f"the median fit is {MEDIAN_FIT} or better", median_verdict(fits, len(unfitted), MEDIAN_FIT),
+             ("no object has a fit" if not fits else
+              f"{statistics.median(fits):.3f} over {len(fits)} of {len(meshed)} meshed objects")
+             + (f"; no fit for: {_names(unfitted)}" if unfitted and fits else "")),
         line("generated meshes of objects with a front face right",
-             None if not fronted else mesh_right / len(fronted) >= FACING_SHARE,
-             f"{mesh_right} of {len(fronted)}"
-             + ("" if not fronted else f" ({100 * mesh_right / len(fronted):.0f} %; {100 * FACING_SHARE:.0f} % asked)")
-             + (f"; the mesh's front could not be read for: {', '.join(undecided)}" if undecided else "")
-             + ("" if record["truth"] else "; no truth.json")),
+             share_verdict(mesh_right, mesh_wrong, len(unread) + len(unlisted), FACING_SHARE),
+             share_text(mesh_right, mesh_wrong)
+             + (f"; the mesh's front could not be read for: {_names(unread)}" if unread else "")
+             + unjudged_text(unlisted)),
         line(f"objects above the poor-fit line of {poor_fit:g} after their attempts", None, ", ".join(poor) or "none"),
     ]
     return {"M1": m1, "M2": m2}
@@ -288,6 +367,8 @@ def print_record(record: dict, checks: dict) -> None:
         if job is None:
             print("  mesh: " + ("no job ended for this object" if o["meshed"] else "none (beyond the room's 32)"))
             continue
+        if job["cached"]:
+            print("  the only job of this object was answered from the cache: no generation of it is in the record")
         for a in job["attempts"]:
             fit = "no fit" if a["fit"] is None else f"fit {a['fit']:.3f}"
             seconds = "" if a["seconds"] is None else f", {a['seconds']:.1f} s"
