@@ -47,6 +47,8 @@ namespace Atlas.Scan
         /// <summary>Seconds of normal tracking without the saved anchor before one is created at the saved pose.</summary>
         public const float AnchorWait = 1f;
 
+        bool _mapApplied;      // this attempt handed its map to the session
+
         public RelocaliseState State { get; private set; }
         public RelocaliseReason Reason { get; private set; }
         /// <summary>Seconds since Begin; stops when the attempt ends.</summary>
@@ -57,6 +59,12 @@ namespace Atlas.Scan
         public bool AnchorRestored { get; private set; }
         /// <summary>The session has been seen searching for the room since the map was applied.</summary>
         public bool SawSearch { get; private set; }
+        /// <summary>
+        /// A world map was applied and the attempt ended without recognising the room (timed out or
+        /// cancelled). The session still searches for that room and tracks nothing else until the map is
+        /// taken out and tracking restarted; TakeMapToDrop hands that duty to the caller.
+        /// </summary>
+        public bool MapToDrop { get; private set; }
 
         /// <summary>Loading or Relocalising: Tick must be called.</summary>
         public bool Busy { get { return State == RelocaliseState.Loading || State == RelocaliseState.Relocalising; } }
@@ -78,6 +86,7 @@ namespace Atlas.Scan
         /// </summary>
         public void Begin(bool hasRoom, bool worldMapSupported)
         {
+            _mapApplied = false;
             Seconds = 0f;
             SecondsNormal = 0f;
             AnchorRestored = false;
@@ -94,7 +103,10 @@ namespace Atlas.Scan
             if (State != RelocaliseState.Loading) return;
             switch (load)
             {
-                case WorldMapLoad.Applied: State = RelocaliseState.Relocalising; break;
+                case WorldMapLoad.Applied:
+                    State = RelocaliseState.Relocalising;
+                    _mapApplied = true;
+                    break;
                 case WorldMapLoad.Bad: End(RelocaliseState.Failed, RelocaliseReason.BadWorldMap); break;
                 default: End(RelocaliseState.Unsupported, RelocaliseReason.NoWorldMap); break;
             }
@@ -137,15 +149,32 @@ namespace Atlas.Scan
                 }
             }
 
-            if (Seconds >= Timeout) End(RelocaliseState.Failed, RelocaliseReason.TimedOut);
+            if (Seconds >= Timeout)
+            {
+                MapToDrop |= _mapApplied;
+                End(RelocaliseState.Failed, RelocaliseReason.TimedOut);
+            }
             return RelocaliseStep.None;
         }
 
         /// <summary>Drops an attempt in progress and returns to Idle. A finished attempt is cleared as well.</summary>
         public void Cancel()
         {
+            MapToDrop |= Busy && _mapApplied;
+            _mapApplied = false;
             Reason = Busy ? RelocaliseReason.Cancelled : RelocaliseReason.None;
             State = RelocaliseState.Idle;
+        }
+
+        /// <summary>
+        /// True once after an attempt left an applied map in a session that did not recognise the room:
+        /// the caller clears the map and resets the session. Begin does not clear the duty.
+        /// </summary>
+        public bool TakeMapToDrop()
+        {
+            bool drop = MapToDrop;
+            MapToDrop = false;
+            return drop;
         }
 
         void End(RelocaliseState state, RelocaliseReason reason)

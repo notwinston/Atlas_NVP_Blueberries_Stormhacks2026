@@ -20,7 +20,8 @@ namespace Atlas.Tools
         /// <summary>Space shown, 0 (Home) to 6. Set by the switch-space command.</summary>
         public int Space;
 
-        public int QualityTier = 3;
+        /// <summary>The tier reported in telemetry, as <c>Atlas.World.QualityTier</c>: Nominal 0, an unloaded phone's rung.</summary>
+        public int QualityTier;
         public ushort WorldVer = 1;
 
         /// <summary>The state at <paramref name="t"/> seconds into the walk. Allocates nothing.</summary>
@@ -39,7 +40,8 @@ namespace Atlas.Tools
 
             state = StateMessage.Identity;
             state.Tracking = 2;
-            state.QualityTier = QualityTier;
+            // State has two bits for the tier; the high tier travels as 0 (lane D contract 2.4).
+            state.QualityTier = QualityTier > 3 ? 0 : QualityTier;
             state.SceneId = (ushort)Space;
             state.SpaceId = (byte)Space;
             state.HeadPosX = x;

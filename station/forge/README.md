@@ -72,7 +72,7 @@ The port and host are uvicorn's own arguments. `forge/config.py` holds every set
 
 | Route | Request | Response |
 |---|---|---|
-| `GET /health` | – | `{ok, gpu, queue, pipelineVer, debugKeep}` and `gpuName`, `generator`, `generatorReady`, `generatorNote`, `hostedEnabled`, `matting` |
+| `GET /health` | – | `{ok, gpu, queue, pipelineVer, debugKeep}` and `gpuName`, `generator`, `generatorReady`, `generatorNote`, `hosted` (and the same flag as `hostedEnabled`), `matting` |
 | `POST /rooms` | RoomModel JSON | 201 `{roomId, roomHash, generated, placeholders, triTarget}`. `roomId` is the RoomModel's `id` |
 | `PUT /rooms/{roomId}/mesh` | binary, ≤ 2 MB | 204 |
 | `GET /rooms/{roomId}` | – | The RoomModel as uploaded |

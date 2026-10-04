@@ -132,6 +132,16 @@ namespace Atlas.Link
             if (_peers.TryGetValue(peerId, out peer)) _net.DisconnectPeer(peer);
         }
 
+        // LiteNetLib writes the bytes into the disconnect packet and puts it on the wire before this returns,
+        // so the packet is out even when the socket is closed straight afterwards.
+        public void Disconnect(int peerId, byte[] data, int offset, int length)
+        {
+            NetPeer peer;
+            if (!_peers.TryGetValue(peerId, out peer)) return;
+            if (Wire.InRange(data, offset, length) && length > 0) _net.DisconnectPeer(peer, data, offset, length);
+            else _net.DisconnectPeer(peer);
+        }
+
         public void Stop()
         {
             if (_net.IsRunning) _net.Stop(true);
@@ -176,8 +186,12 @@ namespace Atlas.Link
 
         void INetEventListener.OnPeerDisconnected(NetPeer peer, DisconnectInfo disconnectInfo)
         {
-            _peers.Remove(peer.Id);
             ILinkTransportListener listener = Listener;
+            // A peer that closed with a last packet (its Bye): that packet first, then the disconnect.
+            NetPacketReader last = disconnectInfo.AdditionalData;
+            if (listener != null && last != null && !last.IsNull && last.AvailableBytes > 0 && _peers.ContainsKey(peer.Id))
+                listener.OnReceive(peer.Id, last.RawData, last.Position, last.AvailableBytes, LinkDelivery.Reliable);
+            _peers.Remove(peer.Id);
             if (listener != null) listener.OnPeerDisconnected(peer.Id, ReasonText(disconnectInfo.Reason));
         }
 

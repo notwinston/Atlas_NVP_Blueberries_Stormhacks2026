@@ -33,6 +33,8 @@ namespace Atlas.Spectator
         public RoomContent RoomContent { get; private set; }
         public AtlasTelemetry TelemetrySystems { get; private set; }
         public SpectatorView View { get; private set; }
+        /// <summary>The walker's furniture: downloaded and built-in meshes, nothing uploaded.</summary>
+        public SpectatorFurniture Furniture { get; private set; }
         UnityForgeTransport _http;
 
         SpectatorApp() { }
@@ -110,7 +112,22 @@ namespace Atlas.Spectator
             TelemetrySystems = TelemetryInstaller.Install(boot);
             Host.Events = TelemetrySystems.Events;
             Core.Attach(TelemetrySystems.Link);
-            TelemetrySystems.Pump.Start(Options.HubHost, Options.HubPort);
+
+            // The same furniture as on the phone (section 5.8): the generated meshes by their hash from the
+            // Forge, the built-in ones where the phone placed them. Ticked at step 8b.
+            Furniture = new SpectatorFurniture(_http, Core, RoomContent);
+            Furniture.Attach(TelemetrySystems.Link);
+            Loop.AddAfterFrame(Furniture);
+
+            // The Station dials the Hub it was started for and nothing else. Pairing is the phone's business:
+            // its controller is taken off the link driver, so that it neither stores an address (in the Editor
+            // the store is the walker's own) nor counts this connection as the phone's pairing. The installer
+            // may already have started the link towards a stored address; SetAddress on a running link drops
+            // that peer and connects to the new one, and Start covers the link that was not started.
+            LinkPump pump = TelemetrySystems.Pump;
+            pump.Pairing = null;
+            pump.SetAddress(Options.HubHost, Options.HubPort);
+            pump.Start();
 
             Registry.PushAll();
             View.enabled = true;
@@ -141,6 +158,7 @@ namespace Atlas.Spectator
             _shutDown = true;
             if (View != null) View.enabled = false;
             Safely(() => Core.Detach());
+            Safely(() => { if (Furniture != null) Furniture.Dispose(); });
             Safely(() => Host.Leave());
             Safely(() => { if (TelemetrySystems != null) TelemetrySystems.Shutdown(); });
             Safely(() => { if (View != null) View.Release(); });

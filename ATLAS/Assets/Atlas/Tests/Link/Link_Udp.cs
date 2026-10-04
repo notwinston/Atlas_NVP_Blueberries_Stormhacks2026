@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using NUnit.Framework;
@@ -77,6 +78,51 @@ namespace Atlas.Link.Tests
             {
                 phone.Stop();
                 spectator.Stop();
+                host.Stop();
+            }
+        }
+
+        [Test]
+        public void Stop_carries_the_Bye_in_the_disconnect_over_udp_every_time()
+        {
+            var clock = new StopwatchClock();
+            var hostWire = new LiteNetTransport();
+            var host = new LinkHost(hostWire, clock) { SessionId = "udp-bye" };
+            var byes = new List<string>();
+            int leaves = 0;
+            host.JsonReceived += (peer, id, body) => { if (id == MessageId.Bye) byes.Add(body.GetString("reason")); };
+            host.PeerLeft += (peer, role, why) => leaves++;
+            LinkClient last = null;
+            try
+            {
+                Assert.That(host.Start(0), Is.True);
+                // Stop straight after the handshake, with no poll in between, several times over: the old Bye
+                // on the reliable channel lost this race to the socket close most of the time.
+                for (int round = 0; round < 5; round++)
+                {
+                    var phone = new LinkClient(new LiteNetTransport(), clock, LinkRole.Phone);
+                    last = phone;
+                    Assert.That(phone.Start("127.0.0.1", host.Port), Is.True);
+                    Assert.That(Pump(host, phone, null, 8000, () => phone.IsReady && host.HasPhone), Is.True, "round " + round + " connects");
+                    phone.Stop("round " + round);
+                    Assert.That(Pump(host, phone, null, 3000, () => leaves == round + 1), Is.True, "round " + round + ": the Hub sees the phone leave");
+                    Assert.That(byes.Count, Is.EqualTo(round + 1), "round " + round + ": the Bye arrived before the leave");
+                    Assert.That(byes[round], Is.EqualTo("round " + round));
+                    Assert.That(host.HasPhone, Is.False);
+                }
+
+                // And the other way: a Hub that stops tells its clients why.
+                var watcher = new LinkClient(new LiteNetTransport(), clock, LinkRole.Spectator);
+                last = watcher;
+                Assert.That(watcher.Start("127.0.0.1", host.Port), Is.True);
+                Assert.That(Pump(host, watcher, null, 8000, () => watcher.IsReady), Is.True);
+                host.Stop("hub stopping");
+                Assert.That(Pump(host, watcher, null, 3000, () => watcher.LastByeReason != null), Is.True);
+                Assert.That(watcher.LastByeReason, Is.EqualTo("hub stopping"));
+            }
+            finally
+            {
+                if (last != null) last.Stop();
                 host.Stop();
             }
         }

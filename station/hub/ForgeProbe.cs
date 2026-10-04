@@ -74,6 +74,26 @@ namespace Atlas.Station
             }
         }
 
+        /// <summary>
+        /// Reads the body of the Forge's <c>GET /health</c>. Anything that is not a JSON object is "down". The
+        /// hosted flag is <c>hosted</c> (lane D contract 3.6); a Forge that still names it
+        /// <c>hostedEnabled</c> is understood too, so the disclosure banner cannot be lost to a field name.
+        /// </summary>
+        public static ForgeStatus Parse(string body)
+        {
+            JsonValue json;
+            if (body == null || !AtlasJson.TryParse(body, out json) || !json.IsObject) return ForgeStatus.Down;
+            return new ForgeStatus
+            {
+                Up = json.GetBool("ok", true),
+                Gpu = json.GetBool("gpu"),
+                Queue = json.GetInt("queue"),
+                DebugKeep = json.GetBool("debugKeep"),
+                Hosted = json.GetBool("hosted") || json.GetBool("hostedEnabled"),
+                PipelineVer = json.GetString("pipelineVer", string.Empty) ?? string.Empty
+            };
+        }
+
         async Task<ForgeStatus> ProbeOnceAsync()
         {
             try
@@ -81,18 +101,7 @@ namespace Atlas.Station
                 using (HttpResponseMessage response = await _http.GetAsync(_healthUrl, _stop.Token).ConfigureAwait(false))
                 {
                     if (!response.IsSuccessStatusCode) return ForgeStatus.Down;
-                    string text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                    JsonValue json;
-                    if (!AtlasJson.TryParse(text, out json) || !json.IsObject) return ForgeStatus.Down;
-                    return new ForgeStatus
-                    {
-                        Up = json.GetBool("ok", true),
-                        Gpu = json.GetBool("gpu"),
-                        Queue = json.GetInt("queue"),
-                        DebugKeep = json.GetBool("debugKeep"),
-                        Hosted = json.GetBool("hosted"),
-                        PipelineVer = json.GetString("pipelineVer", string.Empty) ?? string.Empty
-                    };
+                    return Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
                 }
             }
             catch (Exception)

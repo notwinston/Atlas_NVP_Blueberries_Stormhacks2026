@@ -448,10 +448,8 @@ namespace Atlas.E2E.Tests
                         Assert.That(rig.HubState.Tracking, Is.EqualTo((int)TrackingStates.ToWire(TrackingState.Normal)), at);
                     }
 
-                    if (k != JumpSample && !limited && k != LossFirstSample + LossSamples)
-                        integrated += (double2)(rig.HeadFloor - previousHead);
-                    else if (k == LossFirstSample + LossSamples)
-                        offset += rig.HeadFloor - previousHead;      // the kernel drops the first step after a loss as well
+                    if (k != JumpSample && !limited) integrated += (double2)(rig.HeadFloor - previousHead);
+                    Assert.That(math.distance(rig.WalkerFloor, integrated), Is.LessThan(1e-4), "the kernel's walker, " + at);
                 }
 
                 Assert.That(jumpEvents, Is.EqualTo(jump).Within(1e-5f), "one jump event with the jump's length");
@@ -715,9 +713,13 @@ namespace Atlas.E2E.Tests
                 Assert.That(rig.Hub.SendCommand(OperatorCommand.Quality(OperatorCommand.TierAuto)), Is.True);
                 Assert.That(rig.StepUntil(() => rig.Registry.GetInt(AppParams.PinTier) == OperatorCommand.TierAuto, CommandFrames),
                     Is.GreaterThanOrEqualTo(0), "the pin was not lifted in 250 ms");
-                int back = rig.StepUntil(() => rig.HubState.QualityTier == 0, 60 * 90);
-                Assert.That(back, Is.GreaterThanOrEqualTo(0), "a cool phone never came back to the nominal tier");
-                TestContext.WriteLine("ladder: nominal again {0:F1} s after the pin was lifted", back / 60.0);
+                // With no performance figures (no probe here) the ladder carries on from the rung it was pinned to.
+                rig.Steps(90);
+                Assert.That(rig.HubState.QualityTier, Is.EqualTo(2));
+                Assert.That(rig.Hub.SendCommand(OperatorCommand.Quality(0)), Is.True);
+                Assert.That(rig.StepUntil(() => rig.HubState.QualityTier == 0, 75), Is.GreaterThanOrEqualTo(0), "tier 0 was not in the State within a second");
+                Assert.That(rig.Hub.SendCommand(OperatorCommand.Quality(OperatorCommand.TierAuto)), Is.True);
+                rig.Steps(CommandFrames);
 
                 // 5  STOP: the cue at STRONG, and the world does not change.
                 ushort version = rig.Lab.WorldVersion;
@@ -747,7 +749,7 @@ namespace Atlas.E2E.Tests
                 Assert.That(rig.HubState.P2, Is.EqualTo(rig.Registry.Find(AppParams.CullRho).Max));
                 Assert.That(rig.Kernel.CullRho, Is.EqualTo((double)rig.Registry.Find(AppParams.CullRho).Max));
 
-                Assert.That(rig.Pump.CommandsApplied, Is.EqualTo(8));
+                Assert.That(rig.Pump.CommandsApplied, Is.EqualTo(10));
                 AssertHealthy(rig);
             }
         }

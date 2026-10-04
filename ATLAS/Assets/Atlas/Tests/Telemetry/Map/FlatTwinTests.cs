@@ -241,6 +241,68 @@ namespace Atlas.Telemetry.Tests
             Assert.That(twin.HalfExtent, Is.EqualTo(3f));
         }
 
+        [Test]
+        public void SmallPlanet_is_the_unfolded_cube_net_with_the_walkers_face_and_the_visited_faces()
+        {
+            var twin = new FlatTwin();
+            var trail = new FlatTwinTrail();
+            int[] walked = { 0, 1, 2, 5, 4 };
+            StateMessage state = StateAt((byte)SpaceId.SmallPlanet, 0.3f, 0.1f);
+            for (int i = 0; i < walked.Length; i++)
+            {
+                state.Tile0 = walked[i];
+                state.TimeUs = 1000000L * (i + 1);
+                trail.Add(in state);
+                trail.Add(in state);                // a face is kept once however long the walker stays on it
+            }
+            FlatTwinBuilder.Build(twin, Load(RoomFixtures.Sample3x3), new FlatWalkerKernel(), in state, trail);
+
+            Assert.That(twin.CountOf(FlatTwinShape.Line, FlatTwinInk.Cell), Is.EqualTo(4 * FlatTwinBuilder.CubeFaces), "six faces");
+            Assert.That(twin.CountOf(FlatTwinShape.Line, FlatTwinInk.Highlight), Is.EqualTo(4), "the walker's face");
+            Assert.That(twin.CountOf(FlatTwinShape.Line, FlatTwinInk.Trail), Is.EqualTo(walked.Length - 1));
+            Assert.That(twin.CountOf(FlatTwinShape.Line, FlatTwinInk.Outline), Is.EqualTo(0), "no floor plan on the net");
+            Assert.That(twin.LabelCount, Is.EqualTo(1));
+            float lx, lz;
+            Assert.That(twin.GetLabel(0, out lx, out lz), Is.EqualTo("face 5 of 6"));
+            Assert.That(twin.InView(lx, lz), Is.True);
+
+            // The six faces are six different squares of the cross, all in view.
+            var seen = new HashSet<long>();
+            for (int f = 0; f < FlatTwinBuilder.CubeFaces; f++)
+            {
+                float x, z;
+                FlatTwinBuilder.CubeNetCentre(f, out x, out z);
+                Assert.That(seen.Add((long)Math.Round(x) * 16 + (long)Math.Round(z)), Is.True, "face " + f);
+                Assert.That(twin.InView(x - 0.5f, z - 0.5f) && twin.InView(x + 0.5f, z + 0.5f), Is.True, "face " + f);
+            }
+
+            // The walker's dot is at the centre of its face, and the strokes join the faces in walked order.
+            float wx, wz;
+            FlatTwinBuilder.CubeNetCentre(4, out wx, out wz);
+            FlatTwinItem dot;
+            Assert.That(twin.TryFind(FlatTwinShape.Dot, FlatTwinInk.Walker, out dot), Is.True);
+            Assert.That(dot.A, Is.EqualTo(wx).Within(1e-5f));
+            Assert.That(dot.B, Is.EqualTo(wz).Within(1e-5f));
+            int stroke = 0;
+            for (int i = 0; i < twin.Count; i++)
+            {
+                FlatTwinItem item = twin[i];
+                if (item.Shape != FlatTwinShape.Line || item.Ink != FlatTwinInk.Trail) continue;
+                float ax, az, bx, bz;
+                FlatTwinBuilder.CubeNetCentre(walked[stroke], out ax, out az);
+                FlatTwinBuilder.CubeNetCentre(walked[stroke + 1], out bx, out bz);
+                Assert.That(new[] { item.A, item.B, item.C, item.D }, Is.EqualTo(new[] { ax, az, bx, bz }).Within(1e-5f));
+                stroke++;
+            }
+
+            // A face index this build does not know leaves the bare net; nothing throws.
+            state.Tile0 = 9;
+            FlatTwinBuilder.Build(twin, null, null, in state, null);
+            Assert.That(twin.CountOf(FlatTwinShape.Line, FlatTwinInk.Cell), Is.EqualTo(4 * FlatTwinBuilder.CubeFaces));
+            Assert.That(twin.CountOf(FlatTwinShape.Line, FlatTwinInk.Highlight), Is.EqualTo(0));
+            Assert.That(twin.CountOf(FlatTwinShape.Dot, FlatTwinInk.Walker), Is.EqualTo(0));
+        }
+
         sealed class OwnTwin : IFlatTwinSource
         {
             public void WriteFlatTwin(FlatTwin twin)

@@ -51,17 +51,16 @@ namespace Atlas.Spaces.Portal
             float top = layout.BoothHeight;
             int wall = AtlasPalette.Booth;
 
-            // Counter-clockwise seen from above, so every face looks outwards. The face that holds the
-            // doorway runs the same way as the doorway's own A to B.
+            // Counter-clockwise seen from above, so every face looks outwards. The doorway is cut out of
+            // the face it lies on, whichever that is.
             var c0 = booth.Min;
             var c1 = new float2(booth.Max.x, booth.Min.y);
             var c2 = booth.Max;
             var c3 = new float2(booth.Min.x, booth.Max.y);
-            bool southDoor = math.abs(door.A.y - booth.Min.y) < 1e-3f;
-            if (southDoor) WallWithDoor(data, c0, c1, door, 0f, top, wall); else Wall(data, c0, c1, 0f, top, wall);
-            Wall(data, c1, c2, 0f, top, wall);
-            if (!southDoor) WallWithDoor(data, c2, c3, door, 0f, top, wall); else Wall(data, c2, c3, 0f, top, wall);
-            Wall(data, c3, c0, 0f, top, wall);
+            BoothWall(data, c0, c1, door, top, wall);
+            BoothWall(data, c1, c2, door, top, wall);
+            BoothWall(data, c2, c3, door, top, wall);
+            BoothWall(data, c3, c0, door, top, wall);
 
             // Roof.
             float2 size = booth.Size;
@@ -69,6 +68,15 @@ namespace Atlas.Spaces.Portal
                          AtlasPalette.Uv(AtlasPalette.Ceiling));
 
             DoorGlow(data, door, Lift);
+        }
+
+        static void BoothWall(AtlasMeshBuilder data, float2 p0, float2 p1, in LayoutDoor door, float top, int palette)
+        {
+            float2 along = math.normalizesafe(p1 - p0, new float2(1f, 0f));
+            var across = new float2(along.y, -along.x);
+            bool holdsDoor = math.abs(math.dot(door.A - p0, across)) < 1e-3f && math.abs(math.dot(door.B - p0, across)) < 1e-3f;
+            if (holdsDoor) WallWithDoor(data, p0, p1, door, 0f, top, palette);
+            else Wall(data, p0, p1, 0f, top, palette);
         }
 
         // ---- the loop's entrance --------------------------------------------------------------------------

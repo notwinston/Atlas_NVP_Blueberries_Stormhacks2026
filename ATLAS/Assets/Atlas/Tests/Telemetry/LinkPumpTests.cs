@@ -169,11 +169,22 @@ namespace Atlas.Telemetry.Tests
             Assert.That(local.Data.GetFloat("value"), Is.EqualTo(3.5f));
             Assert.That(rig.Count(LinkEvents.Param), Is.EqualTo(1));
 
-            // Under demo lock the set is ignored.
+            // Under demo lock the set is ignored, and said to be: param.ignored in the phone's log and at the Hub.
             rig.Client.DemoLock = true;
             rig.Host.SendParam("curved.cullRho", 2f);
             rig.Run(100);
             Assert.That(rig.Rho.Float, Is.EqualTo(3.5f));
+            EventMessage ignored = rig.Last(LinkEvents.ParamIgnoredEvent);
+            Assert.That(ignored, Is.Not.Null, "param.ignored is logged on the phone");
+            Assert.That(ignored.Data.GetString("reason"), Is.EqualTo("lock"));
+            Assert.That(ignored.Data.GetInt("count"), Is.EqualTo(1));
+            JsonValue atHub = null;
+            for (int i = 0; i < rig.HubEvents.Count; i++)
+                if (rig.HubEvents[i].GetString("ev") == LinkEvents.ParamIgnoredEvent) atHub = rig.HubEvents[i];
+            Assert.That(atHub, Is.Not.Null, "and reaches the Hub");
+            float known;
+            Assert.That(rig.Host.TryGetSnapshotValue("curved.cullRho", out known), Is.True);
+            Assert.That(known, Is.EqualTo(3.5f), "the Hub's snapshot stays at what the phone holds");
         }
 
         [Test]

@@ -12,6 +12,10 @@ namespace Atlas.Telemetry
     /// <para>A GLB is right-handed: x is stored negated, v runs downwards and front faces are counter-clockwise.
     /// All three are turned back here, which gives the box-local frame of the contract exactly
     /// (docs/contracts/lane-d-link.md section 4.1).</para>
+    /// <para>This reader is the phone's only GLB loader; the glTF package is not used. It reads exactly the
+    /// accessor types section 4.1 binds the Forge to and the validator's check 6 enforces: POSITION and NORMAL
+    /// as VEC3 FLOAT, TEXCOORD_0 as VEC2 FLOAT, COLOR_0 as VEC4 UNSIGNED_BYTE, indices as UNSIGNED_SHORT or
+    /// UNSIGNED_INT. Any other valid glTF encoding is refused, and the object takes its built-in mesh.</para>
     /// </summary>
     public static class GlbMeshReader
     {

@@ -113,8 +113,18 @@ namespace Atlas.Station.Tests
                         return s != null && s["p"][StateMessage.ParamCullRho].AsFloat() == 2.5f && s.GetInt("space") == 4 && s.GetBool("cue");
                     }, "State to show the parameter, the space and the cue");
 
+                    // The tier is the app's scale: Nominal 0 with no load, Critical 3 the lowest rung, High 4.
+                    Assert.That(t.Hub.GetState().GetInt("tier"), Is.EqualTo(0), "an unloaded phone sits at Nominal");
+                    await t.PostJson("/api/op", "{\"cmd\": \"quality\", \"args\": {\"tier\": 2}}");
+                    Wait.Until(() => t.Hub.GetState().GetInt("tier") == 2, "the pinned tier in State");
+                    await t.PostJson("/api/op", "{\"cmd\": \"quality\", \"args\": {\"tier\": -1}}");
+                    Wait.Until(() => t.Hub.GetState().GetInt("tier") == 0, "automatic to go back to Nominal, not to Critical");
+
                     stop.Cancel();
                     Assert.That(await running, Is.EqualTo(ReplayPlayer.ExitOk));
+                    // The Bye travels with the disconnect, so the reason is in hub.log every time.
+                    Wait.Until(() => !t.Hub.HasPhone, "the Hub to see the phone leave");
+                    Assert.That(LogFile.ReadShared(Path.Combine(t.Hub.Log.Folder, SessionLog.HubLogFile)), Does.Contain("replay finished"));
                 }
             }
         }

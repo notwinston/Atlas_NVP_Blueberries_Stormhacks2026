@@ -126,6 +126,27 @@ namespace Atlas.Station.Tests
         }
 
         [Test]
+        public void ForgeProbe_ReadsTheForgesHealthBody()
+        {
+            // The body the Forge's GET /health really sends (station/forge/forge/models.py, Health).
+            ForgeStatus armed = ForgeProbe.Parse(
+                "{\"ok\":true,\"gpu\":false,\"gpuName\":null,\"queue\":2,\"pipelineVer\":\"p1\",\"debugKeep\":true," +
+                "\"generator\":\"procedural\",\"generatorReady\":true,\"generatorNote\":\"\",\"hosted\":true,\"hostedEnabled\":true,\"matting\":\"none\"}");
+            Assert.That(armed.Up, Is.True);
+            Assert.That(armed.Queue, Is.EqualTo(2));
+            Assert.That(armed.DebugKeep, Is.True);
+            Assert.That(armed.Hosted, Is.True, "the hosted fallback is disclosed");
+            Assert.That(armed.PipelineVer, Is.EqualTo("p1"));
+            Assert.That(armed.ToJson().GetBool("hosted"), Is.True, "and reaches /api/session and the link frame");
+
+            // A Forge that only knows the older name is understood too.
+            Assert.That(ForgeProbe.Parse("{\"ok\":true,\"queue\":0,\"hostedEnabled\":true}").Hosted, Is.True);
+            Assert.That(ForgeProbe.Parse("{\"ok\":true,\"queue\":0,\"hostedEnabled\":false}").Hosted, Is.False);
+            Assert.That(ForgeProbe.Parse("not json").Up, Is.False);
+            Assert.That(ForgeProbe.Parse(null).Up, Is.False);
+        }
+
+        [Test]
         public void TelemetryCsv_HasOneValuePerHeaderColumn_InWireOrder()
         {
             var t = new TelemetryMessage

@@ -80,12 +80,28 @@ namespace Atlas.App
             _registry.Set(ParamDemoLock, on ? 1f : 0f, ParamSource.Remote);
         }
 
-        // A variant names one value of the space's "<group>.mode" parameter, by name or by index. A space
-        // with no such parameter ignores it.
+        /// <summary>
+        /// The parameter a <c>SceneCmd</c> variant sets for a space (lane A contract section 14): the gluing of
+        /// S1, the layout of S5, the body of S6. Null for a space that has no variants.
+        /// </summary>
+        public static string VariantParam(SpaceId space)
+        {
+            switch (space)
+            {
+                case SpaceId.Glued: return "glued.mode";
+                case SpaceId.Portal: return "rooms.layout";
+                case SpaceId.Slicer: return "slicer.object";
+                default: return null;
+            }
+        }
+
+        // A variant names one value of the space's variant parameter, by name or by index. A space with no
+        // such parameter, or one that has not declared it, ignores the variant.
         void ApplyVariant(SpaceId space, string variant)
         {
+            string name = VariantParam(space);
             ParamEntry mode;
-            if (!_registry.TryGet(SpaceIds.ParamGroup(space) + ".mode", out mode)) return;
+            if (name == null || !_registry.TryGet(name, out mode)) return;
             for (int i = 0; i < mode.EnumCount; i++)
             {
                 if (string.Equals(mode.EnumName(i), variant, StringComparison.OrdinalIgnoreCase))

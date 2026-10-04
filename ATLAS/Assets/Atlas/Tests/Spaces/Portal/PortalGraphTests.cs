@@ -241,8 +241,9 @@ namespace Atlas.Spaces.Tests.Portal
                 PortalLayout layout = PortalLayoutGenerator.Generate(PortalLayoutRequest.FromRoom(room, PortalLayoutKind.Loop, 6, 1));
                 Assert.That(layout.Kind, Is.EqualTo(PortalLayoutKind.BoothHall), name);
                 Assert.That(layout.IsFallback, Is.True, name);
+                // 1.0 m wide; as deep as leaves half a metre between the middle of the room and its door.
                 Assert.That(layout.Booth.Size.x, Is.EqualTo(1f).Within(1e-5f), name);
-                Assert.That(layout.Booth.Size.y, Is.EqualTo(1f).Within(1e-5f), name);
+                Assert.That(layout.Booth.Size.y, Is.EqualTo(math.min(1f, 0.5f * layout.Df - 0.5f)).Within(1e-5f), name);
                 Assert.That(math.distance(layout.Doors[0].A, layout.Doors[0].B), Is.EqualTo(0.9f).Within(1e-5f), name);
             }
 
@@ -251,6 +252,97 @@ namespace Atlas.Spaces.Tests.Portal
             PortalLayout standing = PortalLayoutGenerator.Generate(PortalLayoutRequest.FromRoom(tiny, PortalLayoutKind.Loop, 6, 1));
             Assert.That(standing.Kind, Is.EqualTo(PortalLayoutKind.BoothHall));
             AssertGraph(standing, new RoomModelFloor(tiny), "tiny_standing");
+        }
+
+        static void AssertDoorwayInFrontOfTheMiddle(PortalLayout layout, float least, string what)
+        {
+            Assert.That(layout.Kind, Is.EqualTo(PortalLayoutKind.BoothHall), what);
+            LayoutDoor door = layout.Doors[0];
+            float4 plane = PortalMath.DoorPlane(door.A, door.B);
+            var head = new float3(0f, 1.6f, 0f);
+            Assert.That(PortalMath.Side(plane, head), Is.GreaterThanOrEqualTo(least - 1e-4f), what + ": the doorway is in front of the walker");
+            Assert.That(layout.Booth.Contains(float2.zero), Is.False, what + ": the walker does not stand in the booth");
+            Assert.That(math.abs(PortalMath.Side(plane, head)), Is.GreaterThan(PortalMath.BoxDistance + 0.15f), what + ": no sway reaches the doorway");
+            // The booth lies behind its door, the door on the booth's own face, inside its width.
+            float2 inBooth = layout.Booth.Centre;
+            Assert.That(PortalMath.Side(plane, new float3(inBooth.x, 1f, inBooth.y)), Is.LessThan(0f), what);
+            Assert.That(layout.Booth.Contains(door.A, 1e-4f) && layout.Booth.Contains(door.B, 1e-4f), Is.True, what);
+            Assert.That(math.distance(door.A, door.B), Is.GreaterThanOrEqualTo(0.6f - 1e-5f), what);
+        }
+
+        [Test]
+        public void Booth_StandingMode_TheDoorwayStaysInFrontOfAWalkerWhoNeverLeavesTheMiddle()
+        {
+            // Lane A contract section 14.2: standing mode gives the booth, viewed in place.
+            RoomModel tiny = RoomFixtures.LoadFromProject(RoomFixtures.TinyStanding);
+            Assert.That(tiny.Standing, Is.True);
+            for (uint seed = 0; seed < 4; seed++)
+            {
+                foreach (PortalLayoutKind kind in new[] { PortalLayoutKind.BoothHall, PortalLayoutKind.Loop })
+                {
+                    PortalLayout layout = PortalLayoutGenerator.Generate(PortalLayoutRequest.FromRoom(tiny, kind, 6, seed));
+                    AssertDoorwayInFrontOfTheMiddle(layout, 0.4f, "tiny_standing seed " + seed);
+                    AssertGraph(layout, new RoomModelFloor(tiny), "tiny_standing seed " + seed);
+                }
+
+                var small = new PortalLayoutRequest { Wf = 1.2f, Df = 1.2f, Standing = true, DoorHeight = 2.1f, Seed = seed, Layout = PortalLayoutKind.BoothHall };
+                AssertDoorwayInFrontOfTheMiddle(PortalLayoutGenerator.Generate(in small), 0.4f, "1.2 x 1.2 seed " + seed);
+
+                // The door looks along the longer side, whichever axis that is.
+                var wide = new PortalLayoutRequest { Wf = 2.0f, Df = 1.4f, Standing = true, DoorHeight = 2.1f, Seed = seed, Layout = PortalLayoutKind.BoothHall };
+                PortalLayout sideways = PortalLayoutGenerator.Generate(in wide);
+                AssertDoorwayInFrontOfTheMiddle(sideways, 0.5f, "2.0 x 1.4 seed " + seed);
+                Assert.That(math.abs(PortalRoomMeshes.DoorNormal(sideways.Doors[0]).x), Is.EqualTo(1f).Within(1e-6f), "seed " + seed);
+                Assert.That(sideways.Booth.Size.x, Is.EqualTo(0.5f).Within(1e-5f), "seed " + seed);
+                Assert.That(sideways.Booth.Size.y, Is.EqualTo(1f).Within(1e-5f), "seed " + seed);
+            }
+        }
+
+        [Test]
+        public void Booth_AStandingWalkerSwaying_NeverChangesRoom_AndNeverGetsThePortalBox()
+        {
+            RoomModel tiny = RoomFixtures.LoadFromProject(RoomFixtures.TinyStanding);
+            for (uint seed = 0; seed < 4; seed++)
+            {
+                PortalLayout layout = PortalLayoutGenerator.Generate(PortalLayoutRequest.FromRoom(tiny, PortalLayoutKind.BoothHall, 6, seed));
+                var core = new PortalFrameCore();
+                core.AddRoom(new float3(-2f, 0f, -2f), new float3(2f, 2.4f, 2f));
+                core.AddRoom(new float3(-4f, -1f, -4f), new float3(4f, 4f, 4f));
+                LayoutDoor door = layout.Doors[0];
+                core.AddDoor(door.From, door.To, door.A, door.B, door.Height);
+                for (int frame = 0; frame < 240; frame++)
+                {
+                    float t = frame * 0.11f;
+                    var head = new float3(0.15f * math.sin(t), 1.6f, 0.15f * math.cos(1.7f * t));
+                    bool changed = core.Step(head, head - new float3(0.032f, 0f, 0f), head + new float3(0.032f, 0f, 0f), null, null, true);
+                    Assert.That(changed, Is.False, "seed " + seed + " frame " + frame);
+                    Assert.That(core.CurrentRoom, Is.EqualTo(0));
+                    Assert.That(core.DoorMasks(0, 0).Reference, Is.EqualTo(1), "the doorway is shown");
+                    Assert.That(core.DoorMasks(0, 0).Box, Is.False, "seed " + seed + " frame " + frame);
+                }
+            }
+        }
+
+        [Test]
+        public void Booth_TheMeshCutsTheDoorwayOutOfTheFaceItLiesOn_OnEitherAxis()
+        {
+            foreach (float2 size in new[] { new float2(1.4f, 2.6f), new float2(2.6f, 1.4f) })
+            {
+                for (uint seed = 0; seed < 4; seed++)
+                {
+                    var request = new PortalLayoutRequest { Wf = size.x, Df = size.y, DoorHeight = 2.0f, Seed = seed, Layout = PortalLayoutKind.BoothHall };
+                    PortalLayout layout = PortalLayoutGenerator.Generate(in request);
+                    var withDoor = new AtlasMeshBuilder(256, 512);
+                    PortalRoomMeshes.BuildExterior(layout, withDoor);
+
+                    // The same booth with a doorway that touches no face: every face is whole.
+                    LayoutDoor door = layout.Doors[0];
+                    layout.Doors[0] = new LayoutDoor { Id = door.Id, From = door.From, To = door.To, A = door.A + 50f, B = door.B + 50f, Height = door.Height };
+                    var closed = new AtlasMeshBuilder(256, 512);
+                    PortalRoomMeshes.BuildExterior(layout, closed);
+                    Assert.That(withDoor.TriangleCount, Is.GreaterThan(closed.TriangleCount), "size " + size + " seed " + seed + ": one face is cut in three");
+                }
+            }
         }
 
         [Test]

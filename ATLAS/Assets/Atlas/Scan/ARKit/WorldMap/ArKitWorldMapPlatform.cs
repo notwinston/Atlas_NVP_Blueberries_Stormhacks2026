@@ -117,5 +117,13 @@ namespace Atlas.Scan.ARKit
                 native.Dispose();
             }
         }
+
+        public void ClearWorldMap(XRSessionSubsystem session)
+        {
+            var arkit = session as ARKitSessionSubsystem;
+            if (arkit == null || !WorldMapSupported) return;
+            // A map that is not valid sets the configuration's initialWorldMap to nil.
+            arkit.ApplyWorldMap(default(ARWorldMap));
+        }
     }
 }

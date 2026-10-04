@@ -162,6 +162,78 @@ namespace Atlas.Telemetry.Tests
             AssertIsFurniture(mesh, AssetFixtures.Dims(fixture), fixture.GetInt("triangles"), fixture.GetInt("vertices"));
         }
 
+        /// <summary>
+        /// The reader does what a glTF importer does for a right-handed file, vertex by vertex: x and the
+        /// normal's x negated, v turned over, the colour bytes kept, the second and third corner exchanged.
+        /// </summary>
+        [Test]
+        public void Glb_MeshReader_MirrorsXFlipsVAndTurnsTheWinding()
+        {
+            byte[] glb = Bytes("forge_table.glb.bytes");
+            GlbFile file;
+            string error;
+            JsonValue primitive;
+            Assert.That(GlbFile.TryParse(glb, glb.Length, out file, out error), Is.True, error);
+            Assert.That(file.TryPrimitive(out primitive), Is.True);
+            JsonValue attributes = primitive["attributes"];
+            GlbAccessor position, normal, uv, colour, index;
+            Assert.That(file.TryAccessor(attributes.GetInt("POSITION"), out position), Is.True);
+            Assert.That(file.TryAccessor(attributes.GetInt("NORMAL"), out normal), Is.True);
+            Assert.That(file.TryAccessor(attributes.GetInt("TEXCOORD_0"), out uv), Is.True);
+            Assert.That(file.TryAccessor(attributes.GetInt("COLOR_0"), out colour), Is.True);
+            Assert.That(file.TryAccessor(primitive.GetInt("indices"), out index), Is.True);
+
+            var mesh = new MeshData();
+            Assert.That(GlbMeshReader.TryRead(glb, glb.Length, mesh), Is.True);
+            Assert.That(mesh.VertexCount, Is.EqualTo(position.Count));
+            Assert.That(mesh.IndexCount, Is.EqualTo(index.Count));
+
+            bool offCentre = false;
+            for (int v = 0; v < mesh.VertexCount; v++)
+            {
+                int p = position.Offset + v * position.Stride, n = normal.Offset + v * normal.Stride;
+                int t = uv.Offset + v * uv.Stride, c = colour.Offset + v * colour.Stride;
+                AtlasVertex vertex = mesh.Vertices[v];
+                Assert.That(vertex.Position.x, Is.EqualTo(-file.Float(p)));
+                Assert.That(vertex.Position.y, Is.EqualTo(file.Float(p + 4)));
+                Assert.That(vertex.Position.z, Is.EqualTo(file.Float(p + 8)));
+                Assert.That(vertex.Normal.x, Is.EqualTo(-file.Float(n)));
+                Assert.That(vertex.Normal.y, Is.EqualTo(file.Float(n + 4)));
+                Assert.That(vertex.Normal.z, Is.EqualTo(file.Float(n + 8)));
+                Assert.That(vertex.Uv0.x, Is.EqualTo(file.Float(t)));
+                Assert.That(vertex.Uv0.y, Is.EqualTo(1f - file.Float(t + 4)));
+                Assert.That(vertex.Color & 255u, Is.EqualTo((uint)glb[c]), "R is the baked shade");
+                Assert.That(vertex.Color >> 24, Is.EqualTo((uint)glb[c + 3]));
+                offCentre |= math.abs(vertex.Position.x) > 0.01f;
+            }
+            Assert.That(offCentre, Is.True, "the fixture has vertices off the mirror plane, so the sign is tested");
+
+            for (int k = 0; k < mesh.IndexCount; k += 3)
+            {
+                Assert.That((uint)mesh.Indices[k], Is.EqualTo(file.Index(in index, k)));
+                Assert.That((uint)mesh.Indices[k + 1], Is.EqualTo(file.Index(in index, k + 2)));
+                Assert.That((uint)mesh.Indices[k + 2], Is.EqualTo(file.Index(in index, k + 1)));
+            }
+        }
+
+        /// <summary>Only the accessor types of section 4.1 are read; another valid glTF encoding is refused.</summary>
+        [Test]
+        public void Glb_MeshReader_RefusesAccessorTypesOutsideTheContract()
+        {
+            byte[] glb = Bytes("forge_table.glb.bytes");
+            // COLOR_0 is the file's only UNSIGNED_BYTE accessor: declare it UNSIGNED_SHORT in the JSON chunk.
+            int jsonLength = BitConverter.ToInt32(glb, 12), at = -1, found = 0;
+            for (int i = 20; i + 4 <= 20 + jsonLength; i++)
+                if (glb[i] == '5' && glb[i + 1] == '1' && glb[i + 2] == '2' && glb[i + 3] == '1') { at = i; found++; }
+            Assert.That(found, Is.EqualTo(1));
+            glb[at + 3] = (byte)'3';
+
+            var mesh = new MeshData();
+            Assert.That(GlbMeshReader.TryRead(glb, glb.Length, mesh), Is.False);
+            Assert.That(mesh.VertexCount, Is.EqualTo(0));
+            Assert.That(mesh.IndexCount, Is.EqualTo(0));
+        }
+
         /// <summary>The file that came back from a running Forge over HTTP (Fixtures/Tools~/forge_round_trip.py).</summary>
         [Test]
         public void Glb_RoundTrip_TheForgesAnswerPassesThePhonesValidator()

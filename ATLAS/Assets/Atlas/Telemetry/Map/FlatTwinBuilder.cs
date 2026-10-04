@@ -27,6 +27,14 @@ namespace Atlas.Telemetry
         const string LabelCut = "w", LabelNoRoom = "no room", LabelNoGraph = "no tile graph";
         static readonly string[] s_roomOf = BuildRoomLabels();
 
+        /// <summary>Faces of the Small Planet's cube; State.tileId's first word names the walker's face, 0 to 5.</summary>
+        public const int CubeFaces = 6;
+        // The unfolded cube as a cross of unit squares: face 0 (the room's face) in the middle, faces 1 to 4
+        // round it on +X, +Z, -X and -Z, face 5 (the far side) below face 4. Column and row of each face.
+        static readonly sbyte[] s_netColumn = { 0, 1, 0, -1, 0, 0 };
+        static readonly sbyte[] s_netRow = { 0, 0, 1, 0, -1, -2 };
+        static readonly string[] s_faceOf = { "face 1 of 6", "face 2 of 6", "face 3 of 6", "face 4 of 6", "face 5 of 6", "face 6 of 6" };
+
         /// <summary>
         /// Clears the twin and draws the one of the State's space. room and kernel may be null: what needs them
         /// is then left out. trail may be null.
@@ -52,8 +60,10 @@ namespace Atlas.Telemetry
                     break;
                 case (byte)SpaceId.CurvedWalk:
                 case (byte)SpaceId.AlignedCells:
-                case (byte)SpaceId.SmallPlanet:
                     Tiles(twin, room, kernel, in state, trail);
+                    break;
+                case (byte)SpaceId.SmallPlanet:
+                    CubeNet(twin, in state, trail);
                     break;
                 case (byte)SpaceId.Portal:
                     FloorPlan(twin, room, outline, in state, trail, 0.30f);
@@ -321,7 +331,52 @@ namespace Atlas.Telemetry
                 mode == GluedKlein ? LabelKlein : mode == GluedTorus3 ? LabelTorus3 : LabelTorus);
         }
 
-        // ---- S2, S3, S4: the tile graph ----------------------------------------------------------------------
+        // ---- S4: the unfolded cube net -----------------------------------------------------------------------
+
+        /// <summary>The centre of a face of the net, in the net's own units (a face is one unit across).</summary>
+        public static void CubeNetCentre(int face, out float x, out float z)
+        {
+            int f = Clamp(face, 0, CubeFaces - 1);
+            x = s_netColumn[f];
+            z = s_netRow[f];
+        }
+
+        // Six faces, the walker's highlighted with a dot in it, and the visited faces joined in the order they
+        // were walked. Only the face index is read: where the walker stands inside a face is the kernel's
+        // business (lane B), and nothing curved is computed here.
+        static void CubeNet(FlatTwin twin, in StateMessage state, FlatTwinTrail trail)
+        {
+            for (int f = 0; f < CubeFaces; f++)
+                twin.Rect(s_netColumn[f] - 0.5f, s_netRow[f] - 0.5f, s_netColumn[f] + 0.5f, s_netRow[f] + 0.5f, FlatTwinInk.Cell);
+            // The cross spans three faces across and four down.
+            const float half = 2.15f;
+            twin.SetView(0f, -0.5f, half, false);
+
+            if (trail != null)
+            {
+                bool have = false;
+                float px = 0f, pz = 0f;
+                for (int k = 0; k < trail.TileCount; k++)
+                {
+                    long face = trail.GetTile(k).Xu;
+                    if (face < 0 || face >= CubeFaces) { have = false; continue; }
+                    float x = s_netColumn[face], z = s_netRow[face];
+                    if (have) twin.Line(px, pz, x, z, FlatTwinInk.Trail);
+                    px = x;
+                    pz = z;
+                    have = true;
+                }
+            }
+
+            long walker = state.Tile0;
+            if (walker < 0 || walker >= CubeFaces) return;      // a face this build does not know: the bare net
+            float cx = s_netColumn[walker], cz = s_netRow[walker];
+            twin.Rect(cx - 0.5f, cz - 0.5f, cx + 0.5f, cz + 0.5f, FlatTwinInk.Highlight);
+            twin.Dot(cx, cz, half * DotShare, FlatTwinInk.Walker);
+            twin.Label(1.2f, -1.9f, s_faceOf[walker]);
+        }
+
+        // ---- S2, S3: the tile graph ----------------------------------------------------------------------
 
         // While lane B's graph is the flat stub (q = 4) this is a square-grid plan in metres. No projection and
         // no curved formula is involved; the {4,5} disc is drawn from the same call when that graph lands.

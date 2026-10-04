@@ -139,6 +139,17 @@ namespace Atlas.App.Onboarding
             return true;
         }
 
+        /// <summary>
+        /// True in the steps that look at the real room through the camera: the room choice, the wait for a
+        /// saved room, the sweep and the outline (lane C contract, section 10.4, step 4). The virtual room of
+        /// an earlier scan must not be drawn over the camera picture there, or a rescan sweeps blind.
+        /// </summary>
+        public static bool CameraPictureOnly(OnboardingStep step)
+        {
+            return step == OnboardingStep.Room || step == OnboardingStep.Relocalise ||
+                   step == OnboardingStep.Sweep || step == OnboardingStep.Confirm;
+        }
+
         /// <summary>From Home back to the hand for a new scan (lane C contract, section 14.2).</summary>
         public bool Rescan()
         {

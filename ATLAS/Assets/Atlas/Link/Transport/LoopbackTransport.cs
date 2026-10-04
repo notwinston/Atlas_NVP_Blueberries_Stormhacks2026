@@ -215,7 +215,17 @@ namespace Atlas.Link
             return true;
         }
 
-        internal void Disconnect(LoopbackTransport from, int peerId, string localReason, string remoteReason)
+        // A close that carries a last packet: the packet travels as a reliable one and the disconnect never
+        // overtakes it.
+        internal void Disconnect(LoopbackTransport from, int peerId, byte[] data, int offset, int length)
+        {
+            Connection c = FindConnection(from, peerId);
+            if (c == null) return;
+            Send(from, peerId, data, offset, length, LinkDelivery.Reliable);
+            Disconnect(from, peerId, "DisconnectPeerCalled", "RemoteConnectionClose", c.A == from ? c.LastReliableAtoB : c.LastReliableBtoA);
+        }
+
+        internal void Disconnect(LoopbackTransport from, int peerId, string localReason, string remoteReason, long notBeforeUs = long.MinValue)
         {
             Connection c = FindConnection(from, peerId);
             if (c == null) return;
@@ -241,6 +251,7 @@ namespace Atlas.Link
             remote.ToPeerId = fromA ? c.IdAtB : c.IdAtA;
             // A pulled cable carries no goodbye: the far end notices at its own timeout.
             remote.DeliverAtUs = now + (_cut ? (long)(DisconnectTimeoutMs * 1000.0) : TransitUs());
+            if (remote.DeliverAtUs < notBeforeUs) remote.DeliverAtUs = notBeforeUs;
             remote.Reason = _cut ? "Timeout" : remoteReason;
             Enqueue(remote);
         }
@@ -419,6 +430,11 @@ namespace Atlas.Link
         public void Disconnect(int peerId)
         {
             if (IsRunning) _network.Disconnect(this, peerId, "DisconnectPeerCalled", "RemoteConnectionClose");
+        }
+
+        public void Disconnect(int peerId, byte[] data, int offset, int length)
+        {
+            if (IsRunning) _network.Disconnect(this, peerId, data, offset, length);
         }
 
         public void Stop()

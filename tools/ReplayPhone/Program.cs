@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using System.Threading;
 
 namespace Atlas.Tools
@@ -29,7 +30,16 @@ namespace Atlas.Tools
                     e.Cancel = true;   // say Bye to the Hub before leaving
                     stop.Cancel();
                 };
-                return new ReplayPlayer(options).Run(stop.Token);
+                // SIGTERM is how a script or a supervisor ends the tool: leave the same way, with a Bye, so the
+                // Hub frees the phone seat at once instead of at its timeout.
+                using (PosixSignalRegistration.Create(PosixSignal.SIGTERM, context =>
+                {
+                    context.Cancel = true;
+                    stop.Cancel();
+                }))
+                {
+                    return new ReplayPlayer(options).Run(stop.Token);
+                }
             }
         }
     }

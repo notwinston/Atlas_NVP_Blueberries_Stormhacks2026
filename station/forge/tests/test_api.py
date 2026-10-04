@@ -37,6 +37,7 @@ def test_health(client):
     assert body["ok"] is True and body["queue"] == 0 and body["debugKeep"] is False
     assert body["pipelineVer"] and body["gpu"] is False
     assert body["generator"] == "procedural" and body["hostedEnabled"] is False
+    assert body["hosted"] is False
 
 
 @pytest.mark.parametrize("name", ["sample_4x5_table", "budget_room", "sample_L_3x4", "sample_3x3", "tiny_standing"])
@@ -188,6 +189,7 @@ def test_hosted_enabled_is_reported_and_has_no_vendor(tmp_path):
     settings = make_settings(tmp_path / "data", hosted_enabled=True, hosted_url="https://example.invalid", hosted_key="k")
     with TestClient(create_app(settings)) as client:
         assert client.get("/health").json()["hostedEnabled"] is True
+        assert client.get("/health").json()["hosted"] is True
         model = room_model("hosted", [(0.6, 0.6, 0.6)])
         upload_room(client, model)
         job = post_object(client, "hosted", meta_for(model["objects"][0], 5000, backend="hosted"), [jpeg()]).json()

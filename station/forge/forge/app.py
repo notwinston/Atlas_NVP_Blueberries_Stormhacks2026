@@ -64,6 +64,7 @@ def create_app(settings: Optional[Settings] = None, generator: Optional[Generato
     def health() -> Health:
         ready, note = forge.generator.availability()
         name = forge.generator.gpu()
+        hosted = forge.hosted.availability()[0]
         return Health(
             ok=True,
             gpu=name is not None,
@@ -74,7 +75,8 @@ def create_app(settings: Optional[Settings] = None, generator: Optional[Generato
             generator=forge.generator.name,
             generatorReady=ready,
             generatorNote=note,
-            hostedEnabled=forge.hosted.availability()[0],
+            hosted=hosted,
+            hostedEnabled=hosted,
             matting=_matting_method(),
         )
 

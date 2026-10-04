@@ -29,6 +29,12 @@ namespace Atlas.Scan
 
         /// <summary>Deserialises and applies a world map: the session starts to relocalise. False on bad data. Main thread.</summary>
         bool ApplyWorldMap(XRSessionSubsystem session, byte[] data);
+
+        /// <summary>
+        /// Takes an applied world map out of the session's configuration, so that a restarted session
+        /// tracks afresh instead of searching for the saved room. Main thread.
+        /// </summary>
+        void ClearWorldMap(XRSessionSubsystem session);
     }
 
     /// <summary>The registered provider, or a neutral stand-in.</summary>
@@ -41,6 +47,7 @@ namespace Atlas.Scan
             public WorldMappingQuality MappingQuality(XRSessionSubsystem session) { return WorldMappingQuality.NotAvailable; }
             public void BeginGetWorldMap(XRSessionSubsystem session, Action<byte[]> done) { if (done != null) done(null); }
             public bool ApplyWorldMap(XRSessionSubsystem session, byte[] data) { return false; }
+            public void ClearWorldMap(XRSessionSubsystem session) { }
         }
 
         static readonly IArWorldMapPlatform s_neutral = new Neutral();

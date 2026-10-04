@@ -53,10 +53,14 @@ namespace Atlas.Spaces.Portal
         public const float MinLoopSide = 2.4f;
         /// <summary>Corridor width: a third of the short side, between these. Metres.</summary>
         public const float MinCorridor = 0.7f, MaxCorridor = 1.0f;
-        /// <summary>The booth: 1.0 m square where the floor allows, never under 0.7 m.</summary>
+        /// <summary>The booth: 1.0 m square where the floor allows, never under 0.7 m wide.</summary>
         public const float BoothSide = 1.0f, MinBoothSide = 0.7f;
-        /// <summary>Floor left in front of the booth's door on the short side. Metres.</summary>
+        /// <summary>Floor left beside the booth on the short side. Metres.</summary>
         public const float BoothApproach = 0.4f;
+        /// <summary>Floor kept between the middle of the room and the booth's door, where the floor allows. Metres.</summary>
+        public const float DoorClearance = 0.5f;
+        /// <summary>The booth is never shallower than this: the walker steps into the hall, not into the booth. Metres.</summary>
+        public const float MinBoothDepth = 0.2f;
         public const float DoorWidth = 0.9f;
         public const float MinDoorHeight = 1.8f, MaxDoorHeight = 2.1f;
         public const float LoopWallHeight = 2.4f;
@@ -232,12 +236,19 @@ namespace Atlas.Spaces.Portal
             float hx = 0.5f * wf, hz = 0.5f * df;
             // The corner the booth stands in: bit 0 picks the side in x, bit 1 the side in z.
             float sx = (corner & 1) == 0 ? -1f : 1f, sz = (corner & 2) == 0 ? -1f : 1f;
-            float side = math.min(BoothSide, math.min(wf - BoothApproach, 0.5f * df));
-            side = math.max(side, MinBoothSide);
-            float doorWidth = math.min(DoorWidth, side - 0.1f);
+            // The door looks along the longer side of the free rectangle, and the doorway stays in front of
+            // a walker at the middle: the booth is only as deep as leaves DoorClearance to its door. That
+            // matters most in standing mode, where the walker never leaves the middle (lane A contract
+            // section 14.2): a doorway through the middle would be straddled with every sway of the head.
+            bool alongX = wf > df;
+            float longSide = alongX ? wf : df, shortSide = alongX ? df : wf;
+            float depth = math.clamp(0.5f * longSide - DoorClearance, MinBoothDepth, BoothSide);
+            float width = math.max(math.min(BoothSide, shortSide - BoothApproach), MinBoothSide);
+            float doorWidth = math.min(DoorWidth, width - 0.1f);
+            float sizeX = alongX ? depth : width, sizeZ = alongX ? width : depth;
 
             PortalLayout layout = NewLayout(in request, PortalLayoutKind.BoothHall, doorHeight);
-            layout.Booth = new FloorRect(new float2(sx * hx, sz * hz), new float2(sx * (hx - side), sz * (hz - side)));
+            layout.Booth = new FloorRect(new float2(sx * hx, sz * hz), new float2(sx * (hx - sizeX), sz * (hz - sizeZ)));
             layout.BoothHeight = doorHeight + 0.2f;
             layout.BoothCorner = new int2((int)sx, (int)sz);
             layout.AddRoom(LayoutRoomKind.Real);
@@ -246,12 +257,20 @@ namespace Atlas.Spaces.Portal
             hall.Cells = new[] { new FloorRect(new float2(-hx, -hz), new float2(hx, hz)) };
             hall.Hue = (int)((request.Seed >> 2) & 3u);
 
-            // The door faces the middle of the room along the long side. A walker in front of it looks
-            // along sz, so the left end lies towards -sz in x.
-            float face = sz * (hz - side);
-            float centre = sx * (hx - 0.5f * side);
-            var a = new float2(centre - sz * 0.5f * doorWidth, face);
-            var b = new float2(centre + sz * 0.5f * doorWidth, face);
+            // A is on the left of a walker who stands in front of the door and looks into the booth.
+            float2 a, b;
+            if (alongX)
+            {
+                float face = sx * (hx - depth), centre = sz * (hz - 0.5f * width);
+                a = new float2(face, centre + sx * 0.5f * doorWidth);
+                b = new float2(face, centre - sx * 0.5f * doorWidth);
+            }
+            else
+            {
+                float face = sz * (hz - depth), centre = sx * (hx - 0.5f * width);
+                a = new float2(centre - sz * 0.5f * doorWidth, face);
+                b = new float2(centre + sz * 0.5f * doorWidth, face);
+            }
             layout.AddDoor(0, hall.Id, a, b, doorHeight);
             return layout;
         }

@@ -35,6 +35,7 @@ namespace Atlas.App
         const int TelemetryModeHud = 2;
 
         readonly SyntheticPoseTrack _track = new SyntheticPoseTrack();
+        readonly PerfRoomKeeper _rooms = new PerfRoomKeeper(RoomFixtures.BudgetRoom);
         AtlasApp _app;
         PerfTourCore _core;
         PerfTourOptions _options;
@@ -200,6 +201,8 @@ namespace Atlas.App
             _roomError = null;
             _lastRoomLoad = double.NegativeInfinity;
             _writeErrors = 0;
+            // The walker's own room and its anchor come back when the run ends.
+            _rooms.Begin(kind, app.Spaces.Room, app.Pose.Pipeline != null ? app.Pose.Pipeline.Anchor : null);
 
             // The per-space numbers are those of the Nominal rung; the soak leaves the ladder to itself.
             if (kind == PerfRunKind.Tour) app.Commands.SetQuality(0);
@@ -220,7 +223,7 @@ namespace Atlas.App
             var info = new PerfRunInfo
             {
                 Session = session,
-                Room = RoomFixtures.BudgetRoom,
+                Room = _rooms.RoomIdOfRun(app.Spaces.Room),
                 Pose = poseName,
                 Depth = depthName,
                 Device = SystemInfo.deviceModel ?? "",
@@ -291,6 +294,7 @@ namespace Atlas.App
                 // value changes, and the switch is told directly when only the built-in lap was in its place.
                 if (!registry.Set(AppParams.PoseSource, _savedSource) && _syntheticPose && app.SourceSwitch != null)
                     app.SourceSwitch.SetSource(_savedSource);
+                RestoreRoom();
                 app.Spaces.ReturnHome();
                 WriteRun(0);
             }
@@ -301,6 +305,19 @@ namespace Atlas.App
             Debug.Log("Atlas: performance run " + (aborted ? "ended early" : "finished") + ": " + _core.Result + ", " +
                       _core.Rows.Count + " rows, file " + _path + (_writeErrors > 0 ? " (" + _writeErrors + " write errors)" : ""));
             if (_options != null && _options.Quit && !_shuttingDown) Application.Quit();
+        }
+
+        // The room the run replaced is handed over again as it first was: anchor to the pose pipeline, room
+        // to the space host and through it to the room frame, Bump Guard and the room content.
+        void RestoreRoom()
+        {
+            AtlasApp app = _app;
+            RoomModel room;
+            object anchor;
+            if (!_rooms.TakeBack(app.Spaces.Room, out room, out anchor) || app.HandOver == null) return;
+            // An anchor ARKit dropped during the run is gone; the room's own anchor pose stands in then.
+            Transform transform = anchor as Transform;
+            app.HandOver.Activate(room, transform != null ? transform : null);
         }
 
         void WriteRun(int value)
@@ -316,7 +333,7 @@ namespace Atlas.App
         {
             AtlasApp app = _app;
             RoomModel room = app.Spaces.Room;
-            if (room == null || room.Id != RoomFixtures.BudgetRoom)
+            if (_rooms.NeedsRunRoom(room))
             {
                 double now = Time.realtimeSinceStartupAsDouble;
                 if (now - _lastRoomLoad < RoomRetrySeconds) return false;

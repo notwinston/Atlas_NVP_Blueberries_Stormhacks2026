@@ -264,8 +264,9 @@ namespace Atlas.Tools
                         _walk.WorldVer++;
                         break;
                     case OperatorCommandKind.Quality:
-                        // -1 is "automatic": the governor would choose; a replay has no load, so it takes the top tier.
-                        _walk.QualityTier = command.Tier < 0 ? 3 : Math.Min(command.Tier, 3);
+                        // -1 is "automatic": the governor chooses, and with no load it sits at Nominal (0). A pinned
+                        // tier is reported as pinned, High (4) included; Critical (3) is the lowest rung.
+                        _walk.QualityTier = command.Tier < 0 ? 0 : Math.Min(command.Tier, 4);
                         break;
                     case OperatorCommandKind.Cue:
                         _cueUntilUs = now + 1000000;

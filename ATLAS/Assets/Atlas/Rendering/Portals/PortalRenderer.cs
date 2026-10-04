@@ -22,23 +22,10 @@ namespace Atlas.Rendering
         /// <summary>The mask shader's file name under Resources.</summary>
         public const string MaskShaderResource = "AtlasPortalMask";
 
-        const int MaxCandidates = 32;
-        static readonly float4 k_NoPlane = new float4(0f, 0f, 0f, 1f);
-
-        struct Candidate
-        {
-            public PortalDoor Door;
-            public int Direction;
-            public float Area;
-            public bool Box;
-            public int Reference;
-        }
-
         readonly List<PortalRoom> m_Rooms = new List<PortalRoom>(16);
         readonly List<PortalDoor> m_Doors = new List<PortalDoor>(16);
-        readonly PortalSlotAllocator m_Slots = new PortalSlotAllocator();
-        readonly PortalSwapRule m_Swap = new PortalSwapRule(16);
-        readonly Candidate[] m_Candidates = new Candidate[MaxCandidates];
+        // The frame's logic, engine-free (foundation F2): this class reads the cameras and applies its result.
+        readonly PortalFrameCore m_Core = new PortalFrameCore();
         readonly Plane[] m_UnityPlanes = new Plane[6];
         readonly float4[] m_LeftPlanes = new float4[6];
         readonly float4[] m_RightPlanes = new float4[6];
@@ -55,44 +42,40 @@ namespace Atlas.Rendering
 
         readonly Transform m_MaskParent;
         Transform m_MaskRoot;
-        int m_CurrentRoom;
-        int m_Depth = 1;
         int m_SlotsInUse;
-        float3 m_PreviousHead;
-        bool m_HasPreviousHead;
 
         /// <param name="maskParent">Parent of the mask objects, or null for a root object of their own.</param>
         public PortalRenderer(Transform maskParent = null)
         {
             m_MaskParent = maskParent;
+            m_Core.RoomChanged += OnCoreRoomChanged;
         }
 
         /// <summary>The eye cameras, for their frusta. Null in the Spectator: a doorway then counts as seen
         /// whenever the head is in front of it.</summary>
         public IStereoRig Rig { get; set; }
 
+        /// <summary>The engine-free frame logic this renderer applies: the same object a headless test steps.</summary>
+        public PortalFrameCore Core { get { return m_Core; } }
+
         public int RoomCount { get { return m_Rooms.Count; } }
         public int DoorCount { get { return m_Doors.Count; } }
         public PortalRoom GetRoom(int room) { return m_Rooms[room]; }
         public PortalDoor GetDoor(int door) { return m_Doors[door]; }
 
-        /// <summary>The room the walker is in. Changed by the renderer when the head crosses a doorway.</summary>
+        /// <summary>The room the walker is in. Changed by the renderer when the head crosses a doorway.
+        /// Placed from outside, the next frame tests no crossing: the head did not walk there.</summary>
         public int CurrentRoom
         {
-            get { return m_CurrentRoom; }
-            set
-            {
-                // Placed from outside: the head did not walk there, so the next frame tests no crossing.
-                m_HasPreviousHead = false;
-                SetCurrent(value);
-            }
+            get { return m_Core.CurrentRoom; }
+            set { m_Core.CurrentRoom = value; }
         }
 
         /// <summary>0: doorways show the fog colour. 1: doorways show the next room (portal.depth).</summary>
         public int Depth
         {
-            get { return m_Depth; }
-            set { m_Depth = math.clamp(value, 0, 1); }
+            get { return m_Core.Depth; }
+            set { m_Core.Depth = value; }
         }
 
         /// <summary>Stencil references in use this frame: 0 .. 15.</summary>
@@ -110,7 +93,7 @@ namespace Atlas.Rendering
             if (root == null) throw new ArgumentNullException(nameof(root));
             var room = new PortalRoom(m_Rooms.Count, root, boundsWorld);
             m_Rooms.Add(room);
-            m_Swap.EnsureCapacity(m_Rooms.Count);
+            m_Core.AddRoom(room.BoundsMin, room.BoundsMax);
             return room.Id;
         }
 
@@ -137,12 +120,14 @@ namespace Atlas.Rendering
             var door = new PortalDoor(m_Doors.Count, fromRoom, toRoom, a, b, height);
             BuildMasks(door);
             m_Doors.Add(door);
+            m_Core.AddDoor(fromRoom, toRoom, a, b, height);
             return door.Id;
         }
 
         public void SetDoorOpen(int door, bool open)
         {
             m_Doors[door].Open = open;
+            m_Core.SetDoorOpen(door, open);
         }
 
         /// <summary>Removes every room and door and puts every root back on Default with the clip off.</summary>
@@ -153,18 +138,16 @@ namespace Atlas.Rendering
                 PortalRoom room = m_Rooms[k];
                 room.SetOn(true);
                 room.SetLayer(PortalStencilTable.WorldLayer);
-                room.SetPlane(k_NoPlane);
+                room.SetPlane(PortalFrameCore.NoPlane);
+                room.WasShown = false;
             }
             m_Rooms.Clear();
             for (int k = 0; k < m_Doors.Count; k++) DestroyMasks(m_Doors[k]);
             m_Doors.Clear();
             if (m_MaskRoot != null) DestroyObject(m_MaskRoot.gameObject);
             m_MaskRoot = null;
-            m_Swap.Reset();
-            m_Slots.Begin();
+            m_Core.Clear();
             m_SlotsInUse = 0;
-            m_CurrentRoom = 0;
-            m_HasPreviousHead = false;
             SetFeatures(0, false, false);
         }
 
@@ -186,13 +169,6 @@ namespace Atlas.Rendering
         public void Upload(in FrameContext frame)
         {
             if (m_Rooms.Count == 0) return;
-            if (m_CurrentRoom < 0 || m_CurrentRoom >= m_Rooms.Count) m_CurrentRoom = 0;
-
-            // The cameras are at the raw head pose, so the doorways are judged from it too.
-            float3 head = frame.RawHeadPosition;
-            if (m_HasPreviousHead) DetectCrossing(head);
-            m_PreviousHead = head;
-            m_HasPreviousHead = true;
 
             IStereoRig rig = Rig;
             bool frusta = rig != null && rig.Mode == DisplayMode.Headset;
@@ -202,182 +178,43 @@ namespace Atlas.Rendering
                 ReadPlanes(rig, Eye.Right, m_RightPlanes);
             }
 
-            // Without the renderer features nothing would test the stencil, and rooms that overlap would all
-            // be drawn at once: the walker's room is then shown alone, and walking through a doorway still works.
-            bool features = m_MaskFeature != null;
-            int candidates = features ? FindDoorways(in frame, head, frusta) : 0;
-            bool rooms = features && m_Depth > 0;
-            AssignSlots(candidates);
-            PlaceRooms(candidates, head, frusta, rooms);
-            ShowMasks(candidates);
+            // The cameras are at the raw head pose, so the doorways are judged from it too.
+            m_Core.Step(frame.RawHeadPosition, frame.LeftEyePosition, frame.RightEyePosition,
+                        frusta ? m_LeftPlanes : null, frusta ? m_RightPlanes : null, m_MaskFeature != null);
 
-            m_SlotsInUse = m_Slots.Count;
-            SetFeatures(m_Slots.Count, candidates > 0, rooms);
-        }
-
-        // ---- the frame ------------------------------------------------------------------------------------
-
-        // The current room changes when the head, not an eye, goes through a doorway (Master Plan P1-A10).
-        void DetectCrossing(float3 head)
-        {
-            for (int k = 0; k < m_Doors.Count; k++)
-            {
-                PortalDoor door = m_Doors[k];
-                if (!door.Open) continue;
-                for (int direction = 0; direction < 2; direction++)
-                {
-                    if (door.ViewerRoom(direction) != m_CurrentRoom) continue;
-                    float2 left = direction == 0 ? door.A : door.B, right = direction == 0 ? door.B : door.A;
-                    if (!PortalMath.Crossed(door.ViewerPlane(direction), left, right, door.Height, m_PreviousHead, head)) continue;
-                    SetCurrent(door.TargetRoom(direction));
-                    return;
-                }
-            }
-        }
-
-        void SetCurrent(int room)
-        {
-            int old = m_CurrentRoom;
-            if (room == old) return;
-            m_CurrentRoom = room;
-            Action<int, int> changed = RoomChanged;
-            if (changed != null) changed(old, room);
-        }
-
-        // Doorways of the walker's room that an eye can see, largest first. Returns their number.
-        int FindDoorways(in FrameContext frame, float3 head, bool frusta)
-        {
-            int count = 0;
-            float3 leftEye = frame.LeftEyePosition, rightEye = frame.RightEyePosition;
-            for (int k = 0; k < m_Doors.Count && count < MaxCandidates; k++)
-            {
-                PortalDoor door = m_Doors[k];
-                if (!door.Open) continue;
-                for (int direction = 0; direction < 2 && count < MaxCandidates; direction++)
-                {
-                    if (door.ViewerRoom(direction) != m_CurrentRoom) continue;
-                    float4 plane = door.ViewerPlane(direction);
-                    float side = PortalMath.Side(plane, head);
-                    if (side < -PortalMath.BehindTolerance) continue;
-
-                    // The portal box: an eye this close cannot rely on a flat mask, the near plane cuts it.
-                    bool box = Straddles(door, plane, leftEye) || Straddles(door, plane, rightEye);
-                    float area;
-                    if (box) area = PortalMath.FullViewArea;
-                    else if (frusta)
-                        area = math.max(PortalMath.DoorViewArea(door.A, door.B, door.Height, leftEye, m_LeftPlanes),
-                                        PortalMath.DoorViewArea(door.A, door.B, door.Height, rightEye, m_RightPlanes));
-                    else
-                        area = side > 0f ? door.Width * door.Height / math.max(side * side, 0.01f) : 0f;
-                    if (!(area > 1e-6f)) continue;
-
-                    // Insertion keeps the list sorted by area, largest first.
-                    int at = count;
-                    while (at > 0 && m_Candidates[at - 1].Area < area)
-                    {
-                        m_Candidates[at] = m_Candidates[at - 1];
-                        at--;
-                    }
-                    m_Candidates[at] = new Candidate { Door = door, Direction = direction, Area = area, Box = box };
-                    count++;
-                }
-            }
-            return count;
-        }
-
-        static bool Straddles(PortalDoor door, float4 plane, float3 eye)
-        {
-            return math.abs(PortalMath.Side(plane, eye)) < PortalMath.BoxDistance
-                   && PortalMath.InsideDoor(door.A, door.B, door.Height, eye, PortalMath.BoxDistance);
-        }
-
-        void AssignSlots(int candidates)
-        {
-            m_Slots.Begin();
-            for (int k = 0; k < candidates; k++)
-                m_Candidates[k].Reference = m_Slots.Assign(m_Candidates[k].Door.TargetRoom(m_Candidates[k].Direction));
-        }
-
-        // showRooms is false at depth 0: doorways are still masked, and show the background's fog colour.
-        void PlaceRooms(int candidates, float3 head, bool frusta, bool showRooms)
-        {
-            PortalRoom current = m_Rooms[m_CurrentRoom];
-            current.SetOn(true);
-            current.SetLayer(PortalStencilTable.WorldLayer);
-            current.SetPlane(k_NoPlane);
-            current.WasShown = true;
-            m_Swap.Reset(m_CurrentRoom);
-
-            // Rooms behind doorways: the largest doorway into a room gives its clip plane.
-            if (showRooms)
-            {
-                for (int k = candidates - 1; k >= 0; k--)
-                {
-                    ref Candidate candidate = ref m_Candidates[k];
-                    if (candidate.Reference == 0) continue;
-                    PortalRoom room = m_Rooms[candidate.Door.TargetRoom(candidate.Direction)];
-                    if (room == current) continue;
-                    room.SetOn(true);
-                    room.SetLayer(PortalStencilTable.Layer(candidate.Reference));
-                    // Normal into the room behind the doorway: what lies in front of the doorway is not drawn.
-                    room.SetPlane(PortalMath.Flip(candidate.Door.ViewerPlane(candidate.Direction)));
-                    room.WasShown = true;
-                    m_Swap.Reset(room.Id);
-                }
-            }
-
-            // Rooms no doorway shows.
+            // Rooms that come on first, so no frame shows a gap; every setter only touches the engine on a change.
             for (int k = 0; k < m_Rooms.Count; k++)
             {
+                PortalFrameCore.RoomFrame placed = m_Core.Room(k);
                 PortalRoom room = m_Rooms[k];
-                if (k == m_CurrentRoom) continue;
-                if (showRooms && m_Slots.ReferenceOf(k) != 0) continue;
-                if (!room.IsOn) continue;
-
-                bool keep = false;
-                int reference = 0;
-                if (showRooms && room.WasShown)
+                room.WasShown = placed.WasShown;
+                if (placed.On)
                 {
-                    bool leftSees = frusta && PortalMath.BoundsInFrustum(m_LeftPlanes, room.BoundsMin, room.BoundsMax);
-                    bool rightSees = frusta && PortalMath.BoundsInFrustum(m_RightPlanes, room.BoundsMin, room.BoundsMax);
-                    bool inOverlap = PortalMath.InOverlap(head, room.BoundsMin, room.BoundsMax, current.BoundsMin, current.BoundsMax);
-                    if (!m_Swap.Step(k, leftSees, rightSees, inOverlap))
-                    {
-                        // Kept on a layer of its own: no mask writes that reference, so nothing of it shows.
-                        reference = m_Slots.Assign(k);
-                        keep = reference != 0;
-                    }
-                }
-                if (keep)
-                {
-                    room.SetLayer(PortalStencilTable.Layer(reference));
+                    room.SetOn(true);
+                    room.SetLayer(placed.Layer);
+                    room.SetPlane(placed.Plane);
                 }
                 else
                 {
                     room.SetOn(false);
-                    room.WasShown = false;
-                    m_Swap.Reset(k);
                 }
             }
-        }
-
-        void ShowMasks(int candidates)
-        {
-            // Hide everything, then show this frame's doorways; a mask only touches the engine when it changes.
             for (int k = 0; k < m_Doors.Count; k++)
             {
                 PortalDoor door = m_Doors[k];
-                int forward = 0, backward = 0;
-                bool forwardBox = false, backwardBox = false;
-                for (int c = 0; c < candidates; c++)
-                {
-                    if (m_Candidates[c].Door != door) continue;
-                    if (m_Candidates[c].Direction == 0) { forward = m_Candidates[c].Reference; forwardBox = m_Candidates[c].Box; }
-                    else { backward = m_Candidates[c].Reference; backwardBox = m_Candidates[c].Box; }
-                }
-                ApplyMasks(ref door.Forward, forward, forwardBox);
-                ApplyMasks(ref door.Backward, backward, backwardBox);
+                PortalFrameCore.DoorFrame forward = m_Core.DoorMasks(k, 0), backward = m_Core.DoorMasks(k, 1);
+                ApplyMasks(ref door.Forward, forward.Reference, forward.Box);
+                ApplyMasks(ref door.Backward, backward.Reference, backward.Box);
             }
+
+            m_SlotsInUse = m_Core.SlotsInUse;
+            SetFeatures(m_SlotsInUse, m_Core.MasksShown, m_Core.RoomsShown);
+        }
+
+        void OnCoreRoomChanged(int from, int to)
+        {
+            Action<int, int> changed = RoomChanged;
+            if (changed != null) changed(from, to);
         }
 
         void ApplyMasks(ref PortalDoor.Masks masks, int reference, bool box)

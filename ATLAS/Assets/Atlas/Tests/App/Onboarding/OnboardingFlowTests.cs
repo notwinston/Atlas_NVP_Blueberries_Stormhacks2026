@@ -634,6 +634,42 @@ namespace Atlas.App.Tests.Onboarding
             Assert.That(rig.Headset.In, Is.True);
         }
 
+        [Test]
+        public void CameraPictureOnly_WhileTheRealRoomIsLookedAt()
+        {
+            foreach (OnboardingStep step in new[]
+                     { OnboardingStep.Room, OnboardingStep.Relocalise, OnboardingStep.Sweep, OnboardingStep.Confirm })
+                Assert.That(OnboardingFlow.CameraPictureOnly(step), Is.True, step.ToString());
+            foreach (OnboardingStep step in new[]
+                     {
+                         OnboardingStep.Idle, OnboardingStep.Welcome, OnboardingStep.Camera, OnboardingStep.Station,
+                         OnboardingStep.Build, OnboardingStep.Headset, OnboardingStep.Home,
+                     })
+                Assert.That(OnboardingFlow.CameraPictureOnly(step), Is.False, step.ToString());
+        }
+
+        [Test]
+        public void Rescan_HidesTheOldRoom_UntilTheNewOneIsBuilt()
+        {
+            var rig = new Rig();
+            rig.ToHeadsetPrompt();
+            rig.Press(OnboardingAction.HeadsetNow);
+            Assert.That(OnboardingFlow.CameraPictureOnly(rig.Flow.Step), Is.False);
+            Assert.That(rig.Flow.Rescan(), Is.True);
+            Assert.That(OnboardingFlow.CameraPictureOnly(rig.Flow.Step), Is.True);
+            rig.Scan.Found = Rooms.Make("scan_2");
+            rig.Press(OnboardingAction.ScanAutomatic);
+            Assert.That(OnboardingFlow.CameraPictureOnly(rig.Flow.Step), Is.True);
+            rig.Scan.FindFloor();
+            rig.Press(OnboardingAction.DoneSweeping);
+            rig.Frames();
+            Assert.That(OnboardingFlow.CameraPictureOnly(rig.Flow.Step), Is.True);
+            rig.Press(OnboardingAction.Accept);
+            rig.Frames(2);
+            Assert.That(rig.Flow.Step, Is.EqualTo(OnboardingStep.Headset));
+            Assert.That(OnboardingFlow.CameraPictureOnly(rig.Flow.Step), Is.False);
+        }
+
         // ---- no phone: fixtures and rooms from outside (contract README F9) ----------------------------------
 
         [Test]

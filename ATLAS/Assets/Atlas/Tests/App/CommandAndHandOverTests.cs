@@ -59,9 +59,34 @@ namespace Atlas.App.Tests
             Assert.That(rig.Host.Calls, Is.EqualTo(new[] { "switch S1" }));
             rig.Router.SwitchSpace(SpaceId.Glued, "2");
             Assert.That(rig.Registry.GetInt("glued.mode"), Is.EqualTo(2));
-            // A space with no mode parameter ignores a variant and is still switched to.
+            // A space whose variant parameter is not declared ignores a variant and is still switched to.
             rig.Router.SwitchSpace(SpaceId.Slicer, "anything");
             Assert.That(rig.Host.Calls[rig.Host.Calls.Count - 1], Is.EqualTo("switch S6"));
+            // So does a space that has no variants at all.
+            rig.Router.SwitchSpace(SpaceId.SmallPlanet, "1");
+            Assert.That(rig.Host.Calls[rig.Host.Calls.Count - 1], Is.EqualTo("switch S4"));
+        }
+
+        [Test]
+        public void SwitchSpace_SetsEachSpacesOwnVariantParameter()
+        {
+            // Lane A contract section 14: booth / loop are rooms.layout, the bodies are slicer.object.
+            var rig = new Rig();
+            rig.Registry.DeclareEnum("rooms.layout", "rooms", new[] { "booth", "loop" }, 0, null, true);
+            rig.Registry.DeclareEnum("slicer.object", "slicer", new[] { "tesseract", "cell5", "cell16", "cell24", "tube", "ball" }, 0, null, true);
+
+            rig.Router.SwitchSpace(SpaceId.Portal, "loop");
+            Assert.That(rig.Registry.GetInt("rooms.layout"), Is.EqualTo(1));
+            rig.Router.SwitchSpace(SpaceId.Slicer, "cell16");
+            Assert.That(rig.Registry.GetInt("slicer.object"), Is.EqualTo(2));
+            rig.Router.SwitchSpace(SpaceId.Slicer, "TUBE");
+            Assert.That(rig.Registry.GetInt("slicer.object"), Is.EqualTo(4), "names match without regard to case");
+            rig.Router.SwitchSpace(SpaceId.Portal, "0");
+            Assert.That(rig.Registry.GetInt("rooms.layout"), Is.EqualTo(0), "or by index");
+            rig.Router.SwitchSpace(SpaceId.Portal, "no-such-layout");
+            Assert.That(rig.Registry.GetInt("rooms.layout"), Is.EqualTo(0), "an unknown name changes nothing");
+            Assert.That(rig.Registry.GetInt("glued.mode"), Is.EqualTo(0), "and no other space's parameter is touched");
+            Assert.That(rig.Host.Calls, Is.EqualTo(new[] { "switch S5", "switch S6", "switch S6", "switch S5", "switch S5" }));
         }
 
         [Test]

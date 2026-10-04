@@ -76,6 +76,9 @@ namespace Atlas.Link
         readonly Dictionary<int, Peer> _peers = new Dictionary<int, Peer>();
         readonly List<Peer> _peerList = new List<Peer>();
         readonly Dictionary<string, float> _snapshot = new Dictionary<string, float>(StringComparer.Ordinal);
+        // What the phone itself last said it holds (its manifest, its param echoes). The snapshot is what the
+        // Station asked for; the two differ only while a ParamSet is on its way, or when the phone dropped one.
+        readonly Dictionary<string, float> _held = new Dictionary<string, float>(StringComparer.Ordinal);
         readonly List<AssetReadyMessage> _unackedAssets = new List<AssetReadyMessage>();
         readonly List<PendingKick> _kicks = new List<PendingKick>();
         readonly byte[] _smallBuffer = new byte[64];
@@ -216,13 +219,15 @@ namespace Atlas.Link
 
         public bool Start(int port = LinkProtocol.DefaultPort) { return _transport.StartHost(port); }
 
-        /// <summary>Says <c>Bye</c> to everyone and closes the socket. The parameter snapshot is kept.</summary>
+        /// <summary>
+        /// Says <c>Bye</c> to everyone and closes the socket. Each <c>Bye</c> travels inside the disconnect, so
+        /// every client learns the reason. The parameter snapshot is kept.
+        /// </summary>
         public void Stop(string reason = "hub stopping")
         {
             if (!_transport.IsRunning) return;
             byte[] bye = new ByeMessage(reason).ToBytes();
-            for (int i = 0; i < _peerList.Count; i++) _transport.Send(_peerList[i].Id, bye, 0, bye.Length, LinkDelivery.Reliable);
-            _transport.Flush();
+            for (int i = 0; i < _peerList.Count; i++) _transport.Disconnect(_peerList[i].Id, bye, 0, bye.Length);
             _transport.Stop();
             _peers.Clear();
             _peerList.Clear();
@@ -436,6 +441,36 @@ namespace Atlas.Link
         /// <summary>Forgets the snapshot (a new session): the next phone keeps the values it arrives with.</summary>
         public void ClearSnapshot() { _snapshot.Clear(); }
 
+        /// <summary>Raised when the phone reported a dropped <c>ParamSet</c> and the snapshot was put back: (reason, values restored).</summary>
+        public event Action<string, int> ParamSetIgnored;
+
+        // The phone dropped a ParamSet (demo lock, or its link was degraded): the snapshot goes back to what
+        // the phone holds, so the Console shows the truth and RESYNC does not replay a value nobody applied.
+        void OnParamIgnored(JsonValue data)
+        {
+            JsonValue ids = data["ids"];
+            int restored = 0;
+            if (Manifest != null && ids.IsArray)
+            {
+                for (int i = 0; i < ids.Count; i++)
+                {
+                    int id = ids[i].AsInt(-1);
+                    for (int k = 0; k < Manifest.Params.Count; k++)
+                    {
+                        ParamManifestEntry e = Manifest.Params[k];
+                        if (e.Id != id || e.Name == null) continue;
+                        float held;
+                        if (_held.TryGetValue(e.Name, out held)) _snapshot[e.Name] = held;
+                        else _snapshot.Remove(e.Name);
+                        restored++;
+                        break;
+                    }
+                }
+            }
+            Action<string, int> handler = ParamSetIgnored;
+            if (handler != null) handler(data.GetString("reason", string.Empty), restored);
+        }
+
         // The phone's manifest with the value each parameter holds now, for a client that joins in mid-session.
         ParamManifestMessage CurrentManifest()
         {
@@ -483,6 +518,9 @@ namespace Atlas.Link
         void OnManifest(Peer peer, ParamManifestMessage manifest)
         {
             Manifest = manifest;
+            // The manifest is the phone's own account of its values at this moment.
+            for (int i = 0; i < manifest.Params.Count; i++)
+                if (manifest.Params[i].Name != null) _held[manifest.Params[i].Name] = manifest.Params[i].Val;
             if (peer.AwaitingFirstManifest)
             {
                 // RESYNC: the phone has just (re)connected. Whatever it holds that differs from the snapshot is
@@ -675,8 +713,13 @@ namespace Atlas.Link
                         {
                             JsonValue d = body["data"];
                             string name = d.GetString("name");
-                            if (name != null && d["value"].IsNumber) _snapshot[name] = d["value"].AsFloat();
+                            if (name != null && d["value"].IsNumber)
+                            {
+                                _snapshot[name] = d["value"].AsFloat();
+                                _held[name] = d["value"].AsFloat();
+                            }
                         }
+                        else if (body.GetString("ev") == LinkEvents.ParamIgnoredEvent) OnParamIgnored(body["data"]);
                         // Spectators mirror the phone from its events: parameter changes, world, objects, assets.
                         SendToWatchers(data, offset, length, LinkDelivery.Reliable);
                         if (body.GetString("ev") == LinkEvents.World)

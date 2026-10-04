@@ -953,4 +953,97 @@ namespace Atlas.App.Tests
             Assert.That(track.HalfAxes.x, Is.GreaterThan(SyntheticPoseTrack.MinHalfAxis));
         }
     }
+
+    [TestFixture]
+    public sealed class PerfTourRoomKeeperTests
+    {
+        static RoomModel Room(string id) { return new RoomModel { Id = id }; }
+
+        [Test]
+        public void PerfTour_Room_ScannedRoomAndItsAnchorComeBackAfterARun([Values(PerfRunKind.Tour, PerfRunKind.Soak, PerfRunKind.SoakDepthOff)] PerfRunKind kind)
+        {
+            var keeper = new PerfRoomKeeper(RoomFixtures.BudgetRoom);
+            RoomModel scanned = Room("room-20261004");
+            object anchorOfScan = new object();
+
+            keeper.Begin(kind, scanned, anchorOfScan);
+            Assert.That(keeper.Holding, Is.True);
+            Assert.That(keeper.NeedsRunRoom(scanned), Is.True, "the run is measured on the fixture");
+            Assert.That(keeper.RoomIdOfRun(scanned), Is.EqualTo(RoomFixtures.BudgetRoom));
+            RoomModel fixture = Room(RoomFixtures.BudgetRoom);
+            Assert.That(keeper.NeedsRunRoom(fixture), Is.False);
+
+            RoomModel room;
+            object anchor;
+            Assert.That(keeper.TakeBack(fixture, out room, out anchor), Is.True);
+            Assert.That(room, Is.SameAs(scanned));
+            Assert.That(anchor, Is.SameAs(anchorOfScan));
+            Assert.That(keeper.Holding, Is.False);
+            Assert.That(keeper.TakeBack(fixture, out room, out anchor), Is.False, "handed back once");
+            Assert.That(room, Is.Null);
+        }
+
+        [Test]
+        public void PerfTour_Room_LadderCheckStaysInTheActiveRoom()
+        {
+            var keeper = new PerfRoomKeeper(RoomFixtures.BudgetRoom);
+            RoomModel scanned = Room("room-20261004");
+
+            keeper.Begin(PerfRunKind.Ladder, scanned, new object());
+            Assert.That(PerfRoomKeeper.UsesRunRoom(PerfRunKind.Ladder), Is.False);
+            Assert.That(keeper.NeedsRunRoom(scanned), Is.False);
+            Assert.That(keeper.RoomIdOfRun(scanned), Is.EqualTo("room-20261004"));
+            Assert.That(keeper.Holding, Is.False);
+            RoomModel room;
+            object anchor;
+            Assert.That(keeper.TakeBack(scanned, out room, out anchor), Is.False);
+
+            // With no room at all Home cannot be entered: the fixture stands in, and there is nothing to give back.
+            keeper.Begin(PerfRunKind.Ladder, null, null);
+            Assert.That(keeper.NeedsRunRoom(null), Is.True);
+            Assert.That(keeper.RoomIdOfRun(null), Is.EqualTo(RoomFixtures.BudgetRoom));
+            Assert.That(keeper.Holding, Is.False);
+        }
+
+        [Test]
+        public void PerfTour_Room_NothingIsHandedBackWhenTheFixtureWasTheRoomOrNeverReplacedIt()
+        {
+            var keeper = new PerfRoomKeeper(RoomFixtures.BudgetRoom);
+            RoomModel room;
+            object anchor;
+
+            // The Editor rehearsal: the fixture was the room before the run.
+            RoomModel fixture = Room(RoomFixtures.BudgetRoom);
+            keeper.Begin(PerfRunKind.Tour, fixture, null);
+            Assert.That(keeper.Holding, Is.False);
+            Assert.That(keeper.NeedsRunRoom(fixture), Is.False);
+            Assert.That(keeper.TakeBack(fixture, out room, out anchor), Is.False);
+
+            // Stopped before the fixture was made active: the scanned room never left.
+            RoomModel scanned = Room("room-20261004");
+            keeper.Begin(PerfRunKind.Soak, scanned, new object());
+            Assert.That(keeper.TakeBack(scanned, out room, out anchor), Is.False);
+            Assert.That(room, Is.Null);
+            Assert.That(anchor, Is.Null);
+            Assert.That(keeper.Holding, Is.False);
+
+            // A newer room scanned or loaded during the run stays.
+            keeper.Begin(PerfRunKind.Soak, scanned, new object());
+            Assert.That(keeper.TakeBack(Room("room-newer"), out room, out anchor), Is.False);
+            Assert.That(keeper.Holding, Is.False);
+        }
+
+        [Test]
+        public void PerfTour_Room_ARoomFromAFileComesBackWithNoAnchor()
+        {
+            var keeper = new PerfRoomKeeper(RoomFixtures.BudgetRoom);
+            RoomModel loaded = Room("sample_3x3");
+            keeper.Begin(PerfRunKind.Tour, loaded, null);
+            RoomModel room;
+            object anchor;
+            Assert.That(keeper.TakeBack(Room(RoomFixtures.BudgetRoom), out room, out anchor), Is.True);
+            Assert.That(room, Is.SameAs(loaded));
+            Assert.That(anchor, Is.Null);
+        }
+    }
 }

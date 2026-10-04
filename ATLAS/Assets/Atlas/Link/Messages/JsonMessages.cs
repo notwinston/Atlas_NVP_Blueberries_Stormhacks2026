@@ -472,6 +472,26 @@ namespace Atlas.Link
         /// </summary>
         public const string World = "world";
 
+        /// <summary>The phone dropped a <c>ParamSet</c>: <c>{reason, count, ids}</c> (lane D contract 2.6).</summary>
+        public const string ParamIgnoredEvent = "param.ignored";
+        /// <summary>Reason of <see cref="ParamIgnoredEvent"/>: the demo lock is on.</summary>
+        public const string IgnoredLock = "lock";
+        /// <summary>Reason of <see cref="ParamIgnoredEvent"/>: the link is not in a state that takes remote values.</summary>
+        public const string IgnoredDegraded = "degraded";
+
+        /// <summary>
+        /// The <c>param.ignored</c> event for a dropped <c>ParamSet</c>. Besides the reason and the count it
+        /// names the wire ids, so the Hub can put its record of those parameters back to what the phone holds.
+        /// </summary>
+        public static EventMessage ParamIgnored(long timeUs, string scene, string reason, ParamSetMessage set)
+        {
+            JsonValue ids = JsonValue.Array();
+            int count = set != null ? set.Count : 0;
+            for (int i = 0; i < count; i++) ids.Add((int)set.Ids[i]);
+            return new EventMessage(timeUs, scene, ParamIgnoredEvent, JsonValue.Object()
+                .Set("reason", reason ?? string.Empty).Set("count", count).Set("ids", ids));
+        }
+
         /// <summary>The <c>param</c> event that echoes an applied value back to the Console (Master Plan section 7.3.2).</summary>
         public static EventMessage ParamChanged(long timeUs, string scene, ParamEntry entry, ParamSource source)
         {

@@ -74,6 +74,13 @@ namespace Atlas.Link
 
         void Disconnect(int peerId);
 
+        /// <summary>
+        /// Closes the connection to a peer and hands it one last packet with the close itself, so a goodbye
+        /// cannot be overtaken by the disconnect or lost with the socket. The far end receives the packet as a
+        /// reliable one, and then the disconnect. The packet must fit in one datagram.
+        /// </summary>
+        void Disconnect(int peerId, byte[] data, int offset, int length);
+
         void Stop();
 
         /// <summary>Smoothed round trip to a peer in milliseconds; 0 when unknown.</summary>

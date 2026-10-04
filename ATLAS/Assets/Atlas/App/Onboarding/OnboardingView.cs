@@ -57,6 +57,9 @@ namespace Atlas.App.Onboarding
         bool _dragValid;
         float2 _dragPoint;
         float _dragY;
+        // The tracked camera's layers, put aside while only the camera picture is wanted.
+        bool _pictureOnly;
+        int _savedMask;
 
         public OnboardingView(Transform parent, OnboardingFlow flow, ScanSession session, Camera camera)
         {
@@ -71,6 +74,7 @@ namespace Atlas.App.Onboarding
         {
             if (_root == null) return;
             OnboardingStep step = _flow.Step;
+            ShowPictureOnly(OnboardingFlow.CameraPictureOnly(step));
             if (step == OnboardingStep.Home || step == OnboardingStep.Idle)
             {
                 // In the headset nothing of onboarding is drawn and nothing here runs.
@@ -93,8 +97,29 @@ namespace Atlas.App.Onboarding
             }
         }
 
+        /// <summary>
+        /// While the real room is looked at, the tracked camera draws no object, only the camera picture: the
+        /// floor and walls of the room in force and the entered space would cover what is being scanned. The
+        /// panel and the AR background do not depend on the camera's layers.
+        /// </summary>
+        void ShowPictureOnly(bool on)
+        {
+            if (on == _pictureOnly || _camera == null) return;
+            if (on)
+            {
+                _savedMask = _camera.cullingMask;
+                _camera.cullingMask = 0;
+            }
+            else
+            {
+                _camera.cullingMask = _savedMask;
+            }
+            _pictureOnly = on;
+        }
+
         public void Dispose()
         {
+            ShowPictureOnly(false);
             AppObjects.Kill(_host);
             AppObjects.Kill(_panel);
             _host = null;

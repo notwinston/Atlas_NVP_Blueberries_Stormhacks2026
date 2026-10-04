@@ -65,6 +65,9 @@ class Health(BaseModel):
     generator: str
     generatorReady: bool
     generatorNote: str = ""
+    # The hosted fallback is armed. "hosted" is the name the Hub and the Console read; "hostedEnabled" is the
+    # same flag under its older name.
+    hosted: bool
     hostedEnabled: bool
     matting: str
 

@@ -121,6 +121,68 @@ namespace Atlas.Station.Tests
         }
 
         [Test]
+        public async Task ALockSetOnThePhone_ReachesTheHub_AndADroppedParamSetIsPutBack()
+        {
+            var rig = new Rig();
+            await rig.StartAsync();
+            await using (rig.Test)
+            {
+                rig.NewPhone();
+                rig.Run(1500);
+                Assert.That(rig.Hub.PhoneState, Is.EqualTo(LinkState.Connected));
+                StateMessage state = StateMessage.Identity;
+                void Frames(double ms)
+                {
+                    for (double t = 0; t < ms; t += 5.0)
+                    {
+                        rig.Phone.SendState(ref state);
+                        rig.Run(5);
+                    }
+                }
+                Frames(50);
+                Assert.That(rig.Hub.DemoLock, Is.False);
+
+                // The walker locks the phone on its own menu. A ParamSet that is already on its way is dropped by
+                // the phone, which says so; the Hub's value goes back to what the phone holds.
+                rig.Phone.DemoLock = true;
+                JsonValue applied;
+                Assert.That(rig.Hub.SetParam("curved.cullRho", 2.4f, out applied), Is.EqualTo(HubResult.Ok));
+                rig.Run(50);
+                Assert.That(rig.Rho.Float, Is.EqualTo(3f));
+                Assert.That((await rig.Test.GetJson("/api/params/curved.cullRho")).GetFloat("val"), Is.EqualTo(3f));
+
+                // The phone's State carries the lock: the Hub follows and now answers 423 itself.
+                Frames(50);
+                Assert.That(rig.Hub.DemoLock, Is.True, "the Hub adopts the phone's lock");
+                Assert.That((await rig.Test.GetJson("/api/session")).GetBool("demoLock"), Is.True);
+                Assert.That(rig.Hub.SetParam("curved.cullRho", 2.4f, out applied), Is.EqualTo(HubResult.Locked));
+
+                // Unlocked on the phone: the Hub lets sliders through again.
+                rig.Phone.DemoLock = false;
+                Frames(50);
+                Assert.That(rig.Hub.DemoLock, Is.False, "and its unlock");
+                Assert.That(rig.Hub.SetParam("curved.cullRho", 2.4f, out applied), Is.EqualTo(HubResult.Ok));
+                rig.Run(50);
+                Assert.That(rig.Rho.Float, Is.EqualTo(2.4f));
+
+                // The Hub's own lock command is not undone by a State that left the phone before it arrived.
+                Assert.That(rig.Hub.SendOperator("lock", AtlasJson.Parse("{\"on\": true}")), Is.EqualTo(HubResult.Ok));
+                rig.Phone.SendState(ref state);   // the command has not been polled yet: this State still says "unlocked"
+                rig.Hub.Pump();
+                rig.Clock.AdvanceMs(5);
+                rig.Hub.Pump();
+                Assert.That(rig.Hub.DemoLock, Is.True);
+                Frames(700);
+                Assert.That(rig.Phone.DemoLock, Is.True);
+                Assert.That(rig.Hub.DemoLock, Is.True);
+
+                string log = LogFile.ReadShared(System.IO.Path.Combine(rig.Hub.Log.Folder, SessionLog.HubLogFile));
+                Assert.That(log, Does.Contain("param.ignored"));
+                Assert.That(log, Does.Contain("\"from\":\"phone\""));
+            }
+        }
+
+        [Test]
         public async Task RelayingState_AllocatesNothing_InSteadyState()
         {
             var rig = new Rig();

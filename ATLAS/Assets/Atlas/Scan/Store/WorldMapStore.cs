@@ -187,7 +187,10 @@ namespace Atlas.Scan
             if (_relocaliser.Busy) TickRelocalise(deltaTime);
         }
 
-        /// <summary>Drops a relocalisation and a save in progress. No callback is made for either.</summary>
+        /// <summary>
+        /// Drops a relocalisation and a save in progress. No callback is made for either. A world map
+        /// that was applied and not yet recognised is taken out of the session and tracking restarts.
+        /// </summary>
         public void Cancel()
         {
             CancelRelocalise();
@@ -297,6 +300,8 @@ namespace Atlas.Scan
 
             RelocaliseStep step = _relocaliser.Tick(deltaTime, tracking, savedTracked);
             if (_relocaliser.Busy) return;
+            // Before the callback: the walker is offered a new scan, and that needs a session that tracks.
+            DropUnrecognisedMap();
 
             Transform anchor = null;
             if (step == RelocaliseStep.UseRestoredAnchor) anchor = saved.transform;
@@ -338,6 +343,20 @@ namespace Atlas.Scan
             _relocaliser.Cancel();
             _relocaliseDone = null;
             _loadJob = null;        // a read still running finishes into a job nobody looks at
+            DropUnrecognisedMap();
+        }
+
+        // ARKit keeps a session with an initial world map in Limited (Relocalizing) until it recognises
+        // that room: in another room, or a changed one, tracking would never return to Normal and a new
+        // scan could not start. So an attempt that ends without the room takes the map out again and
+        // restarts tracking (Master Plan section 4.2; lane C section 12, step 4).
+        void DropUnrecognisedMap()
+        {
+            if (!_relocaliser.TakeMapToDrop()) return;
+            XRSessionSubsystem session = Subsystem;
+            if (session != null) ArWorldMapPlatform.Current.ClearWorldMap(session);
+            if (_rig != null && _rig.Session != null) _rig.Session.Reset();
+            Debug.Log(LogPrefix + "world map dropped and tracking restarted: the room was not recognised");
         }
 
         // A relocalised session uses the map's own origin, so the room's saved pose holds in it: the new

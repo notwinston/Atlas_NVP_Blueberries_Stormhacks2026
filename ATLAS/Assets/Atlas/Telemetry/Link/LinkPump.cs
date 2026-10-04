@@ -100,6 +100,7 @@ namespace Atlas.Telemetry
                 // The driver owns the echo: the client's own would build JSON wherever a value is written, the
                 // frame's steps 1 to 7 included (rule 8 of the plan).
                 _client.EchoParamChanges = false;
+                _client.ParamSetIgnored += OnParamSetIgnored;
                 _registry.Changed += OnParamChanged;
                 _registry.Declared += OnParamDeclared;
                 for (int i = 0; i < _registry.Count; i++) OnParamDeclared(_registry[i]);
@@ -439,6 +440,13 @@ namespace Atlas.Telemetry
             if (_dirty[id]) return;
             _dirty[id] = true;
             _dirtyCount++;
+        }
+
+        // A ParamSet dropped under demo lock or on a degraded link is said out loud (lane D contract 2.6 and
+        // 2.10): the Hub puts its record of those values back, and the phone's own log shows the refusal.
+        void OnParamSetIgnored(string reason, int count)
+        {
+            Report(LinkEvents.ParamIgnored(_client.NowUs, _client.Scene, reason, _client.IgnoredParamSet));
         }
 
         void OnParamDeclared(ParamEntry entry)

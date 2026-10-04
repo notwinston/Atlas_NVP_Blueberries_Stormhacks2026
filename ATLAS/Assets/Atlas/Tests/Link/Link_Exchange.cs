@@ -491,6 +491,77 @@ namespace Atlas.Link.Tests
         }
 
         [Test]
+        public void A_dropped_ParamSet_is_reported_and_the_snapshot_goes_back_to_what_the_phone_holds()
+        {
+            var rig = new LinkRig();
+            rig.Connect();
+            rig.Host.SendParam("curved.cullRho", 2.5f);
+            rig.Run(50);
+            Assert.That(rig.Rho.Float, Is.EqualTo(2.5f));
+
+            // The phone locks itself (its menu, a build flag): the Hub does not know.
+            rig.Phone.DemoLock = true;
+            Assert.That(rig.Host.DemoLock, Is.False);
+            string reason = null;
+            int count = -1, restored = -1;
+            var events = new List<JsonValue>();
+            rig.Phone.ParamSetIgnored += (why, n) => { reason = why; count = n; };
+            rig.Host.ParamSetIgnored += (why, n) => restored = n;
+            rig.Host.JsonReceived += (peer, id, body) => { if (body.GetString("ev") == LinkEvents.ParamIgnoredEvent) events.Add(body.Clone()); };
+
+            var set = new ParamSetMessage();
+            set.Add(rig.Rho.Id, 3.25f);
+            set.Add(rig.Copies.Id, 4f);
+            Assert.That(rig.Host.SendParamSet(set), Is.True);
+            rig.Run(50);
+
+            Assert.That(rig.Rho.Float, Is.EqualTo(2.5f), "ignored under lock");
+            Assert.That(reason, Is.EqualTo("lock"));
+            Assert.That(count, Is.EqualTo(2));
+            Assert.That(events.Count, Is.EqualTo(1), "one param.ignored event reaches the Hub");
+            Assert.That(events[0]["data"].GetString("reason"), Is.EqualTo("lock"));
+            Assert.That(events[0]["data"].GetInt("count"), Is.EqualTo(2));
+            Assert.That(restored, Is.EqualTo(2));
+            float known;
+            Assert.That(rig.Host.TryGetSnapshotValue("curved.cullRho", out known), Is.True);
+            Assert.That(known, Is.EqualTo(2.5f), "the snapshot is what the phone holds, not what was asked");
+            Assert.That(rig.Host.TryGetSnapshotValue("glued.copies", out known), Is.True);
+            Assert.That(known, Is.EqualTo(5f));
+
+            // A reconnect replays nothing that was never applied.
+            rig.Phone.DemoLock = false;
+            rig.Phone.ReconnectNow();
+            rig.Run(2000);
+            Assert.That(rig.Phone.State, Is.EqualTo(LinkState.Connected));
+            Assert.That(rig.Rho.Float, Is.EqualTo(2.5f));
+            Assert.That(rig.Copies.Int, Is.EqualTo(5));
+        }
+
+        [Test]
+        public void Stop_delivers_the_Bye_reason_with_the_disconnect_in_both_directions()
+        {
+            var rig = new LinkRig();
+            LinkClient spectator = rig.AddClient(LinkRole.Spectator);
+            rig.Connect();
+            var hubLog = new List<string>();
+            rig.Host.JsonReceived += (peer, id, body) => { if (id == MessageId.Bye) hubLog.Add("bye " + body.GetString("reason")); };
+            rig.Host.PeerLeft += (peer, role, why) => hubLog.Add("leave " + role);
+
+            rig.Phone.Stop("link.enabled off");
+            rig.Run(50);
+            Assert.That(hubLog, Is.EqualTo(new[] { "bye link.enabled off", "leave Phone" }), "the reason, then the leave");
+            Assert.That(rig.Host.HasPhone, Is.False, "the seat is free at once");
+
+            string heard = null;
+            spectator.ByeReceived += why => heard = why;
+            rig.Host.Stop("hub stopping");
+            rig.Clock.AdvanceMs(5);
+            spectator.Poll();
+            Assert.That(heard, Is.EqualTo("hub stopping"));
+            Assert.That(spectator.LastByeReason, Is.EqualTo("hub stopping"));
+        }
+
+        [Test]
         public void A_second_phone_is_refused_while_the_first_holds_the_seat()
         {
             var rig = new LinkRig();

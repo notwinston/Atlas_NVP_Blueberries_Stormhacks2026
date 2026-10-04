@@ -17,6 +17,7 @@ namespace Atlas.App.Onboarding
         AtlasApp _app;
         WorldMapStore _worldMaps;
         OnboardingView _view;
+        Menu.OnDeviceMenu _menu;
 
         /// <summary>The state machine; null when the rehearsal flow owns the scan.</summary>
         public OnboardingFlow Flow { get; private set; }
@@ -61,6 +62,11 @@ namespace Atlas.App.Onboarding
             Transform tracked = app.Boot.TrackedCamera;
             Camera camera = tracked != null ? tracked.GetComponent<Camera>() : null;
             _view = new OnboardingView(app.Boot.Systems, Flow, scan.Session, camera);
+
+            // "Rescan the room" in the menu: onboarding owns the scan, so the row comes here and not to the
+            // rehearsal flow, which nobody ticks while onboarding owns the flow (lane C contract, section 14.2).
+            _menu = app.Menu as Menu.OnDeviceMenu;
+            if (_menu != null) _menu.RescanRequested += OnRescan;
             // The tail of the frame, before the hand-over and SpaceLab: a room activated here is picked up
             // by them in the same frame.
             app.Loop.AddAfterFrame(this);
@@ -80,8 +86,17 @@ namespace Atlas.App.Onboarding
             _view.Refresh(frame.DeltaTime);
         }
 
+        void OnRescan()
+        {
+            if (Flow == null) return;
+            // Out of the headset and to the room choice; the screen follows in this frame's Refresh.
+            Flow.Rescan();
+        }
+
         public void Shutdown()
         {
+            if (_menu != null) _menu.RescanRequested -= OnRescan;
+            _menu = null;
             if (_worldMaps != null) _worldMaps.Cancel();
             if (_view != null) _view.Dispose();
             _view = null;

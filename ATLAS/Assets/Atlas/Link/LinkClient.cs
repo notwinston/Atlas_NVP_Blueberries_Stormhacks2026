@@ -170,6 +170,15 @@ namespace Atlas.Link
         public event Action<EventMessage> EventReceived;
         /// <summary>A <c>ParamSet</c> was applied to the registry; the argument is how many values changed.</summary>
         public event Action<int> ParamsApplied;
+        /// <summary>
+        /// A <c>ParamSet</c> was dropped: the reason (<see cref="LinkEvents.IgnoredLock"/> or
+        /// <see cref="LinkEvents.IgnoredDegraded"/>) and how many values it carried. The set itself is
+        /// <see cref="IgnoredParamSet"/> during the call. While <see cref="EchoParamChanges"/> is true the client
+        /// tells the Hub itself with a <c>param.ignored</c> event; otherwise the owner of the echo does.
+        /// </summary>
+        public event Action<string, int> ParamSetIgnored;
+        /// <summary>The <c>ParamSet</c> last dropped. The instance is reused: valid during <see cref="ParamSetIgnored"/>.</summary>
+        public ParamSetMessage IgnoredParamSet { get { return _paramSetIn; } }
         /// <summary>The Hub said <c>Bye</c>; the argument is its reason.</summary>
         public event Action<string> ByeReceived;
 
@@ -242,14 +251,17 @@ namespace Atlas.Link
             _watchdog.Start(_clock.NowUs);
         }
 
-        /// <summary>Says <c>Bye</c>, closes the socket and goes offline (<c>link.enabled</c> off).</summary>
+        /// <summary>
+        /// Says <c>Bye</c>, closes the socket and goes offline (<c>link.enabled</c> off). The <c>Bye</c> travels
+        /// inside the disconnect itself, so the Hub always learns why this client left.
+        /// </summary>
         public void Stop(string reason = "stop")
         {
             if (!_started) return;
             if (_peer >= 0)
             {
-                Send(new ByeMessage(reason));
-                _transport.Flush();
+                byte[] bye = new ByeMessage(reason).ToBytes();
+                _transport.Disconnect(_peer, bye, 0, bye.Length);
             }
             _started = false;
             _peer = -1;
@@ -519,7 +531,18 @@ namespace Atlas.Link
                 }
                 case MessageId.ParamSet:
                     // Clamped by the registry; ignored under demo lock and while the link is not CONNECTED.
-                    if (_registry == null || DemoLock || !_watchdog.AcceptsRemoteParams) break;
+                    if (_registry == null) break;
+                    if (DemoLock || !_watchdog.AcceptsRemoteParams)
+                    {
+                        // Said out loud, so the Hub does not go on believing the phone holds these values.
+                        if (!_paramSetIn.ReadFrom(data, offset, length)) break;
+                        string why = DemoLock ? LinkEvents.IgnoredLock : LinkEvents.IgnoredDegraded;
+                        Action<string, int> ignored = ParamSetIgnored;
+                        if (ignored != null) ignored(why, _paramSetIn.Count);
+                        if (EchoParamChanges && Role == LinkRole.Phone)
+                            Send(LinkEvents.ParamIgnored(now, Scene, why, _paramSetIn));
+                        break;
+                    }
                     if (_paramSetIn.ReadFrom(data, offset, length))
                     {
                         _applyingRemote = true;

@@ -97,6 +97,8 @@ namespace Atlas.Telemetry
         public int OutlineRevision { get; private set; }
         /// <summary>The room shown, or null.</summary>
         public RoomModel Room { get { return _roomOk ? _room : null; } }
+        /// <summary>The Forge's base URL as the Hub's Welcome named it; empty before the first.</summary>
+        public string ForgeUrl { get { return _forgeUrl; } }
         /// <summary>The room id the phone names; empty when it names none.</summary>
         public string RoomId { get { return _wantRoom; } }
         /// <summary>True when the phone gave a hash and the room held here hashes to it. False for a room taken on its id or outline alone.</summary>

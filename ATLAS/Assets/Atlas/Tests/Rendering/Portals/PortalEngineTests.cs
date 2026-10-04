@@ -158,6 +158,262 @@ namespace Atlas.Rendering.Tests.Portals
             Assert.That(rule.HeldFrames(8), Is.EqualTo(0));
         }
 
+        // ---- the frame, without the engine ----------------------------------------------------------------------
+
+        static readonly float3 k_Min0 = new float3(-2f, 0f, -2f), k_Max0 = new float3(2f, 2.4f, 2f);
+        static readonly float3 k_Min1 = new float3(-2f, 0f, -2f), k_Max1 = new float3(2f, 2.4f, 6f);
+
+        // Room 0 and a longer room 1 that shares its floor; one doorway on z = 1, seen from room 0 looking along +Z.
+        static PortalFrameCore TwoRooms()
+        {
+            var core = new PortalFrameCore();
+            core.AddRoom(k_Min0, k_Max0);
+            core.AddRoom(k_Min1, k_Max1);
+            core.AddDoor(0, 1, new float2(-0.45f, 1f), new float2(0.45f, 1f), 2f);
+            return core;
+        }
+
+        static bool StepWithEyes(PortalFrameCore core, float3 head, bool features = true)
+        {
+            float4[] planes = Frustum(head, 1f, 0.05f, 60f);
+            return core.Step(head, head - new float3(0.032f, 0f, 0f), head + new float3(0.032f, 0f, 0f), planes, planes, features);
+        }
+
+        static bool StepBlind(PortalFrameCore core, float3 head)
+        {
+            return core.Step(head, head, head, null, null, true);
+        }
+
+        [Test]
+        public void FrameCore_ADoorwayInView_GetsAReference_AndItsRoomTheLayerAndThePlane()
+        {
+            PortalFrameCore core = TwoRooms();
+            Assert.That(StepWithEyes(core, new float3(0f, 1.6f, 0f)), Is.False);
+
+            Assert.That(core.CurrentRoom, Is.EqualTo(0));
+            Assert.That(core.VisibleDoorways, Is.EqualTo(1));
+            Assert.That(core.SlotsInUse, Is.EqualTo(1));
+            Assert.That(core.MasksShown, Is.True);
+            Assert.That(core.RoomsShown, Is.True);
+            Assert.That(core.DoorMasks(0, 0).Reference, Is.EqualTo(1));
+            Assert.That(core.DoorMasks(0, 0).Box, Is.False);
+            Assert.That(core.DoorMasks(0, 1).Reference, Is.EqualTo(0), "the way back is seen from the other room only");
+
+            PortalFrameCore.RoomFrame own = core.Room(0), behind = core.Room(1);
+            Assert.That(own.On, Is.True);
+            Assert.That(own.Layer, Is.EqualTo(PortalStencilTable.WorldLayer));
+            Assert.That(math.all(own.Plane == PortalFrameCore.NoPlane), Is.True);
+            Assert.That(behind.On, Is.True);
+            Assert.That(behind.WasShown, Is.True);
+            Assert.That(behind.Layer, Is.EqualTo(PortalStencilTable.Layer(1)));
+            // What lies in front of the doorway is clipped: the kept side is z > 1.
+            Assert.That(PortalMath.Side(behind.Plane, new float3(0f, 1f, 3f)), Is.GreaterThan(0f));
+            Assert.That(PortalMath.Side(behind.Plane, new float3(0f, 1f, 0f)), Is.LessThan(0f));
+        }
+
+        [Test]
+        public void FrameCore_AnEyeThatStraddlesTheDoorway_GetsThePortalBox()
+        {
+            PortalFrameCore core = TwoRooms();
+            StepWithEyes(core, new float3(0f, 1.6f, 0f));
+            Assert.That(core.DoorMasks(0, 0).Box, Is.False);
+            StepWithEyes(core, new float3(0f, 1.6f, 0.95f));
+            Assert.That(core.CurrentRoom, Is.EqualTo(0), "the head has not gone through yet");
+            Assert.That(core.DoorMasks(0, 0).Reference, Is.EqualTo(1));
+            Assert.That(core.DoorMasks(0, 0).Box, Is.True);
+            // Beside the doorway the plane is just a wall.
+            StepWithEyes(core, new float3(1.5f, 1.6f, 0.95f));
+            Assert.That(core.DoorMasks(0, 0).Box, Is.False);
+        }
+
+        [Test]
+        public void FrameCore_TheHeadThroughTheDoorway_ChangesTheRoom_AndTheOldRoomIsHeldThenSwitchedOff()
+        {
+            PortalFrameCore core = TwoRooms();
+            int raised = 0, from = -1, to = -1;
+            core.RoomChanged += (a, b) => { raised++; from = a; to = b; };
+
+            StepWithEyes(core, new float3(0f, 1.6f, 0.8f));
+            Assert.That(StepWithEyes(core, new float3(0f, 1.6f, 1.3f)), Is.True);
+            Assert.That(core.CurrentRoom, Is.EqualTo(1));
+            Assert.That(raised, Is.EqualTo(1));
+            Assert.That(from, Is.EqualTo(0));
+            Assert.That(to, Is.EqualTo(1));
+            Assert.That(core.Room(1).Layer, Is.EqualTo(PortalStencilTable.WorldLayer), "the walker's room is drawn by the renderer itself");
+            Assert.That(math.all(core.Room(1).Plane == PortalFrameCore.NoPlane), Is.True);
+
+            // The doorway is behind the walker now, so no mask shows room 0; its bounds are still in view
+            // and the head is still inside both rooms, so it stays on, on a layer no mask writes.
+            Assert.That(core.VisibleDoorways, Is.EqualTo(0));
+            Assert.That(core.Room(0).On, Is.True);
+            Assert.That(core.Room(0).Layer, Is.EqualTo(PortalStencilTable.Layer(1)));
+            Assert.That(core.DoorMasks(0, 1).Reference, Is.EqualTo(0));
+
+            // Past the end of room 0, which now lies behind both eyes: off on the third frame, not before.
+            var beyond = new float3(0f, 1.6f, 4f);
+            StepWithEyes(core, beyond);
+            Assert.That(core.Room(0).On, Is.True);
+            Assert.That(core.HeldFrames(0), Is.EqualTo(1));
+            StepWithEyes(core, beyond);
+            Assert.That(core.Room(0).On, Is.True);
+            StepWithEyes(core, beyond);
+            Assert.That(core.Room(0).On, Is.False);
+            Assert.That(core.Room(0).WasShown, Is.False);
+            Assert.That(core.SlotsInUse, Is.EqualTo(0));
+            Assert.That(raised, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void FrameCore_WalkingBack_ShowsTheFirstRoomThroughTheSameDoorway()
+        {
+            PortalFrameCore core = TwoRooms();
+            StepBlind(core, new float3(0f, 1.6f, 0.8f));
+            StepBlind(core, new float3(0f, 1.6f, 1.6f));
+            Assert.That(core.CurrentRoom, Is.EqualTo(1));
+            // With no camera a doorway counts as seen while the head is in front of it.
+            Assert.That(core.DoorMasks(0, 1).Reference, Is.EqualTo(1));
+            Assert.That(core.DoorMasks(0, 0).Reference, Is.EqualTo(0));
+            Assert.That(core.Room(0).Layer, Is.EqualTo(PortalStencilTable.Layer(1)));
+            Assert.That(PortalMath.Side(core.Room(0).Plane, new float3(0f, 1f, 0f)), Is.GreaterThan(0f), "room 0 is kept on its own side");
+
+            Assert.That(StepBlind(core, new float3(0f, 1.6f, 0.7f)), Is.True);
+            Assert.That(core.CurrentRoom, Is.EqualTo(0));
+            Assert.That(core.Room(0).Layer, Is.EqualTo(PortalStencilTable.WorldLayer));
+            Assert.That(core.Room(1).Layer, Is.EqualTo(PortalStencilTable.Layer(1)));
+        }
+
+        [Test]
+        public void FrameCore_BesideTheDoorway_NothingIsCrossed()
+        {
+            PortalFrameCore core = TwoRooms();
+            StepBlind(core, new float3(1.5f, 1.6f, 0.8f));
+            Assert.That(StepBlind(core, new float3(1.5f, 1.6f, 1.3f)), Is.False);
+            Assert.That(core.CurrentRoom, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void FrameCore_DepthZero_MasksTheDoorwayButShowsNoRoom()
+        {
+            PortalFrameCore core = TwoRooms();
+            core.Depth = 0;
+            StepWithEyes(core, new float3(0f, 1.6f, 0f));
+            Assert.That(core.DoorMasks(0, 0).Reference, Is.EqualTo(1));
+            Assert.That(core.MasksShown, Is.True);
+            Assert.That(core.RoomsShown, Is.False);
+            Assert.That(core.Room(1).On, Is.False);
+            core.Depth = 7;
+            Assert.That(core.Depth, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void FrameCore_WithoutTheRendererFeatures_TheWalkersRoomIsShownAlone_AndDoorwaysStillWork()
+        {
+            PortalFrameCore core = TwoRooms();
+            StepWithEyes(core, new float3(0f, 1.6f, 0.8f), false);
+            Assert.That(core.MasksShown, Is.False);
+            Assert.That(core.SlotsInUse, Is.EqualTo(0));
+            Assert.That(core.Room(0).On, Is.True);
+            Assert.That(core.Room(1).On, Is.False);
+            Assert.That(StepWithEyes(core, new float3(0f, 1.6f, 1.3f), false), Is.True);
+            Assert.That(core.CurrentRoom, Is.EqualTo(1));
+            Assert.That(core.Room(1).On, Is.True);
+            Assert.That(core.Room(0).On, Is.False);
+        }
+
+        [Test]
+        public void FrameCore_AClosedDoorway_ShowsNothingAndLetsNobodyThrough()
+        {
+            PortalFrameCore core = TwoRooms();
+            core.SetDoorOpen(0, false);
+            StepBlind(core, new float3(0f, 1.6f, 0.8f));
+            Assert.That(core.MasksShown, Is.False);
+            Assert.That(StepBlind(core, new float3(0f, 1.6f, 1.3f)), Is.False);
+            Assert.That(core.CurrentRoom, Is.EqualTo(0));
+            core.SetDoorOpen(0, true);
+            StepBlind(core, new float3(0f, 1.6f, 0.8f));
+            Assert.That(core.DoorMasks(0, 0).Reference, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void FrameCore_ARoomSetFromOutside_IsNotACrossing()
+        {
+            PortalFrameCore core = TwoRooms();
+            int raised = 0;
+            core.RoomChanged += (a, b) => raised++;
+            StepBlind(core, new float3(0f, 1.6f, 1.3f));
+            core.CurrentRoom = 1;
+            Assert.That(raised, Is.EqualTo(1));
+            // The head was on the far side of the doorway already: stepping back is the first frame in room 1.
+            Assert.That(StepBlind(core, new float3(0f, 1.6f, 0.7f)), Is.False);
+            Assert.That(core.CurrentRoom, Is.EqualTo(1));
+            core.CurrentRoom = 1;
+            Assert.That(raised, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void FrameCore_NeverMoreThanFifteenReferences_LargestDoorwaysFirst_AndTwoDoorsIntoOneRoomShareOne()
+        {
+            var core = new PortalFrameCore();
+            core.AddRoom(new float3(-20f, 0f, -20f), new float3(20f, 3f, 20f));
+            // Seventeen doorways along z = 1, each into a room of its own, nearer the walker the lower the index;
+            // and a second doorway into room 1.
+            for (int k = 0; k < 17; k++)
+            {
+                int room = core.AddRoom(new float3(-20f, 0f, 1f), new float3(20f, 3f, 20f));
+                float z = 1f + 0.5f * k;
+                core.AddDoor(0, room, new float2(-0.45f, z), new float2(0.45f, z), 2f);
+            }
+            core.AddDoor(0, 1, new float2(2f, 30f), new float2(2.9f, 30f), 2f);
+            Assert.That(core.RoomCount, Is.EqualTo(18));
+            Assert.That(core.DoorCount, Is.EqualTo(18));
+
+            StepBlind(core, new float3(0f, 1.6f, 0f));
+            Assert.That(core.VisibleDoorways, Is.EqualTo(18));
+            Assert.That(core.SlotsInUse, Is.EqualTo(15));
+            for (int k = 0; k < 15; k++)
+            {
+                Assert.That(core.DoorMasks(k, 0).Reference, Is.EqualTo(k + 1), "door " + k);
+                Assert.That(core.Room(k + 1).Layer, Is.EqualTo(PortalStencilTable.Layer(k + 1)));
+            }
+            Assert.That(core.DoorMasks(15, 0).Reference, Is.EqualTo(0));
+            Assert.That(core.DoorMasks(16, 0).Reference, Is.EqualTo(0));
+            Assert.That(core.Room(16).On, Is.False);
+            Assert.That(core.Room(17).On, Is.False);
+            Assert.That(core.DoorMasks(17, 0).Reference, Is.EqualTo(1), "the far doorway into room 1 shares its reference");
+            // The largest doorway into a room gives the clip plane: the near one, on z = 1.
+            Assert.That(PortalMath.Side(core.Room(1).Plane, new float3(0f, 1f, 1.5f)), Is.EqualTo(0.5f).Within(1e-5f));
+        }
+
+        [Test]
+        public void FrameCore_Clear_ForgetsEverything()
+        {
+            PortalFrameCore core = TwoRooms();
+            StepBlind(core, new float3(0f, 1.6f, 0.8f));
+            StepBlind(core, new float3(0f, 1.6f, 1.3f));
+            core.Clear();
+            Assert.That(core.RoomCount, Is.EqualTo(0));
+            Assert.That(core.DoorCount, Is.EqualTo(0));
+            Assert.That(core.CurrentRoom, Is.EqualTo(0));
+            Assert.That(core.SlotsInUse, Is.EqualTo(0));
+            Assert.That(core.Step(float3.zero, float3.zero, float3.zero, null, null, true), Is.False, "an empty core does nothing");
+            core.AddRoom(k_Min0, k_Max0);
+            Assert.That(core.Room(0).On, Is.True);
+            Assert.That(core.Room(0).Layer, Is.EqualTo(PortalStencilTable.WorldLayer));
+        }
+
+        [Test]
+        public void FrameCore_AFrameAllocatesNothing()
+        {
+            PortalFrameCore core = TwoRooms();
+            float4[] planes = Frustum(new float3(0f, 1.6f, 0f), 1f, 0.05f, 60f);
+            var near = new float3(0f, 1.6f, 0.8f);
+            var far = new float3(0f, 1.6f, 1.3f);
+            for (int k = 0; k < 8; k++) core.Step(k % 2 == 0 ? near : far, near, far, planes, planes, true);
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int k = 0; k < 200; k++) core.Step(k % 2 == 0 ? near : far, near, far, planes, planes, true);
+            Assert.That(GC.GetAllocatedBytesForCurrentThread() - before, Is.EqualTo(0L));
+        }
+
         // ---- geometry -----------------------------------------------------------------------------------------
 
         // A frustum as GeometryUtility gives it: left, right, down, up, near, far, normals inwards.

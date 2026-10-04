@@ -104,6 +104,10 @@ namespace Atlas.Station
         string _outlineJson;
         int _manifestVer;
         bool _everHeard, _hintPrinted;
+        // Until this time the Hub's own lock command is still on its way to the phone, and a State that left the
+        // phone before it arrived must not undo it.
+        long _lockSettlesUs = long.MinValue;
+        const long LockSettleUs = 500000;
         long _startedUs;
 
         public HubServer(HubOptions options)
@@ -122,6 +126,7 @@ namespace Atlas.Station
             _host.JsonReceived += OnJson;
             _host.ParamSetReceived += OnParamSetFromLink;
             _host.RoomOutlineReceived += OnRoomOutline;
+            _host.ParamSetIgnored += OnParamSetIgnored;
             _phoneWatch.StateChanged += OnPhoneLinkChanged;
         }
 
@@ -574,9 +579,32 @@ namespace Atlas.Station
                 _latencyNext = (_latencyNext + 1) % LatencyWindow;
                 if (_latencyCount < LatencyWindow) _latencyCount++;
             }
+            // The phone can lock and unlock itself (a build flag, the on-device menu). Its State says which, and
+            // the Hub follows, so the Console's badge and the 423 answers match the phone.
+            if (state.DemoLock != _host.DemoLock && now >= _lockSettlesUs) AdoptLock(state.DemoLock);
             _log.WriteState(now, raw, offset);
             // A phone with no parameter registry sends no manifest; its first State ends RESYNC just as well.
             if (_phoneWatch.State == LinkState.Resync) _phoneWatch.OnResyncComplete(now);
+        }
+
+        void AdoptLock(bool on)
+        {
+            _host.DemoLock = on;
+            HubLog("lock", JsonValue.Object().Set("on", on).Set("from", "phone"));
+            if (_feed.Count > 0)
+            {
+                _feed.Broadcast(LinkJson().ToJson());
+                if (_host.Manifest != null) _feed.Broadcast(ManifestJson().ToJson());
+            }
+            if (!_options.Quiet) Console.WriteLine("demo lock " + (on ? "on" : "off") + " (set on the phone)");
+        }
+
+        // The phone dropped a ParamSet and LinkHost has put the snapshot back: the Console is given the values
+        // again, so no slider shows one the phone does not hold.
+        void OnParamSetIgnored(string reason, int restored)
+        {
+            HubLog("param.ignored", JsonValue.Object().Set("reason", reason).Set("restored", restored));
+            if (_feed.Count > 0 && _host.Manifest != null) _feed.Broadcast(ManifestJson().ToJson());
         }
 
         void OnTelemetry(int peerId, in TelemetryMessage telemetry)
@@ -658,6 +686,7 @@ namespace Atlas.Station
 
                 case MessageId.SceneCmd:
                 case MessageId.OperatorCmd:
+                    if (messageId == MessageId.OperatorCmd && body.GetString("cmd") == "lock") _lockSettlesUs = now + LockSettleUs;
                     HubLog("cmd", JsonValue.Object()
                         .Set("from", LinkRoles.Name(_host.RoleOf(peerId)))
                         .Set("cmd", messageId == MessageId.SceneCmd ? "space" : body.GetString("cmd", string.Empty))
@@ -1027,6 +1056,7 @@ namespace Atlas.Station
             lock (_gate)
             {
                 bool sent = _host.SendCommand(command);
+                if (command.Kind == OperatorCommandKind.Lock) _lockSettlesUs = _clock.NowUs + LockSettleUs;
                 JsonValue data = command.ToEvent(0, "hub").Data.Set("from", "console").Set("sent", sent);
                 HubLog("cmd", data);
                 if (command.Kind == OperatorCommandKind.Lock && _feed.Count > 0) _feed.Broadcast(LinkJson().ToJson());

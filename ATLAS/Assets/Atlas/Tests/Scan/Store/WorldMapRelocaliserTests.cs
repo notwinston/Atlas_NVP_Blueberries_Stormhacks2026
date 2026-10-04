@@ -185,6 +185,60 @@ namespace Atlas.Scan.Tests.Store
         }
 
         [Test]
+        public void TimeOut_AfterTheMapWasApplied_AsksToDropIt_Once()
+        {
+            Relocaliser r = Applied();
+            Assert.That(r.MapToDrop, Is.False);
+            Run(r, Relocaliser.Timeout + 1f, TrackingState.Limited, false);
+            Assert.That(r.Reason, Is.EqualTo(RelocaliseReason.TimedOut));
+            Assert.That(r.MapToDrop, Is.True);
+            Assert.That(r.TakeMapToDrop(), Is.True);
+            Assert.That(r.TakeMapToDrop(), Is.False);
+        }
+
+        [Test]
+        public void Cancel_WhileRelocalising_AsksToDropTheMap_AndBeginKeepsTheDuty()
+        {
+            Relocaliser r = Applied();
+            Run(r, 2f, TrackingState.Limited, false);
+            r.Cancel();
+            r.Begin(true, true);
+            Assert.That(r.TakeMapToDrop(), Is.True);
+            Assert.That(r.TakeMapToDrop(), Is.False);
+        }
+
+        [Test]
+        public void NoMapToDrop_WhenNoneWasApplied_OrTheRoomWasRecognised()
+        {
+            var r = new Relocaliser();
+            r.Begin(true, true);
+            Run(r, Relocaliser.Timeout + 1f, TrackingState.Normal, false);     // the map never loads
+            Assert.That(r.Reason, Is.EqualTo(RelocaliseReason.TimedOut));
+            Assert.That(r.MapToDrop, Is.False);
+
+            r.Begin(true, true);
+            r.Cancel();                                                         // cancelled while Loading
+            Assert.That(r.MapToDrop, Is.False);
+
+            r.Begin(true, true);
+            r.MapLoaded(WorldMapLoad.Bad);
+            r.Cancel();
+            Assert.That(r.MapToDrop, Is.False);
+
+            r = Applied();
+            Run(r, 0.5f, TrackingState.Limited, false);
+            Run(r, 3f, TrackingState.Normal, true);
+            Assert.That(r.State, Is.EqualTo(RelocaliseState.Aligned));
+            r.Cancel();                                                         // clearing a finished attempt
+            Assert.That(r.MapToDrop, Is.False);
+
+            // A second attempt that never applies its map owes nothing for the first, aligned one.
+            r.Begin(true, true);
+            Run(r, Relocaliser.Timeout + 1f, TrackingState.Limited, false);
+            Assert.That(r.MapToDrop, Is.False);
+        }
+
+        [Test]
         public void BadTimeSteps_AddNothing()
         {
             Relocaliser r = Applied();
