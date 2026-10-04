@@ -43,8 +43,9 @@ namespace Atlas.Input
     /// whose centre is nearest sideways. Which target a press goes to is judged the same way at the point where
     /// the fingertip met the press plane. While it is PRESSED it stays with the target it pressed, and no other
     /// fingertip can take that target. A Once target fires on the press. A Repeat target fires on the press and,
-    /// once it has stayed pressed for a second, at its own interval. A Hold target is held, or drives its axis,
-    /// for as long as it is pressed.
+    /// once it has stayed pressed for a second, at its own interval (a tap must step once, and a tap stays in
+    /// for more than the 0.4 s of the usual interval). A Hold target is held, or drives its axis, for as long as
+    /// it is pressed.
     ///
     /// Why this survives the sensing (section 4): the walker sees the drawn fingertip and the drawn target in the
     /// same coordinates and steers the one through the other, so a depth error of centimetres only moves where
@@ -96,7 +97,7 @@ namespace Atlas.Input
         public const float SwitchMetres = 0.005f;
         /// <summary>Faces within 30 degrees of each other are one surface: a fingertip armed on a row is armed on the next (cosine).</summary>
         public const float SameSurfaceCos = 0.866f;
-        /// <summary>A Repeat target repeats only after this long pressed: a tap stays in for up to 0.7 s and must step once.</summary>
+        /// <summary>A Repeat target repeats only after this long pressed (or its own interval, if that is longer): a tap stays in for up to 0.7 s and must step once.</summary>
         public const float RepeatDelaySeconds = 1.0f;
         /// <summary>A second route to a target that has only just fired is the same intent, not a second one: a touch on a target the gaze fired less than this ago fires nothing, nor does a pinch on a target that anything fired.</summary>
         public const float SwallowSeconds = 0.5f;
@@ -484,7 +485,7 @@ namespace Atlas.Input
             }
             finger.Phase = HandsTouchPhase.Pressed;
             finger.PressedSeconds = 0f;
-            finger.NextRepeat = RepeatDelaySeconds;
+            finger.NextRepeat = math.max(RepeatDelaySeconds, d.RepeatSeconds);     // never sooner than the target's own interval
             // The dwell fired this target a moment ago: the finger that was already on its way presses, and fires nothing.
             finger.Fire = dwell == null || dwell.SecondsSinceFired(new GazeTargetId(slot, finger.Generation)) >= SwallowSeconds;
         }
