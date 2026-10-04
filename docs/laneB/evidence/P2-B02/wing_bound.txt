@@ -1,0 +1,6 @@
+P2-B02 wing draw-call bound (D-9)
+tree tiles built (Rule S, depth 12): 16381
+R_c = 0.8424821, rho = 3
+N (radius rho + 3 R_c, walker anywhere in a tree tile) = 51
+draw calls = 2N + 2 (valve shell) + 2 (endoluminal display) = 106  (limit 150)
+N at radius rho + 2 R_c = 33
