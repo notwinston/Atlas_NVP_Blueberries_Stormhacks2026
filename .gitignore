@@ -51,3 +51,13 @@ __pycache__/
 
 # Local Claude Docker setup
 Claude_Docker/
+
+# Station pipelines (Phase 2 lane D): downloads, generated case packages, build products
+station/pipelines/.cache/
+station/pipelines/out/
+*.egg-info/
+.pytest_cache/
+# The contract's plain C# projects are sources, not Unity-generated files
+!station/pipelines/csharp/**/*.csproj
+station/pipelines/csharp/**/bin/
+station/pipelines/csharp/**/obj/
