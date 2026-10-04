@@ -1,0 +1,69 @@
+{
+ "schema": "atlas.case/1",
+ "id": "illustrative",
+ "kind": "illustrative",
+ "labels": [
+  {
+   "content": "airway/tree.json",
+   "label": "Model-generated airway"
+  }
+ ],
+ "licence": "CC0-1.0 (synthetic placeholder fixture)",
+ "credit": "ATLAS lane B placeholder generator",
+ "M": 15,
+ "Lambda_m": 1.5,
+ "files": [
+  {
+   "path": "airway/tree.json",
+   "sha256": "6a3b840ad4dfef9a8a0c146a3ef921241d78dbcdef14fdd379313024bfc2bf3d"
+  },
+  {
+   "path": "sky/sky.json",
+   "sha256": "b2aec0d11c8a07df94cb367f0244166470504006329058bcee8d540817a172c4"
+  },
+  {
+   "path": "sky/risk_p0.r8",
+   "sha256": "b07a4a26c831bd0bb225666754567447097a8e6701d0f160de643fb98003911d"
+  },
+  {
+   "path": "sky/risk_p1.r8",
+   "sha256": "f16c2dcbd22d675a96abea16f0d244de40476af8ba3b6339e3ab94ccb6f4dd8a"
+  },
+  {
+   "path": "sky/risk_p2.r8",
+   "sha256": "52bfe977a5adf737ae27184fd6dccda20065d8b91b33fcc1296ca9c574ffb104"
+  },
+  {
+   "path": "sky/risk_p3.r8",
+   "sha256": "52bfe977a5adf737ae27184fd6dccda20065d8b91b33fcc1296ca9c574ffb104"
+  },
+  {
+   "path": "sky/risk_p4.r8",
+   "sha256": "f16c2dcbd22d675a96abea16f0d244de40476af8ba3b6339e3ab94ccb6f4dd8a"
+  },
+  {
+   "path": "sky/risk_p5.r8",
+   "sha256": "b07a4a26c831bd0bb225666754567447097a8e6701d0f160de643fb98003911d"
+  },
+  {
+   "path": "sky/risk_p6.r8",
+   "sha256": "8952f882c30bc8a79fb780a8dd11de6115fe4249f806fda4703782c965ef996f"
+  },
+  {
+   "path": "sky/risk_p7.r8",
+   "sha256": "5e1829f9cf5f6e5f23e3afc740030bc54fabef211ce7723cd94eab7d6520bade"
+  },
+  {
+   "path": "sky/risk_p8.r8",
+   "sha256": "5e1829f9cf5f6e5f23e3afc740030bc54fabef211ce7723cd94eab7d6520bade"
+  },
+  {
+   "path": "sky/risk_p9.r8",
+   "sha256": "8952f882c30bc8a79fb780a8dd11de6115fe4249f806fda4703782c965ef996f"
+  },
+  {
+   "path": "sky/robust.r8",
+   "sha256": "b6300018aae8a591738f8695eb437dd28bf05f2b395927851610b48634f4f860"
+  }
+ ]
+}
