@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 925eed161081382876aa1b28df49038c, type: 3}
+  m_Name: Beats
+  m_EditorClassIdentifier: 
+  m_Beats:
+  - Number: 1
+    Name: scan
+    ExitCondition: RoomModel valid
+  - Number: 2
+    Name: home
+    ExitCondition: Walker confirms; Local Network prompt answered
+  - Number: 3
+    Name: headset
+    ExitCondition: Head pose stable
+  - Number: 4
+    Name: centre
+    ExitCondition: Head within 0.3 m of c0
+  - Number: 5
+    Name: dial
+    ExitCondition: q = 5 selected
+  - Number: 6
+    Name: walk345
+    ExitCondition: Loop closed at q = 5
+  - Number: 7
+    Name: free
+    ExitCondition: Walker opens the mode chip
+  - Number: 8
+    Name: compare
+    ExitCondition: Walker opens the menu
+  - Number: 9
+    Name: menu
+    ExitCondition: Exhibit chosen, or done
+  - Number: 10
+    Name: return
+    ExitCondition: End of run

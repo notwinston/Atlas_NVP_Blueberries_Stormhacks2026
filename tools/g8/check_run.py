@@ -31,11 +31,13 @@ def load(path):
 
 
 def beat_of(e):
+    """The pg.beat payload is {beat:int 1..10, name:string} (P2-C01, PlaygroundDirectorCore). Anything else, or a name
+    that is not the beat's own, reads as an unknown beat and so fails the check."""
     d = e.get("data", {})
-    b = d.get("beat", d.get("name"))
-    if isinstance(b, int) and 1 <= b <= 10:
+    b = d.get("beat")
+    if isinstance(b, int) and not isinstance(b, bool) and 1 <= b <= 10 and d.get("name") == BEATS[b - 1]:
         return BEATS[b - 1]
-    return b
+    return None
 
 
 def check(events):
@@ -83,7 +85,7 @@ def check(events):
 
 def selftest():
     t = lambda s: int(s * 1e6)
-    ev = [{"t_us": t(i), "scene": "S0", "ev": "pg.beat", "data": {"beat": i}} for i in range(1, 11)]
+    ev = [{"t_us": t(i), "scene": "S0", "ev": "pg.beat", "data": {"beat": i, "name": BEATS[i - 1]}} for i in range(1, 11)]
     ev += [{"t_us": t(60 * k), "scene": "S0", "ev": "fms", "data": {"score": 2}} for k in range(1, 4)]
     ev += [{"t_us": t(5), "scene": "S0", "ev": "probe", "data": dict.fromkeys(["ray_az", "pred_geodesic", "pred_euclid", "err_geo", "err_euc"], 1.0)},
            {"t_us": t(9), "scene": "S2", "ev": "probe", "data": dict.fromkeys(["ray_az", "pred_geodesic", "pred_euclid", "err_geo", "err_euc"], 1.0)},
@@ -92,6 +94,8 @@ def selftest():
     assert all(ok for _, ok, _ in check(ev)), check(ev)
     ev2 = [e for e in ev if not (e["ev"] == "pg.beat" and e["data"]["beat"] == 7)]
     assert not dict((n, ok) for n, ok, _ in check(ev2))["pg.beat: all ten beats in order"]
+    ev_old = [dict(e, data={"beat": e["data"]["beat"]}) if e["ev"] == "pg.beat" else e for e in ev]
+    assert not dict((n, ok) for n, ok, _ in check(ev_old))["pg.beat: all ten beats in order"], "name is required"
     ev3 = [dict(e, t_us=e["t_us"] + (30_000_000 if e["ev"] == "fms" and e["t_us"] > t(60) else 0)) for e in ev]
     assert not dict((n, ok) for n, ok, _ in check(ev3))["fms: entered every 60 s +- 5 s"]
     print("selftest ok")

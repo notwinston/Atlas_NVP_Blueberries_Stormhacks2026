@@ -3,8 +3,9 @@ using System.Collections.Generic;
 
 namespace Atlas.Blades.Playground
 {
-    /// <summary>What a prompt is for. Fms, Seq and Stop are operator-facing questions and alerts; the rest guide the walker.</summary>
-    public enum PromptKind : byte { Beat = 0, Probe = 1, Seq = 2, Fms = 3, Stop = 4 }
+    /// <summary>What a prompt is for. Fms, Seq and Stop are operator-facing questions and alerts; the rest guide the walker.
+    /// Exhibit is the task line of the exhibit the walker chose in beat 9.</summary>
+    public enum PromptKind : byte { Beat = 0, Probe = 1, Seq = 2, Fms = 3, Stop = 4, Exhibit = 5 }
 
     /// <summary>One line of guidance shown on the prompt chip (Master Plan section 10.1.3, "Confirm / next beat": A, prompt chip, click).</summary>
     public sealed class Prompt
@@ -72,6 +73,17 @@ namespace Atlas.Blades.Playground
             Prompt p = Make(PromptKind.Beat, beat, text, 0.0);
             Place(p, nowS);
             return p;
+        }
+
+        /// <summary>
+        /// The exhibit's task line changed (or the exhibit was just chosen): it replaces the older exhibit line, and
+        /// the beat line of the menu it came from, which is done. An empty text only removes them.
+        /// </summary>
+        public Prompt SetExhibit(string text, double nowS)
+        {
+            Clear(PromptKind.Exhibit, nowS);
+            Clear(PromptKind.Beat, nowS);
+            return Enqueue(PromptKind.Exhibit, text, nowS);
         }
 
         /// <summary>Queues a prompt of any kind (the probe's "look at where you started", the SEQ question).</summary>

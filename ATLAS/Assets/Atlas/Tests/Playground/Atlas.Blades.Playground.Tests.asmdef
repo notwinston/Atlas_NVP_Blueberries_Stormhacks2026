@@ -9,6 +9,7 @@
         "Atlas.World",
         "Atlas.Input",
         "Atlas.Spaces.Portal",
+        "Atlas.Spaces.Glued",
         "Atlas.Rendering",
         "Atlas.Telemetry",
         "Unity.Mathematics",

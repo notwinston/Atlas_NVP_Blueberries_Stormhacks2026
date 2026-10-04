@@ -137,6 +137,11 @@ namespace Atlas.Blades.Playground
         public const float ChipHalfWidth = 0.42f, ChipHalfHeight = 0.035f;
         public const float ChipLineHeight = 0.034f;
 
+        /// <summary>The prompt chip of the tutorial (task P2-C09): one line above the caption chip.</summary>
+        public static readonly float3 PromptCentre = new float3(0f, -0.23f, 1.2f);
+        public const float PromptHalfWidth = 0.5f, PromptHalfHeight = 0.035f;
+        public const float PromptLineHeight = 0.03f;
+
         /// <summary>The equation card: right of centre, 1.2 m ahead.</summary>
         public static readonly float3 CardCentre = new float3(0.46f, -0.08f, 1.2f);
         public const float CardHalfWidth = 0.22f, CardHalfHeight = 0.14f;
