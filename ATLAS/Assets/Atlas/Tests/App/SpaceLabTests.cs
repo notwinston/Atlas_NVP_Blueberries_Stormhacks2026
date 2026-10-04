@@ -269,6 +269,26 @@ namespace Atlas.App.Tests
             Assert.That(rig.Lab.Current, Is.EqualTo(SpaceId.Home));
         }
 
+        // The stage is told again where the walker ends up: a failed Light space must not leave Home at Light.
+        [Test]
+        public void LoadFailure_TellsTheStageTheFallbackSpace_AndNoSpaceWhenNothingLoads()
+        {
+            var rig = new Rig(SpaceId.Home, SpaceId.Glued);
+            rig.GiveRoom();
+            rig.Loader.Broken.Add(SpaceId.Glued);
+            rig.Lab.RequestSwitch(SpaceId.Glued);
+            rig.RunUntilRunning();
+            Assert.That(rig.Lab.Current, Is.EqualTo(SpaceId.Home));
+            Assert.That(rig.Stage.Nexts, Is.EqualTo(new SpaceId?[] { SpaceId.Glued, SpaceId.Home }));
+
+            rig.Loader.Broken.Add(SpaceId.Home);
+            rig.Stage.Nexts.Clear();
+            rig.Lab.RequestSwitch(SpaceId.Glued);
+            rig.Frames(60);
+            Assert.That(rig.Lab.State, Is.EqualTo(SpaceHostState.Empty));
+            Assert.That(rig.Stage.Nexts[rig.Stage.Nexts.Count - 1], Is.Null, "no space");
+        }
+
         [Test]
         public void LoadFailure_FallsBackToHome_AndWithNoHomeEndsEmpty()
         {

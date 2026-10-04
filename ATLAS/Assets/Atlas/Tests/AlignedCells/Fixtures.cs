@@ -106,6 +106,7 @@ namespace Atlas.Spaces.AlignedCells.Tests
         public bool SetGeneratedMesh(int objectId, UnityEngine.Mesh mesh, string assetHash, float fadeSeconds = 0.3f)
             => Swap(objectId, MeshState.Ready, assetHash);
         public FurnitureLevel FurnitureLevel { get; set; }
+        public bool IsMeshDrawn(UnityEngine.Mesh mesh) => false;
         public bool SetGeneratedLightMesh(int objectId, UnityEngine.Mesh mesh, string assetHashLight) => false;
         public bool SetBuiltInMesh(int objectId, UnityEngine.Mesh sharedMesh, UnityEngine.Vector3 scale, float fadeSeconds = 0.3f)
             => Swap(objectId, MeshState.BuiltIn, "");
