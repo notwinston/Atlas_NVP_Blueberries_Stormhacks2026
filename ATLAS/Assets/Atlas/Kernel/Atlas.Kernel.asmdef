@@ -1,0 +1,9 @@
+{
+    "name": "Atlas.Kernel",
+    "rootNamespace": "Atlas.Kernel",
+    "references": [
+        "Unity.Mathematics",
+        "Unity.Burst",
+        "Unity.Collections"
+    ]
+}

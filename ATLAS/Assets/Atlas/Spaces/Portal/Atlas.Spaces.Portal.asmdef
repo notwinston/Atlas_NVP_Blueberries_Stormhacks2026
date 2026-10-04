@@ -1,0 +1,11 @@
+{
+    "name": "Atlas.Spaces.Portal",
+    "rootNamespace": "Atlas.Spaces.Portal",
+    "references": [
+        "Atlas.Kernel",
+        "Atlas.World",
+        "Atlas.Rendering",
+        "Atlas.Input",
+        "Atlas.Telemetry"
+    ]
+}

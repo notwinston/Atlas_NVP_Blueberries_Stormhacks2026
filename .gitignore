@@ -10,6 +10,8 @@
 **/[Uu]ser[Ss]ettings/
 **/[Mm]emoryCaptures/
 **/[Rr]ecordings/
+# ...but the repo-level recordings/ holds RoomModels and pose logs replayed by every lane (Master Plan C.8)
+!/recordings/
 
 # Unity asset store tools
 **/Assets/AssetStoreTools*
@@ -46,3 +48,6 @@ crashlytics-build.properties
 __pycache__/
 *.pyc
 .venv/
+
+# Local Claude Docker setup
+Claude_Docker/

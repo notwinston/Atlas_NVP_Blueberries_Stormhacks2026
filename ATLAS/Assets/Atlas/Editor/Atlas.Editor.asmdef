@@ -1,0 +1,10 @@
+{
+    "name": "Atlas.Editor",
+    "rootNamespace": "Atlas.EditorTools",
+    "references": [
+        "Unity.InputSystem"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ]
+}

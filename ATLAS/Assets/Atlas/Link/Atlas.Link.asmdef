@@ -1,0 +1,10 @@
+{
+    "name": "Atlas.Link",
+    "rootNamespace": "Atlas.Link",
+    "references": [
+        "LiteNetLib"
+    ],
+    "noEngineReferences": true,
+    "overrideReferences": true,
+    "precompiledReferences": []
+}

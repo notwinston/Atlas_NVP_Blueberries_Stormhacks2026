@@ -1,0 +1,11 @@
+{
+    "name": "Atlas.Spaces.Slicer",
+    "rootNamespace": "Atlas.Spaces.Slicer",
+    "references": [
+        "Atlas.Kernel",
+        "Atlas.World",
+        "Atlas.Rendering",
+        "Atlas.Input",
+        "Atlas.Telemetry"
+    ]
+}

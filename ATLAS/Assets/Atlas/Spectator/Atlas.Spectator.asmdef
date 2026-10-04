@@ -1,0 +1,20 @@
+{
+    "name": "Atlas.Spectator",
+    "rootNamespace": "Atlas.Spectator",
+    "references": [
+        "Atlas.Rendering",
+        "Atlas.World",
+        "Atlas.Link",
+        "Atlas.Spaces.Home",
+        "Atlas.Spaces.Glued",
+        "Atlas.Spaces.Portal",
+        "Atlas.Spaces.Slicer",
+        "Atlas.Spaces.CurvedWalk",
+        "Atlas.Spaces.AlignedCells",
+        "Atlas.Spaces.SmallPlanet"
+    ],
+    "includePlatforms": [
+        "Editor",
+        "WindowsStandalone64"
+    ]
+}

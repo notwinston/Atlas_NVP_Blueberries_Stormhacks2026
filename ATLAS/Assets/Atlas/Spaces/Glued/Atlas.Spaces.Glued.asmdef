@@ -1,0 +1,11 @@
+{
+    "name": "Atlas.Spaces.Glued",
+    "rootNamespace": "Atlas.Spaces.Glued",
+    "references": [
+        "Atlas.Kernel",
+        "Atlas.World",
+        "Atlas.Rendering",
+        "Atlas.Input",
+        "Atlas.Telemetry"
+    ]
+}

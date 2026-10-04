@@ -1,0 +1,10 @@
+{
+    "name": "Atlas.Safety",
+    "rootNamespace": "Atlas.Safety",
+    "references": [
+        "Atlas.Scan",
+        "Unity.Mathematics",
+        "Unity.Burst",
+        "Unity.Collections"
+    ]
+}

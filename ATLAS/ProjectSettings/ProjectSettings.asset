@@ -8,12 +8,12 @@ PlayerSettings:
   AndroidProfiler: 0
   AndroidFilterTouchesWhenObscured: 0
   AndroidEnableSustainedPerformanceMode: 0
-  defaultScreenOrientation: 0
+  defaultScreenOrientation: 3
   targetDevice: 2
   useOnDemandResources: 0
   accelerometerFrequency: 60
   companyName: DefaultCompany
-  productName: My project
+  productName: ATLAS
   defaultCursor: {fileID: 0}
   cursorHotspot: {x: 0, y: 0}
   m_SplashScreenBackgroundColor: {r: 0.13725491, g: 0.12156863, b: 0.1254902, a: 1}
@@ -66,7 +66,7 @@ PlayerSettings:
   useOSAutorotation: 1
   use32BitDisplayBuffer: 1
   preserveFramebufferAlpha: 0
-  adjustIOSFPSUsingThermalState: 1
+  adjustIOSFPSUsingThermalState: 0
   thermalStateSeriousIOSFPS: 30
   thermalStateCriticalIOSFPS: 15
   disableDepthAndStencilBuffers: 0
@@ -157,7 +157,7 @@ PlayerSettings:
   vrSettings:
     enable360StereoCapture: 0
   isWsaHolographicRemotingEnabled: 0
-  enableFrameTimingStats: 0
+  enableFrameTimingStats: 1
   enableOpenGLProfilerGPURecorders: 1
   allowHDRDisplaySupport: 0
   useHDRDisplay: 0
@@ -172,7 +172,7 @@ PlayerSettings:
   applicationIdentifier:
     Android: com.unity.template.ar_mobile
     Standalone: com.unity.template.ar-mobile
-    iPhone: com.unity.template.armobile
+    iPhone: com.winstonthov.atlas
   buildNumber:
     Bratwurst: 0
     Standalone: 0
@@ -199,7 +199,7 @@ PlayerSettings:
   VertexChannelCompressionMask: 4054
   iPhoneSdkVersion: 988
   iOSSimulatorArchitecture: 0
-  iOSTargetOSVersionString: 15.0
+  iOSTargetOSVersionString: 17.0
   tvOSSdkVersion: 0
   tvOSSimulatorArchitecture: 0
   tvOSRequireExtendedGameController: 0
@@ -256,7 +256,7 @@ PlayerSettings:
   iOSManualSigningProvisioningProfileType: 0
   tvOSManualSigningProvisioningProfileType: 0
   VisionOSManualSigningProvisioningProfileType: 0
-  appleEnableAutomaticSigning: 0
+  appleEnableAutomaticSigning: 1
   iOSRequireARKit: 0
   iOSAutomaticallyDetectAndAddCapabilities: 1
   appleEnableProMotion: 0
@@ -536,7 +536,10 @@ PlayerSettings:
       m_Height: 1024
       m_Kind: 0
       m_SubKind: 
-  m_BuildTargetBatching: []
+  m_BuildTargetBatching:
+  - m_BuildTarget: iPhone
+    m_StaticBatching: 0
+    m_DynamicBatching: 0
   m_BuildTargetShaderSettings: []
   m_BuildTargetGraphicsJobs: []
   m_BuildTargetGraphicsJobMode: []
@@ -577,7 +580,8 @@ PlayerSettings:
   enableInternalProfiler: 0
   logObjCUncaughtExceptions: 1
   enableCrashReportAPI: 0
-  cameraUsageDescription: AR Camera
+  cameraUsageDescription: ATLAS uses the camera to track your position, scan your
+    room and photograph objects.
   locationUsageDescription: 
   microphoneUsageDescription: 
   bluetoothUsageDescription: 
@@ -838,13 +842,16 @@ PlayerSettings:
   scriptingDefineSymbols:
     iPhone: UNITY_XR_ARKIT_LOADER_ENABLED
   additionalCompilerArguments: {}
-  platformArchitecture: {}
+  platformArchitecture:
+    iPhone: 1
   scriptingBackend:
     Android: 1
+    iPhone: 1
   il2cppCompilerConfiguration: {}
   il2cppCodeGeneration: {}
   il2cppStacktraceInformation: {}
-  managedStrippingLevel: {}
+  managedStrippingLevel:
+    iPhone: 1
   incrementalIl2cppBuild: {}
   suppressCommonWarnings: 1
   allowUnsafeCode: 0

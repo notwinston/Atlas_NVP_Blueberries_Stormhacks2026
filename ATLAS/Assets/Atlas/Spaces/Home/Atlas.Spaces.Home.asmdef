@@ -1,0 +1,11 @@
+{
+    "name": "Atlas.Spaces.Home",
+    "rootNamespace": "Atlas.Spaces.Home",
+    "references": [
+        "Atlas.Kernel",
+        "Atlas.World",
+        "Atlas.Rendering",
+        "Atlas.Input",
+        "Atlas.Telemetry"
+    ]
+}

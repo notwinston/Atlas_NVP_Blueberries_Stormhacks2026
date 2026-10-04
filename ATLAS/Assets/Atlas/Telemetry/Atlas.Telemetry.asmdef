@@ -1,0 +1,10 @@
+{
+    "name": "Atlas.Telemetry",
+    "rootNamespace": "Atlas.Telemetry",
+    "references": [
+        "Atlas.Link",
+        "Atlas.World",
+        "Unity.Profiling.Core",
+        "glTFast"
+    ]
+}

@@ -1,0 +1,11 @@
+{
+    "name": "Atlas.Spaces.SmallPlanet",
+    "rootNamespace": "Atlas.Spaces.SmallPlanet",
+    "references": [
+        "Atlas.Kernel",
+        "Atlas.World",
+        "Atlas.Rendering",
+        "Atlas.Input",
+        "Atlas.Telemetry"
+    ]
+}

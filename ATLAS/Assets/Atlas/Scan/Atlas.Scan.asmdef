@@ -1,0 +1,12 @@
+{
+    "name": "Atlas.Scan",
+    "rootNamespace": "Atlas.Scan",
+    "references": [
+        "Atlas.Kernel",
+        "Atlas.World",
+        "Unity.XR.ARFoundation",
+        "Unity.XR.ARSubsystems",
+        "Unity.XR.CoreUtils",
+        "Unity.Mathematics"
+    ]
+}

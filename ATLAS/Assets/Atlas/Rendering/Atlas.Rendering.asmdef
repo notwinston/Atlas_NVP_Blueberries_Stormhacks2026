@@ -1,0 +1,11 @@
+{
+    "name": "Atlas.Rendering",
+    "rootNamespace": "Atlas.Rendering",
+    "references": [
+        "Atlas.Kernel",
+        "Atlas.World",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.Mathematics"
+    ]
+}

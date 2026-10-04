@@ -1,0 +1,14 @@
+{
+    "name": "Atlas.Blades.SharedHouse",
+    "rootNamespace": "Atlas.Blades.SharedHouse",
+    "references": [
+        "Atlas.Kernel",
+        "Atlas.World",
+        "Atlas.Rendering",
+        "Atlas.Input",
+        "Atlas.Telemetry",
+        "Atlas.Scan",
+        "Atlas.Safety",
+        "Atlas.Link"
+    ]
+}

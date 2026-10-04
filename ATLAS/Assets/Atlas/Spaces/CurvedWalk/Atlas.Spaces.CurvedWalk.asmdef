@@ -1,0 +1,11 @@
+{
+    "name": "Atlas.Spaces.CurvedWalk",
+    "rootNamespace": "Atlas.Spaces.CurvedWalk",
+    "references": [
+        "Atlas.Kernel",
+        "Atlas.World",
+        "Atlas.Rendering",
+        "Atlas.Input",
+        "Atlas.Telemetry"
+    ]
+}

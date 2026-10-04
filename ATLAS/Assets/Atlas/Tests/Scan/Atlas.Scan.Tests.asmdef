@@ -1,0 +1,20 @@
+{
+    "name": "Atlas.Scan.Tests",
+    "rootNamespace": "Atlas.Scan.Tests",
+    "references": [
+        "Atlas.Scan",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ]
+}

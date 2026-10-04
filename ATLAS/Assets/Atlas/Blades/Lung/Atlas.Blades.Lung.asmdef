@@ -1,0 +1,14 @@
+{
+    "name": "Atlas.Blades.Lung",
+    "rootNamespace": "Atlas.Blades.Lung",
+    "references": [
+        "Atlas.Kernel",
+        "Atlas.World",
+        "Atlas.Rendering",
+        "Atlas.Input",
+        "Atlas.Telemetry",
+        "Atlas.Scan",
+        "Atlas.Safety",
+        "Atlas.Link"
+    ]
+}

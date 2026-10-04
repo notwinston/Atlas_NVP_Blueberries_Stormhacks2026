@@ -1,0 +1,20 @@
+{
+    "name": "Atlas.Link.Tests",
+    "rootNamespace": "Atlas.Link.Tests",
+    "references": [
+        "Atlas.Link",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ]
+}

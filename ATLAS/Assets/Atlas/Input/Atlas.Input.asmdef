@@ -1,0 +1,7 @@
+{
+    "name": "Atlas.Input",
+    "rootNamespace": "Atlas.Input",
+    "references": [
+        "Unity.InputSystem"
+    ]
+}

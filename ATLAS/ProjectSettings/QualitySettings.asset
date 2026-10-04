@@ -6,7 +6,7 @@ QualitySettings:
   serializedVersion: 5
   m_CurrentQuality: 1
   m_QualitySettings:
-  - serializedVersion: 4
+  - serializedVersion: 5
     name: Performant
     pixelLightCount: 0
     shadows: 0
@@ -29,11 +29,12 @@ QualitySettings:
     billboardsFaceCameraPosition: 0
     useLegacyDetailDistribution: 1
     adaptiveVsync: 0
-    vSyncCount: 0
+    vSyncCount: 1
     realtimeGICPUUsage: 25
     adaptiveVsyncExtraA: 0
     adaptiveVsyncExtraB: 0
     lodBias: 0.4
+    meshLodThreshold: 1
     maximumLODLevel: 0
     enableLODCrossFade: 1
     streamingMipmapsActive: 0
@@ -47,7 +48,7 @@ QualitySettings:
     asyncUploadBufferSize: 16
     asyncUploadPersistentBuffer: 1
     resolutionScalingFixedDPIFactor: 1
-    customRenderPipeline: {fileID: 11400000, guid: d0e2fc18fe036412f8223b3b3d9ad574, type: 2}
+    customRenderPipeline: {fileID: 11400000, guid: e2fe3d741e3d7436ba7059e44543e3eb, type: 2}
     terrainQualityOverrides: 0
     terrainPixelError: 1
     terrainDetailDensityScale: 1
@@ -58,7 +59,7 @@ QualitySettings:
     terrainFadeLength: 5
     terrainMaxTrees: 50
     excludedTargetPlatforms: []
-  - serializedVersion: 4
+  - serializedVersion: 5
     name: Balanced
     pixelLightCount: 1
     shadows: 1
@@ -86,6 +87,7 @@ QualitySettings:
     adaptiveVsyncExtraA: 0
     adaptiveVsyncExtraB: 0
     lodBias: 1
+    meshLodThreshold: 1
     maximumLODLevel: 0
     enableLODCrossFade: 1
     streamingMipmapsActive: 0
@@ -99,7 +101,7 @@ QualitySettings:
     asyncUploadBufferSize: 16
     asyncUploadPersistentBuffer: 1
     resolutionScalingFixedDPIFactor: 1
-    customRenderPipeline: {fileID: 11400000, guid: d0e2fc18fe036412f8223b3b3d9ad574, type: 2}
+    customRenderPipeline: {fileID: 11400000, guid: e2fe3d741e3d7436ba7059e44543e3eb, type: 2}
     terrainQualityOverrides: 0
     terrainPixelError: 1
     terrainDetailDensityScale: 1
@@ -110,7 +112,7 @@ QualitySettings:
     terrainFadeLength: 5
     terrainMaxTrees: 50
     excludedTargetPlatforms: []
-  - serializedVersion: 4
+  - serializedVersion: 5
     name: High Fidelity
     pixelLightCount: 2
     shadows: 2
@@ -138,6 +140,7 @@ QualitySettings:
     adaptiveVsyncExtraA: 0
     adaptiveVsyncExtraB: 0
     lodBias: 2
+    meshLodThreshold: 1
     maximumLODLevel: 0
     enableLODCrossFade: 1
     streamingMipmapsActive: 0
@@ -151,7 +154,7 @@ QualitySettings:
     asyncUploadBufferSize: 16
     asyncUploadPersistentBuffer: 1
     resolutionScalingFixedDPIFactor: 1
-    customRenderPipeline: {fileID: 11400000, guid: d0e2fc18fe036412f8223b3b3d9ad574, type: 2}
+    customRenderPipeline: {fileID: 11400000, guid: e2fe3d741e3d7436ba7059e44543e3eb, type: 2}
     terrainQualityOverrides: 0
     terrainPixelError: 1
     terrainDetailDensityScale: 1
@@ -170,6 +173,7 @@ QualitySettings:
     GameCoreXboxOne: 2
     Lumin: 2
     Nintendo Switch: 2
+    Nintendo Switch 2: 2
     PS4: 2
     PS5: 2
     Server: 0
