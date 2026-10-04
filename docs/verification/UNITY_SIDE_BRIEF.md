@@ -27,8 +27,7 @@ session that wrote the code has none of those. It reads `docs/verification/` and
    flat stub (`Atlas.Kernel.FlatWalkerKernel`).
 3. Verified: all 35 C# assemblies compile against the real Unity 6000.3.25f1 and package assemblies in three
    configurations (iOS player, Windows Station, Editor) through `tools/headless/verify.py`.
-4. Verified: 1,383 engine-free NUnit tests pass headless, plus the 13 added with the last fixes
-   (`SpaceActionsTests`, `DevOverlayLayoutTests`; `Atlas.App.Tests` alone is 186 of 186).
+4. Verified: 1,393 engine-free NUnit tests pass headless (`Atlas.App.Tests` alone is 186 of 186).
 5. Verified: the Hub (.NET 8, 42 tests), the Forge (Python, procedural generator, 53 tests) and the Console
    (58 tests) pass their own suites; `tools/e2e/run_station_rehearsal.sh` runs a real Hub and a real Forge
    with no Unity and passes.
@@ -421,7 +420,7 @@ row is one test in the Runner, so the Runner's totals are a little higher than t
 | `Atlas.World.Tests` | 43 | 32 | 0 |
 
 Twelve test assemblies. The first column sums to 1,117, of which 19 are Unity-only; the headless total of
-1,396 is higher because every `[TestCase]` row and every value of a source is a test of its own. In Unity
+1,393 is higher because every `[TestCase]` row and every value of a source is a test of its own. In Unity
 expect that total plus the 19, minus the one headless-only test below.
 
 One test runs only headless and is absent in Unity by design: `StepAndDepth_AllocateNothing` in
