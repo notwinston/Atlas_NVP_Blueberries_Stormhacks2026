@@ -104,10 +104,10 @@ namespace Atlas.E2E.Tests
                 Assert.That(rig.Registry.GetInt(AppParams.CurvedMode), Is.EqualTo(AlignedCellsCore.ModeAlignedCells));
                 Assert.That(rig.Loop.LastState.SpaceId, Is.EqualTo((byte)SpaceId.AlignedCells));
 
-                // S4: the sphere at the room's R.
+                // S4: the sphere at the room's R, or at planet.R when that is larger (its default is the PlanetKit tiles' R0).
                 Switch(rig, SpaceId.SmallPlanet);
                 var s4 = rig.Module<SmallPlanetModule>();
-                double r = SmallPlanetCore.RadiusFor(room, false);
+                double r = SmallPlanetCore.RadiusFor(room, false, rig.Registry.GetFloat(SmallPlanetCore.ParamRadius));
                 Assert.That(r, Is.GreaterThanOrEqualTo(LoopFit.FloorR));
                 Assert.That(rig.Kernel.Q, Is.EqualTo(3));
                 Assert.That(rig.Kernel.Kappa, Is.EqualTo(Curvature.Spherical));

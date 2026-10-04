@@ -11,7 +11,8 @@ namespace Atlas.Spaces.SmallPlanet
     /// <summary>
     /// S4 Small Planet (Master Plan §3.2, §6.5, §10.1.3; tasks P1-B08 and P1-B09): the {4,3} tiling, six tiles
     /// that are the faces of a cube blown onto a sphere of radius R, all always drawn, with a pole beacon and the
-    /// 3-corner walk. The room is tile zero: its kerbs and furniture are the shared room content, warped through
+    /// 3-corner walk. The tiles are the PlanetKit ones modelled in Blender when they load (their cairn is the beacon),
+    /// else procedural (SmallPlanetView). The room is tile zero: its kerbs and furniture are the shared room content, warped through
     /// their own materials. Registered only until the first step (§4.9), so the module reports false.
     /// </summary>
     /// <remarks>

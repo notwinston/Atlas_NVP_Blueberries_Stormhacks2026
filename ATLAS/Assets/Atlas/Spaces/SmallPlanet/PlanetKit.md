@@ -2,7 +2,8 @@
 
 `Resources/PlanetKit/` holds the six tiles of the Small Planet grassland world, modelled in
 `art/blender/SmallPlanet_World.blend` (built by `art/blender/smallplanet_build.py`) and exported by
-`tools/kit/export_planet.py`. Nothing on this branch loads them yet; see the wiring checklist below.
+`tools/kit/export_planet.py`. `SmallPlanetView` draws them (through `PlanetKitTiles`) in place of the procedural tiles
+and the pole beacon; the wiring checklist below records how.
 
 (This note sits outside `Resources/` on purpose: everything inside a Resources folder ships in the player.)
 
@@ -79,29 +80,40 @@ attribute (else the nearest cell to `Col` in OKLab). Nothing is written unless a
 so a re-export of the same .blend changes nothing. Missing `.meta` files are written with the GUIDs
 `tools/gen_meta.py` gives (md5 of `atlas:` + the path under ATLAS/).
 
-## Wiring checklist (for whoever merges this with the Small Planet space code)
+## Wiring checklist (done on branch `smallplanet-wired`, 2026-10-04)
 
-1. `SmallPlanetView.Build` loads the kit with
-   `KitSet.Load(name => Resources.Load<TextAsset>("PlanetKit/" + name)?.bytes)` (KitSet asks for `manifest` and
-   `tile<i>.glb`; Resources drops the `.bytes`). Do not use `KitSet.ResourceFolder` ("AtlasKit"): that is
-   Glued's folder, and Resources paths are global.
-2. Build six meshes, one per face (today one shared `tileMesh` is drawn six times): `TryGet("tile" + f, ...)`,
-   multiply every vertex's x and z by R, upload through `AtlasMesh`. Keep the source `MeshData` so `SetRadius`
-   can rescale and re-upload without reading the files again. Each tile keeps its own pooled material and anchor
-   as now.
-3. If the manifest or any tile is refused (missing, hash mismatch, unreadable), log `KitSet.LastError` once and
-   fall back to the procedural `TileMeshGenerator` tiles for all six, so the planet never mixes the two.
-4. Drop the procedural pole beacon (`PoleBeaconMesh`, placed by `SmallPlanetCore.BeaconPlacement` at a corner of
-   face 5) when the kit is in use: the rock cairn with its lantern stands at the Beacon tile's centre. Keep it
-   on the fallback path. T7 in `SmallPlanetRenderTests` checks the beacon's corner placement; adapt it to the
-   path that is taken.
-5. Raise the 1,200-triangle-per-tile cap in `SmallPlanetRenderTests.SmallPlanet_Budget` (T10, around
-   lines 269-279; it uses `TileChart.TriangleCap(Near)`'s 1,200) for the kit path: tiles reach 2,679 now,
-   and the exporter's own ceiling is 3,000.
-6. Check the S4 budget (Master Plan 8.5: ≤ 70 draw calls, ≤ 190k triangles, both eyes): six tile draws an eye
-   (12 for two, the beacon gone) and 2 x 12,936 ≈ 25.9k planet triangles, before the room, the avatar and the
-   Hub.
-7. R must be the planet's actual radius. The tiles were authored at R0 = 2.2918 m (PLANET_SCALE 1.5); at other
-   radii the layout scales with R but props keep their metric heights, so they look relatively taller on a
-   smaller planet (R = 1.528 m, the loop-fit planet, is 0.67 R0).
-8. On first import Unity reads the committed `.meta` files; it generates none for this folder.
+1. **Done.** `PlanetKitTiles.Load` reads the kit through `KitSet.Load` with the reader
+   `name => Resources.Load<TextAsset>("PlanetKit/" + name)?.bytes` (`SmallPlanetView.ReadKitResource`; the asset is
+   unloaded after its bytes are copied). `PlanetKitTiles.ResourceFolder` is "PlanetKit", not Glued's "AtlasKit".
+   `SmallPlanetView.SharedKit()` loads it once per run and keeps the six parsed `MeshData` (and R0 from the
+   manifest's `"planet"` block). The Small Planet assembly already referenced `Atlas.Telemetry`; no asmdef changed.
+2. **Done.** `SmallPlanetView.Build` makes one `Mesh` per face from `PlanetKitTiles.Scale` (x and z times R, y kept,
+   normals by the inverse transpose of the stretch R/R0; palette, shade and line channels as exported) through
+   `AtlasMesh.Apply`. `SetRadius` rescales into one scratch builder sized for the largest tile and re-uploads into the
+   same six meshes (no reads, no new arrays). Each face keeps its own pooled material and anchor. `Release` destroys
+   the six meshes.
+3. **Done.** Any refusal (missing file, hash mismatch, unreadable GLB or manifest, a triangle count that differs, not
+   exactly six tiles, no `planet.R0`, a vertex beyond 1 R) makes `PlanetKitTiles.Load` return null with the reason;
+   the view logs one warning and builds the procedural `TileMeshGenerator` planet for all six faces, as before.
+4. **Done.** With the kit there is no pole beacon renderer (`BeaconRenderer` is null; six draws an eye); the
+   fallback keeps it. Nothing else reads the beacon: `SmallPlanetCore.BeaconPlacement` still feeds the anchor that
+   `Upload` ignores without a beacon, T7 in `SmallPlanetRenderTests` checks the procedural beacon's corner (fallback
+   only), WalkEvents, the Station and the spectator do not use it.
+5. **Done.** `SmallPlanetRenderTests.SmallPlanet_Budget` keeps the 1,200 Near cap for the procedural fallback;
+   `PlanetKitTests.PlanetKit_Budget` checks the kit against the exporter's 3,000 a tile.
+6. **Done.** Same test: 12 tile draws for two eyes and 2 x 12,936 = 25,872 planet triangles, inside 70 and 190k.
+7. **Done.** planet.R's default is now `SmallPlanetConstants.KitRadius` = 2.291831 m (this manifest's R0; a test
+   checks the two agree), still a lower bound: R = max(room radius, planet.R). Setting planet.R to 0 gives the room's
+   loop-fit planet again, with the props relatively taller.
+8. Unchanged: the committed `.meta` files are used.
+
+Left over:
+
+- **The default planet no longer closes the 3-corner lap on foot in a small room.** With planet.R = 2.29 m, any room
+  whose loop-fit radius is smaller (the 3 x 3 m sample room: 1.27 m) walks the bigger planet, so three right turns
+  of the room's lap side do not close the loop (see `art/blender/README.md`, "Planet size"). For the lap demo, set
+  planet.R to 0 in the menu (or re-export at `PLANET_SCALE = 1.0`). The walk tests set planet.R = 0 explicitly.
+- `planet.R`'s default is a constant, not read from the manifest at run time, so the phone, the Station and the menu
+  agree before any kit is loaded; re-exporting at another scale means updating `SmallPlanetConstants.KitRadius`
+  (`PlanetKitTests` fails until it matches).
+- The ground lines (uv1 on the ground) were not compared on a device against the procedural tile edges.

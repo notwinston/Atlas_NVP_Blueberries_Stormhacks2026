@@ -37,11 +37,15 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             public readonly RoomModel Room;
             public double Time;
 
-            public Rig(string room, double2 head)
+            /// <param name="roomRadius">planet.R = 0, so R is the room's (the loop-fit radius after the comfort floor),
+            /// as these tests of the walk assume; false keeps planet.R's default, the PlanetKit tiles' R0.</param>
+            public Rig(string room, double2 head, bool roomRadius = true)
             {
                 Room = SmallPlanetTestUtil.Room(room);
                 Kernel.Configure(KernelConfig.Flat(Room.LapSide));
                 Kernel.ResetToFloor(head);
+                SmallPlanetCore.DeclareParams(Registry);
+                if (roomRadius) Registry.Find(SmallPlanetCore.ParamRadius).Set(0f);
                 Core.Configure(Room, Registry);
                 Core.Enter(Kernel, head);
             }
@@ -204,7 +208,8 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             Assert.AreEqual(0.5 * Math.PI, fog.Min, 1e-6);
             Assert.AreEqual(0.8 * Math.PI, fog.Max, 1e-6);
             Assert.AreEqual(0.8 * Math.PI, fog.Float, 1e-6);
-            Assert.AreEqual(0f, radius.Float, "0: the radius is the room's");
+            Assert.AreEqual(SmallPlanetConstants.KitRadius, radius.Float, 1e-6, "the PlanetKit tiles' R0: a lower bound, so the props are not stretched");
+            Assert.AreEqual(0.0, radius.Min, 0.0, "0 leaves the radius to the room");
             Assert.IsTrue(radius.OnRelease);
 
             // The dial is Curved Walk's too: one entry, in its group.
@@ -223,6 +228,7 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             var head = new double2(0.3, -0.2);
             var registry = new ParamRegistry();
             SmallPlanetCore.DeclareParams(registry);
+            registry.Find(SmallPlanetCore.ParamRadius).Set(0f);        // the room's radius
             registry.SetGroupActive(CurvedDialParams.Group, false);   // as SpaceLab leaves it outside Curved Walk
             registry.Find(CurvedDialParams.ParamQ).Set(5);
             var kernel = new HolonomyWalkerKernel();
@@ -311,6 +317,18 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             StringAssert.Contains("\"q\":3", events.Data[0]);
             StringAssert.Contains("\"corners\":3", events.Data[events.Data.Count - 1]);
             WalkEvents.Emit(null, rig.Core.Walk, LapEvent.Closed);   // no log published: nothing happens
+        }
+
+        // planet.R's default is the PlanetKit tiles' R0 (2.29 m), a lower bound: a room with a smaller loop-fit radius
+        // walks the kit's planet, a room with a larger one keeps its own.
+        [Test]
+        public void Radius_DefaultsToTheKitRadius_AsALowerBound()
+        {
+            var rig = new Rig(RoomFixtures.Sample3x3, double2.zero, roomRadius: false);
+            Assert.Less(SmallPlanetCore.RadiusFor(rig.Room, false), SmallPlanetConstants.KitRadius, "the 3 x 3 room's own planet is smaller");
+            Assert.AreEqual(SmallPlanetConstants.KitRadius, rig.Core.R, 1e-6);
+            Assert.AreEqual(rig.Core.R, rig.Kernel.MetresPerUnit, 0.0);
+            Assert.AreEqual(3.0, SmallPlanetCore.RadiusFor(rig.Room, false, 3.0), 0.0, "still only a lower bound");
         }
 
         [Test]
@@ -481,7 +499,10 @@ namespace Atlas.Spaces.SmallPlanet.Tests
                 module.Configure(room, registry);
                 module.Enter(kernel.Pose);
                 Assert.AreEqual(3, kernel.Q);
-                Assert.AreEqual(9, pool.Rented, "six tiles, the beacon, the two lap markers");
+                // The PlanetKit tiles from Resources: their cairn replaces the pole beacon (8 on the procedural fallback: 9).
+                Assert.IsTrue(space.View.UsesKit, "the PlanetKit tiles load from Resources");
+                Assert.IsNull(space.View.BeaconRenderer);
+                Assert.AreEqual(8, pool.Rented, "six tiles, the two lap markers");
                 double R = space.Core.R;
                 Assert.AreEqual((float)(0.5 * Math.PI * R), Atlas.Rendering.AtlasLook.State.FogStart, 1e-5f);
                 Assert.AreEqual((float)(0.8 * Math.PI * R), Atlas.Rendering.AtlasLook.State.FogEnd, 1e-5f);
@@ -537,7 +558,7 @@ namespace Atlas.Spaces.SmallPlanet.Tests
                 module.Enter(kernel.Pose);
                 Assert.IsNotNull(space.Dial);
                 Assert.IsTrue(space.Dial.Target.IsValid);
-                Assert.AreEqual(10, pool.Rented, "six tiles, the beacon, the two lap markers, the dial chip");
+                Assert.AreEqual(space.View.UsesKit ? 9 : 10, pool.Rented, "six tiles, the beacon on the procedural fallback, the two lap markers, the dial chip");
                 Assert.IsFalse(space.DialChip.activeSelf);
 
                 var missing = new List<AtlasAction>();
