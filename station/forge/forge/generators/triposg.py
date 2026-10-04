@@ -284,8 +284,13 @@ class TripoSGGenerator:
         return [DECODER_FLASH, DECODER_HIERARCHICAL]
 
     def _run(self, pipe, torch, image: Image.Image, seed: int, decoder: str) -> tuple[np.ndarray, np.ndarray]:
-        # The default call is upstream's own, word for word; only the fallback names the decoder.
+        # The default call is upstream's own, word for word; only the fallback names the decoder,
+        # and FORGE_TRIPOSG_OCTREE_DEPTH, when set, the depth of whichever decoder runs.
         extra = {} if decoder == DECODER_FLASH else {"use_flash_decoder": False}
+        depth = self._settings.triposg_octree_depth
+        if depth:
+            # A shallower octree is far quicker to decode; clean-up keeps 15,000 triangles at most anyway.
+            extra["flash_octree_depth" if decoder == DECODER_FLASH else "hierarchical_octree_depth"] = depth
         with torch.no_grad():
             sample = pipe(
                 image=image,

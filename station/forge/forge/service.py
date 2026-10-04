@@ -41,7 +41,7 @@ from typing import Any, Callable, Optional
 import numpy as np
 
 from . import PIPELINE_VER, attempts, imaging
-from .budget import MAX_GENERATED_PER_ROOM, box_volume, plan_room
+from .budget import box_volume, plan_room
 from .cleanup import CleanupError, CleanResult, Oriented
 from .config import Settings
 from .generators import (
@@ -287,10 +287,9 @@ class Forge:
 
     # ------------------------------------------------------------------ rooms
 
-    @staticmethod
-    def _plan(room: RoomModel) -> dict:
+    def _plan(self, room: RoomModel) -> dict:
         """Which boxes of the room receive meshes and their triangle targets (mesh design section 5.4)."""
-        plan = plan_room((o.id, o.size) for o in room.objects)
+        plan = plan_room(((o.id, o.size) for o in room.objects), self.settings.max_generated)
         return {
             "generated": plan.generated,
             "placeholders": plan.placeholders,
@@ -374,6 +373,11 @@ class Forge:
              hashlib.sha256(cameras.encode("ascii", "replace")).hexdigest(),
              settings.triposg_up, settings.triposg_front, f"{settings.poor_fit:g}", f"{settings.max_anisotropy:g}"]
         )
+        if self.generator.name == "triposg":
+            # What TripoSG makes from the same picture depends on these as well.
+            text += "|" + ",".join([str(settings.triposg_steps), f"{settings.triposg_guidance:g}",
+                                    str(settings.triposg_seed), str(settings.triposg_octree_depth),
+                                    "fp16" if settings.triposg_half_precision else "fp32"])
         return hashlib.sha256(text.encode("ascii", "replace")).hexdigest()
 
     def _cache_lookup(self, key: str) -> Optional[dict]:
@@ -437,7 +441,7 @@ class Forge:
 
             if meta.boxId in room["placeholders"]:
                 job.state = "placeholder"
-                job.error = (f"beyond the {MAX_GENERATED_PER_ROOM} largest boxes of the room; "
+                job.error = (f"beyond the {len(room['generated'])} largest boxes of the room; "
                              "it receives no mesh and keeps its first shape")
                 self._save(job)
                 return job, False

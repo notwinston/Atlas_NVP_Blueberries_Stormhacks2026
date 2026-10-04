@@ -5,6 +5,8 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .budget import MAX_GENERATED_PER_ROOM
+
 _PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 
 GENERATORS = ("triposg", "procedural", "hosted")
@@ -25,6 +27,14 @@ def _flag(name: str, default: bool = False) -> bool:
 def _number(name: str, default: float) -> float:
     value = os.environ.get(name)
     return float(value) if value not in (None, "") else default
+
+
+def _whole(name: str, default: int, low: int, high: int, unset: int | None = None) -> int:
+    """A whole number from ``low`` to ``high``; ``unset`` is also accepted and means the default behaviour."""
+    value = int(_number(name, default))
+    if value != unset and not low <= value <= high:
+        raise ValueError(f"{name} must be from {low} to {high}, not {value}")
+    return value
 
 
 def _choice(name: str, default: str, allowed: tuple[str, ...]) -> str:
@@ -76,6 +86,11 @@ class Settings:
     # (mesh design section 5.3, decision M7). In fractions of the box height.
     poor_fit: float = 0.20
 
+    # How many of a room's largest boxes are generated, at most the 32 of the mesh design (M9).
+    # The rest keep their first shape. Lower it where the generator is slow: the triangle split
+    # stays the rule of the 32, so the phone and the Forge still agree on every target.
+    max_generated: int = 32
+
     max_room_bytes: int = 2 * 1024 * 1024
     max_room_mesh_bytes: int = 2 * 1024 * 1024
     max_crop_bytes: int = 1024 * 1024
@@ -88,6 +103,10 @@ class Settings:
     triposg_guidance: float = 7.0
     triposg_seed: int = 42
     triposg_half_precision: bool = True
+    # The depth of the octree the decoder extracts the surface on: 9 (512 cells a side) is
+    # TripoSG's own and gives about a million triangles, which clean-up reduces to 15,000 at most.
+    # 0 leaves TripoSG's call as it is.
+    triposg_octree_depth: int = 0
     # When the default decoder fails, generate once more with `use_flash_decoder=False`.
     triposg_fallback_decoder: bool = True
     # TripoSG's output frame; "Y" and "unknown" until it has been measured on the Station.
@@ -118,6 +137,7 @@ class Settings:
         s.cleaning_timeout_s = _number("FORGE_CLEANING_TIMEOUT_S", s.cleaning_timeout_s)
         s.max_anisotropy = _number("FORGE_MAX_ANISOTROPY", s.max_anisotropy)
         s.poor_fit = _number("FORGE_POOR_FIT", s.poor_fit)
+        s.max_generated = _whole("FORGE_MAX_GENERATED", s.max_generated, 1, MAX_GENERATED_PER_ROOM)
         s.triposg_repo = os.environ.get("FORGE_TRIPOSG_REPO", "")
         s.triposg_weights = os.environ.get("FORGE_TRIPOSG_WEIGHTS", "")
         s.rmbg_weights = os.environ.get("FORGE_RMBG_WEIGHTS", "")
@@ -125,6 +145,7 @@ class Settings:
         s.triposg_guidance = _number("FORGE_TRIPOSG_GUIDANCE", s.triposg_guidance)
         s.triposg_seed = int(_number("FORGE_TRIPOSG_SEED", s.triposg_seed))
         s.triposg_half_precision = _flag("FORGE_TRIPOSG_FP16", True)
+        s.triposg_octree_depth = _whole("FORGE_TRIPOSG_OCTREE_DEPTH", s.triposg_octree_depth, 6, 10, unset=0)
         s.triposg_fallback_decoder = _flag("FORGE_TRIPOSG_FALLBACK_DECODER", True)
         s.triposg_up = _choice("FORGE_TRIPOSG_UP", s.triposg_up, TRIPOSG_UP)
         s.triposg_front = _choice("FORGE_TRIPOSG_FRONT", s.triposg_front, TRIPOSG_FRONT)

@@ -467,3 +467,49 @@ def test_a_room_record_from_before_the_new_budget_is_planned_again(tmp_path):
 
 def record_targets(record: dict) -> dict:
     return {int(box_id): target for box_id, target in record["triTargets"].items()}
+
+
+def test_a_lower_generation_cap_answers_the_rest_with_their_first_shape(tmp_path):
+    generator = Recording()
+    app = create_app(make_settings(tmp_path / "data", max_generated=2), generator)
+    model = room_model("capped", [(0.4, 0.9, 0.5), (2.0, 0.8, 0.9), (1.2, 0.75, 0.7)], ["chair", "sofa", "table"])
+    targets, _ = plan((o["id"], o["size"]) for o in model["objects"])
+    with TestClient(app) as client:
+        created = upload_room(client, model)
+        assert created["generated"] == [2, 3] and created["placeholders"] == [1]
+        assert created["triTargets"] == {"1": 0, "2": targets[2], "3": targets[3]}  # the rule of the 32
+        chair, sofa = model["objects"][0], model["objects"][1]
+        beyond = post_object(client, "capped", meta_for(chair, 5000), [jpeg(seed=1)])
+        assert beyond.status_code == 200 and beyond.json()["placeholder"] is True
+        status = client.get(f"/jobs/{beyond.json()['jobId']}").json()
+        assert status["state"] == "placeholder" and "2 largest" in status["error"]
+        meshed = post_object(client, "capped", meta_for(sofa, 5000), [jpeg(seed=2)])
+        assert meshed.status_code == 202 and wait_for(client, meshed.json()["jobId"])["state"] == "ready"
+        assert generator.calls == [tuple(sofa["size"])]
+
+
+class NamedTripoSG(ProceduralGenerator):
+    """The procedural generator under TripoSG's name, so that TripoSG's settings count."""
+
+    name = "triposg"
+
+
+@pytest.mark.parametrize("setting, value", [("triposg_steps", 30), ("triposg_guidance", 5.0),
+                                            ("triposg_seed", 7), ("triposg_octree_depth", 8),
+                                            ("triposg_half_precision", False)])
+def test_a_triposg_setting_that_changes_the_mesh_is_part_of_the_cache_key(tmp_path, setting, value):
+    model = room_model("keyed", [(0.4, 0.9, 0.5)], ["chair"])
+    chair, photo = model["objects"][0], jpeg(seed=4)
+
+    def send(**overrides):
+        app = create_app(make_settings(tmp_path / "data", **overrides), NamedTripoSG())
+        with TestClient(app) as client:
+            upload_room(client, model)
+            body = post_object(client, "keyed", meta_for(chair, 5000), [photo]).json()
+            if not body.get("cached"):
+                wait_for(client, body["jobId"])
+            return body
+
+    assert send().get("cached") is not True
+    assert send()["cached"] is True  # the same settings: the same mesh
+    assert send(**{setting: value}).get("cached") is not True
