@@ -131,6 +131,8 @@ namespace Atlas.Hands
         public bool Enabled { get; set; }
         /// <summary>hands.rate: 0 follows the tier; 30 or 15 fixes the detector's rate (for the bench).</summary>
         public int RateOverride { get; set; }
+        /// <summary>hands.nearPanels: panels come within reach in a hands session. Off: they stay where gaze puts them.</summary>
+        public bool NearPanels { get; set; }
         /// <summary>hands.ignoreHeat: the hands stay on when the phone is hot, at the reduced rate.</summary>
         public bool IgnoreHeat { get; set; }
         /// <summary>hands.sound.</summary>
@@ -389,7 +391,8 @@ namespace Atlas.Hands
             _havePreviousHead = true;
             float3 camera = _deps.CameraPosition != null ? _deps.CameraPosition() : head;
             if (UpdateSurfaces() || frame.PoseJumpRejected) _reach.Reset();
-            _reach.Update(now, dt, DebouncedNear(dt), camera, frame.RawHeadRotation, headSpeed,
+            bool near = DebouncedNear(dt) && NearPanels;
+            _reach.Update(now, dt, near, camera, frame.RawHeadRotation, headSpeed,
                 leftValid, tipLeft, rightValid, tipRight,
                 inputTouch.Left.Pressed || inputTouch.Right.Pressed, _surfaces);
 

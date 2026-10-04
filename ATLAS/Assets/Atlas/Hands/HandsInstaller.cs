@@ -47,7 +47,8 @@ namespace Atlas.Hands
         public const string Group = "hands";
         public const string ParamEnabled = "hands.enabled", ParamRate = "hands.rate", ParamReach = "hands.reach",
                             ParamSound = "hands.sound", ParamDraw = "hands.draw", ParamEditor = "hands.editor",
-                            ParamBench = "hands.bench", ParamRecord = "hands.record", ParamIgnoreHeat = "hands.ignoreHeat";
+                            ParamBench = "hands.bench", ParamRecord = "hands.record", ParamIgnoreHeat = "hands.ignoreHeat",
+                            ParamNearPanels = "hands.nearPanels";
         static readonly string[] s_rates = { "auto", "30", "15" };
 
         public HandsRuntime Runtime { get; internal set; }
@@ -89,6 +90,10 @@ namespace Atlas.Hands
             // On by default: the hands keep running on a hot phone, at the reduced rate. The menu's "Hands in heat" row turns it off.
             ParamEntry ignoreHeat = registry.DeclareBool(ParamIgnoreHeat, Group, true, on => runtime.IgnoreHeat = on);
             if (runtime != null) runtime.IgnoreHeat = ignoreHeat.Bool;
+            // Off by default: the menu and the signs keep the gaze layout in a hands session, rather than following
+            // the head at arm's length, which got in the way of looking around.
+            ParamEntry nearPanels = registry.DeclareBool(ParamNearPanels, Group, false, on => runtime.NearPanels = on);
+            if (runtime != null) runtime.NearPanels = nearPanels.Bool;
         }
 
         /// <summary>Stops the detector, returns the materials, destroys the objects. Safe to call twice.</summary>
