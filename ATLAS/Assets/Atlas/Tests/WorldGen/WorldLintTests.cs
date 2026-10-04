@@ -35,8 +35,11 @@ namespace Atlas.WorldGen.Tests
             Assert.GreaterOrEqual(report.StartSpanPairs, 1, "§3.5 spanning object near the start");
             Assert.LessOrEqual(report.MaxDrawnTiles, 71, "§8.5 S2 row");
             Assert.LessOrEqual(report.MaxTileDraws, 150);
-            Assert.LessOrEqual(report.MaxDraws, 210);
-            Assert.LessOrEqual(report.MaxTriangles, 250000);
+            // S2's row with the room at Home's full furniture load (mesh design section 5.4): the tiles' own share
+            // is unchanged, 150 draws and 120,000 triangles.
+            Assert.LessOrEqual(report.MaxDraws, 240);
+            Assert.LessOrEqual(report.MaxTriangles, 370000);
+            Assert.LessOrEqual(report.MaxTriangles - new WorldLintSettings().RoomTris, 120000, "the tiles' own share");
             Assert.AreEqual(0, report.CoincidentFaces, "§3.4 no coincident faces");
             Assert.AreEqual(0, report.StructuralConflicts);
             Assert.AreEqual(0, report.RegionMismatches, "§9.5.6 same region on two runs");
