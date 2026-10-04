@@ -1,0 +1,1069 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test-run id="2" testcasecount="112" result="Skipped:Ignored" total="112" passed="111" failed="0" inconclusive="0" skipped="1" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:19Z" duration="9.3730336">
+  <test-suite type="TestSuite" id="1000" name="ATLAS" fullname="ATLAS" runstate="Runnable" testcasecount="112" result="Skipped" label="Ignored" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:19Z" duration="9.373034" total="112" passed="111" failed="0" inconclusive="0" skipped="1" asserts="0">
+    <properties>
+      <property name="platform" value="EditMode" />
+    </properties>
+    <reason>
+      <message><![CDATA[One or more child tests were ignored]]></message>
+    </reason>
+    <test-suite type="Assembly" id="1035" name="Atlas.Blades.Lung.AirwayViews.Tests.dll" fullname="/private/tmp/claude-501/-Users-lucas-Developer-StormHacks-2026-Blueberries/1f5dd69c-395d-49f7-a84f-71990036bc33/scratchpad/wt/P2-B02/ATLAS/Library/ScriptAssemblies/Atlas.Blades.Lung.AirwayViews.Tests.dll" runstate="Runnable" testcasecount="27" result="Skipped" label="Ignored" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:13Z" duration="2.799994" total="27" passed="26" failed="0" inconclusive="0" skipped="1" asserts="0">
+      <properties>
+        <property name="_PID" value="76574" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <reason>
+        <message><![CDATA[One or more child tests were ignored]]></message>
+      </reason>
+      <test-suite type="TestSuite" id="1036" name="Atlas" fullname="Atlas" runstate="Runnable" testcasecount="27" result="Skipped" label="Ignored" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:13Z" duration="2.799706" total="27" passed="26" failed="0" inconclusive="0" skipped="1" asserts="0">
+        <properties />
+        <reason>
+          <message><![CDATA[One or more child tests were ignored]]></message>
+        </reason>
+        <test-suite type="TestSuite" id="1037" name="Blades" fullname="Atlas.Blades" runstate="Runnable" testcasecount="27" result="Skipped" label="Ignored" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:13Z" duration="2.799492" total="27" passed="26" failed="0" inconclusive="0" skipped="1" asserts="0">
+          <properties />
+          <reason>
+            <message><![CDATA[One or more child tests were ignored]]></message>
+          </reason>
+          <test-suite type="TestSuite" id="1038" name="Lung" fullname="Atlas.Blades.Lung" runstate="Runnable" testcasecount="27" result="Skipped" label="Ignored" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:13Z" duration="2.799284" total="27" passed="26" failed="0" inconclusive="0" skipped="1" asserts="0">
+            <properties />
+            <reason>
+              <message><![CDATA[One or more child tests were ignored]]></message>
+            </reason>
+            <test-suite type="TestSuite" id="1039" name="AirwayViews" fullname="Atlas.Blades.Lung.AirwayViews" runstate="Runnable" testcasecount="27" result="Skipped" label="Ignored" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:13Z" duration="2.799070" total="27" passed="26" failed="0" inconclusive="0" skipped="1" asserts="0">
+              <properties />
+              <reason>
+                <message><![CDATA[One or more child tests were ignored]]></message>
+              </reason>
+              <test-suite type="TestSuite" id="1040" name="Tests" fullname="Atlas.Blades.Lung.AirwayViews.Tests" runstate="Runnable" testcasecount="27" result="Skipped" label="Ignored" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:13Z" duration="2.798799" total="27" passed="26" failed="0" inconclusive="0" skipped="1" asserts="0">
+                <properties />
+                <reason>
+                  <message><![CDATA[One or more child tests were ignored]]></message>
+                </reason>
+                <test-suite type="TestFixture" id="1001" name="EndoluminalGpuTests" fullname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalGpuTests" classname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalGpuTests" runstate="Runnable" testcasecount="1" result="Skipped" label="Ignored" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.010490" total="1" passed="0" failed="0" inconclusive="0" skipped="1" asserts="0">
+                  <properties />
+                  <reason>
+                    <message><![CDATA[One or more child tests were ignored]]></message>
+                  </reason>
+                  <test-case id="1002" name="Endo_Render_GPU" fullname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalGpuTests.Endo_Render_GPU" methodname="Endo_Render_GPU" classname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalGpuTests" runstate="Runnable" seed="370994239" result="Skipped" label="Ignored" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.003917" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                    <reason>
+                      <message><![CDATA[Null graphics device: run without -nographics (docs/laneB/TESTING.md)]]></message>
+                    </reason>
+                  </test-case>
+                </test-suite>
+                <test-suite type="TestFixture" id="1003" name="EndoluminalMathTests" fullname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalMathTests" classname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalMathTests" runstate="Runnable" testcasecount="7" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.016483" total="7" passed="7" failed="0" inconclusive="0" skipped="0" asserts="0">
+                  <properties />
+                  <test-case id="1004" name="Endo_ClockHour_Sweep" fullname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalMathTests.Endo_ClockHour_Sweep" methodname="Endo_ClockHour_Sweep" classname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalMathTests" runstate="Runnable" seed="553504762" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.005885" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                  </test-case>
+                  <test-case id="1005" name="Endo_ClockHour_SyntheticRoot" fullname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalMathTests.Endo_ClockHour_SyntheticRoot" methodname="Endo_ClockHour_SyntheticRoot" classname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalMathTests" runstate="Runnable" seed="1305347351" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.000700" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                  </test-case>
+                  <test-case id="1006" name="Endo_ClockMatchesProjection" fullname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalMathTests.Endo_ClockMatchesProjection" methodname="Endo_ClockMatchesProjection" classname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalMathTests" runstate="Runnable" seed="2098324817" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.001764" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                  </test-case>
+                  <test-case id="1010" name="Endo_ForkView_Validation" fullname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalMathTests.Endo_ForkView_Validation" methodname="Endo_ForkView_Validation" classname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalMathTests" runstate="Runnable" seed="1114371094" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.000865" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                  </test-case>
+                  <test-case id="1008" name="Endo_PoseInsideParent" fullname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalMathTests.Endo_PoseInsideParent" methodname="Endo_PoseInsideParent" classname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalMathTests" runstate="Runnable" seed="507214683" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.000538" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                  </test-case>
+                  <test-case id="1009" name="Endo_TubeMesh" fullname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalMathTests.Endo_TubeMesh" methodname="Endo_TubeMesh" classname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalMathTests" runstate="Runnable" seed="1779364635" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.005709" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                  </test-case>
+                  <test-case id="1007" name="Endo_UpFallback" fullname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalMathTests.Endo_UpFallback" methodname="Endo_UpFallback" classname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalMathTests" runstate="Runnable" seed="2037600121" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.000251" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                  </test-case>
+                </test-suite>
+                <test-suite type="TestFixture" id="1011" name="EndoluminalWindowTests" fullname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalWindowTests" classname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalWindowTests" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.084364" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
+                  <properties />
+                  <test-case id="1015" name="Endo_Labels_SyntheticRoot" fullname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalWindowTests.Endo_Labels_SyntheticRoot" methodname="Endo_Labels_SyntheticRoot" classname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalWindowTests" runstate="Runnable" seed="1338025837" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.073077" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                    <output><![CDATA[Font Asset [LiberationSans SDF - Fallback] Units Per EM set to 2048. Please commit the newly serialized value.
+Font Asset [LiberationSans SDF - Fallback] Units Per EM set to 2048. Please commit the newly serialized value.
+]]></output>
+                  </test-case>
+                  <test-case id="1014" name="Endo_NoPerFrameWork" fullname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalWindowTests.Endo_NoPerFrameWork" methodname="Endo_NoPerFrameWork" classname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalWindowTests" runstate="Runnable" seed="2063478641" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.001935" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                  </test-case>
+                  <test-case id="1013" name="Endo_RenderOncePerFork" fullname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalWindowTests.Endo_RenderOncePerFork" methodname="Endo_RenderOncePerFork" classname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalWindowTests" runstate="Runnable" seed="1801754143" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.001951" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                    <output><![CDATA[[P2-B07] render-frame CPU time (Editor, last Show) = 0.260 ms
+[P2-B07] render-frame CPU time (Editor, last Show) = 0.260 ms
+]]></output>
+                  </test-case>
+                  <test-case id="1016" name="Endo_TestScene_References" fullname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalWindowTests.Endo_TestScene_References" methodname="Endo_TestScene_References" classname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalWindowTests" runstate="Runnable" seed="1280860794" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.004637" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                  </test-case>
+                  <test-case id="1012" name="Endo_TextureSpec" fullname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalWindowTests.Endo_TextureSpec" methodname="Endo_TextureSpec" classname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalWindowTests" runstate="Runnable" seed="1479969912" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.001822" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                  </test-case>
+                </test-suite>
+                <test-suite type="TestFixture" id="1017" name="KitClassifyTests" fullname="Atlas.Blades.Lung.AirwayViews.Tests.KitClassifyTests" classname="Atlas.Blades.Lung.AirwayViews.Tests.KitClassifyTests" runstate="Runnable" testcasecount="3" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.010046" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0">
+                  <properties />
+                  <test-case id="1018" name="Kit_Classify_RuleS" fullname="Atlas.Blades.Lung.AirwayViews.Tests.KitClassifyTests.Kit_Classify_RuleS" methodname="Kit_Classify_RuleS" classname="Atlas.Blades.Lung.AirwayViews.Tests.KitClassifyTests" runstate="Runnable" seed="2090180007" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.001667" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                  </test-case>
+                  <test-case id="1019" name="Kit_FermiOracle" fullname="Atlas.Blades.Lung.AirwayViews.Tests.KitClassifyTests.Kit_FermiOracle" methodname="Kit_FermiOracle" classname="Atlas.Blades.Lung.AirwayViews.Tests.KitClassifyTests" runstate="Runnable" seed="1382624316" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.005556" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                  </test-case>
+                  <test-case id="1020" name="Kit_RejectsSphere" fullname="Atlas.Blades.Lung.AirwayViews.Tests.KitClassifyTests.Kit_RejectsSphere" methodname="Kit_RejectsSphere" classname="Atlas.Blades.Lung.AirwayViews.Tests.KitClassifyTests" runstate="Runnable" seed="928505218" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.001374" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                  </test-case>
+                </test-suite>
+                <test-suite type="TestFixture" id="1021" name="KitFloorTests" fullname="Atlas.Blades.Lung.AirwayViews.Tests.KitFloorTests" classname="Atlas.Blades.Lung.AirwayViews.Tests.KitFloorTests" runstate="Runnable" testcasecount="3" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.045370" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0">
+                  <properties />
+                  <test-case id="1023" name="Kit_FloorBoundary16" fullname="Atlas.Blades.Lung.AirwayViews.Tests.KitFloorTests.Kit_FloorBoundary16" methodname="Kit_FloorBoundary16" classname="Atlas.Blades.Lung.AirwayViews.Tests.KitFloorTests" runstate="Runnable" seed="888159403" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.005513" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                  </test-case>
+                  <test-case id="1022" name="Kit_FloorFromGenerator" fullname="Atlas.Blades.Lung.AirwayViews.Tests.KitFloorTests.Kit_FloorFromGenerator" methodname="Kit_FloorFromGenerator" classname="Atlas.Blades.Lung.AirwayViews.Tests.KitFloorTests" runstate="Runnable" seed="599660171" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.035811" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                  </test-case>
+                  <test-case id="1024" name="Kit_SeamsAcrossOpenEdge" fullname="Atlas.Blades.Lung.AirwayViews.Tests.KitFloorTests.Kit_SeamsAcrossOpenEdge" methodname="Kit_SeamsAcrossOpenEdge" classname="Atlas.Blades.Lung.AirwayViews.Tests.KitFloorTests" runstate="Runnable" seed="1282109604" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.003573" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                  </test-case>
+                </test-suite>
+                <test-suite type="TestFixture" id="1025" name="KitGeometryTests" fullname="Atlas.Blades.Lung.AirwayViews.Tests.KitGeometryTests" classname="Atlas.Blades.Lung.AirwayViews.Tests.KitGeometryTests" runstate="Runnable" testcasecount="6" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.086161" total="6" passed="6" failed="0" inconclusive="0" skipped="0" asserts="0">
+                  <properties />
+                  <test-case id="1027" name="Kit_CorridorGeometry" fullname="Atlas.Blades.Lung.AirwayViews.Tests.KitGeometryTests.Kit_CorridorGeometry" methodname="Kit_CorridorGeometry" classname="Atlas.Blades.Lung.AirwayViews.Tests.KitGeometryTests" runstate="Runnable" seed="1894734025" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.029597" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                  </test-case>
+                  <test-case id="1028" name="Kit_Dither" fullname="Atlas.Blades.Lung.AirwayViews.Tests.KitGeometryTests.Kit_Dither" methodname="Kit_Dither" classname="Atlas.Blades.Lung.AirwayViews.Tests.KitGeometryTests" runstate="Runnable" seed="1460099797" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.002963" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                  </test-case>
+                  <test-case id="1026" name="Kit_EdgeLength_KerbMembraneIris" fullname="Atlas.Blades.Lung.AirwayViews.Tests.KitGeometryTests.Kit_EdgeLength_KerbMembraneIris" methodname="Kit_EdgeLength_KerbMembraneIris" classname="Atlas.Blades.Lung.AirwayViews.Tests.KitGeometryTests" runstate="Runnable" seed="155851961" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.023642" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                    <output><![CDATA[[P2-B02] max kit edge = 0.2438 m (limit 0.25)
+[P2-B02] max kit edge = 0.2438 m (limit 0.25)
+]]></output>
+                  </test-case>
+                  <test-case id="1029" name="Kit_OneDrawPerTile" fullname="Atlas.Blades.Lung.AirwayViews.Tests.KitGeometryTests.Kit_OneDrawPerTile" methodname="Kit_OneDrawPerTile" classname="Atlas.Blades.Lung.AirwayViews.Tests.KitGeometryTests" runstate="Runnable" seed="38574517" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.002542" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                  </test-case>
+                  <test-case id="1030" name="Kit_ValveShell" fullname="Atlas.Blades.Lung.AirwayViews.Tests.KitGeometryTests.Kit_ValveShell" methodname="Kit_ValveShell" classname="Atlas.Blades.Lung.AirwayViews.Tests.KitGeometryTests" runstate="Runnable" seed="54990882" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.025401" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                  </test-case>
+                  <test-case id="1031" name="Kit_ValveShell_Alloc" fullname="Atlas.Blades.Lung.AirwayViews.Tests.KitGeometryTests.Kit_ValveShell_Alloc" methodname="Kit_ValveShell_Alloc" classname="Atlas.Blades.Lung.AirwayViews.Tests.KitGeometryTests" runstate="Runnable" seed="34915371" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:10Z" duration="0.001113" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                    <output><![CDATA[[P2-B02] BuildValveShell managed allocation = 0 B
+[P2-B02] BuildValveShell managed allocation = 0 B
+]]></output>
+                  </test-case>
+                </test-suite>
+                <test-suite type="TestFixture" id="1032" name="KitWingBudgetTests" fullname="Atlas.Blades.Lung.AirwayViews.Tests.KitWingBudgetTests" classname="Atlas.Blades.Lung.AirwayViews.Tests.KitWingBudgetTests" runstate="Runnable" testcasecount="2" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:13Z" duration="2.544945" total="2" passed="2" failed="0" inconclusive="0" skipped="0" asserts="0">
+                  <properties />
+                  <test-case id="1033" name="Kit_WingDrawCalls_Rho3" fullname="Atlas.Blades.Lung.AirwayViews.Tests.KitWingBudgetTests.Kit_WingDrawCalls_Rho3" methodname="Kit_WingDrawCalls_Rho3" classname="Atlas.Blades.Lung.AirwayViews.Tests.KitWingBudgetTests" runstate="Runnable" seed="1515468385" result="Passed" start-time="2026-10-04 03:36:10Z" end-time="2026-10-04 03:36:12Z" duration="1.693922" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                    <output><![CDATA[[P2-B02] P2-B02 wing draw-call bound (D-9)
+tree tiles built (Rule S, depth 12): 16381
+R_c = 0.8424821, rho = 3
+N (radius rho + 3 R_c, walker anywhere in a tree tile) = 51
+draw calls = 2N + 2 (valve shell) + 2 (endoluminal display) = 106  (limit 150)
+N at radius rho + 2 R_c = 33
+
+[P2-B02] P2-B02 wing draw-call bound (D-9)
+tree tiles built (Rule S, depth 12): 16381
+R_c = 0.8424821, rho = 3
+N (radius rho + 3 R_c, walker anywhere in a tree tile) = 51
+draw calls = 2N + 2 (valve shell) + 2 (endoluminal display) = 106  (limit 150)
+N at radius rho + 2 R_c = 33
+
+]]></output>
+                  </test-case>
+                  <test-case id="1034" name="Kit_WingTriangles_FrameBudget" fullname="Atlas.Blades.Lung.AirwayViews.Tests.KitWingBudgetTests.Kit_WingTriangles_FrameBudget" methodname="Kit_WingTriangles_FrameBudget" classname="Atlas.Blades.Lung.AirwayViews.Tests.KitWingBudgetTests" runstate="Runnable" seed="377149397" result="Passed" start-time="2026-10-04 03:36:12Z" end-time="2026-10-04 03:36:13Z" duration="0.850457" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                    <output><![CDATA[[P2-B02] wing triangles/frame = 258628 (N 51, max tile 2500, max shell 1812)
+[P2-B02] wing triangles/frame = 258628 (N 51, max tile 2500, max shell 1812)
+]]></output>
+                  </test-case>
+                </test-suite>
+              </test-suite>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+    <test-suite type="Assembly" id="1067" name="Atlas.Kernel.Tests.dll" fullname="/private/tmp/claude-501/-Users-lucas-Developer-StormHacks-2026-Blueberries/1f5dd69c-395d-49f7-a84f-71990036bc33/scratchpad/wt/P2-B02/ATLAS/Library/ScriptAssemblies/Atlas.Kernel.Tests.dll" runstate="Runnable" testcasecount="19" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.373140" total="19" passed="19" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="76574" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1068" name="Atlas" fullname="Atlas" runstate="Runnable" testcasecount="19" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.372456" total="19" passed="19" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1069" name="Kernel" fullname="Atlas.Kernel" runstate="Runnable" testcasecount="19" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.372284" total="19" passed="19" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestSuite" id="1070" name="Tests" fullname="Atlas.Kernel.Tests" runstate="Runnable" testcasecount="19" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.372106" total="19" passed="19" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-suite type="TestFixture" id="1041" name="KernelDependencyTests" fullname="Atlas.Kernel.Tests.KernelDependencyTests" classname="Atlas.Kernel.Tests.KernelDependencyTests" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.181167" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1042" name="KernelReferencesNoOtherAtlasAssembly" fullname="Atlas.Kernel.Tests.KernelDependencyTests.KernelReferencesNoOtherAtlasAssembly" methodname="KernelReferencesNoOtherAtlasAssembly" classname="Atlas.Kernel.Tests.KernelDependencyTests" runstate="Runnable" seed="518347981" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.180776" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+            <test-suite type="TestFixture" id="1043" name="KernelMathTests" fullname="Atlas.Kernel.Tests.KernelMathTests" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" testcasecount="18" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.190656" total="18" passed="18" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-suite type="ParameterizedMethod" id="1064" name="Closure_345" fullname="Atlas.Kernel.Tests.KernelMathTests.Closure_345" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.001121" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+                <properties />
+                <test-case id="1060" name="Closure_345(-1.0d,5)" fullname="Atlas.Kernel.Tests.KernelMathTests.Closure_345(-1.0d,5)" methodname="Closure_345" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" seed="85683689" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000730" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                  <output><![CDATA[k=-1 s=1.0612750619: |g^5-I| 1.89E-015; min over k<n 3.04E+000
+]]></output>
+                </test-case>
+                <test-case id="1061" name="Closure_345(1.0d,3)" fullname="Atlas.Kernel.Tests.KernelMathTests.Closure_345(1.0d,3)" methodname="Closure_345" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" seed="1152382893" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000045" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                  <output><![CDATA[k=1 s=1.5707963268: |g^3-I| 5.35E-016; min over k<n 2.45E+000
+]]></output>
+                </test-case>
+                <test-case id="1062" name="Closure_345(0.0d,4)" fullname="Atlas.Kernel.Tests.KernelMathTests.Closure_345(0.0d,4)" methodname="Closure_345" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" seed="528048368" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000032" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                  <output><![CDATA[k=0 s=1.0000000000: |g^4-I| 4.51E-016; min over k<n 2.24E+000
+]]></output>
+                </test-case>
+                <test-case id="1063" name="Closure_345(-2.0d,4)" fullname="Atlas.Kernel.Tests.KernelMathTests.Closure_345(-2.0d,4)" methodname="Closure_345" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" seed="808761992" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000029" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                  <output><![CDATA[k=0 s=0.3700000000: |g^4-I| 3.57E-016; min over k<n 2.03E+000
+]]></output>
+                </test-case>
+              </test-suite>
+              <test-suite type="ParameterizedMethod" id="1059" name="Holonomy_Triangle" fullname="Atlas.Kernel.Tests.KernelMathTests.Holonomy_Triangle" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" testcasecount="3" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.002555" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0">
+                <properties />
+                <test-case id="1056" name="Holonomy_Triangle(-1.0d)" fullname="Atlas.Kernel.Tests.KernelMathTests.Holonomy_Triangle(-1.0d)" methodname="Holonomy_Triangle" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" seed="1526285235" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.001586" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                  <output><![CDATA[k=-1: holonomy vs angle defect max 3.55E-014
+]]></output>
+                </test-case>
+                <test-case id="1057" name="Holonomy_Triangle(1.0d)" fullname="Atlas.Kernel.Tests.KernelMathTests.Holonomy_Triangle(1.0d)" methodname="Holonomy_Triangle" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" seed="573398553" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000294" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                  <output><![CDATA[k=1: holonomy vs angle defect max 8.33E-016
+]]></output>
+                </test-case>
+                <test-case id="1058" name="Holonomy_Triangle(0.0d)" fullname="Atlas.Kernel.Tests.KernelMathTests.Holonomy_Triangle(0.0d)" methodname="Holonomy_Triangle" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" seed="1727056659" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000481" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                  <output><![CDATA[k=0: holonomy vs angle defect max 4.44E-016
+]]></output>
+                </test-case>
+              </test-suite>
+              <test-suite type="ParameterizedMethod" id="1051" name="Kernel_EtaOrthonormal" fullname="Atlas.Kernel.Tests.KernelMathTests.Kernel_EtaOrthonormal" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" testcasecount="3" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.015707" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0">
+                <properties />
+                <test-case id="1048" name="Kernel_EtaOrthonormal(-1.0d)" fullname="Atlas.Kernel.Tests.KernelMathTests.Kernel_EtaOrthonormal(-1.0d)" methodname="Kernel_EtaOrthonormal" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" seed="536056691" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.005556" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                  <output><![CDATA[k=-1: generators max 8.46E-015
+k=-1: renormalised max 2.40E-015; distance to clean 1.99E-005
+]]></output>
+                </test-case>
+                <test-case id="1049" name="Kernel_EtaOrthonormal(1.0d)" fullname="Atlas.Kernel.Tests.KernelMathTests.Kernel_EtaOrthonormal(1.0d)" methodname="Kernel_EtaOrthonormal" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" seed="1947558956" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.003297" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                  <output><![CDATA[k=1: generators max 9.04E-016
+k=1: renormalised max 6.03E-016; distance to clean 2.53E-006
+]]></output>
+                </test-case>
+                <test-case id="1050" name="Kernel_EtaOrthonormal(0.0d)" fullname="Atlas.Kernel.Tests.KernelMathTests.Kernel_EtaOrthonormal(0.0d)" methodname="Kernel_EtaOrthonormal" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" seed="902199724" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.006613" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                  <output><![CDATA[k=0: generators max 3.14E-016
+k=0: renormalised max 6.28E-016; distance to clean 2.17E-006
+]]></output>
+                </test-case>
+              </test-suite>
+              <test-suite type="ParameterizedMethod" id="1047" name="Kernel_ExpLog" fullname="Atlas.Kernel.Tests.KernelMathTests.Kernel_ExpLog" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" testcasecount="3" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.003473" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0">
+                <properties />
+                <test-case id="1044" name="Kernel_ExpLog(-1.0d)" fullname="Atlas.Kernel.Tests.KernelMathTests.Kernel_ExpLog(-1.0d)" methodname="Kernel_ExpLog" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" seed="647084270" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.001755" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                  <output><![CDATA[k=-1: exp(log p)-p 2.13E-014; log(exp t)-t 8.88E-016; dist 6.22E-015; float-cast 3.70E-007 m
+]]></output>
+                </test-case>
+                <test-case id="1045" name="Kernel_ExpLog(0.0d)" fullname="Atlas.Kernel.Tests.KernelMathTests.Kernel_ExpLog(0.0d)" methodname="Kernel_ExpLog" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" seed="1965626406" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000495" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                  <output><![CDATA[k=0: exp(log p)-p 0.00E+000; log(exp t)-t 0.00E+000; dist 0.00E+000; float-cast 3.57E-007 m
+]]></output>
+                </test-case>
+                <test-case id="1046" name="Kernel_ExpLog(1.0d)" fullname="Atlas.Kernel.Tests.KernelMathTests.Kernel_ExpLog(1.0d)" methodname="Kernel_ExpLog" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" seed="1905024195" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000958" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                  <output><![CDATA[k=1: exp(log p)-p 4.44E-016; log(exp t)-t 4.44E-016; dist 2.22E-016; float-cast 2.80E-007 m
+]]></output>
+                </test-case>
+              </test-suite>
+              <test-suite type="ParameterizedMethod" id="1055" name="Kernel_Inverse" fullname="Atlas.Kernel.Tests.KernelMathTests.Kernel_Inverse" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" testcasecount="3" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.013100" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0">
+                <properties />
+                <test-case id="1052" name="Kernel_Inverse(-1.0d)" fullname="Atlas.Kernel.Tests.KernelMathTests.Kernel_Inverse(-1.0d)" methodname="Kernel_Inverse" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" seed="2024252353" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.005894" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                  <output><![CDATA[k=-1: M*Inv-I max 1.32E-014
+]]></output>
+                </test-case>
+                <test-case id="1053" name="Kernel_Inverse(0.0d)" fullname="Atlas.Kernel.Tests.KernelMathTests.Kernel_Inverse(0.0d)" methodname="Kernel_Inverse" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" seed="1944139634" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.003429" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                  <output><![CDATA[k=0: M*Inv-I max 1.07E-015
+]]></output>
+                </test-case>
+                <test-case id="1054" name="Kernel_Inverse(1.0d)" fullname="Atlas.Kernel.Tests.KernelMathTests.Kernel_Inverse(1.0d)" methodname="Kernel_Inverse" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" seed="1536424966" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.003413" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                  <output><![CDATA[k=1: M*Inv-I max 1.02E-015
+]]></output>
+                </test-case>
+              </test-suite>
+              <test-case id="1066" name="KernelContracts_Stubs" fullname="Atlas.Kernel.Tests.KernelMathTests.KernelContracts_Stubs" methodname="KernelContracts_Stubs" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" seed="183095730" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000626" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1065" name="Lorentz_Drift" fullname="Atlas.Kernel.Tests.KernelMathTests.Lorentz_Drift" methodname="Lorentz_Drift" classname="Atlas.Kernel.Tests.KernelMathTests" runstate="Runnable" seed="242663172" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.153031" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[renormalised: max 2.31E-015, final 3.89E-016, max entry 1.375, crossings 6790
+without Orthonormalised (log only): max 8.88E+061, final 1.19E+061
+]]></output>
+              </test-case>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+    <test-suite type="Assembly" id="1073" name="Atlas.Link.Tests.dll" fullname="/private/tmp/claude-501/-Users-lucas-Developer-StormHacks-2026-Blueberries/1f5dd69c-395d-49f7-a84f-71990036bc33/scratchpad/wt/P2-B02/ATLAS/Library/ScriptAssemblies/Atlas.Link.Tests.dll" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.066585" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="76574" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1074" name="Atlas" fullname="Atlas" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.066318" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1075" name="Link" fullname="Atlas.Link" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.066251" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestSuite" id="1076" name="Tests" fullname="Atlas.Link.Tests" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.066168" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-suite type="TestFixture" id="1071" name="LinkDependencyTests" fullname="Atlas.Link.Tests.LinkDependencyTests" classname="Atlas.Link.Tests.LinkDependencyTests" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.066081" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1072" name="LinkHasNoEngineOrAtlasReferences" fullname="Atlas.Link.Tests.LinkDependencyTests.LinkHasNoEngineOrAtlasReferences" methodname="LinkHasNoEngineOrAtlasReferences" classname="Atlas.Link.Tests.LinkDependencyTests" runstate="Runnable" seed="411577727" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.065623" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+    <test-suite type="Assembly" id="1088" name="Atlas.PlaceholdersA.Tests.dll" fullname="/private/tmp/claude-501/-Users-lucas-Developer-StormHacks-2026-Blueberries/1f5dd69c-395d-49f7-a84f-71990036bc33/scratchpad/wt/P2-B02/ATLAS/Library/ScriptAssemblies/Atlas.PlaceholdersA.Tests.dll" runstate="Runnable" testcasecount="10" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.008411" total="10" passed="10" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="76574" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1089" name="Atlas" fullname="Atlas" runstate="Runnable" testcasecount="10" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.008094" total="10" passed="10" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1090" name="PlaceholdersA" fullname="Atlas.PlaceholdersA" runstate="Runnable" testcasecount="10" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.007971" total="10" passed="10" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestSuite" id="1091" name="Tests" fullname="Atlas.PlaceholdersA.Tests" runstate="Runnable" testcasecount="10" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.007844" total="10" passed="10" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-suite type="TestFixture" id="1077" name="PlaceholdersATests" fullname="Atlas.PlaceholdersA.Tests.PlaceholdersATests" classname="Atlas.PlaceholdersA.Tests.PlaceholdersATests" runstate="Runnable" testcasecount="10" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.007664" total="10" passed="10" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1082" name="Placeholder_AtlasPalette_CellUV" fullname="Atlas.PlaceholdersA.Tests.PlaceholdersATests.Placeholder_AtlasPalette_CellUV" methodname="Placeholder_AtlasPalette_CellUV" classname="Atlas.PlaceholdersA.Tests.PlaceholdersATests" runstate="Runnable" seed="12645446" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000329" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1083" name="Placeholder_AtlasShaderIDs_Resolve" fullname="Atlas.PlaceholdersA.Tests.PlaceholdersATests.Placeholder_AtlasShaderIDs_Resolve" methodname="Placeholder_AtlasShaderIDs_Resolve" classname="Atlas.PlaceholdersA.Tests.PlaceholdersATests" runstate="Runnable" seed="1044149271" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000100" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1084" name="Placeholder_AtlasSurface_SrpBatcherCompatible" fullname="Atlas.PlaceholdersA.Tests.PlaceholdersATests.Placeholder_AtlasSurface_SrpBatcherCompatible" methodname="Placeholder_AtlasSurface_SrpBatcherCompatible" classname="Atlas.PlaceholdersA.Tests.PlaceholdersATests" runstate="Runnable" seed="1092280934" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.001693" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1086" name="Placeholder_LensBlit_IdentitySourceUV" fullname="Atlas.PlaceholdersA.Tests.PlaceholdersATests.Placeholder_LensBlit_IdentitySourceUV" methodname="Placeholder_LensBlit_IdentitySourceUV" classname="Atlas.PlaceholdersA.Tests.PlaceholdersATests" runstate="Runnable" seed="627680669" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000118" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1087" name="Placeholder_LungBeat_EightBeats" fullname="Atlas.PlaceholdersA.Tests.PlaceholdersATests.Placeholder_LungBeat_EightBeats" methodname="Placeholder_LungBeat_EightBeats" classname="Atlas.PlaceholdersA.Tests.PlaceholdersATests" runstate="Runnable" seed="1490208536" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000095" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1078" name="Placeholder_SpaceIdMatchesStateSpaceId" fullname="Atlas.PlaceholdersA.Tests.PlaceholdersATests.Placeholder_SpaceIdMatchesStateSpaceId" methodname="Placeholder_SpaceIdMatchesStateSpaceId" classname="Atlas.PlaceholdersA.Tests.PlaceholdersATests" runstate="Runnable" seed="1355394965" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000201" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1080" name="Placeholder_SpaceLab_HomeProperty" fullname="Atlas.PlaceholdersA.Tests.PlaceholdersATests.Placeholder_SpaceLab_HomeProperty" methodname="Placeholder_SpaceLab_HomeProperty" classname="Atlas.PlaceholdersA.Tests.PlaceholdersATests" runstate="Runnable" seed="1380104154" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000344" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1081" name="Placeholder_SpaceLab_RegisterAndSwitch" fullname="Atlas.PlaceholdersA.Tests.PlaceholdersATests.Placeholder_SpaceLab_RegisterAndSwitch" methodname="Placeholder_SpaceLab_RegisterAndSwitch" classname="Atlas.PlaceholdersA.Tests.PlaceholdersATests" runstate="Runnable" seed="428087992" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.001746" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1079" name="Placeholder_SpaceLab_StepOrder" fullname="Atlas.PlaceholdersA.Tests.PlaceholdersATests.Placeholder_SpaceLab_StepOrder" methodname="Placeholder_SpaceLab_StepOrder" classname="Atlas.PlaceholdersA.Tests.PlaceholdersATests" runstate="Runnable" seed="1488178601" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000191" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1085" name="Placeholder_StereoRig_Eyes" fullname="Atlas.PlaceholdersA.Tests.PlaceholdersATests.Placeholder_StereoRig_Eyes" methodname="Placeholder_StereoRig_Eyes" classname="Atlas.PlaceholdersA.Tests.PlaceholdersATests" runstate="Runnable" seed="793494502" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.001953" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+    <test-suite type="Assembly" id="1136" name="Atlas.PlaceholdersC.Tests.dll" fullname="/private/tmp/claude-501/-Users-lucas-Developer-StormHacks-2026-Blueberries/1f5dd69c-395d-49f7-a84f-71990036bc33/scratchpad/wt/P2-B02/ATLAS/Library/ScriptAssemblies/Atlas.PlaceholdersC.Tests.dll" runstate="Runnable" testcasecount="36" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.073197" total="36" passed="36" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="76574" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1137" name="Atlas" fullname="Atlas" runstate="Runnable" testcasecount="36" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.072760" total="36" passed="36" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1138" name="PlaceholdersC" fullname="Atlas.PlaceholdersC" runstate="Runnable" testcasecount="36" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.072490" total="36" passed="36" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestSuite" id="1139" name="Tests" fullname="Atlas.PlaceholdersC.Tests" runstate="Runnable" testcasecount="36" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.072205" total="36" passed="36" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-suite type="TestFixture" id="1092" name="PlaceholdersCTests" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" testcasecount="36" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.071873" total="36" passed="36" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1132" name="Placeholder_BumpGuard_AlwaysClear" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_BumpGuard_AlwaysClear" methodname="Placeholder_BumpGuard_AlwaysClear" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="302125082" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.002441" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1104" name="Placeholder_Fixture_CellExamples" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Fixture_CellExamples" methodname="Placeholder_Fixture_CellExamples" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="1150541159" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000303" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-suite type="ParameterizedMethod" id="1109" name="Placeholder_Fixture_SdfIsPositiveInsideFreeFloor" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Fixture_SdfIsPositiveInsideFreeFloor" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.002663" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+                <properties />
+                <test-case id="1105" name="Placeholder_Fixture_SdfIsPositiveInsideFreeFloor(&quot;room_3x3&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Fixture_SdfIsPositiveInsideFreeFloor(&quot;room_3x3&quot;)" methodname="Placeholder_Fixture_SdfIsPositiveInsideFreeFloor" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="1271995179" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000420" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1106" name="Placeholder_Fixture_SdfIsPositiveInsideFreeFloor(&quot;room_3x4_L&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Fixture_SdfIsPositiveInsideFreeFloor(&quot;room_3x4_L&quot;)" methodname="Placeholder_Fixture_SdfIsPositiveInsideFreeFloor" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="937645364" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000347" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1107" name="Placeholder_Fixture_SdfIsPositiveInsideFreeFloor(&quot;room_4x5_table&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Fixture_SdfIsPositiveInsideFreeFloor(&quot;room_4x5_table&quot;)" methodname="Placeholder_Fixture_SdfIsPositiveInsideFreeFloor" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="999700938" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000772" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1108" name="Placeholder_Fixture_SdfIsPositiveInsideFreeFloor(&quot;budget_room&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Fixture_SdfIsPositiveInsideFreeFloor(&quot;budget_room&quot;)" methodname="Placeholder_Fixture_SdfIsPositiveInsideFreeFloor" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="406720053" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000850" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+              </test-suite>
+              <test-suite type="ParameterizedMethod" id="1114" name="Placeholder_Fixture_WalkableMatchesSdfContour" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Fixture_WalkableMatchesSdfContour" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.001999" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+                <properties />
+                <test-case id="1110" name="Placeholder_Fixture_WalkableMatchesSdfContour(&quot;room_3x3&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Fixture_WalkableMatchesSdfContour(&quot;room_3x3&quot;)" methodname="Placeholder_Fixture_WalkableMatchesSdfContour" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="900741653" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000717" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1111" name="Placeholder_Fixture_WalkableMatchesSdfContour(&quot;room_3x4_L&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Fixture_WalkableMatchesSdfContour(&quot;room_3x4_L&quot;)" methodname="Placeholder_Fixture_WalkableMatchesSdfContour" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="1972167999" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000274" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1112" name="Placeholder_Fixture_WalkableMatchesSdfContour(&quot;room_4x5_table&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Fixture_WalkableMatchesSdfContour(&quot;room_4x5_table&quot;)" methodname="Placeholder_Fixture_WalkableMatchesSdfContour" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="316530327" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000396" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1113" name="Placeholder_Fixture_WalkableMatchesSdfContour(&quot;budget_room&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Fixture_WalkableMatchesSdfContour(&quot;budget_room&quot;)" methodname="Placeholder_Fixture_WalkableMatchesSdfContour" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="570344602" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000373" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+              </test-suite>
+              <test-suite type="ParameterizedMethod" id="1124" name="Placeholder_Fixture_WallsClosedObjectsValid" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Fixture_WallsClosedObjectsValid" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.001322" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+                <properties />
+                <test-case id="1120" name="Placeholder_Fixture_WallsClosedObjectsValid(&quot;room_3x3&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Fixture_WallsClosedObjectsValid(&quot;room_3x3&quot;)" methodname="Placeholder_Fixture_WallsClosedObjectsValid" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="1910071729" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000269" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1121" name="Placeholder_Fixture_WallsClosedObjectsValid(&quot;room_3x4_L&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Fixture_WallsClosedObjectsValid(&quot;room_3x4_L&quot;)" methodname="Placeholder_Fixture_WallsClosedObjectsValid" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="719158446" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000212" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1122" name="Placeholder_Fixture_WallsClosedObjectsValid(&quot;room_4x5_table&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Fixture_WallsClosedObjectsValid(&quot;room_4x5_table&quot;)" methodname="Placeholder_Fixture_WallsClosedObjectsValid" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="1645777369" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000298" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1123" name="Placeholder_Fixture_WallsClosedObjectsValid(&quot;budget_room&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Fixture_WallsClosedObjectsValid(&quot;budget_room&quot;)" methodname="Placeholder_Fixture_WallsClosedObjectsValid" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="492585930" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000292" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+              </test-suite>
+              <test-suite type="ParameterizedMethod" id="1103" name="Placeholder_Fixtures_FollowLoopFitRule" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Fixtures_FollowLoopFitRule" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.001394" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+                <properties />
+                <test-case id="1099" name="Placeholder_Fixtures_FollowLoopFitRule(&quot;room_3x3&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Fixtures_FollowLoopFitRule(&quot;room_3x3&quot;)" methodname="Placeholder_Fixtures_FollowLoopFitRule" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="2043962852" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000334" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1100" name="Placeholder_Fixtures_FollowLoopFitRule(&quot;room_3x4_L&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Fixtures_FollowLoopFitRule(&quot;room_3x4_L&quot;)" methodname="Placeholder_Fixtures_FollowLoopFitRule" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="2145211876" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000211" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1101" name="Placeholder_Fixtures_FollowLoopFitRule(&quot;room_4x5_table&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Fixtures_FollowLoopFitRule(&quot;room_4x5_table&quot;)" methodname="Placeholder_Fixtures_FollowLoopFitRule" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="415538151" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000296" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1102" name="Placeholder_Fixtures_FollowLoopFitRule(&quot;budget_room&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Fixtures_FollowLoopFitRule(&quot;budget_room&quot;)" methodname="Placeholder_Fixtures_FollowLoopFitRule" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="545185446" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000316" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+              </test-suite>
+              <test-case id="1125" name="Placeholder_Home_BudgetTriangles" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Home_BudgetTriangles" methodname="Placeholder_Home_BudgetTriangles" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="960521412" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.014512" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1131" name="Placeholder_Home_ObjectMeshIsBaseCentred" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Home_ObjectMeshIsBaseCentred" methodname="Placeholder_Home_ObjectMeshIsBaseCentred" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="1389275675" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000671" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-suite type="ParameterizedMethod" id="1130" name="Placeholder_Home_ShellBudget" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Home_ShellBudget" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.007937" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+                <properties />
+                <test-case id="1126" name="Placeholder_Home_ShellBudget(&quot;room_3x3&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Home_ShellBudget(&quot;room_3x3&quot;)" methodname="Placeholder_Home_ShellBudget" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="468201871" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000293" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1127" name="Placeholder_Home_ShellBudget(&quot;room_3x4_L&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Home_ShellBudget(&quot;room_3x4_L&quot;)" methodname="Placeholder_Home_ShellBudget" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="1792895421" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000259" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1128" name="Placeholder_Home_ShellBudget(&quot;room_4x5_table&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Home_ShellBudget(&quot;room_4x5_table&quot;)" methodname="Placeholder_Home_ShellBudget" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="150260281" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000358" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1129" name="Placeholder_Home_ShellBudget(&quot;budget_room&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Home_ShellBudget(&quot;budget_room&quot;)" methodname="Placeholder_Home_ShellBudget" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="1262001816" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.006610" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+              </test-suite>
+              <test-suite type="ParameterizedMethod" id="1119" name="Placeholder_Home_WallsFaceInward" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Home_WallsFaceInward" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.008020" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+                <properties />
+                <test-case id="1115" name="Placeholder_Home_WallsFaceInward(&quot;room_3x3&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Home_WallsFaceInward(&quot;room_3x3&quot;)" methodname="Placeholder_Home_WallsFaceInward" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="1364399147" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000555" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1116" name="Placeholder_Home_WallsFaceInward(&quot;room_3x4_L&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Home_WallsFaceInward(&quot;room_3x4_L&quot;)" methodname="Placeholder_Home_WallsFaceInward" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="1558894321" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000249" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1117" name="Placeholder_Home_WallsFaceInward(&quot;room_4x5_table&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Home_WallsFaceInward(&quot;room_4x5_table&quot;)" methodname="Placeholder_Home_WallsFaceInward" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="1066381315" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000352" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1118" name="Placeholder_Home_WallsFaceInward(&quot;budget_room&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Home_WallsFaceInward(&quot;budget_room&quot;)" methodname="Placeholder_Home_WallsFaceInward" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="1644935201" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.006493" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+              </test-suite>
+              <test-case id="1133" name="Placeholder_Input_GazeDwellAndTwins" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_Input_GazeDwellAndTwins" methodname="Placeholder_Input_GazeDwellAndTwins" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="1138446903" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000646" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1134" name="Placeholder_PoseLog_Lap5" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_PoseLog_Lap5" methodname="Placeholder_PoseLog_Lap5" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="1915170119" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.007491" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1135" name="Placeholder_PoseLog_Still60s" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_PoseLog_Still60s" methodname="Placeholder_PoseLog_Still60s" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="892997740" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.016210" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1098" name="Placeholder_RoomModel_LoopFit" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_RoomModel_LoopFit" methodname="Placeholder_RoomModel_LoopFit" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="1035337509" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000234" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-suite type="ParameterizedMethod" id="1097" name="Placeholder_RoomModel_RoundTrip" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_RoomModel_RoundTrip" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.004659" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+                <properties />
+                <test-case id="1093" name="Placeholder_RoomModel_RoundTrip(&quot;room_3x3&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_RoomModel_RoundTrip(&quot;room_3x3&quot;)" methodname="Placeholder_RoomModel_RoundTrip" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="20606980" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000791" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1094" name="Placeholder_RoomModel_RoundTrip(&quot;room_3x4_L&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_RoomModel_RoundTrip(&quot;room_3x4_L&quot;)" methodname="Placeholder_RoomModel_RoundTrip" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="185029201" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000783" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1095" name="Placeholder_RoomModel_RoundTrip(&quot;room_4x5_table&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_RoomModel_RoundTrip(&quot;room_4x5_table&quot;)" methodname="Placeholder_RoomModel_RoundTrip" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="207547047" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.001196" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+                <test-case id="1096" name="Placeholder_RoomModel_RoundTrip(&quot;budget_room&quot;)" fullname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests.Placeholder_RoomModel_RoundTrip(&quot;budget_room&quot;)" methodname="Placeholder_RoomModel_RoundTrip" classname="Atlas.PlaceholdersC.Tests.PlaceholdersCTests" runstate="Runnable" seed="1493542485" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.001318" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                </test-case>
+              </test-suite>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+    <test-suite type="Assembly" id="1151" name="Atlas.PlaceholdersD.Tests.dll" fullname="/private/tmp/claude-501/-Users-lucas-Developer-StormHacks-2026-Blueberries/1f5dd69c-395d-49f7-a84f-71990036bc33/scratchpad/wt/P2-B02/ATLAS/Library/ScriptAssemblies/Atlas.PlaceholdersD.Tests.dll" runstate="Runnable" testcasecount="10" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:14Z" duration="0.594733" total="10" passed="10" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="76574" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1152" name="Atlas" fullname="Atlas" runstate="Runnable" testcasecount="10" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:14Z" duration="0.594609" total="10" passed="10" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1153" name="PlaceholdersD" fullname="Atlas.PlaceholdersD" runstate="Runnable" testcasecount="10" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:14Z" duration="0.594509" total="10" passed="10" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestSuite" id="1154" name="Tests" fullname="Atlas.PlaceholdersD.Tests" runstate="Runnable" testcasecount="10" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:14Z" duration="0.594394" total="10" passed="10" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-suite type="TestFixture" id="1140" name="PlaceholdersDTests" fullname="Atlas.PlaceholdersD.Tests.PlaceholdersDTests" classname="Atlas.PlaceholdersD.Tests.PlaceholdersDTests" runstate="Runnable" testcasecount="10" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:14Z" duration="0.594233" total="10" passed="10" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1144" name="Placeholder_AtlasParamAttribute_Shape" fullname="Atlas.PlaceholdersD.Tests.PlaceholdersDTests.Placeholder_AtlasParamAttribute_Shape" methodname="Placeholder_AtlasParamAttribute_Shape" classname="Atlas.PlaceholdersD.Tests.PlaceholdersDTests" runstate="Runnable" seed="1400403368" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000887" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1146" name="Placeholder_Event_Emit" fullname="Atlas.PlaceholdersD.Tests.PlaceholdersDTests.Placeholder_Event_Emit" methodname="Placeholder_Event_Emit" classname="Atlas.PlaceholdersD.Tests.PlaceholdersDTests" runstate="Runnable" seed="1182890330" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000862" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1147" name="Placeholder_Manifest_LoadsAndHashesMatch" fullname="Atlas.PlaceholdersD.Tests.PlaceholdersDTests.Placeholder_Manifest_LoadsAndHashesMatch" methodname="Placeholder_Manifest_LoadsAndHashesMatch" classname="Atlas.PlaceholdersD.Tests.PlaceholdersDTests" runstate="Runnable" seed="1665968463" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.174219" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1141" name="Placeholder_Registry_ClampAndLock" fullname="Atlas.PlaceholdersD.Tests.PlaceholdersDTests.Placeholder_Registry_ClampAndLock" methodname="Placeholder_Registry_ClampAndLock" classname="Atlas.PlaceholdersD.Tests.PlaceholdersDTests" runstate="Runnable" seed="531553720" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.001692" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1142" name="Placeholder_Registry_IdsInRegistrationOrder" fullname="Atlas.PlaceholdersD.Tests.PlaceholdersDTests.Placeholder_Registry_IdsInRegistrationOrder" methodname="Placeholder_Registry_IdsInRegistrationOrder" classname="Atlas.PlaceholdersD.Tests.PlaceholdersDTests" runstate="Runnable" seed="106650138" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000240" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1143" name="Placeholder_Scanner_BindsFieldsAndIsIdempotent" fullname="Atlas.PlaceholdersD.Tests.PlaceholdersDTests.Placeholder_Scanner_BindsFieldsAndIsIdempotent" methodname="Placeholder_Scanner_BindsFieldsAndIsIdempotent" classname="Atlas.PlaceholdersD.Tests.PlaceholdersDTests" runstate="Runnable" seed="1929109571" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.002160" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1149" name="Placeholder_Sky_P2D08" fullname="Atlas.PlaceholdersD.Tests.PlaceholdersDTests.Placeholder_Sky_P2D08" methodname="Placeholder_Sky_P2D08" classname="Atlas.PlaceholdersD.Tests.PlaceholdersDTests" runstate="Runnable" seed="711955492" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.036606" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1145" name="Placeholder_State_Layout" fullname="Atlas.PlaceholdersD.Tests.PlaceholdersDTests.Placeholder_State_Layout" methodname="Placeholder_State_Layout" classname="Atlas.PlaceholdersD.Tests.PlaceholdersDTests" runstate="Runnable" seed="1177891149" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:13Z" duration="0.000441" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1148" name="Placeholder_Tree_AddressableRatioOneWrongFork" fullname="Atlas.PlaceholdersD.Tests.PlaceholdersDTests.Placeholder_Tree_AddressableRatioOneWrongFork" methodname="Placeholder_Tree_AddressableRatioOneWrongFork" classname="Atlas.PlaceholdersD.Tests.PlaceholdersDTests" runstate="Runnable" seed="176892165" result="Passed" start-time="2026-10-04 03:36:13Z" end-time="2026-10-04 03:36:14Z" duration="0.370831" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1150" name="Placeholder_TunnelArea" fullname="Atlas.PlaceholdersD.Tests.PlaceholdersDTests.Placeholder_TunnelArea" methodname="Placeholder_TunnelArea" classname="Atlas.PlaceholdersD.Tests.PlaceholdersDTests" runstate="Runnable" seed="531517169" result="Passed" start-time="2026-10-04 03:36:14Z" end-time="2026-10-04 03:36:14Z" duration="0.005258" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+    <test-suite type="Assembly" id="1157" name="Atlas.Safety.Tests.dll" fullname="/private/tmp/claude-501/-Users-lucas-Developer-StormHacks-2026-Blueberries/1f5dd69c-395d-49f7-a84f-71990036bc33/scratchpad/wt/P2-B02/ATLAS/Library/ScriptAssemblies/Atlas.Safety.Tests.dll" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 03:36:14Z" end-time="2026-10-04 03:36:14Z" duration="0.045719" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="76574" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1158" name="Atlas" fullname="Atlas" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 03:36:14Z" end-time="2026-10-04 03:36:14Z" duration="0.045245" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1159" name="Safety" fullname="Atlas.Safety" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 03:36:14Z" end-time="2026-10-04 03:36:14Z" duration="0.045173" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestSuite" id="1160" name="Tests" fullname="Atlas.Safety.Tests" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 03:36:14Z" end-time="2026-10-04 03:36:14Z" duration="0.045101" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-suite type="TestFixture" id="1155" name="SafetyDependencyTests" fullname="Atlas.Safety.Tests.SafetyDependencyTests" classname="Atlas.Safety.Tests.SafetyDependencyTests" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 03:36:14Z" end-time="2026-10-04 03:36:14Z" duration="0.045028" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1156" name="SafetyNeverReachesLinkOrTelemetry" fullname="Atlas.Safety.Tests.SafetyDependencyTests.SafetyNeverReachesLinkOrTelemetry" methodname="SafetyNeverReachesLinkOrTelemetry" classname="Atlas.Safety.Tests.SafetyDependencyTests" runstate="Runnable" seed="1410642666" result="Passed" start-time="2026-10-04 03:36:14Z" end-time="2026-10-04 03:36:14Z" duration="0.044741" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+    <test-suite type="Assembly" id="1163" name="Atlas.Scan.Tests.dll" fullname="/private/tmp/claude-501/-Users-lucas-Developer-StormHacks-2026-Blueberries/1f5dd69c-395d-49f7-a84f-71990036bc33/scratchpad/wt/P2-B02/ATLAS/Library/ScriptAssemblies/Atlas.Scan.Tests.dll" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 03:36:14Z" end-time="2026-10-04 03:36:14Z" duration="0.043804" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="76574" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1164" name="Atlas" fullname="Atlas" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 03:36:14Z" end-time="2026-10-04 03:36:14Z" duration="0.043687" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1165" name="Scan" fullname="Atlas.Scan" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 03:36:14Z" end-time="2026-10-04 03:36:14Z" duration="0.043619" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestSuite" id="1166" name="Tests" fullname="Atlas.Scan.Tests" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 03:36:14Z" end-time="2026-10-04 03:36:14Z" duration="0.043551" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-suite type="TestFixture" id="1161" name="ScanDependencyTests" fullname="Atlas.Scan.Tests.ScanDependencyTests" classname="Atlas.Scan.Tests.ScanDependencyTests" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 03:36:14Z" end-time="2026-10-04 03:36:14Z" duration="0.043476" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1162" name="ScanReferencesOnlyKernelAndWorld" fullname="Atlas.Scan.Tests.ScanDependencyTests.ScanReferencesOnlyKernelAndWorld" methodname="ScanReferencesOnlyKernelAndWorld" classname="Atlas.Scan.Tests.ScanDependencyTests" runstate="Runnable" seed="1288232046" result="Passed" start-time="2026-10-04 03:36:14Z" end-time="2026-10-04 03:36:14Z" duration="0.043210" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+    <test-suite type="Assembly" id="1175" name="Atlas.TileMeshes.Tests.dll" fullname="/private/tmp/claude-501/-Users-lucas-Developer-StormHacks-2026-Blueberries/1f5dd69c-395d-49f7-a84f-71990036bc33/scratchpad/wt/P2-B02/ATLAS/Library/ScriptAssemblies/Atlas.TileMeshes.Tests.dll" runstate="Runnable" testcasecount="6" result="Passed" start-time="2026-10-04 03:36:14Z" end-time="2026-10-04 03:36:19Z" duration="5.313852" total="6" passed="6" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="76574" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1176" name="Atlas" fullname="Atlas" runstate="Runnable" testcasecount="6" result="Passed" start-time="2026-10-04 03:36:14Z" end-time="2026-10-04 03:36:19Z" duration="5.313654" total="6" passed="6" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1177" name="TileMeshes" fullname="Atlas.TileMeshes" runstate="Runnable" testcasecount="6" result="Passed" start-time="2026-10-04 03:36:14Z" end-time="2026-10-04 03:36:19Z" duration="5.313553" total="6" passed="6" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestSuite" id="1178" name="Tests" fullname="Atlas.TileMeshes.Tests" runstate="Runnable" testcasecount="6" result="Passed" start-time="2026-10-04 03:36:14Z" end-time="2026-10-04 03:36:19Z" duration="5.313441" total="6" passed="6" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-suite type="TestFixture" id="1170" name="TileMesh_SeamsEdges" fullname="Atlas.TileMeshes.Tests.TileMesh_SeamsEdges" classname="Atlas.TileMeshes.Tests.TileMesh_SeamsEdges" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-10-04 03:36:14Z" end-time="2026-10-04 03:36:19Z" duration="5.300622" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1173" name="ChordError_AtMost015Deg" fullname="Atlas.TileMeshes.Tests.TileMesh_SeamsEdges.ChordError_AtMost015Deg" methodname="ChordError_AtMost015Deg" classname="Atlas.TileMeshes.Tests.TileMesh_SeamsEdges" runstate="Runnable" seed="2116783774" result="Passed" start-time="2026-10-04 03:36:14Z" end-time="2026-10-04 03:36:19Z" duration="5.044961" asserts="0">
+                <properties>
+                  <property name="Timeout" value="600000" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[T3] 461 tiles within 5.2 L
+[T3] L=1.4 Near: worst chord error 0.0454 deg (limit 0.15)
+[T3] L=1.4 Mid: worst chord error 0.0825 deg (limit 0.15)
+[T3] L=1.4 Far: worst chord error 0.1272 deg (limit 0.15)
+[T3] L=1.9 Near: worst chord error 0.0479 deg (limit 0.15)
+[T3] L=1.9 Mid: worst chord error 0.0764 deg (limit 0.15)
+[T3] L=1.9 Far: worst chord error 0.1047 deg (limit 0.15)
+[T3] L=3 Near: worst chord error 0.0499 deg (limit 0.15)
+[T3] L=3 Mid: worst chord error 0.0597 deg (limit 0.15)
+[T3] L=3 Far: worst chord error 0.0749 deg (limit 0.15)
+]]></output>
+              </test-case>
+              <test-case id="1172" name="PostWedges_FiveCloseWithoutGapOrOverlap" fullname="Atlas.TileMeshes.Tests.TileMesh_SeamsEdges.PostWedges_FiveCloseWithoutGapOrOverlap" methodname="PostWedges_FiveCloseWithoutGapOrOverlap" classname="Atlas.TileMeshes.Tests.TileMesh_SeamsEdges" runstate="Runnable" seed="611287912" result="Passed" start-time="2026-10-04 03:36:19Z" end-time="2026-10-04 03:36:19Z" duration="0.008172" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[T2] curved corner 72.000000 deg, mesh-coordinate corner 65.8232 deg; worst wedge gap/overlap 2.05E-005 deg; worst span error 2.05E-005 deg; worst CT offset 5.89E-008 m; worst arc radius error 5.73E-008 m; worst arc join 5.37E-008 m
+]]></output>
+              </test-case>
+              <test-case id="1171" name="Seams_NeighbourEdgesCoincide" fullname="Atlas.TileMeshes.Tests.TileMesh_SeamsEdges.Seams_NeighbourEdgesCoincide" methodname="Seams_NeighbourEdgesCoincide" classname="Atlas.TileMeshes.Tests.TileMesh_SeamsEdges" runstate="Runnable" seed="1390284851" result="Passed" start-time="2026-10-04 03:36:19Z" end-time="2026-10-04 03:36:19Z" duration="0.124275" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[T1] maximum seam distance after warp: 4.130E-007 m (limit 1e-3)
+]]></output>
+              </test-case>
+              <test-case id="1174" name="Triangles_WithinCaps" fullname="Atlas.TileMeshes.Tests.TileMesh_SeamsEdges.Triangles_WithinCaps" methodname="Triangles_WithinCaps" classname="Atlas.TileMeshes.Tests.TileMesh_SeamsEdges" runstate="Runnable" seed="563310423" result="Passed" start-time="2026-10-04 03:36:19Z" end-time="2026-10-04 03:36:19Z" duration="0.121887" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[T4] Near: max triangles 944 (cap 1200); Build time 0.244 ms per mesh
+[T4] Mid: max triangles 456 (cap 500); Build time 0.126 ms per mesh
+[T4] Far: max triangles 248 (cap 250); Build time 0.078 ms per mesh
+]]></output>
+              </test-case>
+            </test-suite>
+            <test-suite type="TestFixture" id="1167" name="TileMeshSupportTests" fullname="Atlas.TileMeshes.Tests.TileMeshSupportTests" classname="Atlas.TileMeshes.Tests.TileMeshSupportTests" runstate="Runnable" testcasecount="2" result="Passed" start-time="2026-10-04 03:36:19Z" end-time="2026-10-04 03:36:19Z" duration="0.012628" total="2" passed="2" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1169" name="OtherShapes" fullname="Atlas.TileMeshes.Tests.TileMeshSupportTests.OtherShapes" methodname="OtherShapes" classname="Atlas.TileMeshes.Tests.TileMeshSupportTests" runstate="Runnable" seed="1339601976" result="Passed" start-time="2026-10-04 03:36:19Z" end-time="2026-10-04 03:36:19Z" duration="0.003112" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[S2] kappa=-1 q=6 Near/Far seam distance 1.02E-007 m
+[S2] kappa=1 q=3 Near/Far seam distance 6.83E-008 m
+]]></output>
+              </test-case>
+              <test-case id="1168" name="VertexData" fullname="Atlas.TileMeshes.Tests.TileMeshSupportTests.VertexData" methodname="VertexData" classname="Atlas.TileMeshes.Tests.TileMeshSupportTests" runstate="Runnable" seed="367764723" result="Passed" start-time="2026-10-04 03:36:19Z" end-time="2026-10-04 03:36:19Z" duration="0.008281" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+    <test-suite type="Assembly" id="1181" name="Atlas.World.Tests.dll" fullname="/private/tmp/claude-501/-Users-lucas-Developer-StormHacks-2026-Blueberries/1f5dd69c-395d-49f7-a84f-71990036bc33/scratchpad/wt/P2-B02/ATLAS/Library/ScriptAssemblies/Atlas.World.Tests.dll" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 03:36:19Z" end-time="2026-10-04 03:36:19Z" duration="0.049249" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="76574" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1182" name="Atlas" fullname="Atlas" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 03:36:19Z" end-time="2026-10-04 03:36:19Z" duration="0.049132" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1183" name="World" fullname="Atlas.World" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 03:36:19Z" end-time="2026-10-04 03:36:19Z" duration="0.049059" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestSuite" id="1184" name="Tests" fullname="Atlas.World.Tests" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 03:36:19Z" end-time="2026-10-04 03:36:19Z" duration="0.048978" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-suite type="TestFixture" id="1179" name="WorldDependencyTests" fullname="Atlas.World.Tests.WorldDependencyTests" classname="Atlas.World.Tests.WorldDependencyTests" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 03:36:19Z" end-time="2026-10-04 03:36:19Z" duration="0.048884" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1180" name="WorldReferencesOnlyKernelAndLink" fullname="Atlas.World.Tests.WorldDependencyTests.WorldReferencesOnlyKernelAndLink" methodname="WorldReferencesOnlyKernelAndLink" classname="Atlas.World.Tests.WorldDependencyTests" runstate="Runnable" seed="1048169314" result="Passed" start-time="2026-10-04 03:36:19Z" end-time="2026-10-04 03:36:19Z" duration="0.048536" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: [TestRunnerNoThrottle] Restored Interaction Mode after test run.
+<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: [TestRunnerNoThrottle] Restored Interaction Mode after test run.
+Saving results to: /Users/lucas/Library/Application Support/DefaultCompany/ATLAS/TestResults.xml
+Saving results to: /Users/lucas/Library/Application Support/DefaultCompany/ATLAS/TestResults.xml
+]]></output>
+              </test-case>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+  </test-suite>
+</test-run>

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test-run id="2" testcasecount="1" result="Passed" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-10-04 03:34:46Z" end-time="2026-10-04 03:34:46Z" duration="0.2989937">
+  <test-suite type="TestSuite" id="1000" name="ATLAS" fullname="ATLAS" runstate="Runnable" testcasecount="111" result="Passed" start-time="2026-10-04 03:34:46Z" end-time="2026-10-04 03:34:46Z" duration="0.298994" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+    <properties>
+      <property name="platform" value="EditMode" />
+    </properties>
+    <test-suite type="Assembly" id="1034" name="Atlas.Blades.Lung.AirwayViews.Tests.dll" fullname="/private/tmp/claude-501/-Users-lucas-Developer-StormHacks-2026-Blueberries/1f5dd69c-395d-49f7-a84f-71990036bc33/scratchpad/wt/P2-B02/ATLAS/Library/ScriptAssemblies/Atlas.Blades.Lung.AirwayViews.Tests.dll" runstate="Runnable" testcasecount="26" result="Passed" start-time="2026-10-04 03:34:46Z" end-time="2026-10-04 03:34:46Z" duration="0.294895" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="76231" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1035" name="Atlas" fullname="Atlas" runstate="Runnable" testcasecount="26" result="Passed" start-time="2026-10-04 03:34:46Z" end-time="2026-10-04 03:34:46Z" duration="0.294560" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1036" name="Blades" fullname="Atlas.Blades" runstate="Runnable" testcasecount="26" result="Passed" start-time="2026-10-04 03:34:46Z" end-time="2026-10-04 03:34:46Z" duration="0.294245" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestSuite" id="1037" name="Lung" fullname="Atlas.Blades.Lung" runstate="Runnable" testcasecount="26" result="Passed" start-time="2026-10-04 03:34:46Z" end-time="2026-10-04 03:34:46Z" duration="0.293933" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-suite type="TestSuite" id="1038" name="AirwayViews" fullname="Atlas.Blades.Lung.AirwayViews" runstate="Runnable" testcasecount="26" result="Passed" start-time="2026-10-04 03:34:46Z" end-time="2026-10-04 03:34:46Z" duration="0.293609" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-suite type="TestSuite" id="1039" name="Tests" fullname="Atlas.Blades.Lung.AirwayViews.Tests" runstate="Runnable" testcasecount="26" result="Passed" start-time="2026-10-04 03:34:46Z" end-time="2026-10-04 03:34:46Z" duration="0.293329" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+                <properties />
+                <test-suite type="TestFixture" id="1001" name="EndoluminalGpuTests" fullname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalGpuTests" classname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalGpuTests" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-10-04 03:34:46Z" end-time="2026-10-04 03:34:46Z" duration="0.292601" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+                  <properties />
+                  <test-case id="1002" name="Endo_Render_GPU" fullname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalGpuTests.Endo_Render_GPU" methodname="Endo_Render_GPU" classname="Atlas.Blades.Lung.AirwayViews.Tests.EndoluminalGpuTests" runstate="Runnable" seed="1715843298" result="Passed" start-time="2026-10-04 03:34:46Z" end-time="2026-10-04 03:34:46Z" duration="0.286279" asserts="0">
+                    <properties>
+                      <property name="retryIteration" value="0" />
+                      <property name="repeatIteration" value="0" />
+                    </properties>
+                    <output><![CDATA[Font Asset [LiberationSans SDF - Fallback] Units Per EM set to 2048. Please commit the newly serialized value.
+Font Asset [LiberationSans SDF - Fallback] Units Per EM set to 2048. Please commit the newly serialized value.
+[P2-B07] GPU: 96.6% of pixels differ from the background
+[P2-B07] GPU: 96.6% of pixels differ from the background
+[P2-B07] GPU: centre luma 0.546, darkest tissue luma 0.254, reference (0.5, 0.9) luma 0.602
+[P2-B07] GPU: centre luma 0.546, darkest tissue luma 0.254, reference (0.5, 0.9) luma 0.602
+[P2-B07] GPU: child 0 far-axis luma 0.581, reference (0.5, 0.9) luma 0.602, ratio 0.965 (brief: <= 0.5)
+[P2-B07] GPU: child 0 far-axis luma 0.581, reference (0.5, 0.9) luma 0.602, ratio 0.965 (brief: <= 0.5)
+[P2-B07] GPU: label 0 (9 o'clock) max luma 1.000 at (76, 255)
+[P2-B07] GPU: label 0 (9 o'clock) max luma 1.000 at (76, 255)
+[P2-B07] GPU: child 1 far-axis luma 0.585, reference (0.5, 0.9) luma 0.602, ratio 0.971 (brief: <= 0.5)
+[P2-B07] GPU: child 1 far-axis luma 0.585, reference (0.5, 0.9) luma 0.602, ratio 0.971 (brief: <= 0.5)
+[P2-B07] GPU: label 1 (3 o'clock) max luma 1.000 at (435, 256)
+[P2-B07] GPU: label 1 (3 o'clock) max luma 1.000 at (435, 256)
+[P2-B07] GPU: 96.5% of pixels differ from the background
+[P2-B07] GPU: 96.5% of pixels differ from the background
+[P2-B07] GPU: centre luma 0.546, darkest tissue luma 0.254, reference (0.5, 0.9) luma 0.602
+[P2-B07] GPU: centre luma 0.546, darkest tissue luma 0.254, reference (0.5, 0.9) luma 0.602
+[P2-B07] GPU: child 0 far-axis luma 0.581, reference (0.5, 0.9) luma 0.602, ratio 0.965 (brief: <= 0.5)
+[P2-B07] GPU: child 0 far-axis luma 0.581, reference (0.5, 0.9) luma 0.602, ratio 0.965 (brief: <= 0.5)
+[P2-B07] GPU: label 0 (6 o'clock) max luma 1.000 at (256, 76)
+[P2-B07] GPU: label 0 (6 o'clock) max luma 1.000 at (256, 76)
+[P2-B07] GPU: child 1 far-axis luma 0.585, reference (0.5, 0.9) luma 0.602, ratio 0.971 (brief: <= 0.5)
+[P2-B07] GPU: child 1 far-axis luma 0.585, reference (0.5, 0.9) luma 0.602, ratio 0.971 (brief: <= 0.5)
+[P2-B07] GPU: label 1 (12 o'clock) max luma 1.000 at (256, 435)
+[P2-B07] GPU: label 1 (12 o'clock) max luma 1.000 at (256, 435)
+Releasing render texture that is set to be RenderTexture.active!
+Releasing render texture that is set to be RenderTexture.active!
+<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: [TestRunnerNoThrottle] Restored Interaction Mode after test run.
+<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: [TestRunnerNoThrottle] Restored Interaction Mode after test run.
+Saving results to: /Users/lucas/Library/Application Support/DefaultCompany/ATLAS/TestResults.xml
+Saving results to: /Users/lucas/Library/Application Support/DefaultCompany/ATLAS/TestResults.xml
+]]></output>
+                  </test-case>
+                </test-suite>
+              </test-suite>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+  </test-suite>
+</test-run>
