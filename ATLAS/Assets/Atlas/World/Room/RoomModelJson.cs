@@ -23,6 +23,7 @@ namespace Atlas.World
         /// <summary>A file is at most 300 kB (Master Plan section 7.4).</summary>
         public const int MaxFileBytes = 300 * 1000;
 
+        static readonly string[] s_facingNames = { "box", "profile", "table", "clearance" };
         static readonly string[] s_meshNames = { "placeholder", "requested", "ready", "builtIn", "standIn" };
         static readonly string[] s_openingNames = { "door", "window", "opening" };
         static readonly byte[] s_hashMagic = Encoding.ASCII.GetBytes("ATLAS-ROOM-1");
@@ -195,7 +196,26 @@ namespace Atlas.World
             obj.AssetHash = Str(v, "assetHash", path + ".assetHash");
             if (obj.AssetHash.Length != 0 && !IsSha256(obj.AssetHash))
                 throw new RoomModelFormatException(path + ".assetHash: must be empty or 64 lower-case hexadecimal digits");
-            obj.TriTarget = Int(v, "triTarget", path + ".triTarget", 0, 5000);
+            obj.TriTarget = Int(v, "triTarget", path + ".triTarget", 0, ObjectMeshRules.TriTargetMax);
+            JsonValue optional;
+            if (v.TryGet("assetHashLight", out optional) && !optional.IsNull)
+            {
+                obj.AssetHashLight = Str(v, "assetHashLight", path + ".assetHashLight");
+                if (!IsSha256(obj.AssetHashLight))
+                    throw new RoomModelFormatException(path + ".assetHashLight: must be 64 lower-case hexadecimal digits");
+            }
+            if (v.TryGet("facing", out optional) && !optional.IsNull)
+            {
+                int facing = Array.IndexOf(s_facingNames, Str(v, "facing", path + ".facing"));
+                if (facing < 0) throw new RoomModelFormatException(path + ".facing: must be box, profile, table or clearance");
+                obj.Facing = (ObjectFacingRule)facing;
+            }
+            if (v.TryGet("profile", out optional) && !optional.IsNull)
+            {
+                string text = Str(v, "profile", path + ".profile");
+                try { obj.Profile = Convert.FromBase64String(text); }
+                catch (FormatException) { throw new RoomModelFormatException(path + ".profile: not standard base64"); }
+            }
             return obj;
         }
 
@@ -461,7 +481,16 @@ namespace Atlas.World
             sb.Append(", \"yaw\": "); Num(sb, obj.Yaw);
             sb.Append(", \"mesh\": \"").Append(MeshStateName(obj.Mesh));
             sb.Append("\", \"assetHash\": "); Quoted(sb, obj.AssetHash);
-            sb.Append(", \"triTarget\": ").Append(Text(obj.TriTarget)).Append('}');
+            sb.Append(", \"triTarget\": ").Append(Text(obj.TriTarget));
+            if (!string.IsNullOrEmpty(obj.AssetHashLight))
+            {
+                sb.Append(", \"assetHashLight\": "); Quoted(sb, obj.AssetHashLight);
+            }
+            if (obj.Facing != ObjectFacingRule.Box)
+                sb.Append(", \"facing\": \"").Append(s_facingNames[(int)obj.Facing]).Append('"');
+            if (obj.Profile != null)
+                sb.Append(", \"profile\": \"").Append(Convert.ToBase64String(obj.Profile)).Append('"');
+            sb.Append('}');
         }
 
         /// <summary>JSON name of a mesh state: placeholder, requested, ready, builtIn, standIn.</summary>

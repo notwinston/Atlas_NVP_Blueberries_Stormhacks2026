@@ -18,7 +18,7 @@
     {"a": [-3.9, -2.0], "b": [1.1, -2.0], "height": 2.4, "openings": []}
   ],
   "objects": [
-    {"id": 1, "category": "table", "base": [-1.4, 0.0, 0.0], "size": [1.0, 0.75, 0.6], "yaw": -1.570796, "mesh": "placeholder", "assetHash": "", "triTarget": 5000}
+    {"id": 1, "category": "table", "base": [-1.4, 0.0, 0.0], "size": [1.0, 0.75, 0.6], "yaw": -1.570796, "mesh": "placeholder", "assetHash": "", "triTarget": 15000}
   ],
   "quality": {"unknownShare": 0.0, "route": 0}
 }

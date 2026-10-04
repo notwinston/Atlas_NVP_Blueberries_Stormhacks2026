@@ -46,10 +46,15 @@ ALIGNED_TARGET = 1.5        # m, Aligned Cells target size (section 4.7)
 ALIGNED_MIN_N = 3
 ALIGNED_MIN_G = 0.75        # m: below this the grid falls back to 2 x 2
 
-MAX_MESHED_OBJECTS = 20     # section 4.5
-FURNITURE_TRIANGLES = 60000
+MAX_MESHED_OBJECTS = 32     # Mesh Design section 5.4
+FURNITURE_TRIANGLES = 120000
 TRI_TARGET_MIN = 3000
-TRI_TARGET_MAX = 5000
+TRI_TARGET_MAX = 15000
+LIGHT_TRIANGLES = 60000
+LIGHT_TARGET_MIN = 1500
+LIGHT_TARGET_MAX = 5000
+STANDIN_TRIANGLES = 5000    # the stand-in ellipsoid, and the target of every object of an all-stand-in room
+PROFILE_BYTES = 256         # R21
 
 SHELL_PITCH = 0.25          # m, Home shell grid (section 8.4)
 SHELL_MAX_TRIANGLES = 3000
@@ -118,19 +123,81 @@ def aligned_cells(wf, df):
 
 
 def tri_target(meshed_count):
-    """Triangle target per object when `meshed_count` objects receive meshes (section 4.5)."""
+    """The full target when `meshed_count` objects of equal surface area receive meshes."""
     if meshed_count <= 0:
         return 0
     return min(max(FURNITURE_TRIANGLES // meshed_count, TRI_TARGET_MIN), TRI_TARGET_MAX)
 
 
+def light_target(meshed_count):
+    """The room's light target: clamp(60000 // n, 1500, 5000); 0 when nothing is meshed."""
+    if meshed_count <= 0:
+        return 0
+    return min(max(LIGHT_TRIANGLES // meshed_count, LIGHT_TARGET_MIN), LIGHT_TARGET_MAX)
+
+
+def mm(v):
+    """Metres to whole millimetres."""
+    return int(math.floor(v * 1000 + 0.5))
+
+
 def assign_tri_targets(objects):
-    """Largest boxes first (volume, ties by lower id): at most 20 get a target, the rest 0."""
-    order = sorted(objects, key=lambda o: (-o["size"][0] * o["size"][1] * o["size"][2], o["id"]))
-    picked = order[:MAX_MESHED_OBJECTS]
-    target = tri_target(len(picked))
-    picked_ids = {o["id"] for o in picked}
-    return {o["id"]: (target if o["id"] in picked_ids else 0) for o in objects}
+    """The rule of Mesh Design section 5.4, in whole numbers. The 32 largest boxes (volume in whole cubic
+    millimetres, ties by lower id) share 120,000 triangles by surface area, 3,000..15,000 each; the rest get 0.
+    Returns {id: full target}."""
+    targets, _ = plan_tri_targets(objects)
+    return targets
+
+
+def plan_tri_targets(objects):
+    """(full target per id, the room's light target) for objects with "id" and "size" (w, h, d) in metres."""
+    order = sorted(objects, key=lambda o: (-(mm(o["size"][0]) * mm(o["size"][1]) * mm(o["size"][2])), o["id"]))
+    meshed = order[:MAX_MESHED_OBJECTS]
+    n = len(meshed)
+    targets = {o["id"]: 0 for o in objects}
+    if n == 0:
+        return targets, 0
+    area = {}
+    for o in meshed:
+        w, h, d = mm(o["size"][0]), mm(o["size"][1]), mm(o["size"][2])
+        area[o["id"]] = 2 * (w * h + h * d + w * d)
+    total = sum(area.values())
+    t = {i: min(max((FURNITURE_TRIANGLES * a) // total, TRI_TARGET_MIN), TRI_TARGET_MAX) for i, a in area.items()}
+    if sum(t.values()) > FURNITURE_TRIANGLES:
+        extra = sum(v - TRI_TARGET_MIN for v in t.values())
+        budget = FURNITURE_TRIANGLES - TRI_TARGET_MIN * n
+        t = {i: TRI_TARGET_MIN + ((v - TRI_TARGET_MIN) * budget) // extra for i, v in t.items()}
+    targets.update(t)
+    return targets, light_target(n)
+
+
+def tri_rule_vectors():
+    """The test vectors of the brief: (name, [(id, (w, h, d))], full targets in id order, light target)."""
+    boxes40 = [(i, (0.3 + 0.05 * i, 0.5, 0.4)) for i in range(1, 41)]
+    mid = [3000] * 9 + [3044, 3134, 3226, 3316, 3407, 3498, 3589, 3679, 3770, 3861, 3952, 4043, 4134, 4225,
+                        4315, 4407, 4497, 4588, 4679, 4770, 4861, 4952, 5043]
+    return [
+        ("five cubes", [(i, (1.0, 1.0, 1.0)) for i in range(1, 6)], [15000] * 5, 5000),
+        ("three mixed", [(1, (2.0, 0.8, 0.9)), (2, (0.5, 0.9, 0.5)), (3, (1.2, 0.75, 0.6))], [15000] * 3, 5000),
+        ("eight and 24", [(i, (1.5, 1.0, 1.0)) for i in range(1, 9)] + [(i, (0.2, 0.2, 0.2)) for i in range(9, 33)],
+         [6000] * 8 + [3000] * 24, 1875),
+        ("forty ramp", boxes40, [0] * 8 + mid, 1875),
+        ("one", [(7, (0.6, 0.45, 0.6))], [15000], 5000),
+        ("twelve", [(i, (1.8, 0.8, 0.9)) for i in range(1, 13)], [10000] * 12, 5000),
+    ]
+
+
+def check_tri_rule():
+    """True when plan_tri_targets reproduces every vector of tri_rule_vectors."""
+    ok = True
+    for name, boxes, full, light in tri_rule_vectors():
+        targets, got_light = plan_tri_targets([{"id": i, "size": s} for i, s in boxes])
+        got = [targets[i] for i, _ in boxes]
+        same = got == full and got_light == light
+        ok = ok and same
+        print("  %-14s n = %2d  sum = %6d  light = %4d  %s" % (name, len(boxes), sum(got), got_light,
+                                                             "ok" if same else "MISMATCH"))
+    return ok
 
 
 # --------------------------------------------------------------------------------------
@@ -848,7 +915,9 @@ def build_room_model(room_id, outline, boxes_meta, walker_xz, walls=None, wall_h
         ring = rotate_ring_to_lowest(ring)
         return [[q6(grid_r.origin_x + p[0] * CELL), q6(grid_r.origin_z + p[1] * CELL)] for p in ring]
 
-    targets = assign_tri_targets(boxes_r)
+    targets = assign_tri_targets([{"id": b["id"], "size": [q6(v) for v in b["size"]]} for b in boxes_r])
+    if boxes_r and all(b["mesh"] == "standIn" for b in boxes_r):
+        targets = {b["id"]: STANDIN_TRIANGLES for b in boxes_r}
     objects = []
     for b in boxes_r:
         objects.append({
@@ -1174,8 +1243,10 @@ def main():
         print("turned %+5.1f deg  Wf x Df = %.2f x %.2f  %s" % (
             turn, room["freeRect"]["wf"], room["freeRect"]["df"], "within 0.10 m" if close else "OUT OF TOLERANCE"))
     print()
-    print("Triangle target by number of meshed objects:")
-    print("  " + ", ".join("%d: %d" % (n, tri_target(n)) for n in (1, 12, 13, 15, 16, 20)))
+    print("Triangle rule of Mesh Design section 5.4 (full target = equal-area case, light target) by number of meshed objects:")
+    print("  " + ", ".join("%d: %d, %d" % (n, tri_target(n), light_target(n)) for n in (1, 5, 8, 12, 20, 32)))
+    print("Test vectors of the rule:")
+    ok = check_tri_rule() and ok
     return 0 if ok else 1
 
 
