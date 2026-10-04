@@ -1,5 +1,6 @@
 using System;
 using Atlas.Rendering;
+using Atlas.World;
 using Unity.Mathematics;
 
 namespace Atlas.Spaces.Glued
@@ -107,7 +108,9 @@ namespace Atlas.Spaces.Glued
     /// </summary>
     /// <remarks>
     /// The origin is the tracked head (the midpoint between the eyes), +Z is where the walker faces, +X is the
-    /// walker's right. The body hangs from the head, so the copy crouches when the walker does.
+    /// walker's right. The body hangs from the head, so the copy crouches when the walker does. This is the
+    /// body alone, built once; the walker's hands, when they are tracked, are added after it by
+    /// <see cref="GluedAvatarRig"/> in the same frame (<see cref="GluedAvatarHands"/>).
     /// </remarks>
     public static class GluedAvatarMesh
     {
@@ -115,6 +118,19 @@ namespace Atlas.Spaces.Glued
         /// <summary>The head's centre lies this far behind the eyes, metres.</summary>
         public const float HeadBack = 0.08f;
         public const int HeadSegments = 10, HeadRings = 6;
+        /// <summary>How far each upper arm's axis stands from the middle of the body, metres.</summary>
+        public const float ArmX = 0.235f;
+        /// <summary>Height of the elbow, the lower end of the upper arm, relative to the head, metres.</summary>
+        public const float ElbowY = -0.68f;
+
+        /// <summary>
+        /// The elbow of the arm on one side in the avatar's own frame: the middle of the lower end of the upper arm,
+        /// where a forearm starts. The walker's left is -X.
+        /// </summary>
+        public static float3 Elbow(HandSide side)
+        {
+            return new float3(side == HandSide.Left ? -ArmX : ArmX, ElbowY, -HeadBack);
+        }
 
         public static void Build(AtlasMeshBuilder data)
         {
@@ -131,9 +147,9 @@ namespace Atlas.Spaces.Glued
             data.AddBox(new float3(0f, -0.25f, z), new float3(0.08f, 0.16f, 0.08f), 0f, body, false, 0, 4f);          // neck
             data.AddBox(new float3(0f, -0.78f, z), new float3(0.32f, 0.53f, 0.18f), 0f, body, true, 0, 4f);           // torso
             data.AddBox(new float3(-0.225f, -0.38f, z), new float3(0.13f, 0.13f, 0.16f), 0f, left, true, 0, 4f);      // left shoulder
-            data.AddBox(new float3(-0.235f, -0.68f, z), new float3(0.09f, 0.30f, 0.10f), 0f, left, true, 0, 4f);      // left upper arm
+            data.AddBox(new float3(-ArmX, ElbowY, z), new float3(0.09f, 0.30f, 0.10f), 0f, left, true, 0, 4f);        // left upper arm
             data.AddBox(new float3(0.225f, -0.38f, z), new float3(0.13f, 0.13f, 0.16f), 0f, right, true, 0, 4f);      // right shoulder
-            data.AddBox(new float3(0.235f, -0.68f, z), new float3(0.09f, 0.30f, 0.10f), 0f, right, true, 0, 4f);      // right upper arm
+            data.AddBox(new float3(ArmX, ElbowY, z), new float3(0.09f, 0.30f, 0.10f), 0f, right, true, 0, 4f);        // right upper arm
         }
 
         // A latitude and longitude sphere with smooth normals, faces outwards.
