@@ -162,5 +162,16 @@ namespace Atlas.Kernel
             Iso2 n = Iso2.Boost(t * so / sn, kn) * Iso2.Rot(theta);
             _u = new Iso2(n.M, kn);
         }
+
+        // P2-B03, MP §10.2.3 step 4: U <- U*Rot(alpha) about the walker; the only rotation outside walking (MP §0.5 rule 3).
+        // Keeps the position U*o; does not touch _prev or the curvature ramp (so it is not Reset: no displacement is dropped).
+        public void Reaim(double alpha)
+        {
+            _u = new Iso2(math.mul(_u.M, Iso2.Rot(alpha).M), Sign(_k)).Orthonormalised();
+            _u = new Iso2(_u.M, Sign(_k));
+            Reaims++;
+        }
+
+        public long Reaims { get; private set; }
     }
 }

@@ -8,6 +8,7 @@
         "Atlas.Link",
         "Atlas.World",
         "Atlas.Rendering",
+        "Atlas.Safety",
         "Unity.Mathematics",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
