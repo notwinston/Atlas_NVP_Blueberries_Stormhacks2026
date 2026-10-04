@@ -309,7 +309,7 @@ namespace Atlas.Station
                 HubResult result = hub.SendOperator(cmd, body["args"].IsObject ? body["args"] : null);
                 if (result == HubResult.Ok) await Json(c, 200, JsonValue.Object().Set("ok", true).Set("cmd", cmd));
                 else await Error(c, StatusOf(result), result == HubResult.Unknown
-                    ? "unknown command '" + cmd + "' (home, recentre, quality, cue, lock)"
+                    ? "unknown command '" + cmd + "' (home, recentre, quality, cue, lock, walk)"
                     : HubServer.Describe(result));
             });
 

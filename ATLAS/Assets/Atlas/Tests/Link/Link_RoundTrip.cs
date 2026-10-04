@@ -551,7 +551,7 @@ namespace Atlas.Link.Tests
                 Assert.That(back.On, Is.EqualTo(commands[i].On));
             }
             Assert.That(commands[0].Variant, Is.EqualTo("klein"));
-            Assert.That(Enum.GetValues(typeof(OperatorCommandKind)).Length, Is.EqualTo(7), "None plus exactly six");
+            Assert.That(Enum.GetValues(typeof(OperatorCommandKind)).Length, Is.EqualTo(8), "None, exactly six, and the Map page's walk");
 
             OperatorCommand none;
             Assert.That(OperatorCommand.TryFrom(new OperatorCmdMessage { Cmd = "panic" }, out none), Is.False);
@@ -562,6 +562,34 @@ namespace Atlas.Link.Tests
             Assert.That(OperatorCommand.Stop().ToEvent(3, "S0").ToJsonLine(),
                 Is.EqualTo("{\"t_us\":3,\"scene\":\"S0\",\"ev\":\"cmd\",\"data\":{\"cmd\":\"cue\"}}"));
             Assert.That(default(OperatorCommand).ToMessage(), Is.Null);
+        }
+
+        [Test]
+        public void The_walk_command_round_trips_and_is_clamped()
+        {
+            OperatorCommand walk = OperatorCommand.Walk(-1f, 0.5f, -90f, 1.5f);
+            JsonMessage message = walk.ToMessage();
+            Assert.That(message.Id, Is.EqualTo(MessageId.OperatorCmd));
+            Assert.That(message.ToJson().ToJson(),
+                Is.EqualTo("{\"cmd\":\"walk\",\"args\":{\"x\":-1.0,\"y\":0.5,\"turn\":-90.0,\"speed\":1.5}}"));
+
+            byte[] packet = message.ToBytes();
+            var op = new OperatorCmdMessage();
+            Assert.That(op.ReadFrom(packet, 0, packet.Length), Is.True);
+            OperatorCommand back;
+            Assert.That(OperatorCommand.TryFrom(op, out back), Is.True);
+            Assert.That(back.Kind, Is.EqualTo(OperatorCommandKind.Walk));
+            Assert.That(new[] { back.MoveX, back.MoveY, back.Turn, back.Speed }, Is.EqualTo(new[] { -1f, 0.5f, -90f, 1.5f }));
+            Assert.That(back.Name, Is.EqualTo("walk"));
+            Assert.That(back.IsStill, Is.False);
+
+            // Out of range, missing or not a number: clamped, defaulted, stopped.
+            OperatorCommand wild = OperatorCommand.Walk(5f, float.NaN, 1000f, 99f);
+            Assert.That(new[] { wild.MoveX, wild.MoveY, wild.Turn, wild.Speed },
+                Is.EqualTo(new[] { 1f, 0f, OperatorCommand.WalkMaxTurn, OperatorCommand.WalkMaxSpeed }));
+            Assert.That(OperatorCommand.TryFrom(new OperatorCmdMessage { Cmd = "walk" }, out back), Is.True);
+            Assert.That(back.IsStill, Is.True);
+            Assert.That(back.Speed, Is.EqualTo(OperatorCommand.WalkDefaultSpeed));
         }
 
         [Test]

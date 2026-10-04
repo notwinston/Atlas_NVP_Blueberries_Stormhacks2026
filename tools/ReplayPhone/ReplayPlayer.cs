@@ -33,7 +33,8 @@ namespace Atlas.Tools
         bool _introDue;
         readonly SyntheticWalk _walk = new SyntheticWalk();
         readonly ParamHandle _cullRho;
-        readonly ParamEntry _renderScale, _msaa, _stateHz;
+        readonly ParamEntry _renderScale, _msaa, _stateHz, _poseSource;
+        OperatorCommand _lastWalk;
         List<StateLog.Entry> _recording;
         long _statesSent, _commandsReceived;
         long _cueUntilUs;
@@ -50,6 +51,8 @@ namespace Atlas.Tools
             _registry.DeclareInt("glued.copies", "glued", 3, 5, 5, null, true);
             _registry.DeclareBool("pose.gyroPredict", "pose", true);
             _stateHz = _registry.DeclareInt("link.stateHz", "link", 10, 60, 60);
+            // walker: the Map page's keys drive the head instead of the track, as on the phone.
+            _poseSource = _registry.DeclareEnum("pose.source", "pose", new[] { "tracked", "replay", "walker" }, 0);
 
             // A recording brings its own manifest; with no registry the client leaves every ParamSet alone.
             _replaying = options.File != null;
@@ -201,6 +204,7 @@ namespace Atlas.Tools
                 }
                 else if (elapsed >= frame * 1000000L / _options.Hz)
                 {
+                    _walk.Driven = _poseSource.Int == 2;
                     _walk.Fill(ref state, frame / (double)_options.Hz, _registry, _cullRho);
                     if (now < _cueUntilUs)
                     {
@@ -271,6 +275,16 @@ namespace Atlas.Tools
                     case OperatorCommandKind.Cue:
                         _cueUntilUs = now + 1000000;
                         break;
+                    case OperatorCommandKind.Walk:
+                    {
+                        _walk.Walk(command);
+                        // A held key is repeated several times a second: as the app does, only a change is logged.
+                        bool same = _lastWalk.Kind == OperatorCommandKind.Walk && command.MoveX == _lastWalk.MoveX &&
+                                    command.MoveY == _lastWalk.MoveY && command.Turn == _lastWalk.Turn && command.Speed == _lastWalk.Speed;
+                        _lastWalk = command;
+                        if (same) continue;
+                        break;
+                    }
                     // Recentre has nothing to move here, and the lock is applied by LinkClient itself.
                 }
                 _client.Scene = "S" + _walk.Space;

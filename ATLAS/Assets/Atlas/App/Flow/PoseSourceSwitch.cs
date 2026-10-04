@@ -87,6 +87,7 @@ namespace Atlas.App
         public void SetSource(int source)
         {
             LastError = null;
+            IPoseSource before = _pose.Pipeline.Source;
             if (source == AppParams.SourceReplay && StartReplay())
             {
                 _source = AppParams.SourceReplay;
@@ -97,6 +98,13 @@ namespace Atlas.App
             _pose.StopReplay();
             if (source == AppParams.SourceWalker)
             {
+                // The walker takes over where the head was, facing the same way, so the switch (from the
+                // Station's Map page, say) does not throw the view across the room.
+                if (!ReferenceEquals(before, _pose.Walker))
+                {
+                    HeadPose head = _pose.Pipeline.Raw;
+                    _pose.Walker.Place(head.Floor, head.Yaw);
+                }
                 _pose.Pipeline.Source = _pose.Walker;
                 _source = AppParams.SourceWalker;
             }

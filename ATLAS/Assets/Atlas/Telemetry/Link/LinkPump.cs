@@ -407,12 +407,24 @@ namespace Atlas.Telemetry
             return true;
         }
 
+        // The Map page repeats a held walk input several times a second; only a change of input is logged.
+        OperatorCommand _lastWalk;
+        bool _walkLogged;
+
         void Apply(IOperatorCommands commands, in OperatorCommand command, long now)
         {
+            bool log = true;
             try
             {
                 switch (command.Kind)
                 {
+                    case OperatorCommandKind.Walk:
+                        commands.Walk(command.MoveX, command.MoveY, command.Turn, command.Speed);
+                        log = !_walkLogged || command.MoveX != _lastWalk.MoveX || command.MoveY != _lastWalk.MoveY ||
+                              command.Turn != _lastWalk.Turn || command.Speed != _lastWalk.Speed;
+                        _lastWalk = command;
+                        _walkLogged = true;
+                        break;
                     case OperatorCommandKind.SwitchSpace:
                         ApplyArgs(command.Args);
                         if (command.Space >= 0 && command.Space < SpaceIds.Count)
@@ -432,7 +444,7 @@ namespace Atlas.Telemetry
                 if (_events != null) _events.LogLine("error", "operator command " + command.Name + ": " + e.Message);
             }
             CommandsApplied++;
-            if (_events != null) _events.Log(command.ToEvent(now, _client.Scene));
+            if (log && _events != null) _events.Log(command.ToEvent(now, _client.Scene));
         }
 
         // A SceneCmd may carry parameter values for the space it switches to; they are part of the command, so

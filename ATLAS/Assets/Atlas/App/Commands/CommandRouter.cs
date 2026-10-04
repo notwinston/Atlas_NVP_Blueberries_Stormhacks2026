@@ -7,7 +7,7 @@ using Unity.Mathematics;
 namespace Atlas.App
 {
     /// <summary>
-    /// The six operator commands as local calls (Master Plan section 7.3.2). The link glue hands a received
+    /// The six operator commands, and the Map page's walk input, as local calls (Master Plan section 7.3.2). The link glue hands a received
     /// command to this class at step 8b; it never passes a link type on, so Bump Guard's cue is fired by a
     /// plain call and Atlas.Safety never sees the network.
     /// </summary>
@@ -21,11 +21,13 @@ namespace Atlas.App
         readonly ParamRegistry _registry;
         readonly IPosePipeline _pipeline;
         readonly Action _cue;
+        readonly RemoteWalkInput _walk;
 
         /// <param name="pipeline">May be null: recentre then resets the walker only.</param>
         /// <param name="cue">The STOP cue; null gives the real one, <see cref="FireOperatorCue"/>.</param>
+        /// <param name="walk">Where the Station's walk input goes; null ignores it.</param>
         public CommandRouter(ISpaceHost host, IFrameLoop loop, ParamRegistry registry, IPosePipeline pipeline = null,
-            Action cue = null)
+            Action cue = null, RemoteWalkInput walk = null)
         {
             if (host == null) throw new ArgumentNullException(nameof(host));
             if (loop == null) throw new ArgumentNullException(nameof(loop));
@@ -35,6 +37,7 @@ namespace Atlas.App
             _registry = registry;
             _pipeline = pipeline;
             _cue = cue ?? FireOperatorCue;
+            _walk = walk;
         }
 
         /// <summary>
@@ -78,6 +81,11 @@ namespace Atlas.App
         public void SetLock(bool on)
         {
             _registry.Set(ParamDemoLock, on ? 1f : 0f, ParamSource.Remote);
+        }
+
+        public void Walk(float moveX, float moveY, float turnDegreesPerSecond, float speed)
+        {
+            if (_walk != null) _walk.Set(moveX, moveY, turnDegreesPerSecond, speed);
         }
 
         /// <summary>

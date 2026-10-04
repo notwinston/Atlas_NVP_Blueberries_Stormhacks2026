@@ -240,6 +240,15 @@
           <dt>Nearest</dt><dd id="map-nearest">–</dd>
           <dt>Room</dt><dd id="map-room">–</dd>
         </dl>
+        <div class="drive" id="drive">
+          <label class="switch">
+            <input type="checkbox" id="drive-on">
+            <span class="track"></span>
+            <span>Drive the phone's camera with the keyboard</span>
+          </label>
+          <p class="hint" id="drive-status">Off. Switching on sets pose.source to walker: the phone's view then follows these keys instead of its own tracking.</p>
+          <p class="drive-keys"><kbd data-key="KeyW ArrowUp">W</kbd><kbd data-key="KeyS ArrowDown">S</kbd> forward, back · <kbd data-key="KeyA">A</kbd><kbd data-key="KeyD">D</kbd> sideways · <kbd data-key="KeyQ">Q</kbd><kbd data-key="KeyE">E</kbd> or <kbd data-key="ArrowLeft">←</kbd><kbd data-key="ArrowRight">→</kbd> turn · <kbd data-key="Shift">Shift</kbd> faster</p>
+        </div>
         <ul class="key">
           <li><i class="k-outline"></i>room outline</li>
           <li><i class="k-rect"></i>free rectangle</li>

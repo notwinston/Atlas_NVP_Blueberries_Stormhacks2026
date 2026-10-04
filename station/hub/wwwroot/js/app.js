@@ -16,6 +16,7 @@ import { Trail, cellLabel, dialLabel, nearestObstacle, relativeSide } from './ma
 import { drawMap } from './mapview.js';
 import { JobList, phaseOf } from './jobs.js';
 import { CommandTracker, comfortScore, requestFor, statusText } from './commands.js';
+import { WalkKeys, WalkSender } from './walk.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -39,7 +40,11 @@ const model = {
   dirtyCharts: false,
   dirtyMap: false,
   fmsPending: null,
-  notePending: false
+  notePending: false,
+  walkKeys: new WalkKeys(),
+  walkSender: new WalkSender(),
+  driving: false,          // the Map page's keys drive the phone's walker
+  driveRestore: 0          // the pose.source to go back to when driving stops
 };
 
 // ---- HTTP ------------------------------------------------------------------------------------------
@@ -105,6 +110,7 @@ function showPage() {
   // A hidden canvas has no size: draw when its page is shown.
   if (model.page === 'dashboard') drawCharts();
   if (model.page === 'map') paintMap();
+  else stopWalking();   // the walk keys work on the Map page only
   if (model.page === 'pairing') loadPairing('');
   if (model.page === 'tuner') refreshPresets();
 }
@@ -169,6 +175,7 @@ function setLocked(locked) {
   if (locked === model.locked) return;
   model.locked = locked;
   applyLock();
+  renderDrive();
 }
 
 function renderState(digest) {
@@ -224,6 +231,7 @@ function onManifest(frame) {
     ? 'Waiting for the phone\'s parameter manifest.'
     : count + ' parameters from the phone' + (model.locked ? ' · demo lock is on: the phone ignores changes' : '');
   markCurrent();
+  renderDrive();
 }
 
 function buildTuner() {
@@ -451,6 +459,7 @@ function onEcho(event) {
     }
   }
   markCurrent();
+  renderDrive();
 }
 
 function applyLock() {
@@ -838,6 +847,105 @@ function paintMap() {
   drawMap($('map-canvas'), { room, trail: model.trail, walker, bump: d ? d.bump : 0, cue: d ? d.cue : false, obstacle, boxState });
 }
 
+// ---- drive: the Map page's walk keys ---------------------------------------------------------------
+
+// pose.source on the phone (AppParams): the walker is the head the keys move.
+const POSE_SOURCE = 'pose.source';
+const SOURCE_TRACKED = 0;
+const SOURCE_WALKER = 2;
+const SOURCE_NAMES = ['tracked', 'replay', 'walker'];
+
+/** The phone's pose.source as it last reported it, or null before its manifest. */
+function poseSource() {
+  const view = model.views.get(POSE_SOURCE);
+  return view ? view.control.val : null;
+}
+
+function setPoseSource(value) {
+  const view = model.views.get(POSE_SOURCE);
+  if (view) sendParam(view, value);
+}
+
+function setDriving(on) {
+  $('drive-on').checked = on;
+  if (on === model.driving) return;
+  model.driving = on;
+  $('drive').classList.toggle('on', on);
+  if (on) {
+    const before = poseSource();
+    model.driveRestore = before !== null && before !== SOURCE_WALKER ? before : SOURCE_TRACKED;
+    setPoseSource(SOURCE_WALKER);
+  } else {
+    stopWalking();
+    if (poseSource() === SOURCE_WALKER) setPoseSource(model.driveRestore);
+  }
+  renderDrive();
+}
+
+/** Lets every key go; the phone gets one stop if the walker was moving. */
+function stopWalking() {
+  model.walkKeys.clear();
+  tickWalk();
+  renderKeys();
+}
+
+// Called every 50 ms and on every key: the sender decides whether anything goes out.
+function tickWalk() {
+  const keys = model.walkKeys;
+  if (!model.driving) keys.clear();
+  const input = model.walkSender.offer(keys.input(), performance.now());
+  if (input) feed.send({ t: 'op', cmd: 'walk', args: input });
+}
+
+function renderKeys() {
+  const keys = model.walkKeys;
+  for (const kbd of document.querySelectorAll('#drive kbd[data-key]')) {
+    const down = kbd.dataset.key.split(' ').some((code) => (code === 'Shift' ? keys.fast : keys.held.has(code)));
+    kbd.classList.toggle('down', down);
+  }
+}
+
+function renderDrive() {
+  const status = $('drive-status');
+  const source = poseSource();
+  const name = source === null ? '' : SOURCE_NAMES[source] || String(source);
+  if (!model.driving) {
+    setStatus(status, source === SOURCE_WALKER
+      ? 'Off. The phone\'s head is the walker (pose.source), and no keys drive it.'
+      : 'Off. Switching on sets pose.source to walker: the phone\'s view then follows these keys instead of its own tracking.', '');
+  } else if (source === null) {
+    setStatus(status, 'Waiting for the phone\'s parameters: pose.source cannot be set yet.', 'bad');
+  } else if (source !== SOURCE_WALKER) {
+    setStatus(status, model.locked
+      ? 'The demo lock is on: the phone keeps pose.source at ' + name + '. Unlock it on the Operator page.'
+      : 'Asking the phone for the walker (pose.source is ' + name + ')…', model.locked ? 'bad' : '');
+  } else {
+    setStatus(status, 'Driving: the phone\'s camera follows the keys anywhere on this page. Switching off goes back to ' +
+      (SOURCE_NAMES[model.driveRestore] || 'tracked') + '.', 'good');
+  }
+}
+
+function buildDrive() {
+  $('drive-on').addEventListener('change', (e) => setDriving(e.target.checked));
+  document.addEventListener('keydown', (e) => {
+    if (!model.driving || model.page !== 'map' || e.ctrlKey || e.metaKey || e.altKey) return;
+    const target = e.target;
+    const tag = target && target.tagName;
+    if ((tag === 'INPUT' && target.type !== 'checkbox') || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if (model.walkKeys.down(e.code)) e.preventDefault();
+    if (!e.repeat) tickWalk();
+    renderKeys();
+  });
+  document.addEventListener('keyup', (e) => {
+    model.walkKeys.up(e.code);
+    tickWalk();
+    renderKeys();
+  });
+  // A key let go while the window is not looking would otherwise walk on until the phone's hold runs out.
+  window.addEventListener('blur', stopWalking);
+  setInterval(tickWalk, 50);
+}
+
 // ---- assets ----------------------------------------------------------------------------------------
 
 function renderJobs() {
@@ -941,6 +1049,8 @@ const feed = new Feed((location.protocol === 'https:' ? 'wss://' : 'ws://') + lo
 function start() {
   buildOperator();
   buildTiles();
+  buildDrive();
+  renderDrive();
   for (const [id, action] of [['preset-load', 'load'], ['preset-bake', 'bake'], ['preset-delete', 'delete'], ['preset-save', 'save']]) {
     $(id).addEventListener('click', () => presetAction(action));
   }
