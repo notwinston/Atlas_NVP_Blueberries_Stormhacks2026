@@ -96,7 +96,7 @@ function clockTime(date = new Date()) {
 
 // ---- tabs ------------------------------------------------------------------------------------------
 
-const PAGES = ['tuner', 'operator', 'dashboard', 'map', 'assets', 'pairing'];
+const PAGES = ['tuner', 'operator', 'dashboard', 'map', 'view', 'assets', 'pairing'];
 
 function showPage() {
   const wanted = location.hash.replace('#', '');
@@ -112,6 +112,7 @@ function showPage() {
   if (model.page === 'dashboard') drawCharts();
   if (model.page === 'map') paintMap();
   else stopWalking();   // the walk keys work on the Map page only
+  showView();
   if (model.page === 'pairing') loadPairing('');
   if (model.page === 'tuner') refreshPresets();
 }
@@ -974,6 +975,54 @@ function buildDrive() {
   setInterval(tickWalk, 50);
 }
 
+// ---- view: what the phone shows --------------------------------------------------------------------
+
+// The stream is open only while the page is shown and the window visible: the Hub asks the phone to send
+// its picture while anyone watches, and every frame costs the phone GPU time and heat.
+let viewTimer = 0;
+
+function showView() {
+  const img = $('view-img');
+  const wanted = model.page === 'view' && document.visibilityState === 'visible';
+  const open = img.dataset.open === '1';
+  if (wanted === open) return;
+  if (wanted) {
+    img.dataset.open = '1';
+    img.src = '/api/view/stream?t=' + Date.now();
+    pollView();
+    viewTimer = setInterval(pollView, 1000);
+  } else {
+    img.dataset.open = '';
+    img.removeAttribute('src');   // closes the stream; the last viewer leaving tells the phone to stop
+    clearInterval(viewTimer);
+    viewTimer = 0;
+  }
+}
+
+async function pollView() {
+  const reply = await api('GET', '/api/view');
+  if (!reply.ok || !reply.json) {
+    setStatus($('view-status'), 'The Hub does not answer.', 'bad');
+    return;
+  }
+  const v = reply.json;
+  const online = model.link && model.link.phone && model.link.phone.state !== 'offline';
+  const fresh = v.ageMs >= 0 && v.ageMs < 2000;
+  const empty = $('view-empty');
+  empty.hidden = fresh;
+  if (fresh) {
+    setStatus($('view-status'), fixed(v.fps, 1) + ' fps · ' + Math.round(v.bytes / 1024) + ' KB a frame · ' +
+      (v.mode === 'headset' ? 'headset view, left eye' : v.mode === 'hand' ? 'in-hand view' : 'phone view') +
+      ' · ' + (v.viewers === 1 ? '1 viewer' : v.viewers + ' viewers'), 'good');
+  } else {
+    const why = !online ? 'The phone is not connected.'
+      : v.frames === 0 ? 'Asked the phone for its picture; nothing yet. A build older than this page sends none.'
+        : 'The phone stopped sending ' + fixed(v.ageMs / 1000, 0) + ' s ago.';
+    setStatus($('view-status'), why, v.frames === 0 || !online ? '' : 'bad');
+    empty.hidden = v.frames > 0;   // a stopped stream keeps its last picture; the status line says it is old
+  }
+}
+
 // ---- assets ----------------------------------------------------------------------------------------
 
 function renderJobs() {
@@ -1087,6 +1136,7 @@ function start() {
     model.dirtyMap = true;
   });
   window.addEventListener('hashchange', showPage);
+  document.addEventListener('visibilitychange', showView);
   window.addEventListener('resize', () => {
     model.dirtyCharts = true;
     model.dirtyMap = true;

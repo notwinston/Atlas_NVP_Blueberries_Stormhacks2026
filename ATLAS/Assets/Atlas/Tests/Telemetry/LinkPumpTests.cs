@@ -30,6 +30,7 @@ namespace Atlas.Telemetry.Tests
                 Calls.Add(string.Format(System.Globalization.CultureInfo.InvariantCulture, "walk {0} {1} {2} {3}",
                     moveX, moveY, turnDegreesPerSecond, speed));
             }
+            public void View(bool on, int port) { Calls.Add("view " + on + " " + port); }
         }
 
         sealed class Rig
@@ -512,6 +513,25 @@ namespace Atlas.Telemetry.Tests
             public void Cue() { Cues++; }
             public void SetLock(bool on) { }
             public void Walk(float moveX, float moveY, float turnDegreesPerSecond, float speed) { }
+            public void View(bool on, int port) { }
+        }
+
+        [Test]
+        public void The_view_request_reaches_the_handler_and_only_a_change_is_logged()
+        {
+            var rig = new Rig();
+            var commands = new Commands();
+            rig.Pump.Commands = commands;
+            rig.Connect();
+
+            // The Hub repeats "on" every second while anyone watches, then says "off".
+            rig.Host.SendCommand(OperatorCommand.View(true, 8080));
+            rig.Host.SendCommand(OperatorCommand.View(true, 8080));
+            rig.Host.SendCommand(OperatorCommand.View(false, 8080));
+            rig.Run(100);
+
+            Assert.That(commands.Calls, Is.EqualTo(new[] { "view True 8080", "view True 8080", "view False 8080" }));
+            Assert.That(rig.Count(LinkEvents.Command), Is.EqualTo(2), "the repeats are not logged");
         }
 
         [Test]

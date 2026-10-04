@@ -88,6 +88,15 @@ namespace Atlas.App
             if (_walk != null) _walk.Set(moveX, moveY, turnDegreesPerSecond, speed);
         }
 
+        /// <summary>Where the View page's request goes: (on, the Hub's HTTP port). Null ignores it.</summary>
+        public Action<bool, int> ViewRequested { get; set; }
+
+        public void View(bool on, int port)
+        {
+            Action<bool, int> view = ViewRequested;
+            if (view != null) view(on, port);
+        }
+
         /// <summary>
         /// The parameter a <c>SceneCmd</c> variant sets for a space (lane A contract section 14): the gluing of
         /// S1, the layout of S5, the body of S6. Null for a space that has no variants.

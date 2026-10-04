@@ -86,6 +86,7 @@ namespace Atlas.Station
             MapPresets(app, hub, options);
             MapLogs(app, hub, options);
             MapPerfUpload(app, hub);
+            MapView(app, hub);
             MapInternal(app, hub);
             return app;
         }
@@ -309,7 +310,7 @@ namespace Atlas.Station
                 HubResult result = hub.SendOperator(cmd, body["args"].IsObject ? body["args"] : null);
                 if (result == HubResult.Ok) await Json(c, 200, JsonValue.Object().Set("ok", true).Set("cmd", cmd));
                 else await Error(c, StatusOf(result), result == HubResult.Unknown
-                    ? "unknown command '" + cmd + "' (home, recentre, quality, cue, lock, walk)"
+                    ? "unknown command '" + cmd + "' (home, recentre, quality, cue, lock, walk, view)"
                     : HubServer.Describe(result));
             });
 
@@ -539,6 +540,84 @@ namespace Atlas.Station
                 c.Response.StatusCode = 204;
             });
         }
+
+        // ---- the phone's view -------------------------------------------------------------------------
+
+        const string ViewBoundary = "atlasframe";
+
+        // The View page: the phone posts one eye's image as JPEG while anyone watches, and each viewer gets the
+        // newest frame as an MJPEG stream an <img> can show.
+        static void MapView(WebApplication app, HubServer hub)
+        {
+            ViewRelay view = hub.View;
+
+            app.MapPost("/api/view/frame", async (HttpContext c) =>
+            {
+                byte[] jpeg;
+                using (var buffer = new MemoryStream())
+                {
+                    try
+                    {
+                        await c.Request.Body.CopyToAsync(buffer, c.RequestAborted);
+                    }
+                    catch (BadHttpRequestException e)
+                    {
+                        await Error(c, e.StatusCode, "a frame is at most " + (ViewRelay.MaxFrameBytes >> 10) + " KiB");
+                        return;
+                    }
+                    jpeg = buffer.ToArray();
+                }
+                if (!view.Post(jpeg, c.Request.Query["mode"]))
+                {
+                    await Error(c, 400, "expected one JPEG image of at most " + (ViewRelay.MaxFrameBytes >> 10) + " KiB");
+                    return;
+                }
+                // The answer says whether anyone is still watching, so the phone stops at once when nobody is.
+                await Json(c, 200, JsonValue.Object().Set("watching", view.Watching));
+            });
+
+            app.MapGet("/api/view", (HttpContext c) => Json(c, 200, view.Status()));
+
+            app.MapGet("/api/view/latest.jpg", async (HttpContext c) =>
+            {
+                byte[] jpeg;
+                long seq;
+                if (!view.TryGetLatest(out jpeg, out seq))
+                {
+                    await Error(c, 404, "no frame from the phone yet");
+                    return;
+                }
+                c.Response.ContentType = "image/jpeg";
+                c.Response.ContentLength = jpeg.Length;
+                c.Response.Headers["Cache-Control"] = "no-store";
+                await c.Response.Body.WriteAsync(jpeg, 0, jpeg.Length, c.RequestAborted);
+            });
+
+            app.MapGet("/api/view/stream", async (HttpContext c) =>
+            {
+                c.Response.ContentType = "multipart/x-mixed-replace; boundary=" + ViewBoundary;
+                c.Response.Headers["Cache-Control"] = "no-store";
+                CancellationToken cancel = c.RequestAborted;
+                using (view.Watch())
+                {
+                    long seq = 0;
+                    while (!cancel.IsCancellationRequested)
+                    {
+                        await view.WaitNewer(seq, cancel);
+                        byte[] jpeg;
+                        if (!view.TryGetLatest(out jpeg, out seq)) continue;
+                        byte[] head = Encoding.ASCII.GetBytes("--" + ViewBoundary + "\r\nContent-Type: image/jpeg\r\nContent-Length: " +
+                                                              jpeg.Length + "\r\n\r\n");
+                        await c.Response.Body.WriteAsync(head, 0, head.Length, cancel);
+                        await c.Response.Body.WriteAsync(jpeg, 0, jpeg.Length, cancel);
+                        await c.Response.Body.WriteAsync(CrLf, 0, CrLf.Length, cancel);
+                        await c.Response.Body.FlushAsync(cancel);
+                    }
+                }
+            });
+        }
+
+        static readonly byte[] CrLf = { 13, 10 };
 
         // ---- Forge to Hub -----------------------------------------------------------------------------
 

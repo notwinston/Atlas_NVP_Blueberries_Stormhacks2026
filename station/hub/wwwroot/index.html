@@ -72,6 +72,7 @@
   <a href="#operator" data-tab="operator">Operator</a>
   <a href="#dashboard" data-tab="dashboard">Dashboard</a>
   <a href="#map" data-tab="map">Map</a>
+  <a href="#view" data-tab="view">View</a>
   <a href="#assets" data-tab="assets">Assets</a>
   <a href="#pairing" data-tab="pairing">Pairing</a>
 </nav>
@@ -269,6 +270,18 @@
         <p class="hint">The level is the phone's Bump Guard. The pointer shows the nearest wall or object in the scanned room, worked out on the Station.</p>
         <button type="button" class="quiet" id="trail-clear">Clear trail</button>
       </aside>
+    </div>
+  </section>
+
+  <!-- View: what the phone shows, one eye, before the lens pass -->
+  <section class="page" id="page-view" data-page="view" hidden>
+    <div class="page-head">
+      <h1>View</h1>
+      <p class="hint" id="view-status">While this page is open the phone sends what it shows, one eye, flat.</p>
+    </div>
+    <div class="panel view-panel">
+      <img id="view-img" alt="What the phone shows, one eye">
+      <p class="view-empty" id="view-empty">Waiting for the phone's picture…</p>
     </div>
   </section>
 

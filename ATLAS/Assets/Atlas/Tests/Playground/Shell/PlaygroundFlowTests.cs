@@ -384,6 +384,7 @@ namespace Atlas.Blades.Playground.Tests.ShellFlow
             public void Cue() { }
             public void SetLock(bool on) { }
             public void Walk(float moveX, float moveY, float turnDegreesPerSecond, float speed) { }
+            public void View(bool on, int port) { }
         }
 
         [Test]

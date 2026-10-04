@@ -312,6 +312,14 @@ select[size] option { padding: 5px 8px; border-radius: 4px; }
 .drive-keys kbd.down { background: var(--accent); border-color: var(--accent); color: var(--bg); }
 #drive.on .drive-keys { color: var(--text); }
 
+/* ---- view --------------------------------------------------------------------------------------- */
+
+.view-panel { position: relative; padding: 0; overflow: hidden; background: #000; min-height: min(72vh, 760px); display: flex; align-items: center; justify-content: center; }
+#view-img { display: block; max-width: 100%; max-height: min(78vh, 900px); object-fit: contain; }
+#view-img:not([src]), #view-img[src=""] { display: none; }
+.view-empty { position: absolute; inset: auto 0 50%; margin: 0; text-align: center; color: var(--muted); font-size: 14px; }
+.view-empty[hidden] { display: none; }
+
 /* ---- assets ------------------------------------------------------------------------------------- */
 
 .table-wrap { padding: 0; overflow-x: auto; }

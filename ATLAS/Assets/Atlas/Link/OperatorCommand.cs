@@ -29,7 +29,13 @@ namespace Atlas.Link
         /// until the next walk command or for <see cref="OperatorCommand.WalkHoldSeconds"/>, whichever is first.
         /// Moves the head only while <c>pose.source</c> is the walker.
         /// </summary>
-        Walk = 7
+        Walk = 7,
+        /// <summary>
+        /// The View page (<c>OperatorCmd view</c>, args <c>{on, port}</c>): the phone posts what it shows, one eye,
+        /// as JPEG to the Hub's HTTP <c>port</c>. The Hub repeats <c>on</c> every second while anyone watches; the
+        /// phone stops after <see cref="OperatorCommand.ViewHoldSeconds"/> without it, or at once on <c>off</c>.
+        /// </summary>
+        View = 8
     }
 
     /// <summary>
@@ -44,6 +50,7 @@ namespace Atlas.Link
         public const string CmdCue = "cue";
         public const string CmdLock = "lock";
         public const string CmdWalk = "walk";
+        public const string CmdView = "view";
 
         /// <summary>Quality tiers: -1 hands the ladder back to automatic, 0-3 are its rungs, 4 is the high tier.</summary>
         public const int TierAuto = -1;
@@ -59,6 +66,11 @@ namespace Atlas.Link
         /// <summary>Metres per second: the walk speed range.</summary>
         public const float WalkMinSpeed = 0.1f, WalkMaxSpeed = 4f, WalkDefaultSpeed = 1f;
 
+        /// <summary>Seconds the phone keeps sending its view with no newer <c>view on</c>; the Hub repeats it every second.</summary>
+        public const float ViewHoldSeconds = 4f;
+        /// <summary>The Hub's HTTP port when a view command names none (Appendix B.3).</summary>
+        public const int DefaultHttpPort = 8080;
+
         public OperatorCommandKind Kind;
         /// <summary>Target space 0-6 of <see cref="OperatorCommandKind.SwitchSpace"/>.</summary>
         public int Space;
@@ -66,8 +78,10 @@ namespace Atlas.Link
         public string Variant;
         /// <summary>Tier of <see cref="OperatorCommandKind.Quality"/>: -1 automatic, 0-3 the ladder rungs, 4 high.</summary>
         public int Tier;
-        /// <summary>State of <see cref="OperatorCommandKind.Lock"/>.</summary>
+        /// <summary>State of <see cref="OperatorCommandKind.Lock"/> and <see cref="OperatorCommandKind.View"/>.</summary>
         public bool On;
+        /// <summary>View: the Hub's HTTP port, 1 to 65535.</summary>
+        public int Port;
         /// <summary>Walk: right and forward in the walker's heading frame, -1 to 1 each.</summary>
         public float MoveX, MoveY;
         /// <summary>Walk: degrees per second, positive turns right (Unity's yaw sense).</summary>
@@ -109,6 +123,12 @@ namespace Atlas.Link
             };
         }
 
+        /// <summary>Start or stop the phone's view stream to the Hub's HTTP port; a port outside 1..65535 reads as the default.</summary>
+        public static OperatorCommand View(bool on, int port = DefaultHttpPort)
+        {
+            return new OperatorCommand { Kind = OperatorCommandKind.View, On = on, Port = port > 0 && port <= 65535 ? port : DefaultHttpPort };
+        }
+
         /// <summary>True for a walk command that asks for no movement and no turn: the walker stops.</summary>
         public bool IsStill { get { return MoveX == 0f && MoveY == 0f && Turn == 0f; } }
 
@@ -139,6 +159,8 @@ namespace Atlas.Link
                     return new OperatorCmdMessage { Cmd = CmdLock, Args = JsonValue.Object().Set("on", On) };
                 case OperatorCommandKind.Walk:
                     return new OperatorCmdMessage { Cmd = CmdWalk, Args = WalkArgs() };
+                case OperatorCommandKind.View:
+                    return new OperatorCmdMessage { Cmd = CmdView, Args = JsonValue.Object().Set("on", On).Set("port", Port) };
                 default: return null;
             }
         }
@@ -171,6 +193,7 @@ namespace Atlas.Link
                     command = Walk(args.GetFloat("x"), args.GetFloat("y"), args.GetFloat("turn"),
                         args.GetFloat("speed", WalkDefaultSpeed));
                     break;
+                case CmdView: command = View(args.GetBool("on"), args.GetInt("port", DefaultHttpPort)); break;
                 default: return false;
             }
             command.Args = message.Args;
@@ -191,6 +214,7 @@ namespace Atlas.Link
                     case OperatorCommandKind.Cue: return CmdCue;
                     case OperatorCommandKind.Lock: return CmdLock;
                     case OperatorCommandKind.Walk: return CmdWalk;
+                    case OperatorCommandKind.View: return CmdView;
                     default: return "none";
                 }
             }
@@ -208,6 +232,7 @@ namespace Atlas.Link
             if (Kind == OperatorCommandKind.SwitchSpace) data.Set("space", Space).Set("variant", Variant ?? string.Empty);
             else if (Kind == OperatorCommandKind.Quality) data.Set("tier", Tier);
             else if (Kind == OperatorCommandKind.Lock) data.Set("on", On);
+            else if (Kind == OperatorCommandKind.View) data.Set("on", On).Set("port", Port);
             else if (Kind == OperatorCommandKind.Walk) data.Set("x", MoveX).Set("y", MoveY).Set("turn", Turn).Set("speed", Speed);
             return new EventMessage(timeUs, scene, LinkEvents.Command, data);
         }

@@ -62,5 +62,10 @@ namespace Atlas.World
         /// only; it moves the head while pose.source is the walker.
         /// </summary>
         void Walk(float moveX, float moveY, float turnDegreesPerSecond, float speed);
+        /// <summary>
+        /// The View page: send what the phone shows, one eye, to the Hub's HTTP port, or stop. The Hub repeats
+        /// on every second while anyone watches; with no repeat the phone stops by itself.
+        /// </summary>
+        void View(bool on, int port);
     }
 }

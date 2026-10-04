@@ -38,5 +38,6 @@ namespace Atlas.Blades.Playground.Shell
         public void Cue() { m_Inner.Cue(); }
         public void SetLock(bool on) { m_Inner.SetLock(on); }
         public void Walk(float moveX, float moveY, float turnDegreesPerSecond, float speed) { m_Inner.Walk(moveX, moveY, turnDegreesPerSecond, speed); }
+        public void View(bool on, int port) { m_Inner.View(on, port); }
     }
 }

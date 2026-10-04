@@ -551,7 +551,7 @@ namespace Atlas.Link.Tests
                 Assert.That(back.On, Is.EqualTo(commands[i].On));
             }
             Assert.That(commands[0].Variant, Is.EqualTo("klein"));
-            Assert.That(Enum.GetValues(typeof(OperatorCommandKind)).Length, Is.EqualTo(8), "None, exactly six, and the Map page's walk");
+            Assert.That(Enum.GetValues(typeof(OperatorCommandKind)).Length, Is.EqualTo(9), "None, exactly six, the Map page's walk and the View page's view");
 
             OperatorCommand none;
             Assert.That(OperatorCommand.TryFrom(new OperatorCmdMessage { Cmd = "panic" }, out none), Is.False);
@@ -562,6 +562,27 @@ namespace Atlas.Link.Tests
             Assert.That(OperatorCommand.Stop().ToEvent(3, "S0").ToJsonLine(),
                 Is.EqualTo("{\"t_us\":3,\"scene\":\"S0\",\"ev\":\"cmd\",\"data\":{\"cmd\":\"cue\"}}"));
             Assert.That(default(OperatorCommand).ToMessage(), Is.Null);
+        }
+
+        [Test]
+        public void The_view_command_round_trips()
+        {
+            JsonMessage message = OperatorCommand.View(true, 8081).ToMessage();
+            Assert.That(message.ToJson().ToJson(), Is.EqualTo("{\"cmd\":\"view\",\"args\":{\"on\":true,\"port\":8081}}"));
+            byte[] packet = message.ToBytes();
+            var op = new OperatorCmdMessage();
+            Assert.That(op.ReadFrom(packet, 0, packet.Length), Is.True);
+            OperatorCommand back;
+            Assert.That(OperatorCommand.TryFrom(op, out back), Is.True);
+            Assert.That(back.Kind, Is.EqualTo(OperatorCommandKind.View));
+            Assert.That(back.On, Is.True);
+            Assert.That(back.Port, Is.EqualTo(8081));
+            Assert.That(back.Name, Is.EqualTo("view"));
+
+            Assert.That(OperatorCommand.TryFrom(new OperatorCmdMessage { Cmd = "view" }, out back), Is.True);
+            Assert.That(back.On, Is.False, "no args: stop");
+            Assert.That(back.Port, Is.EqualTo(OperatorCommand.DefaultHttpPort));
+            Assert.That(OperatorCommand.View(true, 70000).Port, Is.EqualTo(OperatorCommand.DefaultHttpPort));
         }
 
         [Test]
