@@ -3,10 +3,10 @@ using Atlas.Blades.Playground.Shell;
 using Atlas.World;
 using NUnit.Framework;
 using Unity.Mathematics;
-using static Atlas.Blades.Playground.Tests.ShellFakes;
 
-namespace Atlas.Blades.Playground.Tests
+namespace Atlas.Blades.Playground.Tests.ShellFlow
 {
+    using static Atlas.Blades.Playground.Tests.ShellFlow.ShellWalkFakes;
     /// <summary>P2-C02: beats 1 to 3, the placeholder audit and the swap drift.</summary>
     public class ShellScanToHomeTests
     {

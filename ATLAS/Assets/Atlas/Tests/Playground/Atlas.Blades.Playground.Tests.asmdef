@@ -8,6 +8,9 @@
         "Atlas.Link",
         "Atlas.World",
         "Atlas.Input",
+        "Atlas.Spaces.Portal",
+        "Atlas.Rendering",
+        "Atlas.Telemetry",
         "Unity.Mathematics",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"

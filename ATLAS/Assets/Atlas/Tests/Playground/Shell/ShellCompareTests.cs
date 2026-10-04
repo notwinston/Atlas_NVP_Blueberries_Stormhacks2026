@@ -1,10 +1,10 @@
 using Atlas.Blades.Playground.Shell;
 using Atlas.Kernel;
 using NUnit.Framework;
-using static Atlas.Blades.Playground.Tests.ShellFakes;
 
-namespace Atlas.Blades.Playground.Tests
+namespace Atlas.Blades.Playground.Tests.ShellFlow
 {
+    using static Atlas.Blades.Playground.Tests.ShellFlow.ShellWalkFakes;
     /// <summary>P2-C05: the mode chip, the mini-map reveal and the home beacon.</summary>
     public class ShellCompareTests
     {

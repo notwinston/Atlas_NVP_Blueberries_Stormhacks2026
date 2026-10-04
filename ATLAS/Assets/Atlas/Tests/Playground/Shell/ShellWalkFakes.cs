@@ -5,10 +5,10 @@ using Atlas.Kernel;
 using Atlas.World;
 using Unity.Mathematics;
 
-namespace Atlas.Blades.Playground.Tests
+namespace Atlas.Blades.Playground.Tests.ShellFlow
 {
     /// <summary>Stand-ins for the ports and the room content of the shell. None touches an engine object.</summary>
-    static class ShellFakes
+    static class ShellWalkFakes
     {
         public sealed class FakeView : IRoomObjectView
         {

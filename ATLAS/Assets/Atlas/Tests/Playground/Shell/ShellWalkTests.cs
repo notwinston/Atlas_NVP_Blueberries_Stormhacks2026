@@ -5,10 +5,10 @@ using Atlas.Rendering;
 using Atlas.World;
 using NUnit.Framework;
 using Unity.Mathematics;
-using static Atlas.Blades.Playground.Tests.ShellFakes;
 
-namespace Atlas.Blades.Playground.Tests
+namespace Atlas.Blades.Playground.Tests.ShellFlow
 {
+    using static Atlas.Blades.Playground.Tests.ShellFlow.ShellWalkFakes;
     /// <summary>P2-C03 and P2-C04: the centre mark, the standing lock, the guided walk and the floor arrows.</summary>
     public class ShellWalkTests
     {
