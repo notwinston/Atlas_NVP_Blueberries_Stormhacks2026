@@ -57,8 +57,8 @@ namespace Atlas.Hands.Tests
         public void Hands_Skin_Mesh_CountsEqualThePublishedConstants_AndFitTheBudget()
         {
             // The numbers the design quotes: about 700 triangles and 450 vertices a hand.
-            Assert.That(HandsMeshTemplate.TriangleTotal, Is.EqualTo(738));
-            Assert.That(HandsMeshTemplate.VertexTotal, Is.EqualTo(403));
+            Assert.That(HandsMeshTemplate.TriangleTotal, Is.EqualTo(790));
+            Assert.That(HandsMeshTemplate.VertexTotal, Is.EqualTo(409));
             Assert.That(HandJoints.FingerCount * HandsMeshTemplate.FingerTriangles + HandsMeshTemplate.PalmTriangles
                         + HandsMeshTemplate.CuffTriangles, Is.EqualTo(HandsMeshTemplate.TriangleTotal));
             Assert.That(HandJoints.FingerCount * HandsMeshTemplate.FingerVertices + HandsMeshTemplate.PalmVertices
@@ -90,44 +90,53 @@ namespace Atlas.Hands.Tests
         }
 
         [Test]
-        public void Hands_Skin_Mesh_IsClosedEverywhereButAtTheRingsBuriedInThePalm()
+        public void Hands_Skin_Mesh_IsSevenClosedShells_EachWoundOneWayRound()
         {
-            // The palm is one closed shell; each tube and the cuff are closed but for their first ring, which lies
-            // inside the palm (section 5.1: no seam needs stitching). Closed and wound one way round: every edge
-            // is walked once in each direction by the two triangles that share it.
+            // Five tubes, the palm and the cuff, each closed: the tubes and the cuff start inside the palm (section
+            // 5.1: no seam needs stitching) and are closed there too, so no pose can show a hole. Closed and wound
+            // one way round: every edge is walked once in each direction by the two triangles that share it.
             foreach (HandSide side in Sides)
             {
                 HandsMeshTemplate template = HandsMeshTemplate.Build(side);
                 int[] indices = HandsSkinRig.Indices(template);
                 var edges = new System.Collections.Generic.HashSet<long>();
+                var shell = new int[template.VertexCount];
+                for (int i = 0; i < shell.Length; i++) shell[i] = i;
                 for (int t = 0; t < template.IndexCount; t += 3)
                 {
                     for (int k = 0; k < 3; k++)
                     {
                         long from = indices[t + k], to = indices[t + (k + 1) % 3];
                         Assert.That(edges.Add((from << 32) | to), Is.True, side + ": an edge is walked twice the same way in triangle " + t / 3);
+                        int a = Root(shell, (int)from), b = Root(shell, (int)to);
+                        if (a != b) shell[a] = b;
                     }
                 }
-
-                var open = new bool[template.VertexCount];
-                for (int finger = 0; finger < HandJoints.FingerCount; finger++)
-                {
-                    HandsMeshTemplate.Ring first = template.Rings[finger * HandsMeshTemplate.FingerRings];
-                    for (int i = 0; i < first.Count; i++) open[first.First + i] = true;
-                }
-                HandsMeshTemplate.Ring cuff = template.Rings[HandJoints.FingerCount * HandsMeshTemplate.FingerRings];
-                for (int i = 0; i < cuff.Count; i++) open[cuff.First + i] = true;
-
-                int unmatched = 0;
                 foreach (long edge in edges)
                 {
                     long from = edge >> 32, to = edge & 0xFFFFFFFFL;
-                    if (edges.Contains((to << 32) | from)) continue;
-                    Assert.That(open[from] && open[to], Is.True, side + ": the mesh is open between vertices " + from + " and " + to);
-                    unmatched++;
+                    Assert.That(edges.Contains((to << 32) | from), Is.True, side + ": the mesh is open between vertices " + from + " and " + to);
                 }
-                Assert.That(unmatched, Is.EqualTo(HandJoints.FingerCount * HandsConstants.FingerSides + HandsMeshTemplate.CuffSides));
+
+                int shells = 0;
+                for (int i = 0; i < shell.Length; i++)
+                    if (Root(shell, i) == i) shells++;
+                Assert.That(shells, Is.EqualTo(HandJoints.FingerCount + 2));
+                // In the order the constants give: the tubes, the palm, the cuff.
+                int palm = HandJoints.FingerCount * HandsMeshTemplate.FingerVertices, cuff = palm + HandsMeshTemplate.PalmVertices;
+                for (int finger = 0; finger < HandJoints.FingerCount; finger++)
+                    for (int i = 1; i < HandsMeshTemplate.FingerVertices; i++)
+                        Assert.That(Root(shell, finger * HandsMeshTemplate.FingerVertices + i),
+                                    Is.EqualTo(Root(shell, finger * HandsMeshTemplate.FingerVertices)), side + ": finger " + finger);
+                for (int i = 1; i < HandsMeshTemplate.PalmVertices; i++) Assert.That(Root(shell, palm + i), Is.EqualTo(Root(shell, palm)));
+                for (int i = 1; i < HandsMeshTemplate.CuffVertices; i++) Assert.That(Root(shell, cuff + i), Is.EqualTo(Root(shell, cuff)));
             }
+        }
+
+        static int Root(int[] shell, int vertex)
+        {
+            while (shell[vertex] != vertex) vertex = shell[vertex] = shell[shell[vertex]];
+            return vertex;
         }
 
         [Test]
@@ -199,8 +208,8 @@ namespace Atlas.Hands.Tests
                         if (other > 0f) Assert.That(frame.Other, Is.Not.EqualTo(frame.Joint));
                     }
                 }
-                // Six rings of eight by each of fifteen joints lean on two bones.
-                Assert.That(blended, Is.EqualTo(5 * 6 * HandsConstants.FingerSides));
+                // Six rings of eight a finger lean on two bones, and the point that closes the first of them.
+                Assert.That(blended, Is.EqualTo(HandJoints.FingerCount * (6 * HandsConstants.FingerSides + 1)));
             }
         }
 

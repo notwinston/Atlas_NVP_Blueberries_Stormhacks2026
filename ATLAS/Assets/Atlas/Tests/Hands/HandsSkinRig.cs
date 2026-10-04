@@ -119,10 +119,26 @@ namespace Atlas.Hands.Tests
             return set;
         }
 
-        /// <summary>A fist as HandModel curls it: 80, 100 and 70 degrees, the thumb folded over.</summary>
+        /// <summary>A fist as HandModel curls it: 80, 100 and 70 degrees at a finger's joints, the thumb curled as far as it goes.</summary>
         public static JointSet Fist(HandSide side, float scale = 1f)
         {
             return HandModel.Pose(side, new float4(1f, 1f, 1f, 1f), 1f, scale);
+        }
+
+        /// <summary>
+        /// The same pose with the palm arched across, as it is in a real fist: the ring finger and the little
+        /// finger moved towards the palm's side by 8 and 15 mm (times amount), the thumb's whole chain by 6.
+        /// </summary>
+        public static JointSet Arched(in JointSet pose, float amount)
+        {
+            JointSet set = pose;
+            for (int k = 0; k < HandJoints.PerFinger; k++)
+            {
+                set[(int)HandJoint.ThumbCmc + k] = pose[(int)HandJoint.ThumbCmc + k] + PalmUp * (0.006f * amount);
+                set[(int)HandJoint.RingMcp + k] = pose[(int)HandJoint.RingMcp + k] + PalmUp * (0.008f * amount);
+                set[(int)HandJoint.LittleMcp + k] = pose[(int)HandJoint.LittleMcp + k] + PalmUp * (0.015f * amount);
+            }
+            return set;
         }
 
         /// <summary>One finger out, the others curled: the pose a press is made with.</summary>

@@ -266,6 +266,10 @@ namespace Atlas.Hands.Tests
                     HandsSkinRig.Curled(side, 100f, 110f, 80f, 50f, HandsConstants.ScaleMax),
                     // And a hand bent back as far as a hand goes.
                     HandsSkinRig.Curled(side, -30f, -10f, -10f, -15f),
+                    // The palm arched across, as a real fist arches it.
+                    HandsSkinRig.Arched(HandsSkinRig.Fist(side), 1f),
+                    HandsSkinRig.Arched(HandsSkinRig.Curled(side, 100f, 110f, 80f, 50f), 1f),
+                    HandsSkinRig.Arched(HandModel.RestPose(side), -1f),
                 };
                 for (int p = 0; p < poses.Length; p++)
                 {
@@ -331,8 +335,10 @@ namespace Atlas.Hands.Tests
         [Test]
         public void Hands_Skin_Mesh_EveryTubeStartsInsideThePalm()
         {
-            // The first ring of each tube and of the cuff is open. It never shows: in every pose a hand takes it lies
-            // inside the palm, which is why the palm hangs from the same joints the tubes do.
+            // The first ring of each tube and of the cuff lies inside the palm in every pose a hand takes, so no
+            // seam shows where a finger leaves it: that is why the palm hangs from the same joints the tubes do.
+            // The thumb's base alone can come out, when the palm is arched and the detector puts that base high
+            // above it; the tubes are closed at that end, so what shows then is a blunt end and never a hole.
             foreach (HandSide side in Sides)
             {
                 HandsMeshTemplate template = HandsMeshTemplate.Build(side);
@@ -353,17 +359,24 @@ namespace Atlas.Hands.Tests
                     HandsSkinRig.Stretched(HandsSkinRig.Pinch(side), seed++),
                     HandModel.RestPose(side, HandsConstants.ScaleMin),
                     HandsSkinRig.Fist(side, HandsConstants.ScaleMax),
+                    // From here on the palm is arched across, as a real fist arches it, or bent the other way as far.
+                    HandsSkinRig.Arched(HandsSkinRig.Fist(side), 1f),
+                    HandsSkinRig.Arched(HandModel.RestPose(side), 1f),
+                    HandsSkinRig.Arched(HandModel.RestPose(side), -1f),
+                    HandsSkinRig.Arched(HandsSkinRig.Pinch(side), 1f),
                 };
+                const int firstArched = 12;
                 for (int p = 0; p < poses.Length; p++)
                 {
                     JointSet placed = HandsSkinRig.Placed(in poses[p], HandsSkinRig.Turn, HandsSkinRig.Place);
                     AtlasVertex[] vertices = HandsSkinRig.Skin(template, in placed, math.mul(HandsSkinRig.Turn, HandsSkinRig.PalmUp), out _, out _);
-                    for (int r = 0; r <= HandJoints.FingerCount; r++)
+                    // Ring 0 of each tube, thumb first, then the cuff's.
+                    for (int r = p < firstArched ? 0 : 1; r <= HandJoints.FingerCount; r++)
                     {
                         HandsMeshTemplate.Ring ring = template.Rings[r * HandsMeshTemplate.FingerRings];
                         for (int i = 0; i < ring.Count; i++)
                             Assert.That(IsInside(vertices[ring.First + i].Position, vertices, indices, palmFirst, palmCount), Is.True,
-                                        side + " pose " + p + ": the open ring " + r + " shows at vertex " + i);
+                                        side + " pose " + p + ": the first ring of tube " + r + " shows at vertex " + i);
                     }
                 }
             }

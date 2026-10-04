@@ -10,8 +10,9 @@ namespace Atlas.Hands
     /// One hand's mesh before any joints are known (documents/ATLAS_Hands_Design.md section 5.1), built in code
     /// from the dimensions of <see cref="HandModel"/>: five tubes of <see cref="HandsConstants.FingerSides"/>
     /// sides that taper with the model's radii and end in a rounded cap, a palm slab with a bevelled rim, and a
-    /// short cuff that closes the hand behind the wrist. Built once per side at boot; <see cref="HandsSkin"/>
-    /// poses it on the joints every frame.
+    /// short cuff that closes the hand behind the wrist. The tubes and the cuff start inside the palm, so no seam
+    /// needs stitching; each of the seven parts is a closed shell, so no pose shows a hole. Built once per side
+    /// at boot; <see cref="HandsSkin"/> poses it on the joints every frame.
     ///
     /// Every vertex is stored in the frame of what it hangs from, never in the hand's:
     /// a ring of a tube sits on one bone by the joint at one of its ends and leans on the bone across that joint
@@ -29,11 +30,11 @@ namespace Atlas.Hands
         // ---- What one hand costs (section 5.7). Hands_Skin_Mesh holds the template to these. ----
 
         /// <summary>Triangles of one hand: five tubes, then the palm, then the cuff, in that order in the index buffer.</summary>
-        internal const int TriangleTotal = 738;
-        internal const int FingerTriangles = 120, PalmTriangles = 78, CuffTriangles = 60;
+        internal const int TriangleTotal = 790;
+        internal const int FingerTriangles = 128, PalmTriangles = 78, CuffTriangles = 72;
         /// <summary>Vertices of one hand, in the same order.</summary>
-        internal const int VertexTotal = 403;
-        internal const int FingerVertices = 65, PalmVertices = 41, CuffVertices = 37;
+        internal const int VertexTotal = 409;
+        internal const int FingerVertices = 66, PalmVertices = 41, CuffVertices = 38;
         /// <summary>Rings of one tube: one before and one after each of its three joints, the last full ring, the cap's ring.</summary>
         internal const int FingerRings = 8;
         /// <summary>Sides and rings of the cuff, and corners of the palm's outline.</summary>
@@ -51,7 +52,11 @@ namespace Atlas.Hands
         internal const float RingOffset = 0.8f;
         /// <summary>Weight of the bone across the joint at a ring: the ring turns by this share of the bend.</summary>
         internal const float RingBlend = 0.25f;
-        /// <summary>The first ring of a tube is left open inside the palm; its radius is this share of the joint's, so it stays buried.</summary>
+        /// <summary>
+        /// The first ring of a tube lies inside the palm; its radius is this share of the joint's, which keeps a
+        /// finger's buried in every pose. It is closed all the same: a thumb's base that the detector puts high
+        /// above the palm comes out of it, and then a blunt end shows and not a hole.
+        /// </summary>
         internal const float BaseRingRadius = 0.5f;
         /// <summary>The cap's apex is this many tip radii beyond the tip joint: the detector's tip lies inside the fingertip.</summary>
         internal const float TipOvershoot = 0.5f;
@@ -208,7 +213,7 @@ namespace Atlas.Hands
         // ---- Fingers and thumb ----
 
         // One tube: by each of the chain's first three joints a ring before it and a ring after it, then the last
-        // full ring, the cap's ring and the apex. The first ring lies inside the palm and is left open.
+        // full ring, the cap's ring and the apex. The first ring lies inside the palm and is closed by a low cone.
         static void AddFinger(int finger, List<Vertex> vertices, List<Frame> frames, List<Ring> rings, List<int> indices)
         {
             const int sides = HandsConstants.FingerSides;
@@ -241,6 +246,18 @@ namespace Atlas.Hands
             int apex = vertices.Count;
             vertices.Add(new Vertex { Position = new float3(0f, 0f, centre + tipRadius), Normal = new float3(0f, 0f, 1f), Frame = cap });
 
+            // The closed end inside the palm, after the apex so that the rings and the apex keep their places.
+            Vertex firstRing = vertices[start];
+            float baseRadius = math.length(firstRing.Position.xy);
+            int end = vertices.Count;
+            vertices.Add(new Vertex
+            {
+                Position = new float3(0f, 0f, firstRing.Position.z - 0.5f * baseRadius),
+                Normal = new float3(0f, 0f, -1f),
+                Frame = firstRing.Frame,
+            });
+
+            for (int i = 0; i < sides; i++) AddTriangle(indices, start + (i + 1) % sides, start + i, end);
             for (int k = 0; k + 1 < FingerRings; k++) AddBand(indices, start + k * sides, start + (k + 1) * sides, sides);
             int last = start + (FingerRings - 1) * sides;
             for (int i = 0; i < sides; i++) AddTriangle(indices, last + i, last + (i + 1) % sides, apex);
@@ -405,8 +422,8 @@ namespace Atlas.Hands
                 vertices.Add(Bound(point[i], math.normalize(normal[i]), anchor[i], frames, side, up, forward));
             for (int t = 0; t < triangles.Count; t++) indices.Add(first + triangles[t]);
 
-            // The cuff: an ellipse about the model's forearm line, starting inside the palm and closed behind
-            // the wrist by a nearly flat end. Nothing tracks the elbow, so there is no forearm.
+            // The cuff: an ellipse about the model's forearm line, starting inside the palm and closed at both
+            // ends, behind the wrist by a nearly flat one. Nothing tracks the elbow, so there is no forearm.
             int wristFrame = AnchorFrame(frames, wrist, wrist);
             int inside = AddCuffRing(vertices, rings, frames, wristFrame, CuffInside, 0.75f * WristHalfWidth, 0.63f * WristHalfThickness,
                                      0f, side, up, forward);
@@ -416,6 +433,9 @@ namespace Atlas.Hands
                                    math.radians(45f), side, up, forward);
             int end = vertices.Count;
             vertices.Add(Bound(origin + new float3(0f, 0f, CuffEnd), new float3(0f, 0f, -1f), wristFrame, frames, side, up, forward));
+            int start = vertices.Count;
+            vertices.Add(Bound(origin + new float3(0f, 0f, CuffInside + 0.002f), new float3(0f, 0f, 1f), wristFrame, frames, side, up, forward));
+            for (int i = 0; i < CuffSides; i++) AddTriangle(indices, inside + i, inside + (i + 1) % CuffSides, start);
             AddBand(indices, front, inside, CuffSides);
             AddBand(indices, back, front, CuffSides);
             for (int i = 0; i < CuffSides; i++) AddTriangle(indices, back + (i + 1) % CuffSides, back + i, end);
