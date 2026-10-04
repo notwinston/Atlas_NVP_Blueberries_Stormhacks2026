@@ -52,9 +52,9 @@ namespace Atlas.Input
     {
         /// <summary>What each hand's index fingertip did. All default while that fingertip is over no target.</summary>
         public HandsTouchHand Left, Right;
-        /// <summary>A pinch fired the target under the gaze in this tick.</summary>
+        /// <summary>A pinch opened or closed the on-device menu in this tick.</summary>
         public bool PinchFired;
-        /// <summary>The target that pinch fired; default when none did.</summary>
+        /// <summary>Always default: a pinch fires no target.</summary>
         public GazeTargetId PinchTarget;
         /// <summary>A trusted fingertip is within 0.20 m of a target that can be touched: the dwell on that target waits.</summary>
         public bool AnyNear;

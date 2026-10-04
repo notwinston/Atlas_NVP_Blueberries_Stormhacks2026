@@ -36,6 +36,8 @@ namespace Atlas.Rendering
         public float SphericalMode { get; set; } = AtlasWarpCpu.ModeSpherical;
         /// <summary>False draws no objects (the kerbs and the shell only); the default draws and warps every object.</summary>
         public bool ShowObjects { get; set; } = true;
+        /// <summary>False hides the kerbs (the room outline) in curved space; the full walls at kappa = 0 are drawn either way.</summary>
+        public bool ShowKerbs { get; set; } = true;
         public int ObjectCount => room.ObjectCount;
         public Renderer FloorRenderer => room.FloorRenderer;
         /// <summary>The full walls at kappa = 0, the kerbs in curved space.</summary>
@@ -61,7 +63,7 @@ namespace Atlas.Rendering
             warped = true;
             room.FloorVisible = false;                                          // [D10]
             room.KerbHeight = CurvedRoomConstants.KerbHeightM;
-            SetWalls(drawRoom ? WallMode.Kerbs : WallMode.Hidden);
+            SetWalls(drawRoom && ShowKerbs ? WallMode.Kerbs : WallMode.Hidden);
             Iso2 a0 = walker.Inverse() * tileZeroInCurrent;                     // double
             Material shell = room.ShellMaterial;
             shell.SetFloat(AtlasShaderIDs.WarpMode, mode);
