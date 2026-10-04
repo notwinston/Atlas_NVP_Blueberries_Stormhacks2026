@@ -28,8 +28,14 @@ REPO = Path(__file__).resolve().parents[2]
 ROOMS = REPO / "ATLAS" / "Assets" / "Atlas" / "World" / "Resources" / "AtlasRooms"
 BOUNDARY = "atlas-forge-boundary-5f2c9a71d3e84b06"       # ForgeProtocol.Boundary
 
-# The asset contract (Master Plan section 6.4, acceptance test L16).
-MIN_TRIS, MAX_TRIS, MAX_EDGE, BOX_TOLERANCE, ROOM_TRIS = 1500, 5000, 0.25, 0.10, 60000
+sys.path.insert(0, str(REPO / "tools" / "rooms"))
+import roommath  # noqa: E402  (the reference of the triangle rule, which the Forge's own must agree with)
+
+# The asset contract (Master Plan section 6.4 with mesh design section 5.4, acceptance test L16). Every mesh
+# comes in two copies: the most triangles and bytes of one file, and the most triangles of a room's furniture.
+MIN_TRIS, MAX_EDGE, BOX_TOLERANCE = 1500, 0.25, 0.10
+LEVELS = {"full": {"tris": 15000, "bytes": 2 * 1024 * 1024, "room": 120000},
+          "light": {"tris": 5000, "bytes": 1024 * 1024, "room": 60000}}
 
 # State on the wire (Appendix B.1): 202 bytes, little-endian.
 STATE = struct.Struct("<BBHIq7fBB6qh9d8fH")
@@ -270,22 +276,31 @@ def live_forge(forge: str, hub: str, work: Path, forge_dir: Path) -> None:
         answer = json.loads(body) if status in (200, 201) else {}
         generated = answer.get("generated") or []
         if not check(status in (200, 201) and answer.get("roomId") == room["id"],
-                     f"{room_name}: POST /rooms {status}, boxes {generated} receive meshes at {answer.get('triTarget')} triangles each"):
+                     f"{room_name}: POST /rooms {status}, boxes {generated} receive meshes"):
             continue
-        target = min(MAX_TRIS, max(3000, ROOM_TRIS // max(1, len(objects))))
-        check(sorted(generated) == sorted(o["id"] for o in objects) and not answer.get("placeholders") and answer.get("triTarget") == target,
-              f"{room_name}: every one of the {len(objects)} boxes receives a mesh, target clamp(60000 / n, 3000, 5000) = {target}")
+        # The Forge's plan against the reference rule: the room's 120,000 triangles shared by surface area.
+        targets, light_target = roommath.plan_tri_targets(objects)
+        check(sorted(generated) == sorted(o["id"] for o in objects) and not answer.get("placeholders"),
+              f"{room_name}: every one of the {len(objects)} boxes receives a mesh")
+        check(answer.get("triTargets") == {str(box): t for box, t in targets.items()}
+              and answer.get("triTarget") == max(targets.values(), default=0)
+              and answer.get("triTargetLight") == light_target,
+              f"{room_name}: the Forge's targets are those of tools/rooms/roommath.py: full "
+              f"{min(targets.values())} to {max(targets.values())}, light {light_target}")
         status, back = get_json(f"{forge}/rooms/{room['id']}")
         check(status == 200 and back == room, f"{room_name}: GET /rooms/{room['id']} returns the RoomModel as uploaded")
 
-        started = time.monotonic()
-        jobs = {}
-        for k, obj in enumerate(objects):
-            meta = {"boxId": obj["id"], "category": obj["category"], "dims": obj["size"], "yaw": obj["yaw"],
-                    "triTarget": obj["triTarget"], "backend": "local",
+        def meta_of(obj: dict) -> dict:
+            # What the phone sends: the RoomModel's own full target for the object and the room's light target.
+            return {"boxId": obj["id"], "category": obj["category"], "dims": obj["size"], "yaw": obj["yaw"],
+                    "triTarget": obj["triTarget"], "triTargetLight": light_target, "backend": "local",
                     "views": [{"score": 0.8, "azimuthDeg": 35.0, "intrinsics": [612.0, 612.0, 128.0, 128.0],
                                "camToBox": [1, 0, 0, 0, 0, 1, 0, 0.4, 0, 0, 1, -1.5, 0, 0, 0, 1]}]}
-            status, body = request("POST", f"{forge}/rooms/{room['id']}/objects", object_body(meta, [crop(palette[k % len(palette)])]),
+
+        jobs = {}
+        for k, obj in enumerate(objects):
+            status, body = request("POST", f"{forge}/rooms/{room['id']}/objects",
+                                   object_body(meta_of(obj), [crop(palette[k % len(palette)])]),
                                    f"multipart/form-data; boundary={BOUNDARY}", 15)
             if status in (200, 202):
                 jobs[json.loads(body)["jobId"]] = obj
@@ -303,50 +318,58 @@ def live_forge(forge: str, hub: str, work: Path, forge_dir: Path) -> None:
         if not check(bool(done), f"{room_name}: every job ended, {waited:.1f} s after the first upload (L15: at most 60 s each)"):
             continue
         check(all(j["state"] == "ready" for j in done), f"{room_name}: every job is ready: " + ", ".join(sorted({j['state'] for j in done})))
+        check(all(j.get("attempts") == 1 and j.get("fitUp") == "Y" and "fit" not in j for j in done if j["state"] == "ready"),
+              f"{room_name}: one generation per object, and no fit, since these fixtures carry no profile")
 
-        total = 0
+        import subprocess
+        total = {"full": 0, "light": 0}
         for job in sorted(done, key=lambda j: jobs[j["jobId"]]["id"]):
             obj = jobs[job["jobId"]]
             if job["state"] != "ready":
                 continue
-            url = job["url"] if job["url"].startswith("http") else forge + job["url"]
-            status, glb = request("GET", url, timeout=20)
-            if not check(status == 200 and hashlib.sha256(glb).hexdigest() == job["sha256"],
-                         f"{room_name} box {obj['id']} ({obj['category']}): asset downloaded, its SHA-256 is its name"):
-                continue
-            path = out / f"{room['id']}_{obj['id']}.glb"
-            path.write_bytes(glb)
-            try:
-                m = measure_glb(glb)
-            except Exception as error:      # a malformed file is a finding, not a crash
-                check(False, f"{room_name} box {obj['id']}: the GLB cannot be read: {error}")
-                continue
-            size = [m["max"][k] - m["min"][k] for k in range(3)]
-            worst = max(abs(size[k] - obj["size"][k]) / obj["size"][k] for k in range(3))
-            centred = abs(m["min"][1]) < 1e-3 and abs(m["min"][0] + m["max"][0]) < 0.02 and abs(m["min"][2] + m["max"][2]) < 0.02
-            limit = min(target, obj["triTarget"])
-            ok = (MIN_TRIS <= m["tris"] <= limit and m["maxEdge"] <= MAX_EDGE + 1e-4 and worst <= BOX_TOLERANCE
-                  and centred and not m["extras"] and not m["material"] and len(glb) <= 1024 * 1024)
-            check(ok, f"{room_name} box {obj['id']} ({obj['category']}): {m['tris']} triangles (1500 to {limit}), longest edge "
-                      f"{m['maxEdge']:.3f} m, {worst * 100:.1f} % off the box, base centred {centred}, {len(glb)} bytes (L16)")
-            check(m["tris"] == job["tris"], f"{room_name} box {obj['id']}: the job reports the triangle count the file holds")
-            total += m["tris"]
+            # Both copies: the full one to the smaller of the two targets, the light one to the room's.
+            limits = {"full": min(targets[obj["id"]], obj["triTarget"]), "light": light_target}
+            for level, sha_key, url_key, count_key in (("full", "sha256", "url", "tris"),
+                                                       ("light", "lightSha256", "lightUrl", "lightTris")):
+                name = f"{room_name} box {obj['id']} ({obj['category']}), {level} copy"
+                if not check(bool(job.get(sha_key)) and bool(job.get(url_key)), f"{name}: the job names it"):
+                    continue
+                url = job[url_key] if job[url_key].startswith("http") else forge + job[url_key]
+                status, glb = request("GET", url, timeout=20)
+                if not check(status == 200 and hashlib.sha256(glb).hexdigest() == job[sha_key],
+                             f"{name}: asset downloaded, its SHA-256 is its name"):
+                    continue
+                path = out / f"{room['id']}_{obj['id']}_{level}.glb"
+                path.write_bytes(glb)
+                try:
+                    m = measure_glb(glb)
+                except Exception as error:      # a malformed file is a finding, not a crash
+                    check(False, f"{name}: the GLB cannot be read: {error}")
+                    continue
+                size = [m["max"][k] - m["min"][k] for k in range(3)]
+                worst = max(abs(size[k] - obj["size"][k]) / obj["size"][k] for k in range(3))
+                centred = abs(m["min"][1]) < 1e-3 and abs(m["min"][0] + m["max"][0]) < 0.02 and abs(m["min"][2] + m["max"][2]) < 0.02
+                limit = min(limits[level], LEVELS[level]["tris"])
+                ok = (MIN_TRIS <= m["tris"] <= limit and m["maxEdge"] <= MAX_EDGE + 1e-4 and worst <= BOX_TOLERANCE
+                      and centred and not m["extras"] and not m["material"] and len(glb) <= LEVELS[level]["bytes"])
+                check(ok, f"{name}: {m['tris']} triangles (1500 to {limit}), longest edge {m['maxEdge']:.3f} m, "
+                          f"{worst * 100:.1f} % off the box, base centred {centred}, {len(glb)} bytes (L16)")
+                check(m["tris"] == job[count_key], f"{name}: the job reports the triangle count the file holds")
+                total[level] += m["tris"]
 
-            # The Forge's own validator, as the command line the team uses.
-            import subprocess
-            run = subprocess.run([sys.executable, "-m", "forge.validator", str(path), "--target", str(limit),
-                                  "--box", *[str(v) for v in obj["size"]]], cwd=forge_dir, capture_output=True, text=True)
-            check(run.returncode == 0, f"{room_name} box {obj['id']}: forge.validator accepts it" +
-                  ("" if run.returncode == 0 else ": " + (run.stdout + run.stderr).strip()[-300:]))
-        check(0 < total <= ROOM_TRIS, f"{room_name}: the furniture holds {total} triangles in all (L16: at most 60,000)")
+                # The Forge's own validator, as the command line the team uses.
+                run = subprocess.run([sys.executable, "-m", "forge.validator", str(path), "--target", str(limit),
+                                      "--level", level, "--box", *[str(v) for v in obj["size"]]],
+                                     cwd=forge_dir, capture_output=True, text=True)
+                check(run.returncode == 0, f"{name}: forge.validator accepts it" +
+                      ("" if run.returncode == 0 else ": " + (run.stdout + run.stderr).strip()[-300:]))
+        for level in ("full", "light"):
+            check(0 < total[level] <= LEVELS[level]["room"],
+                  f"{room_name}: the {level} copies hold {total[level]} triangles in all (L16: at most {LEVELS[level]['room']:,})")
 
-        # The same crop again with the same target: the cache answers, no job runs (L18).
+        # The same crop again with the same meta: the cache answers, no job runs (L18).
         obj = objects[0]
-        meta = {"boxId": obj["id"], "category": obj["category"], "dims": obj["size"], "yaw": obj["yaw"],
-                "triTarget": obj["triTarget"], "backend": "local",
-                "views": [{"score": 0.8, "azimuthDeg": 35.0, "intrinsics": [612.0, 612.0, 128.0, 128.0],
-                           "camToBox": [1, 0, 0, 0, 0, 1, 0, 0.4, 0, 0, 1, -1.5, 0, 0, 0, 1]}]}
-        status, body = request("POST", f"{forge}/rooms/{room['id']}/objects", object_body(meta, [crop(palette[0])]),
+        status, body = request("POST", f"{forge}/rooms/{room['id']}/objects", object_body(meta_of(obj), [crop(palette[0])]),
                                f"multipart/form-data; boundary={BOUNDARY}", 15)
         again = json.loads(body) if status in (200, 202) else {}
         check(status == 200 and again.get("cached") is True, f"{room_name}: the same crop uploaded twice is a cache hit: {status} {again}")

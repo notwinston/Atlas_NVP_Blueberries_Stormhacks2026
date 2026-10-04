@@ -96,6 +96,23 @@ def test_a_tie_is_broken_by_the_generators_known_front(prefer, yaw):
     assert [c["fit"] for c in report.candidates[:4]] == [0.0] * 4  # the four yaws tie
 
 
+def test_another_up_axis_must_fit_clearly_better_to_be_taken():
+    # A cube with a plinth: on its side it fits a scan of its flat top a hair better, which means nothing.
+    dims = (0.5, 0.5, 0.5)
+    v, f = build_furniture("other", dims)
+    scan = np.full(256, 100, dtype=np.uint8)
+    report = clean(v, f, dims, 5000, scan=scan).report
+    best = report.candidates[0]
+    assert best["up"] != "Y" and 0.0 < report.fit - best["fit"] < cleanup.FIT_TIE
+    assert (report.up_axis, report.yaw_degrees) == ("Y", 0)  # the generator's own frame, within the tie
+    # A chair on its side is far from the scan of the chair: the right axis is found whatever the order.
+    v, f = build_furniture("chair", (0.6, 0.6, 0.6))
+    scan = profile.of_mesh(v, f, (0.6, 0.6, 0.6))
+    lying = v @ dict(cleanup._UP)["X"]
+    report = clean(lying, f, (0.6, 0.6, 0.6), 5000, scan=scan).report
+    assert (report.up_axis, report.fit) == ("X", 0.0)
+
+
 def test_a_near_tie_is_broken_and_a_clear_fit_is_not():
     # A table with a low block near one edge: the half turn scores a little worse, within the tie.
     (v, f), dims = table()

@@ -417,10 +417,13 @@ def orient_by_fit(
     The candidates are every up axis of ``up_axes`` times the four quarter
     turns, keeping those whose bounds fill the box within the stretch limit.
     With a profile, each is scored by `profile.fit_score` against the mesh's
-    own profile and the lowest score wins; among scores within ``FIT_TIE`` of
-    the best, one with the preferred turn wins. Without a profile the preferred
-    turn decides among the candidates the bounds allow, and with neither it is
-    the bounds alone (`orient_and_scale`).
+    own profile and the lowest score wins. Scores within ``FIT_TIE`` of the
+    best are a tie: one with the preferred turn wins it, then the generator's
+    own up axis (the first of ``up_axes``), then the lower score. A scan seen
+    from above cannot tell a cube from the same cube on its side, so another
+    up axis must fit clearly better to be taken. Without a profile the
+    preferred turn decides among the candidates the bounds allow, and with
+    neither it is the bounds alone (`orient_and_scale`).
 
     Returns the chosen candidate and every candidate that was scored.
     """
@@ -446,11 +449,10 @@ def orient_by_fit(
     for candidate in allowed:
         candidate.fit = scan_profile.fit_score(scan, scan_profile.of_mesh(candidate.vertices, faces, box))
     ranked = sorted(allowed, key=lambda c: c.fit)  # stable: equal fits keep the order Y, Z, X and 0 to 3 turns
-    chosen = ranked[0]
-    if prefer_turns is not None:
-        tied = [c for c in ranked if c.fit - ranked[0].fit < FIT_TIE and c.turns == prefer_turns % 4]
-        if tied:
-            chosen = tied[0]
+    order = [name for name, _ in _up_axes(up_axes)]
+    tied = [c for c in ranked if c.fit - ranked[0].fit < FIT_TIE]
+    chosen = min(tied, key=lambda c: (prefer_turns is not None and c.turns != prefer_turns % 4,
+                                      order.index(c.up_axis), c.fit))
     return chosen, ranked
 
 

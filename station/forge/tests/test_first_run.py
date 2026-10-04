@@ -12,6 +12,7 @@ from PIL import Image
 
 from conftest import ROOT, jpeg, make_settings
 from forge.app import create_app
+from forge import profile
 from forge.cleanup import _UP, clean
 from forge.generators.procedural import build_furniture
 
@@ -102,6 +103,30 @@ def test_the_frame_is_read_from_a_glb_through_its_report(tmp_path):
         assert raw_reading["source"] == "raw" and (raw_reading["up"], raw_reading["front"]) == ("Z", expected)
         assert abs(abs(raw_reading["frontAzimuth"]) - abs(front)) < 12
         assert abs(abs(reading["frontAzimuth"]) - abs(front)) < 12
+
+
+def test_a_turn_the_fit_chose_is_taken_out_of_the_glb_too():
+    # With a profile clean-up may turn a mesh by any quarter turn; the report says which, and the reading undoes it.
+    v, f = chair(0)
+    scan = profile.of_mesh(v, f, DIMS)
+    for quarter in range(4):
+        delivered = turn(v, 90 * quarter)  # the generator's frame has the front at this azimuth
+        result = clean(delivered, f, DIMS, 5000, scan=scan)
+        assert result.report.fit < 0.01
+        reading = first_run.read_frame(*glb_mesh(result.glb), result.report.up_axis, result.report.yaw_degrees)
+        raw = first_run.read_frame(delivered, f)
+        assert reading["up"] == raw["up"] == "Y"
+        assert abs(abs(reading["frontAzimuth"]) - abs(raw["frontAzimuth"])) < 12
+        assert reading["front"] == raw["front"] == ("canonical" if quarter == 0 else "unknown")
+
+
+def glb_mesh(glb: bytes):
+    from forge.glb import read_glb
+
+    file = read_glb(glb)
+    primitive = file.doc["meshes"][0]["primitives"][0]
+    return (file.accessor(primitive["attributes"]["POSITION"]).astype(np.float64),
+            file.accessor(primitive["indices"]).reshape(-1, 3).astype(np.int64))
 
 
 def test_photo_and_form():

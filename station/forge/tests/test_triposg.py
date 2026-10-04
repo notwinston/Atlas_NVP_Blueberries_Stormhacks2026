@@ -572,6 +572,39 @@ def test_the_job_reports_the_decoder_that_made_its_mesh(tmp_path, matting):
         assert "hierarchical decoder: CUDA error" in status["error"] and "decoder" not in status
 
 
+def test_what_was_measured_of_triposgs_frame_steers_the_fit(tmp_path, matting):
+    """`FORGE_TRIPOSG_FRONT` breaks a tie of the fit, and `FORGE_TRIPOSG_UP` names the one up axis that is tried."""
+    from forge import profile
+
+    flat = profile.encode(np.full(256, 255, dtype=np.uint8))  # a cupboard's flat top: every yaw fits it equally
+
+    def job(front, up="Y", camera=(2.0, 0.4, 0.1), name="frame"):
+        runtime = FakeRuntime()
+        app, _ = served(tmp_path / f"{name}_{front}_{up}", runtime, triposg_front=front, triposg_up=up)
+        with TestClient(app) as client:
+            model = room_model(name, [(0.6, 0.6, 0.6)])
+            assert client.post("/rooms", json=model).status_code == 201
+            meta = meta_for(model["objects"][0], 15000)
+            x, y, z = camera
+            meta["views"][0]["camToBox"] = [1, 0, 0, x, 0, 1, 0, y, 0, 0, 1, z, 0, 0, 0, 1]
+            meta["profile"] = flat
+            return wait_for(client, post_object(client, name, meta, [jpeg()]).json()["jobId"])
+
+    # The camera stood on Unity's +X side of the box.
+    unknown, canonical, view = job("unknown"), job("canonical"), job("view")
+    for status in (unknown, canonical, view):
+        assert status["state"] == "ready" and status["fit"] == 0.0 and status["fitUp"] == "Y"
+    assert unknown["fitYaw"] == 0 and canonical["fitYaw"] == 0
+    # `view`: the mesh's own +Z side is put where the camera stood, at azimuth 90.
+    assert view["fitYaw"] == 90 and view["report"]["yawDegrees"] == 270
+    assert job("view", camera=(0.1, 0.4, -2.0), name="behind")["fitYaw"] == 180
+    assert job("view", camera=(-2.0, 0.4, 0.1), name="left")["fitYaw"] == 270
+    # Only the measured up axis is tried: every candidate of the fit has it.
+    lying = job("unknown", up="Z", name="up")
+    assert lying["fitUp"] == "Z" and {c["up"] for c in lying["report"]["candidates"]} == {"Z"}
+    assert {c["up"] for c in unknown["report"]["candidates"]} == {"Y"}
+
+
 @pytest.mark.skipif(importlib.util.find_spec("torch") is not None,
                     reason="PyTorch is installed here: the service's own start-up may load it")
 def test_no_test_imported_pytorch():
