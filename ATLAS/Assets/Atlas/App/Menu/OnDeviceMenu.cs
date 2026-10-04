@@ -48,6 +48,9 @@ namespace Atlas.App.Menu
         quaternion _rotation = quaternion.identity;
         float _scale = 1f;
         bool _near;
+        // Turns a rectangle target in place. The real input service can and its interface cannot; with none, a
+        // panel whose anchor turned has its targets made again.
+        Action<GazeTargetId, Quaternion> _turn;
         bool _open, _frameSet, _shutDown;
         int _shownRevision = -1, _shownSlot = -1;
         float _sinceStatus;
@@ -83,7 +86,12 @@ namespace Atlas.App.Menu
             var model = new MenuModel(app.Registry, app.Spaces, this) { Events = events };
             IMenuView view = null;
             if (app.Boot != null && app.Boot.Hud != null && app.Pool != null) view = MenuView.Create(app.Boot.Hud, app.Pool);
-            Compose(app.InputService, app.Rig, app.Loop, model, view);
+            // The near anchor turns while the walker walks: the service turns the panel's targets with it, so
+            // that a dwell or a press on a row is not lost at every frame.
+            var service = app.InputService as AtlasInput;
+            Action<GazeTargetId, Quaternion> turn = null;
+            if (service != null) turn = service.RotateGazeTarget;
+            Compose(app.InputService, app.Rig, app.Loop, model, view, turn);
 
             if (app.Loop != null)
             {
@@ -95,15 +103,18 @@ namespace Atlas.App.Menu
 
         /// <summary>
         /// The menu on its parts alone, with no app behind it: what <see cref="Install"/> ends in, and what a
-        /// test of where the menu stands calls. Every part but the model may be null.
+        /// test of where the menu stands calls. Every part but the model may be null. turn rotates a rectangle
+        /// target in place; without it a panel whose anchor turned has its targets made again.
         /// </summary>
-        internal void Compose(IAtlasInput input, IStereoRig rig, IFrameLoop loop, MenuModel model, IMenuView view)
+        internal void Compose(IAtlasInput input, IStereoRig rig, IFrameLoop loop, MenuModel model, IMenuView view,
+                              Action<GazeTargetId, Quaternion> turn = null)
         {
             _input = input;
             _rig = rig;
             _loop = loop;
             _model = model;
             _view = view;
+            _turn = turn;
             // The gaze twin of the menu action: a chip down and to the left, live while a space runs.
             RegisterChip();
         }
@@ -348,13 +359,17 @@ namespace Atlas.App.Menu
             {
                 origin = ReachSlots.World(anchor, facing, _scale, MenuLayout.PanelSlot);
                 stand = facing;
-                turned = ReachSlots.RotationMoved(_rotation, facing);
+                // The anchor turns while the walker walks and while it eases to a new place. Turned in place, the
+                // targets follow it to the frame and keep a dwell or a press that is under way.
+                turned = _turn == null && ReachSlots.RotationMoved(_rotation, facing);
+                if (_turn != null && !reached) TurnTargets(facing);
             }
             if (turned || reached)
             {
-                // Rare a metre away: the walker turned their back on the panel. Within reach: the anchor eased
-                // to a new place, or the menu came or went. The targets are rectangles with a heading and a
-                // size, so they are made again rather than moved.
+                // Rare a metre away: the walker turned their back on the panel. Within reach: the menu came or
+                // went, the scale moved, or the anchor turned under an input service that cannot turn a
+                // rectangle. The targets are rectangles with a heading and a size, so they are made again
+                // rather than moved.
                 UnregisterTargets();
                 RegisterTargets(origin, stand);
                 // The text is rebuilt only where it always was: a turning anchor costs no string.
@@ -366,6 +381,18 @@ namespace Atlas.App.Menu
                 for (int i = 0; i < _targets.Length; i++) _input.MoveGazeTarget(_targets[i], origin + _offsets[i]);
             }
             if (_view != null) _view.PlacePanel(origin + _panelOffset, stand);
+        }
+
+        // Within reach: every target takes the anchor's rotation of this frame, and its place on the turned panel.
+        void TurnTargets(quaternion rotation)
+        {
+            if (rotation.Equals(_rotation)) return;
+            _rotation = rotation;
+            for (int i = 0; i < _targets.Length; i++)
+            {
+                _offsets[i] = Offset(rotation, i, _shownSlot);
+                _turn(_targets[i], rotation);
+            }
         }
 
         // A target's place from the point the panel is hung from: the head when far, with the panel 1.2 m ahead

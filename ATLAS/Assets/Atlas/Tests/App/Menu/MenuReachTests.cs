@@ -160,13 +160,16 @@ namespace Atlas.App.Tests
             public int Frame;
 
             /// <param name="display">The stereo rig; null is a menu with no rig, which counts as the headset.</param>
-            public Rig(IStereoRig display = null)
+            /// <param name="turns">The input service can turn a rectangle target in place, as the real one can.</param>
+            public Rig(IStereoRig display = null, bool turns = false)
             {
                 Registry.DeclareFloat("render.scale", "render", 0.6f, 0.8f, 0.8f);
                 Registry.DeclareBool("hud.visible", "hud", false);
                 Model = new MenuModel(Registry, new FakeHost());
                 Input.PushContext(InputContext.Space);
-                Menu.Compose(Input, display, Loop, Model, View);
+                Action<GazeTargetId, Quaternion> turn = null;
+                if (turns) turn = (id, rotation) => Input.Core.Targets.SetRotation(id, new quaternion(rotation.x, rotation.y, rotation.z, rotation.w));
+                Menu.Compose(Input, display, Loop, Model, View, turn);
             }
 
             public void Step(quaternion rotation, int frames = 1)
@@ -528,6 +531,57 @@ namespace Atlas.App.Tests
             Assert.That(w.Data(w.Menu.ChipTarget).Radius, Is.EqualTo(0.9f * MenuLayout.OpenChipRadius).Within(1e-7f));
         }
 
+        // While the walker walks, or the anchor eases to a new place, the anchor turns a little every frame. The
+        // real input service turns a rectangle in place, so the panel's targets follow without being made again
+        // and a dwell (or a press under way) carries on. An input service that cannot is the fallback above.
+        [Test]
+        public void Near_WhenTheInputCanTurnARectangle_TheTargetsFollowATurningAnchorInPlace_AndTheDwellCarriesOn()
+        {
+            foreach (bool turns in new[] { true, false })
+            {
+                Reach reach = Publish();
+                var w = new Rig(turns: turns);
+                w.Step(quaternion.identity, 2);
+                w.Menu.Open();
+                w.Step(quaternion.identity);
+                var ids = new GazeTargetId[MenuLayout.TargetCount];
+                for (int i = 0; i < ids.Length; i++) ids[i] = w.Menu.TargetOf(i);
+
+                // The walker looks at row 3 for 0.9 s while the anchor turns a quarter of a degree and moves half a
+                // millimetre every frame.
+                for (int f = 0; f < FramesFor(0.9f); f++)
+                {
+                    float3 row = w.Data(w.Menu.TargetOf(3)).Centre;   // where the row stands at this frame's input step
+                    reach.Rotation = math.mul(quaternion.RotateY(math.radians(0.25f)), reach.Rotation);
+                    reach.Position += new float3(0.0005f, 0f, 0f);
+                    w.Step(Toward(Head, row));
+                }
+
+                if (!turns)
+                {
+                    Assert.That(w.Menu.TargetOf(3), Is.Not.EqualTo(ids[3]), "made again at every turn");
+                    Assert.That(w.Model.Selected, Is.EqualTo(0), "and a dwell cannot complete on a target that is made again every frame");
+                    continue;
+                }
+                for (int i = 0; i < ids.Length; i++) Assert.That(w.Menu.TargetOf(i), Is.EqualTo(ids[i]), "target " + i + " was turned, not made again");
+                Assert.That(w.Model.Selected, Is.EqualTo(w.Model.Top + 3), "the dwell on a row carried on through the turn");
+
+                // And every target is where the anchor is now, to the frame.
+                w.Step(quaternion.identity);
+                int slot = w.Model.Selected - w.Model.Top;
+                Assert.That(w.View.PanelRotation, Is.EqualTo(reach.Rotation));
+                Close(w.View.Panel, reach.Position, "the panel");
+                for (int i = 0; i < MenuLayout.TargetCount; i++)
+                {
+                    GazeTargetData d = w.Data(w.Menu.TargetOf(i));
+                    Close(d.Centre, reach.Position + math.mul(reach.Rotation, 0.75f * MenuLayout.TargetCentre(i, slot)), "target " + i);
+                    Assert.That(Angle(d.Rotation, reach.Rotation), Is.LessThan(1e-3f), "target " + i + " lies in the anchor's plane");
+                    Assert.That(d.HalfSize, Is.EqualTo(MenuLayout.NearTargetHalfSize(i, 0.75f)));
+                }
+                for (int i = 0; i < MenuModel.VisibleRows; i++) Assert.That(w.Enabled(w.Menu.TargetOf(i)), Is.True, "row " + i);
+            }
+        }
+
         [Test]
         public void Near_GazeDwellWorksOnWhatIsDrawn()
         {
@@ -715,6 +769,26 @@ namespace Atlas.App.Tests
             long turning = GC.GetAllocatedBytesForCurrentThread() - before;
             Assert.That(turning, Is.EqualTo(0L), "bytes allocated by 100 uploads while the anchor turns");
             Assert.That(w.Menu.TargetOf(0), Is.Not.EqualTo(first), "the targets were made again");
+
+            // The same with an input service that turns a rectangle in place, as the real one does.
+            var t = new Rig(turns: true);
+            t.Step(quaternion.identity, 3);
+            t.Menu.Open();
+            for (int i = 0; i < 20; i++)
+            {
+                reach.Rotation = math.mul(quaternion.RotateY(0.01f * i), upright);
+                t.Menu.Upload(in t.Loop.Frame);   // warm up
+            }
+            first = t.Menu.TargetOf(0);
+            before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < 100; i++)
+            {
+                reach.Rotation = math.mul(quaternion.RotateY(0.01f * (i % 20)), upright);
+                t.Menu.Upload(in t.Loop.Frame);
+            }
+            long inPlace = GC.GetAllocatedBytesForCurrentThread() - before;
+            Assert.That(inPlace, Is.EqualTo(0L), "bytes allocated by 100 uploads while the targets are turned in place");
+            Assert.That(t.Menu.TargetOf(0), Is.EqualTo(first), "the targets were turned, not made again");
         }
     }
 }
