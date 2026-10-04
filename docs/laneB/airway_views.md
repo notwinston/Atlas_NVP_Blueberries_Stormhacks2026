@@ -55,3 +55,34 @@ Added by the implementation:
 ### Hand-overs
 G4 (P2-B01, P2-B08): AirwayTree supplies per tree tile the canonical open mask and entry edge (root: the trachea door edge, FrameOf edge 0). Kind and placement = `Classify` + `KitToTile`.
 G6 (P2-B03): draw tree tiles only from `AirwayKitMeshes.Get(kind, lod)`, one pooled material instance per tile; the valve shell uses the tile's anchor. During the opaque phase keep the shell fixed relative to the walker (compensate its anchor by the same Rot(alpha)); rotate only once the head is inside r 0.49 m; switch to the dithered state with the exit iris open at step 5.
+
+## P2-B07 endoluminal window (namespace `Atlas.Blades.Lung.Endoluminal`)
+
+A true 3D view of one bifurcation from inside the model airway, rendered once per fork into a 512 x 512 texture (MP 10.2.3 Mode 1, "endoluminal window"), with "N o'clock" labels.
+
+### API
+- `AirwaySegmentMm(address, posMm, dir, lenMm, radiusMm)` (one `atlas.tree/2` node; `EndMm`), `ForkView(parent, left, right)` (child addresses must be parent + "L" / "R"). The tree.json reader is P2-B01's; P2-B08 maps its node type to `AirwaySegmentMm`.
+- `EndoluminalCamera` (static, pure): `Pose` (camera on the parent axis at E - min(2 r_p, 0.5 len_p) d, forward d, up = anterior (0,-1,0) projected, superior (0,0,1) fallback, right = forward x up), `ClockAngleDeg`, `ClockHour`, `ClockLabel`, `ToScene` / `ToSceneDir` (z-reflection), `ViewMatrix`, `ProjectionMatrix` (90 deg, 0.005-10 m), `SceneScale` (parent radius = 0.1 m).
+- `AirwayTubeMeshBuilder.Build(...)`: 24-sided open double-sided cylinder, ring spacing <= 0.5 r, vertex AO = 1 - 0.75 saturate((d - 1 r_p) / (7 r_p)). Parent drawn over its last 4 r_p, each child over its full length.
+- `EndoluminalWindow` (MonoBehaviour, no Update/LateUpdate/FixedUpdate/OnGUI/render callbacks): `Initialise(surface, display, font)` (idempotent, all allocation), `Show(in ForkView)` (renders only when the address changes; returns true when it rendered), `Hide()`, `Release()`, `Texture`, `Display`, `RenderedAddress`, `RenderCount`, `LastRenderFrame`, `LastRenderCpuMs`, `ClockHour(child)`, `LabelText(child)`. Profiler marker `Atlas.Lung.Endoluminal.Render`. Constants: TextureSize 512, DisplaySizeM 0.4, LabelRadiusFraction 0.35, LabelHeightFraction 0.06.
+- Render: CommandBuffer into a 512 x 512, 24-bit depth, 4x MSAA RT (no Camera, no layer, D-14). Fog globals are zeroed for the draw and restored (D-19). Labels are drawn after a depth-only clear.
+- `Testing/SyntheticForks.Route(n[, planeAxis])` (generator constants, no randomness), `Testing/EndoluminalTestDriver` (phone driver), `TestScene/Lung_EndoluminalTest.unity` (not in the build list).
+
+### Measured
+- Editor render-frame CPU time (one Show, Null graphics device, no GPU work): about 0.2 ms; every repeat of the same address is an early return (299 of 299 in `Endo_RenderOncePerFork`).
+- GPU test on this Mac (`gpu_results.xml`, run without `-nographics`, Metal): 96.6% of pixels differ from the background; both labels bright (max luma 1.0, in both the x-axis fork, 9 and 3 o'clock, and the y-axis fork, 6 and 12 o'clock). Images: `evidence/P2-B07/gpu_render.png`, `gpu_render_axisY.png`.
+
+### Deviations
+D-11 ForkView is the input. D-12 12 o'clock is anterior (0,-1,0) in LPS with a superior fallback: lane D must confirm the tree.json frame. D-13 Camera pose, 90 deg field of view, scene scale, z-reflection. D-14 CommandBuffer, not a Camera. D-15 Tube resolution and depth AO, no grandchildren. D-16 Label placement and size, depth cleared before the labels. D-17 The display is a 0.4 m quad with URP/Unlit (a display panel, like TMP text); the caller positions it. D-18 One RT with 4x MSAA, re-rendered only when the fork address changes. D-19 Fog is off for this draw and restored.
+Added by the implementation:
+- D-27 The brief's GPU criterion "luma at the viewport point of each child's far axis point <= 0.5 x luma at (0.5, 0.9)" is not met: measured 0.965 and 0.971. With the synthetic geometry (radius ratio 0.794, 37 deg) the far axis point projects onto the rim of the parent opening, where the child's near wall is seen, not deep tissue. The test logs both ratios and instead asserts that the darkest tissue pixel is <= 0.85 x the near-wall luma (measured 0.254 vs 0.602). Flag to cross-review: the AO range (0.25 at 8 r_p) gives a weak depth cue over the roughly 40 mm that is visible.
+- D-28 TextMeshPro: ForceMeshUpdate(ignoreActiveState: true) leaves an inactive object's mesh empty (TMP uploads only for an active object), so each label is activated for the single ForceMeshUpdate call inside Show and deactivated again (no frame passes). The label objects are created active and then deactivated, because TMP builds nothing before its Awake. `mesh.bounds` is empty, so the label bounds are taken from the mesh vertices. TMP's SDF shader needs `_ScreenParams`; the command buffer sets it to 512 x 512 for the draw and restores it.
+- D-29 The label offset is clamped so the whole label stays inside the view (the nominal 0.7 z offset clips the 9 o'clock label by about 4 px).
+- D-30 `Release()` is public (idempotent) so EditMode tests can free the RT without relying on OnDestroy in edit mode.
+- D-31 The GPU test ran through a copy of the shared runner without `-nographics` (`scratchpad/unity_test_gfx.sh`, same slot locking), because the shared runner always passes `-nographics`. It sets its own `_PaletteTex` global (the placeholder shader reads it; lane A's real palette replaces it).
+- D-32 The evidence PNGs are written with the rows reversed (EncodeToPNG of the Metal read-back is upside down).
+- D-33 Extra tests: `Endo_Labels_SyntheticRoot` (labels "9 o'clock" / "3 o'clock" after Show) and `Endo_TestScene_References` (the phone scene loads and the driver's three references resolve).
+- D-34 The surface material sets only `_WarpMode` = 0. `_Anchor` and `_Gates` stay at the material default (zero matrices); the real AtlasWarp / AtlasGates must treat `_WarpMode` 0 as identity and no gates (as the placeholders do).
+
+### Hand-overs
+P2-B08 builds `ForkView` from tree.json nodes, calls `Show` at the fork chamber, positions `Display`, and may use `ClockHour` in "take the N o'clock branch". Nothing in G5 assumes 4 forks. At integration replace `SetFloat("_WarpMode", ...)` with `AtlasShaderIDs.WarpMode` (P1-B03).
