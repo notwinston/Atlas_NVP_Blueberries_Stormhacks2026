@@ -26,11 +26,12 @@ namespace Atlas.Scan.Tests.Photo
             return new PhotoBox { Base = float3.zero, Size = new float3(side, side, side), Yaw = 0f };
         }
 
+        // In front of the box (local +Z is the front), looking at it: a view from behind would score half.
         static PhotoCamera Facing(in PhotoBox box, float distance)
         {
             float3 p;
             quaternion r;
-            Orbit(in box, 180f, distance, out p, out r);
+            Orbit(in box, 0f, distance, out p, out r);
             return Camera(p, r);
         }
 
