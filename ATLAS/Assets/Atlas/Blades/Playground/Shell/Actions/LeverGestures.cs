@@ -43,18 +43,22 @@ namespace Atlas.Blades.Playground
         bool _down;
         float _downSeconds;
         bool _longFired;
+        /// <summary>The touch in progress was cut short by <see cref="Reset"/>: it makes no gesture, ever.</summary>
+        bool _spent;
         bool _holdFired;
         int _clicks;
         float _gap;
 
         /// <summary>True from HoldBegin until HoldEnd.</summary>
-        public bool Holding { get { return _holdFired && _down; } }
+        public bool Holding { get { return _holdFired && _down && !_spent; } }
 
         /// <summary>Forgets a touch in progress (the context changed: a touch that began in a menu must not
         /// finish as a click in the space).</summary>
         public void Reset()
         {
-            _down = false;
+            // A finger still down stays down and spent: seen as a new touch on the next frame it would make a
+            // second gesture (a long press that opens the menu would pick from it 0.6 s later).
+            _spent = _down;
             _downSeconds = 0f;
             _longFired = false;
             _holdFired = false;
@@ -70,6 +74,7 @@ namespace Atlas.Blades.Playground
 
             if (down)
             {
+                if (_spent) return LeverGesture.None;
                 if (!_down)
                 {
                     _down = true;
@@ -98,6 +103,13 @@ namespace Atlas.Blades.Playground
                 return LeverGesture.None;
             }
 
+            if (_spent)
+            {
+                // The release of a touch that Reset cut short is silent.
+                _spent = false;
+                _down = false;
+                return LeverGesture.None;
+            }
             if (_down)
             {
                 _down = false;

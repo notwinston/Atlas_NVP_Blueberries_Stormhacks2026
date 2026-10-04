@@ -37,10 +37,12 @@ namespace Atlas.Blades.Playground.Tests
             return true;
         }
 
+        public bool ReturnHomeResult = true;
+
         public bool ReturnHome()
         {
             ReturnHomeCalls++;
-            return true;
+            return ReturnHomeResult;
         }
 
         public void SetRoom(RoomModel room) { RoomNow = room; }

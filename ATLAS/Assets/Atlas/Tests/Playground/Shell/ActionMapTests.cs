@@ -20,7 +20,7 @@ namespace Atlas.Blades.Playground.Tests
             Assert.That(t.Length, Is.EqualTo(9));
             string[] names = { "Confirm / next beat", "Dial q", "Mode 1 / Mode 2", "Exhibit menu, pick", "Gluing T2 / Klein / T3",
                                "Slice w", "Rotate in a w-plane", "Shadow", "Return Home" };
-            string[] pads = { "A", "D-pad left/right", "Y", "Start, stick + A", "bumpers", "bumpers", "triggers", "X", "B held" };
+            string[] pads = { "A", "D-pad left/right", "Y", "Start, stick + A", "bumpers", "bumpers", "triggers (or marker cube pitch)", "X", "B held" };
             string[] gazes = { "prompt chip", "floor dial, four detents", "mode chip", "exhibit sign", "gluing sign",
                                "ends of the w-ruler", "floor dial, five detents", "look down past -35 deg", "home beacon" };
             for (int i = 0; i < t.Length; i++)
@@ -266,6 +266,29 @@ namespace Atlas.Blades.Playground.Tests
             Touch(map, 0.9f); Release(map, 0.5f);
             Assert.That(e.ConvertAll(x => x.Action), Is.EqualTo(new[] { PgAction.ExhibitOpen, PgAction.ExhibitOpen, PgAction.ExhibitOpen }));
             Assert.That(e[2].Source, Is.EqualTo(InputSource.Lever));
+        }
+
+        [Test]
+        public void OneLongTouchMakesOneGestureEvenWhenTheContextChangesUnderIt()
+        {
+            var host = new FakeHost();
+            var map = new ActionMap();
+            var menu = new ExhibitMenu(host, null, map);
+            map.Fired += menu.OnAction;
+            var e = Collect(map);
+            Touch(map, 1.5f);
+            Assert.That(menu.IsOpen, Is.True, "the long press opened it");
+            Assert.That(host.Switches, Is.Empty, "and the same touch picked nothing");
+            Release(map, 0.5f);
+            Assert.That(e.ConvertAll(x => x.Action), Is.EqualTo(new[] { PgAction.ExhibitOpen }), "the release is silent");
+            Assert.That(menu.IsOpen, Is.True);
+
+            // The other way round: a pick closes the menu; holding on must not reopen it.
+            Click(map);
+            Touch(map, 1.5f);
+            Release(map, 0.5f);
+            Assert.That(e.ConvertAll(x => x.Action), Is.EqualTo(new[] { PgAction.ExhibitOpen, PgAction.ExhibitStep, PgAction.ExhibitPick }));
+            Assert.That(menu.IsOpen, Is.False);
         }
 
         [Test]

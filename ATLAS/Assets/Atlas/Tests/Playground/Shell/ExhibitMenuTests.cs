@@ -362,6 +362,69 @@ namespace Atlas.Blades.Playground.Tests
         }
 
         [Test]
+        public void StartOpensAndClosesTheMenuWithSpaceActionsWiredToo()
+        {
+            var host = new FakeHost();
+            var map = new ActionMap();
+            var menu = new ExhibitMenu(host, null, map);
+            map.Fired += menu.OnAction;
+            var registry = new Atlas.Link.ParamRegistry();
+            registry.DeclareBool(Atlas.App.CommandRouter.ParamDemoLock, "app", false);
+            // The seam of the status file: during the Playground lane D's Spaces page is not wired, so only the
+            // action map drives the menu.
+            var actions = new Atlas.App.SpaceActions(host, registry) { OpenSpaceMenu = null };
+
+            for (int round = 0; round < 2; round++)
+            {
+                // The input tick, then step 8b of the same frame.
+                map.OnActionFired(AtlasAction.SpaceMenu, InputSource.Gamepad, 0);
+                actions.Do(AtlasAction.SpaceMenu, menu.IsOpen ? InputContext.Menu : InputContext.Space);
+                Assert.That(menu.IsOpen, Is.EqualTo(round == 0), "round " + round);
+            }
+
+            // Wired to Open, as the first status file said, Start could never close it.
+            actions.OpenSpaceMenu = () => menu.Open();
+            map.OnActionFired(AtlasAction.SpaceMenu, InputSource.Gamepad, 0);
+            map.OnActionFired(AtlasAction.SpaceMenu, InputSource.Gamepad, 0);
+            Assert.That(menu.IsOpen, Is.False);
+            actions.Do(AtlasAction.SpaceMenu, InputContext.Space);
+            Assert.That(menu.IsOpen, Is.True, "why the seam must stay empty");
+        }
+
+        [Test]
+        public void AReturnSpaceActionsAlreadyDidInTheSameFrameStillCounts()
+        {
+            RoomModel room = Rooms.Empty();
+            var host = new FakeHost { RoomNow = room, CurrentNow = SpaceId.Home, ReturnHomeResult = false };
+            var ramp = new Ramp();
+            var home = NewReturn(host, ramp, new Projection());
+            var pose = WalkerPose.Start;
+            home.Begin();
+            ramp.Kappa = 0.0;
+            home.Tick(1f / 60f, in pose, double2.zero);
+            Assert.That(home.State, Is.EqualTo(HomeReturnState.Done));
+        }
+
+        [Test]
+        public void TheTimeoutRunsFromTheMomentKappaIsFlatNotFromTheStart()
+        {
+            RoomModel room = Rooms.Empty();
+            var host = new FakeHost { RoomNow = room, CurrentNow = SpaceId.CurvedWalk, StateNow = SpaceHostState.Loading };
+            var ramp = new Ramp();
+            var home = NewReturn(host, ramp, new Projection());
+            var pose = WalkerPose.Start;
+            home.Begin();
+            // A walker who keeps moving: the ramp takes 20 s, longer than the old 14 s limit.
+            for (int i = 0; i < 20 * 60; i++) home.Tick(1f / 60f, in pose, double2.zero);
+            Assert.That(home.State, Is.EqualTo(HomeReturnState.Ramping));
+            ramp.Kappa = 0.0;
+            for (int i = 0; i < 9 * 60; i++) home.Tick(1f / 60f, in pose, double2.zero);
+            Assert.That(home.State, Is.EqualTo(HomeReturnState.Returning));
+            for (int i = 0; i < 2 * 60; i++) home.Tick(1f / 60f, in pose, double2.zero);
+            Assert.That(home.State, Is.EqualTo(HomeReturnState.Failed));
+        }
+
+        [Test]
         public void TheReturnHomeTwinStartsIt()
         {
             RoomModel room = Rooms.Empty();

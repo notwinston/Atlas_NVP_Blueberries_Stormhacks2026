@@ -3,6 +3,7 @@
     "rootNamespace": "Atlas.Blades.Playground.Tests",
     "references": [
         "Atlas.Blades.Playground",
+        "Atlas.App",
         "Atlas.Kernel",
         "Atlas.Link",
         "Atlas.World",

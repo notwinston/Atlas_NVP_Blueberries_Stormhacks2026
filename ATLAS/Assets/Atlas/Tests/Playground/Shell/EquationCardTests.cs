@@ -120,6 +120,23 @@ namespace Atlas.Blades.Playground.Tests
         }
 
         [Test]
+        public void LapsCountAtQCornersNotAtFour()
+        {
+            var open = new FakeWalk { Armed = true, Q = 5, Corners = 4, Closed = false };
+            var src = new CurvedWalkEquationSource(open);
+            var card = new EquationCard();
+            card.Bind(src);
+            Assert.That(card.Text.ToString(), Does.Contain("laps  0"), "four right turns at q = 5 do not bring you home");
+            open.Corners = 5;
+            open.Closed = true;
+            card.Bind(src);
+            Assert.That(card.Text.ToString(), Does.Contain("laps  1"), "a fifth does");
+            var six = new FakeWalk { Armed = true, Q = 6, Corners = 5, Closed = false };
+            card.Bind(new CurvedWalkEquationSource(six));
+            Assert.That(card.Text.ToString(), Does.Contain("laps  0"));
+        }
+
+        [Test]
         public void CurvedWalkCardShowsTheLoopRelationWithLiveLengths()
         {
             foreach (int q in new[] { 5, 6 })

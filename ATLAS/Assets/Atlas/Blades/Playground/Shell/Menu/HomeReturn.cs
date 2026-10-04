@@ -120,8 +120,12 @@ namespace Atlas.Blades.Playground
     {
         /// <summary>kappa ramps over 4 s (Master Plan section 10.1.4).</summary>
         public const float RampSeconds = 4f;
-        /// <summary>A SpaceLab that has not answered in this long fails the return, seconds (derived).</summary>
+        /// <summary>A SpaceLab that has not answered in this long fails the return, seconds (derived). Counted
+        /// from the moment kappa is flat, not from the start: lane B's dial ramps only while the walker stands still.</summary>
         public const float TimeoutSeconds = 10f;
+        /// <summary>The longest the ramp may take to finish, seconds (derived): a walker who never stands still
+        /// must not hold the sequence for ever.</summary>
+        public const float RampWaitSeconds = 60f;
 
         readonly ISpaceHost _host;
         readonly ICurvatureRamp _ramp;
@@ -180,7 +184,8 @@ namespace Atlas.Blades.Playground
             float dt = deltaTime > 0f ? deltaTime : 0f;
             _elapsed += dt;
             _sinceStage += dt;
-            if (_elapsed > TimeoutSeconds + RampSeconds)
+            float limit = State == HomeReturnState.Ramping ? RampWaitSeconds : TimeoutSeconds;
+            if (_sinceStage > limit)
             {
                 Finish(HomeReturnState.Failed);
                 return;
@@ -197,7 +202,10 @@ namespace Atlas.Blades.Playground
             if (!_requested)
             {
                 _requested = _host.ReturnHome();
-                return;
+                // SpaceActions (lane D) may have sent the walker home in this same frame (B held): a return
+                // already done or under way counts as asked.
+                if (!_requested && _host.HasSpace && _host.Current == SpaceId.Home) _requested = true;
+                if (!_requested) return;
             }
             if (_host.State != SpaceHostState.Running || !_host.HasSpace || _host.Current != SpaceId.Home) return;
             Verify(in pose, headFloor);

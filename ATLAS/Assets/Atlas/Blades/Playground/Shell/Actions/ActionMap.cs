@@ -141,7 +141,7 @@ namespace Atlas.Blades.Playground
                        AtlasAction.VariantPrev, AtlasAction.VariantNext),
             new PgTwin(PgAction.SliceW, "Slice w", "bumpers", "ends of the w-ruler", "hold to sweep",
                        AtlasAction.VariantPrev, AtlasAction.VariantNext, true, AtlasAxis.Sweep),
-            new PgTwin(PgAction.Rotate, "Rotate in a w-plane", "triggers", "floor dial, five detents", "double click steps 15 deg",
+            new PgTwin(PgAction.Rotate, "Rotate in a w-plane", "triggers (or marker cube pitch)", "floor dial, five detents", "double click steps 15 deg",
                        AtlasAction.None, AtlasAction.None, true, AtlasAxis.Twist),
             new PgTwin(PgAction.Shadow, "Shadow", "X", "look down past -35 deg", null,
                        AtlasAction.Secondary, AtlasAction.None),
@@ -320,6 +320,9 @@ namespace Atlas.Blades.Playground
             }
             int max = 1;
             if (DoubleRole != LeverDoubleRole.None) max = 2;
+            // Return Home is live in every beat by default, so a single click waits MultiClickSeconds (0.30 s) to
+            // tell it from a triple click; a beat that does not offer Return Home sets it not live to drop that
+            // wait. Provisional, to be tuned on the phone (open item 10).
             if (IsLive(PgAction.ReturnHome)) max = 3;
             Lever.MaxClicks = max;
             Lever.HoldBound = HoldSweeps;

@@ -155,7 +155,8 @@ namespace Atlas.Blades.Playground
                 rows[n++] = EquationRow.Number(q == 3 ? "cos(s/2R)" : "cosh(s/2L)", CardMath.LoopLhs(q, s, l), "");
                 rows[n++] = EquationRow.Number("sqrt(2) cos(pi/q)", CardMath.LoopRhs(q), "");
             }
-            rows[n++] = EquationRow.Number("laps", _walk.Armed ? _walk.Corners / 4 : double.NaN, "");
+            // A lap closes at Q corners (lane B's LapWalk), so four right turns at q = 5 are not yet a lap.
+            rows[n++] = EquationRow.Number("laps", _walk.Armed ? _walk.Corners / Math.Max(1, q) : double.NaN, "");
             rows[n++] = EquationRow.Number("world turned", _walk.Armed ? _walk.WorldTurnDeg : double.NaN, "deg");
             rows[n++] = EquationRow.Number("from the start flag", _walk.Armed ? _walk.DistanceToFlagM : double.NaN, "m");
             return n;
