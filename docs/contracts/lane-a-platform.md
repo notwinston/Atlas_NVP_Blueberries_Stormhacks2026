@@ -15,6 +15,7 @@ stencil table, and `Mesh4D`. Names and signatures are binding. Bodies are free.
 | `AtlasWarp.hlsl`, `AtlasGates.hlsl` | Lane B's warp and gate clip (`P1-B03`, `P1-B10`), on lane A's property block | unchanged |
 | S1 Glued, S5 Impossible Rooms, S6 Slicer, `Mesh4D` | Built | unchanged |
 | S2, S3, S4 | Built by lane B and registered like the others (`Spaces/CurvedWalk`, `AlignedCells`, `SmallPlanet`); S2 and S4 configure the app's one walker kernel on entry and SpaceLab puts it back to flat after Exit | unchanged |
+| The tracked hands' hooks in the frame loop (§7), `Atlas/NearText`, how the hands and the near panels are drawn (§10.9) | Built and tested headless; the Unity-only tests and a phone have not run | unchanged |
 
 ---
 
@@ -628,6 +629,7 @@ Services of lane A, and the slots this page reserves for the others:
 | `PortalRenderer` | `Atlas.Rendering` | Nobody in this build. `PortalSpace` uses a published one if there is one, and otherwise creates and drives its own (§12.2) | no |
 | `RoomHandOver` | `Atlas.App` | `AtlasApp` (§4.2) | no |
 | `IAtlasInput` | `Atlas.Input` | `AtlasApp`, from `AtlasInput.Install` | lane D's page |
+| `IHands`, `IReachLayout` | `Atlas.World` | `AtlasApp`, from `HandsInstaller.Install`: the one `HandsRuntime` under both keys (lane C §7.7), withdrawn by `HandsSystem.Shutdown`. A view asks with `TryGet`: the Spectator, and a test that installs no hands, have neither | no |
 | `IPerfSource`, `IEventLog` | `Atlas.World` | lane D's telemetry installer | lane D's page |
 | `IRoomContent`, `IPosePipeline`, `IScanSession`, `IBumpGuard`, `IObjectPhotoSink` | their pages | their installers | their pages |
 
@@ -705,9 +707,21 @@ namespace Atlas.World
 `Atlas.Input` references no Atlas assembly (README F1), so it cannot implement `ISenseStep`.
 `Atlas.App.InputSenseStep` is the adapter: at step 1, after the pose pipeline, it calls
 `IAtlasInput.Tick(frame.RawHeadPosition, frame.RawHeadRotation, frame.DeltaTime)` and hands the keyboard walker
-its input. `Atlas.App.BumpGuardStep` implements `ISafetyStep` and builds nothing itself: the pose pipeline fills
-its `SensorFrame` at step 1 (raw pose, tracking, depth), and the step calls
-`IBumpGuard.Tick(in pipeline.Sensors)`.
+its input. `Atlas.App.BumpGuardStep` implements `ISafetyStep` and builds almost nothing itself: the pose pipeline
+fills its `SensorFrame` at step 1 (raw pose, tracking, depth), and the step calls `IBumpGuard.Tick(in pipeline.Sensors)`.
+The one thing it adds: given an `IDepthMaskSource` (the tracked hands), a frame that holds a new depth image goes to
+Bump Guard as a copy that carries the mask for that image, and a source that throws is counted in
+`BumpGuardStep.MaskFaults` while Bump Guard ticks on the frame as it was (lane C §7.3).
+
+**The tracked hands** (`Atlas.Hands`) are three more implementations of the hooks above. `HandsInstaller.Install`
+builds them and the composition root adds them in this order (§8.2): `HandsSenseStep` (step 1), after the pose
+pipeline's step and before `InputSenseStep`, so that a touch or a pinch reaches this frame's input snapshot;
+`HandsUploadStep` (step 6), after `RigUploadStep`: it skins the two hands and places the contact marks (§10.9);
+`HandsAfterFrameStep` (step 8b), before `QualityLadder`: it logs the hands' edge events and plays their sounds. The
+hands' own main-thread time, sense and upload together, feeds their self-governor (lane D §1.4, `hands.rate`).
+`FrameLoopCore` puts a net under the hooks of step 1 and none under those of steps 6 and 8b (§7.2, rule 9), so the
+hands' three hooks each catch their own exceptions: an exception in any of them switches the hands off for the
+session and is logged once as `hands.fault`, and the frame carries on (decision R9 of the hands brief).
 
 Four more interfaces, in `App/Frame/FrameLoopCore.cs` (namespace `Atlas.App`), connect the loop to its
 neighbours without an engine type:
@@ -783,7 +797,7 @@ public sealed class FrameLoopCore : IFrameLoop, IWalkerReset
         _frame.Walker = _kernel.Pose;
         Space.TickSpace(in _frame);                          // 5  ISpaceModule.Tick
         Space.UploadSpace(in _frame);                        // 6  the module's own IUploadStep, if any
-        for (i) _upload[i].Upload(in _frame);                // 6  LookUploadStep, RigUploadStep, TileStatsUploadStep
+        for (i) _upload[i].Upload(in _frame);                // 6  LookUploadStep, RigUploadStep, HandsUploadStep, TileStatsUploadStep
     }
     // 7  URP renders Eye Left, Eye Right, then the Screen camera with the lens blit
 
@@ -804,16 +818,17 @@ public sealed class FrameLoopCore : IFrameLoop, IWalkerReset
 | Step (§6.3) | Call | Hook declared in | Implemented by | Lane |
 |---|---|---|---|---|
 | 1 Read | `ISenseStep.Sense(ref frame)`, each in order | `Atlas.World` | Pose pipeline in `Atlas.Scan`: moves the XR Origin so the room anchor is the world origin (README F4), then fills `RawHeadPosition`, `RawHeadRotation`, `Tracking` from `AtlasBootContext.Head`, takes the newest depth image and builds the frame's `SensorFrame` | C |
-| 1 Read | same | `Atlas.World` | `Atlas.App.InputSenseStep`, added after the pose pipeline's step so the gaze sees this frame's head: freezes the input snapshot | A (adapter), C (input) |
+| 1 Read | same | `Atlas.World` | `Atlas.Hands.HandsSenseStep`, added after the pose pipeline's step and before `InputSenseStep`: polls the hand detector, lifts and filters the hands, runs the gate, builds this frame's depth mask for Bump Guard, places the near anchor and hands the fingertips and pinch edges to `IHandsInput` | the hands (lead) |
+| 1 Read | same | `Atlas.World` | `Atlas.App.InputSenseStep`, added after the hands' step so the gaze sees this frame's head and fingertips: freezes the input snapshot | A (adapter), C (input) |
 | 1 Read | `IEyePositions.GetEyes` | `Atlas.App` | `RigEyePositions` over `IStereoRig` | A |
-| 2 Bump Guard | `ISafetyStep.Guard(in frame)` → `IBumpGuard.Tick(in SensorFrame)` | `Atlas.World`; `Atlas.Safety` | `Atlas.App.BumpGuardStep` and lane C's Bump Guard | C (A adapter) |
+| 2 Bump Guard | `ISafetyStep.Guard(in frame)` → `IBumpGuard.Tick(in SensorFrame)` | `Atlas.World`; `Atlas.Safety` | `Atlas.App.BumpGuardStep` and lane C's Bump Guard. The step puts the hands' depth mask on a copy of the frame (§7.1) | C (A adapter) |
 | 3 Pose filter | `IPoseFilterStep.Filter(ref frame)` | `Atlas.World` | Pose pipeline in `Atlas.Scan` | C |
 | 4 Kernel | `IWalkerKernel.Step(double2 headFloorMetres, bool trackingNormal, double timeSeconds)` | `Atlas.Kernel` | `HolonomyWalkerKernel` (flat, {4,5}, {4,6} or the sphere, by configuration) | B |
 | 5 Space | `ISpaceModule.Tick(in frame)` | `Atlas.World` | The entered module; skipped when none | space owner |
-| 6 Upload | `IUploadStep.Upload(in frame)`: the module first, then the registered hooks | `Atlas.World` | `LookUploadStep` (`AtlasLook.Upload`: `_HeadPosWS`, `_HypL`, fog cross-fade, `_AtlasTime`, and every other global again), then `RigUploadStep` (the prediction offset), `TileStatsUploadStep` (the drawn-tile count for telemetry); a `PortalRenderer` is driven from `PortalSpace`'s own `Upload`; lane B's tile renderer, room view and markers from the module's own `Upload` | A, B |
+| 6 Upload | `IUploadStep.Upload(in frame)`: the module first, then the registered hooks | `Atlas.World` | `LookUploadStep` (`AtlasLook.Upload`: `_HeadPosWS`, `_HypL`, fog cross-fade, `_AtlasTime`, and every other global again), then `RigUploadStep` (the prediction offset), `HandsUploadStep` (the two hand meshes and the contact marks, §10.9), `TileStatsUploadStep` (the drawn-tile count for telemetry); a `PortalRenderer` is driven from `PortalSpace`'s own `Upload`; lane B's tile renderer, room view and markers from the module's own `Upload` | A, B, the hands |
 | 7 Render | Unity and URP | – | Eye cameras into their textures, one lens blit to the screen (§9) | A |
 | 8a State | `ISpaceModule.WriteState(ref state)`, `IStateSink.Send(in state)` | `Atlas.World` | The module; lane D's link glue in `Atlas.Telemetry` | space owner, D |
-| 8b After the frame | `IAfterFrameStep.AfterFrame(in frame)`, each in order | `Atlas.World` | In this order: lane D's perf probe (samples counters); lane D's link pump (drains received parameters and commands; commands go to `IOperatorCommands`); lane D's HUD; hooks the asset client, the menu and onboarding added at rows 18 and 19; `QualityLadder`; `RehearsalFlow`; `RoomHandOver`; `SpaceActionStep`; `SpaceLab` (advances a switch, so a switch starts in the frame that asked for it) | D, C, A |
+| 8b After the frame | `IAfterFrameStep.AfterFrame(in frame)`, each in order | `Atlas.World` | In this order: lane D's perf probe (samples counters); lane D's link pump (drains received parameters and commands; commands go to `IOperatorCommands`); lane D's HUD; hooks the asset client, the menu and onboarding added at rows 18 and 19; `HandsAfterFrameStep` (the hands' edge events and sounds); `QualityLadder`; `RehearsalFlow`; `RoomHandOver`; `SpaceActionStep`; `SpaceSigns`; `SpaceLab` (advances a switch, so a switch starts in the frame that asked for it) | D, C, A, the hands |
 
 Rules:
 
@@ -843,6 +858,10 @@ Rules:
    `AtlasServices.MarkBooted()`; a hook added later is still added, and reported through `Warning`.
 8. Nobody else has an `Update` that does per-frame work on the frame path. Systems created by an installer may
    have `Update` for work that is not on the frame path (file writers, reconnect timers).
+9. `FrameLoopCore` puts a net under the hooks of step 1 (rule 2) and under none of the hooks at steps 6 and 8b: an
+   exception from one of them ends the remaining hooks of that step for the frame and leaves the loop. A hook added
+   there that must not take the frame down catches its own. The tracked hands' do: they switch themselves off for
+   the session, log `hands.fault` once and leave the frame as it was (decision R9 of the hands brief).
 
 `CommandRouter` (`Atlas.App`, lane A) implements `IOperatorCommands`:
 
@@ -920,7 +939,7 @@ namespace Atlas.App
         // One read-only property per system: Boot, Options, Registry, Pool, Lens, Rig, Display, Eyes, Blit, Loop,
         // LoopCore, WalkerKernel, InputService, Pose, ScanSystems, ScanSettings, Guard, GuardInstalled,
         // RoomContent, Ladder, Spaces, Commands, SpaceActions, TelemetrySystems, Assets, HandOver, SourceSwitch,
-        // Flow, Overlay, Onboarding, Menu, PerfTour.
+        // Flow, Overlay, Onboarding, Menu, PerfTour, Hands (the HandsSystem: never null, off until hands.enabled is set).
     }
 }
 ```
@@ -994,16 +1013,17 @@ head-locked parent and returns the input service, which the root publishes. The 
 | 8 | Kernel: `new HolonomyWalkerKernel()` (flat until a curved space configures it) | `AtlasApp` | A (type: B) | – | `IWalkerKernel`, `IDialKernel` |
 | 9 | `FrameLoopCore`; `AtlasFrameLoop` (disabled until row 20) | `AtlasFrameLoop.Create(boot.Systems, core)` | A | `Systems/FrameLoop` | `IFrameLoop` |
 | 10 | Input | `AtlasInput.Install(boot.Hud, material)` | C | `boot.Hud` | `IAtlasInput` |
-| 11 | AR session set-up, pose sources and pipeline; scan session, room store, photo capture, world maps; then `InputSenseStep` | `ArPoseSystems.Create(boot, session, logs)`, `ScanSystems.Create(pose)`, each with `Publish(loop)` | C | `Systems` | `ISenseStep`, `IPoseFilterStep`; `IPosePipeline`, `IScanSession` and their own types; `AddSense(InputSenseStep)` |
-| 12 | Bump Guard and its cue (the cue under `boot.Hud`) | `SafetyInstaller.Install(boot, material)` | C | `Systems` | `IBumpGuard`; the root wraps it in `BumpGuardStep` → `SetGuard`. If it throws: `Display.HeadsetLocked` on a device |
+| 11 | AR session set-up, pose sources and pipeline; scan session, room store, photo capture, world maps | `ArPoseSystems.Create(boot, session, logs)`, `ScanSystems.Create(pose)`, each with `Publish(loop)` | C | `Systems` | `ISenseStep`, `IPoseFilterStep`; `IPosePipeline`, `IScanSession` and their own types |
+| 11 | The tracked hands: their source (the phone's detector, the Editor's mouse and keys, or none), the runtime, the hand meshes with their marks, the sounds; then `InputSenseStep` | `HandsInstaller.Install(new HandsPorts { … })`, kept as `AtlasApp.Hands`; then `new InputSenseStep(input, pipeline, remoteWalk)` | the hands (lead); A for the step | `Systems` (the object "Atlas Hands") | `IHands`, `IReachLayout`; `AddSense(Hands.Sense)`, then `AddSense(InputSenseStep)` |
+| 12 | Bump Guard and its cue (the cue under `boot.Hud`) | `SafetyInstaller.Install(boot, material)` | C | `Systems` | `IBumpGuard`; the root wraps it in `BumpGuardStep(guard, pipeline, Hands.Mask)` → `SetGuard`. If it throws: `Display.HeadsetLocked` on a device |
 | 13 | Room content | `RoomContentInstaller.Install(boot, pool)` (`Atlas.Rendering.Room`, lane C files) | C | `Atlas/Room` | `IRoomContent` |
-| 14 | Upload hooks of lane A, in this order: `LookUploadStep`, `RigUploadStep` | `AtlasApp` | A | – | `AddUpload` × 2 |
+| 14 | Upload hooks, in this order: `LookUploadStep`, `RigUploadStep` (lane A) and `Hands.Upload` (the hands) | `AtlasApp` | A | – | `AddUpload` × 3 |
 | 15 | `QualityLadder` round a `QualityApplier` on the eye textures; then `FurnitureLevelPolicy(RoomContent, Ladder)`, made here because it needs the room content (row 13) and the ladder, and kept as `AtlasApp.Furniture` | `AtlasApp` | A | – | `IQualityState` |
 | 16 | `GridSpace` registered as Home when there is no Home space; `SpaceLab` with `SceneSpaceLoader` and `SpaceStage(RoomContent, Furniture)`; then the parameters of §9.6 (`AppParams`, with `DeclareRender` given `Furniture` as its last argument) and `SpaceRegistry.DeclareAllParams(registry)` | `AtlasApp` | A | – | `ISpaceHost` |
 | 17 | `CommandRouter` | `AtlasApp` | A | – | `IOperatorCommands` |
-| 18 | Link client, perf probe, HUD, event log, pairing; the asset client; then `RoomHandOver`, `RehearsalFlow`, `DevOverlay` and the `dev.*` parameters | `TelemetryInstaller.Install(boot)`, `AssetClientInstaller.Install(boot, telemetry)`; `AtlasApp` | D, A | `Systems`; HUD under `boot.Hud` | `SetStateSink`; `IPerfSource`, `IEventLog`, `IObjectPhotoSink`; `AddAfterFrame` × 3 (probe, pump, HUD); `RoomHandOver` |
+| 18 | Link client, perf probe, HUD, event log, pairing; the asset client; then `RoomHandOver`, `RehearsalFlow`, `DevOverlay` and the `dev.*` parameters; then the hands' parameters, `Hands.DeclareParams(registry)` (§9.6) | `TelemetryInstaller.Install(boot)`, `AssetClientInstaller.Install(boot, telemetry)`; `AtlasApp` | D, A | `Systems`; HUD under `boot.Hud` | `SetStateSink`; `IPerfSource`, `IEventLog`, `IObjectPhotoSink`; `AddAfterFrame` × 3 (probe, pump, HUD); `RoomHandOver` |
 | 19 | On-device menu, onboarding, perf tour | `AppHooks.CreateMenu()`, `CreateOnboarding()`, `CreatePerfTour()`, then `Install(app)` on each | D, C, A | `Systems` | their own |
-| 20 | `AddAfterFrame` × 5: `QualityLadder`, `RehearsalFlow`, `RoomHandOver`, `SpaceActionStep`, `SpaceLab`; `ParamRegistry.PushAll()`; the frame loop is enabled; `AtlasServices.MarkBooted()`; `FrameLoopCore.Seal()`; `Onboarding.Begin()` | `AtlasApp` | A | – | – |
+| 20 | `AddAfterFrame` × 7: `Hands.AfterFrame`, `QualityLadder`, `RehearsalFlow`, `RoomHandOver`, `SpaceActionStep`, `SpaceSigns`, `SpaceLab`; `ParamRegistry.PushAll()`; the frame loop is enabled; `AtlasServices.MarkBooted()`; `FrameLoopCore.Seal()`; `Onboarding.Begin()` | `AtlasApp` | A | – | – |
 
 Rows 10 and 12 get one pooled material for head-locked content (fog weight 0, fade weight 0); the reticle and
 the cue use it only when their own shader is missing (§10.1).
@@ -1472,6 +1492,11 @@ The column is a table in `Rendering/Quality/QualityFurniture.cs` (`QualityFurnit
 `Atlas.World`; moving the column onto the row is a later change in that assembly. `FurnitureLevel` is `Atlas.World.FurnitureLevel`
 (`Full = 0`, `Light = 1`).
 
+The tracked hands follow the tier too, and the ladder knows nothing of them: the hands read `FrameContext.Tier`
+(hands design §7.3). Their gate holds at `Nominal`, `High` and `Fair`, with the detector at 30 detections a second at
+`Nominal` and `High` and 15 at `Fair`. At `Serious` and `Critical` the gate closes with the reason `heat`
+(`hands.off`), the detector stops, and the panels that had come within reach stay where they are and work by gaze.
+
 T³ is 3 × 3 × 3 on every rung. `State.flags` bits 4 to 5 carry the value 0 to 3; `High` is sent as 0 (it shares
 the Nominal texture set). `Telemetry.tier` carries the value 0 to 4 (decided here).
 
@@ -1638,6 +1663,11 @@ order of declaration); the names, ranges and defaults are binding here.
 (decided here). `RigUploadStep` copies the pipeline's `PredictionRotation` into `IStereoRig.PredictionOffset` at
 step 6. `ParamRegistry.PushAll()` at the end of boot pushes every value to its handler once.
 
+The tracked hands' own parameters, the `hands.*` area (`hands.enabled`, `hands.rate`, `hands.reach`, `hands.sound`,
+`hands.draw`, `hands.editor`, `hands.bench`, `hands.record`), are not `AppParams`'. `HandsSystem.DeclareParams` declares
+them and the root calls it after the dev rows (§8.2, row 18). Lane D's page 1.4 has their kinds, ranges and defaults and
+1.5 the one kill switch among them, `hands.enabled`, which is off at the start.
+
 ---
 
 ## 10 · Shader contract
@@ -1654,6 +1684,8 @@ Every shader sits in a `Resources` folder, so a player build includes it with no
 | `Rendering/Shaders/Resources/AtlasPortalClip.hlsl` | – | A | `AtlasPortalClip`: clip against a portal plane |
 | `Rendering/Shaders/Resources/AtlasGates.hlsl` | – | B | `AtlasGatesClip`: clip against up to four sight-line gates, read from `_Gate0` to `_Gate3`. Lane B's (lane B §6.5) |
 | `Rendering/Shaders/Resources/AtlasBackground.shader` | `Hidden/Atlas/Background` | A | The gradient background, used as the skybox material |
+| `Rendering/Shaders/Resources/AtlasNearText.shader` | `Atlas/NearText` | A, for the hands | The text of panels within reach of the hands: Unity's built-in font shader (vertex colour times `_Color`, alpha from the font texture, blended, both faces, no depth write) with its depth test on, `ZTest LEqual` (decision R7 of the hands brief; below and §10.9) |
+| `Rendering/Shaders/Resources/AtlasHexFlip.shader` | `Hidden/Atlas/HexFlip` | A | The hexagon dome that turns one space over into the next (`App/Spaces/HexTransition.cs`): one mesh, opaque, no fog and no fade, drawn before the world in a thin depth slab next to the near plane |
 | `Rendering/Portals/Resources/AtlasPortalMask.shader` | `Hidden/Atlas/PortalMask` | A | Doorway mask: stencil mark and depth reset |
 | `Rendering/Stereo/Resources/AtlasLensBlit.shader` | `Atlas/LensBlit` | A | The lens blit of §9.4 |
 | `Rendering/Look/AtlasShaderIDs.cs` | – | A, with B | The property ids of the look, the warp and the portals (§10.6) |
@@ -1670,10 +1702,22 @@ Every shader sits in a `Resources` folder, so a player build includes it with no
   `docs/scene-ownership.md` says the same.
 - The shaders reach the player through their `Resources` folders and are loaded by file name at boot:
   `Resources.Load<Shader>("AtlasSurface")` and `("AtlasBackground")` (`AtlasLook.LoadSurfaceShader`,
-  `LoadBackgroundShader`), `("AtlasPortalMask")` (`PortalRenderer.MaskShaderResource`) and `("AtlasLensBlit")`
-  (`LensBlit.ShaderResource`). There is no shader-set asset; `Shader.Find` is only the lens blit's second try
+  `LoadBackgroundShader`), `("AtlasPortalMask")` (`PortalRenderer.MaskShaderResource`), `("AtlasLensBlit")`
+  (`LensBlit.ShaderResource`), `("AtlasHexFlip")` (`HexTransition`) and `("AtlasNearText")` (`NearText.ShaderResource`,
+  `App/Menu/NearText.cs`). There is no shader-set asset; `Shader.Find` is only the lens blit's second try
   (U §9). **No other lane loads `Atlas/Surface` or creates a material of it.** Materials come from
   `MaterialPool`.
+- `Atlas/NearText` exists for one reason. The text
+  of the on-device menu and of the four SpaceLab signs is legacy `TextMesh` on the built-in font's own material, whose
+  shader (`GUI/Text Shader`) passes the depth test always: right on the head-locked layer, wrong on the world layer,
+  where a panel within reach of the hands stands, because its text would paint over a finger held in front of it.
+  While a panel is within reach its view gives its text renderers the one `Atlas/NearText` material of the font
+  (`NearText.For(font)`: made once for each font with the font's own texture and colour, kept in step when the font
+  rebuilds its atlas, `HideAndDontSave`, so neither pooled nor saved) and gives the font's own material back when the
+  panel goes back. The shader is `GUI/Text Shader` with the depth test on, written for the Universal pipeline with no
+  keyword; its one pass has no `LightMode` tag, so URP draws it as `SRPDefaultUnlit` in the transparent queue, after
+  the opaque panels have written their depth. It uses none of the look's block, globals, warp or fog. Without it in the
+  build the font's own material stays: the text is readable and does not go behind a finger (a warning is logged once).
 - Three shaders outside `Atlas.Rendering` exist in the code, each loaded from `Resources` by its owner:
   `Input/Resources/AtlasReticle.shader` (the gaze reticle), `Safety/Resources/AtlasCue.shader` (the warning
   cue, which must not depend on the look) and `Telemetry/Map/Resources/AtlasFlatTwin.shader` (the flat-twin
@@ -2300,6 +2344,53 @@ The values and the fog cross-fade are the engine-free struct `AtlasLookState`
 A space calls `SetFog`, `SetFogColor` and `SetSkyTop` in `Enter` or later; it never calls `Shader.SetGlobal…`
 itself. Lane B's spaces set the fog from ρ and L the same way.
 
+### 10.9 What the tracked hands and the near panels draw with
+
+The tracked hands (`Atlas.Hands`, hands design §5) add nothing to the look: no shader of their own, no keyword and no
+property block. `HandsView` (`Hands/View/HandsView.cs`) builds an object "Atlas Hands" under `boot.Systems`, never
+under room content or a space, whose subtrees `PortalRenderer` and SpaceLab re-layer and switch off as rooms change, and
+four children. Each is a `MeshFilter` and a `MeshRenderer` on **layer 0**, the world (§12.1), with shadows and probes
+off and the renderer disabled until there is something to draw. Each has its **own pooled `Atlas/Surface` material**
+(`MaterialPool.Rent()`, four in all, returned by `Dispose`):
+
+| Object | Mesh | Material |
+|---|---|---|
+| `Hands Left`, `Hands Right` | A dynamic mesh each (`AtlasMesh.CreateDynamic`): 790 triangles and 409 vertices built in code from the template hand (`HandsMeshTemplate`; capacity `HandsConstants.MaxVertices` 640 and `MaxIndices` 2,700). Skinned on the CPU every frame at step 6 from the 21 world joints the hands' filter holds (`HandsSkin.Skin`: weights, a baked shade from `AtlasShading.LightDirection`, bounds from the joints) and uploaded with `AtlasMesh.Upload`; nothing is allocated | `SetSurface(1, 0, 0.12, 0)` and `SetCull(Off)`; tint white, opacity `HandPose.Opacity` every frame; the vertices' UV0 is the palette cell `AtlasPalette.AvatarBody` |
+| `Hands Mark Left`, `Hands Mark Right` | A flat ring of unit diameter in the local XY plane (24 segments), set 2 mm proud of a target's face under a hovering or pressing fingertip, or of a surface of the room the fingertip is near, and left to fade for 0.4 s (hands design §6.2, §6.5) | `SetSurface(1, 0, 0, 0)` and `SetCull(Off)`; tint white, opacity 0.25 to 1; the palette cell `AtlasPalette.Reticle` (an emissive cell) |
+
+- **No warp.** None of the four materials sets `_WarpMode`, `_Anchor` or a gate, so `AtlasWarp` returns the plain object-to-world
+  position and nothing is clipped (lane B §10, item 5): in S2, S3 and S4 too the hands are in room coordinates, as the
+  walker's own hands must be. The meshes are written in world coordinates, so their objects never move.
+- **No fog, no fade.** Fog weight 0, so that a hand is never fogged (Glued's fog can start half a metre out), and fade
+  weight 0, so that a space switch's `_AtlasFade` does not touch it.
+- **Dithered opacity.** `HandPose.Opacity` goes to `_BaseTint.a` each frame (`MaterialPool.SetTint`) and the shader's
+  4 × 4 ordered dither does the rest (§10.5): no blending and no sorting. The material is opaque geometry (`ZWrite On`,
+  queue Geometry), so a hand is tested against the world, against a near panel and against the other hand. A hand with no
+  opacity, or hidden, is not skinned and its renderer is off. The opacity is the smallest of five ramps (a hand
+  entering or leaving, the edge of the camera's view, a Bump Guard warning, the gate, `IHands.HideThisFrame`; hands
+  design §5.4).
+- **The near fade.** `SetSurface`'s third value, `HandsConstants.NearFadeMetres` = 0.12: `AtlasShade` multiplies the
+  opacity by `saturate(distance(positionWS, _WorldSpaceCameraPos) / 0.12)` for each eye, so the part of a hand within
+  12 cm of an eye dissolves by the same dither and is not sliced by the near plane.
+- **Both faces.** `SetCull(Off)`, so a hand that is given the wrong side never shows a hole.
+- **Where it is in the frame.** `HandsUploadStep` is the third upload hook, after `LookUploadStep` and `RigUploadStep`
+  (§7.2). It reads only what the hands' sense step froze at step 1, writes the meshes, the opacities and the marks, and
+  has no look global of its own to write. The frame's other views place themselves in their own step 6 and then ask
+  `ReachSlots.TryGetNear` (lane C §7.7), which reads the layout of the same frame.
+- **Cost**, counted for both eyes as everywhere on this page and measured nowhere yet (hands design §5.7): four draw
+  calls for the two hands and up to four for the two marks; 3,160 triangles for the two hands (790 each, in two eyes)
+  and up to 192 for the rings (48 each); four of the 256 pooled materials.
+
+**Panels within reach.** In a hands session the on-device menu, the four SpaceLab signs, the dial and mode chips of
+Curved Walk and the dial chip of Small Planet stand at their slots about the near anchor (lane C §7.7), with their
+size multiplied by `IReachLayout.Scale`. They keep the materials they have, `Atlas/Surface` from the pool. The menu
+and the signs, which draw on `AtlasHud` when they are far, move to **layer 0** for as long as they are near, so that
+the eye cameras test them against depth, and go back; the chips of Curved Walk and the plate of Small Planet are on
+the world layer already. The text of the menu and the signs, which is legacy `TextMesh`, takes the font's
+`Atlas/NearText` material (§10.1), so that a finger in front of a row covers the row and its text; Curved Walk's chip
+text is TextMeshPro world text and does not use it. A child object does not take its parent's layer: the object and
+each text under it are set one by one, and set back when the panel goes far.
+
 ---
 
 ## 11 · `MaterialPool`
@@ -2425,6 +2516,10 @@ namespace Atlas.Rendering
 - Content under `IStereoRig.Hud` on `AtlasHud` is drawn in both eyes at its real stereo depth, on top of the
   world. Keep it 1.0 to 2.0 m from the eyes. It uses `Atlas/Surface` with fog weight 0 and fade weight 0, or
   TextMeshPro. Budget: at most 20 draw calls per frame for everything on the layer (decided here).
+- Two things on layer 0 are not room content and are never under it: the tracked hands and their marks (§10.9), and,
+  in a hands session, the menu and the SpaceLab signs, which leave `AtlasHud` while they are within reach of the hands
+  and are drawn depth-tested there; everything on `AtlasHud` is as above whenever they are far. Neither is under a
+  room's root, which is all that `PortalRenderer` moves between layers.
 
 ### 12.2 Renderer features and the stencil table
 
@@ -2856,7 +2951,7 @@ the C# members are lane C's.
 | Copies drawn | T², Klein: n × n cells round (ci, cj), n = `glued.copies`. T³: 3 × 3 × 3, vertical period 2.6 m |
 | Cell | One open frame of at most 1,500 triangles: four corner posts, a floor with the grid drawn by the shader, one chiral landmark. One mesh, one draw call per eye per copy |
 | Klein bottle | A cell in an odd row j is mirrored in x (negative scale): the determinant sign of copy (row, column) is (−1)^row |
-| Self-avatar | At most 600 triangles (head, torso, left shoulder `AvatarLeft`, right shoulder `AvatarRight`), in every drawn cell but the walker's own, at the walker's position in that cell, mirrored like the cell |
+| Self-avatar | At most 600 triangles (head, torso, left shoulder `AvatarLeft`, right shoulder `AvatarRight`), in every drawn cell but the walker's own, at the walker's position in that cell, mirrored like the cell. The same mesh also holds the walker's hands while `IHands` reports them tracked: for each hand a palm box, five fingers of three boxes and a forearm from the avatar's elbow to the wrist, 17 boxes of 12 triangles (204 a hand) in the palette cell `AvatarLeft` or `AvatarRight`, joints taken into the avatar's own frame so that a mirrored copy shows the other hand, rebuilt at step 6 when a joint moved (`GluedAvatarHands`, `GluedAvatarRig`). They ride in the avatar's draw, so no copy gains a draw call, and they are added only where the body leaves room for both inside the 600 (`AtlasMeshBudget.SelfAvatar`): a body that does not is drawn without hands (decision R15 of the hands brief, being built, appends them at a reduced level instead). A fault in the hands service turns the copies' hands off for the visit |
 | Fog | §10.8: opaque at (n − 1) / 2 cells |
 | Standing mode | Runs in place: no prompt to walk across a cell edge |
 | `tileId` in `State` | (ci, cj, 0, 0, 0, 0) |
@@ -3058,7 +3153,7 @@ Nobody edits the generated Xcode project by hand (Appendix C.5). A lane that nee
 
 | Key | Value | Why |
 |---|---|---|
-| `NSCameraUsageDescription` | `AtlasUsageText.Camera` | Tracking, scan, object photos |
+| `NSCameraUsageDescription` | `AtlasUsageText.Camera`: "ATLAS uses the camera to track your position, scan your room, photograph objects and see your hands." | Tracking, scan, object photos and the tracked hands, whose detector reads the camera frames ARKit already makes |
 | `NSLocalNetworkUsageDescription` | `AtlasUsageText.LocalNetwork` | Unicast UDP to the Hub raises the prompt |
 | `NSAppTransportSecurity` → `NSAllowsLocalNetworking` | `YES` | HTTP to a LAN address |
 | `UIFileSharingEnabled` | `YES` | The perf CSV and the event log are readable from the Mac |
@@ -3074,6 +3169,14 @@ The same step also adds the RoomPlan wall bridge (scan route 4, lane C): `AtlasR
 it twice equals applying it once. The edit has been compiled and linked in Unity's export of this tree (the framework
 target built; the app target stopped at its storyboards because the iOS platform component is not installed on the
 build Mac), and the plugin has not run on a device.
+
+The tracked hands' detector is `Assets/Plugins/iOS/AtlasHands.swift` (Apple Vision's hand-pose request on the frames
+ARKit already makes, with the LiDAR depth under each joint; `Atlas.Hands.ARKit.VisionHandsSource` is its C# half). It
+sits beside `AtlasRoomPlan.swift`, but `AtlasPostBuild` and `AtlasRoomPlanProject` name only that one: this file is left
+to Unity's own handling of Swift plugin sources. It reads the AR session through `XRSessionSubsystem.nativePtr`, only
+reads it, and configures, runs and pauses nothing. The camera usage text above is the only plist change made for it; the
+plugin keeps no picture. The file type-checks against the iOS SDK (`xcrun -sdk iphoneos swiftc -typecheck -target
+arm64-apple-ios17.0`); it has never been through an Xcode export or run on a phone (§17.1).
 
 Not written, on purpose: `NSBonjourServices`, a microphone key, a multicast entitlement, and
 `CADisableMinimumFrameDurationOnPhone` (the display stays at 60 Hz, §8.2).
@@ -3100,9 +3203,11 @@ also makes sure `Atlas_Boot.unity` exists with the AR Session and the XR Origin.
 | ARKit keeps delivering poses and depth with the AR `Camera` component disabled in headset mode. In the source, `ARCameraManager` only reads the camera's clip planes (`ARCameraManager.cs`, `Update`). Fallback if not: keep the camera enabled, culling nothing, into a 16 × 16 texture | phone A |
 | Which formats Metal returns for the eye textures, and `Display.main.requiresSrgbBlitToBackbuffer` | phone A, logged once at boot |
 | A straight-line grid looks straight through the lenses; lens numbers and head offset tuned | phone A in the headset, three testers |
-| The four shaders load from their `Resources` folders in a player build | phone A |
+| The six shaders of the table in §10.1 load from their `Resources` folders in a player build. Without `Atlas/NearText` the near text is not depth-tested and a warning says so; without `Atlas/HexFlip` spaces fade | phone A |
 | The Render Objects features of §12.2 are in the renderer asset after the set-up has run, and `PortalRenderer.FeaturesFound` is true | Editor, then phone A |
 | Each ladder rung forced from the Console takes effect within 1 s | G4 |
+| The tracked hands and the near panels, in the headset (hands design §9.3, §9.4): both hands draw in both eyes in front of the world and behind nearer things; no hand is cut by the near plane; a finger in front of a menu row covers the row and its text; the reticle is single over a panel at 0.45 m | phone A in the headset |
+| `AtlasHands.swift` compiles and links into `UnityFramework` in Unity's export (six `_atlas_hands_` symbols), `HandsPlatform.HasPlatformSource` is true on the phone, and the detector's results reach the hands with the AR camera component disabled in headset mode (the checks of `docs/verification/UNITY_SIDE_BRIEF.md`, step 3i) | Xcode, phone A |
 | Home and Curved Walk hold 60 frames per second with the full furniture copies (`budget_room_120k` through the PerfTour; mesh design check M3); the first ladder step below nominal drops the furniture to its light copies | phone A |
 
 ### 17.2 Where the repository differs from this page today
@@ -3144,9 +3249,11 @@ project is opened in the Editor, and at the start of every player build (§9.1).
 6. **Shading.** The shader does not light by the normal (D23); every generator bakes one fixed light into the
    vertex shade with `AtlasShading`. If the first headset view reads too flat, a normal term is an addition to
    the warp contract (lane B §9.4, item 3) and is announced to all four lanes.
-7. **One look, four shaders.** README F7 names one shader. The gaze reticle, the Bump Guard cue and the
-   flat-twin map each draw with a shader of their own (§10.1). Accept them as exceptions in F7, or move them
-   onto `Atlas/Surface`.
+7. **One look, more than one shader.** README F7 names one shader. The gaze reticle, the Bump Guard cue and the
+   flat-twin map each draw with a shader of their own (§10.1), and so do the hexagon dome (`Hidden/Atlas/HexFlip`) and
+   the text of panels within reach of the hands (`Atlas/NearText`, which cannot be `Atlas/Surface`: legacy `TextMesh`
+   takes its glyph alpha from the font's texture). README F7 now names `Atlas/NearText`; accept the others as
+   exceptions in F7 as well, or move them onto `Atlas/Surface`.
 8. **The 0.25 m rule has two measures.** Gridded shapes keep cell sides to 0.25 m (diagonals to 0.354 m); the
    strict pass keeps every edge to 0.25 m at about twice the triangles (§10.2). Decide which one the warp of
    lane B needs, because the triangle budgets of §15 were written for the first.
