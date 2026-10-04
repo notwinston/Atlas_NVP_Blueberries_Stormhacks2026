@@ -63,8 +63,13 @@ namespace Atlas.Rendering
         public const float DefaultLensSeparation = 0.064f;
         public const float DefaultScreenToLens = 0.039f;
         public const float DefaultVerticalOffset = 0f;
-        /// <summary>Largest half-angle the lens shows in any direction (the profile's 60 degrees). PLACEHOLDER.</summary>
-        public const float DefaultMaxFovDegrees = 60f;
+        /// <summary>
+        /// Half the field of view to each side: the contract's symmetric projection (lane A contract section
+        /// 9.2; Master Plan section 8.5, "about 50 degrees to each side"). tan = tan(48 deg) x 1398 / 1290 = 1.2036.
+        /// </summary>
+        public const float DefaultMaxFovHorizontalDegrees = 50.28f;
+        /// <summary>Half the field of view up and down: 96 degrees in all (section 9.2). tan = 1.1106.</summary>
+        public const float DefaultMaxFovVerticalDegrees = 48f;
 
         /// <summary>2796 x 1290 px at 460 px per inch: both phones (iPhone 14 Pro Max, 15 Pro Max). Metres.</summary>
         public const float DefaultScreenWidth = 0.1544f;
@@ -79,7 +84,8 @@ namespace Atlas.Rendering
         float _lensSeparation = DefaultLensSeparation;
         float _screenToLens = DefaultScreenToLens;
         float _verticalOffset = DefaultVerticalOffset;
-        float _maxFovDegrees = DefaultMaxFovDegrees;
+        float _maxFovHorizontalDegrees = DefaultMaxFovHorizontalDegrees;
+        float _maxFovVerticalDegrees = DefaultMaxFovVerticalDegrees;
         float _screenWidth = DefaultScreenWidth;
         float _screenHeight = DefaultScreenHeight;
         int _version;
@@ -97,8 +103,13 @@ namespace Atlas.Rendering
         public float ScreenToLens { get => _screenToLens; set => Set(ref _screenToLens, math.max(value, MinExtent)); }
         /// <summary>Lens centre above (+) or below (-) the screen centre. Metres.</summary>
         public float VerticalOffset { get => _verticalOffset; set => Set(ref _verticalOffset, value); }
-        /// <summary>Largest half-angle the lens shows; the frustum is clamped to it. Degrees.</summary>
-        public float MaxFovDegrees { get => _maxFovDegrees; set => Set(ref _maxFovDegrees, math.clamp(value, 10f, 85f)); }
+        /// <summary>
+        /// Largest half-angle drawn to the left and to the right; the frustum is clamped to it. Degrees. The
+        /// draw and triangle budgets are planned for the default; a wider value is a contract change.
+        /// </summary>
+        public float MaxFovHorizontalDegrees { get => _maxFovHorizontalDegrees; set => Set(ref _maxFovHorizontalDegrees, math.clamp(value, 10f, 85f)); }
+        /// <summary>Largest half-angle drawn up and down; the frustum is clamped to it. Degrees.</summary>
+        public float MaxFovVerticalDegrees { get => _maxFovVerticalDegrees; set => Set(ref _maxFovVerticalDegrees, math.clamp(value, 10f, 85f)); }
         /// <summary>Physical width of the screen in landscape (the long side). Metres.</summary>
         public float ScreenWidth { get => _screenWidth; set => Set(ref _screenWidth, math.max(value, MinExtent)); }
         /// <summary>Physical height of the screen in landscape (the short side). Metres.</summary>
@@ -227,8 +238,11 @@ namespace Atlas.Rendering
 
         /// <summary>
         /// The frustum of an eye: how far the eye sees through its lens to each edge of its half of the screen,
-        /// clamped to <see cref="MaxFovDegrees"/>. The inner (nose) side ends at the screen centre, the outer
-        /// side at the screen edge, so the frustum is off-axis.
+        /// clamped to <see cref="MaxFovHorizontalDegrees"/> and <see cref="MaxFovVerticalDegrees"/>. With the
+        /// default lens numbers the screen reaches past both limits on every side, so the frustum is the
+        /// symmetric 100.6 x 96 degrees of the contract and the screen beyond it is black (section 9.4). It
+        /// turns off-axis only where the screen ends before the limit (the nose side of a narrow lens
+        /// separation, or a vertical lens offset).
         /// </summary>
         public EyeFrustum GetFrustum(Eye eye)
         {
@@ -237,20 +251,21 @@ namespace Atlas.Rendering
             float up = math.max(0.5f * _screenHeight - _verticalOffset, MinExtent);
             float down = math.max(0.5f * _screenHeight + _verticalOffset, MinExtent);
 
-            float tanMax = math.tan(math.radians(_maxFovDegrees));
-            float tanInner = math.min(Distort(inner / _screenToLens), tanMax);
-            float tanOuter = math.min(Distort(outer / _screenToLens), tanMax);
+            float tanMaxH = math.tan(math.radians(_maxFovHorizontalDegrees));
+            float tanMaxV = math.tan(math.radians(_maxFovVerticalDegrees));
+            float tanInner = math.min(Distort(inner / _screenToLens), tanMaxH);
+            float tanOuter = math.min(Distort(outer / _screenToLens), tanMaxH);
 
             EyeFrustum f;
             f.TanLeft = eye == Eye.Left ? tanOuter : tanInner;
             f.TanRight = eye == Eye.Left ? tanInner : tanOuter;
-            f.TanDown = math.min(Distort(down / _screenToLens), tanMax);
-            f.TanUp = math.min(Distort(up / _screenToLens), tanMax);
+            f.TanDown = math.min(Distort(down / _screenToLens), tanMaxV);
+            f.TanUp = math.min(Distort(up / _screenToLens), tanMaxV);
             return f;
         }
 
         /// <summary>
-        /// Off-axis projection of an eye in Unity's Camera.projectionMatrix convention (OpenGL clip space, the
+        /// Projection of an eye (off-axis when its frustum is) in Unity's Camera.projectionMatrix convention (OpenGL clip space, the
         /// camera looks down -z). Assign it to Camera.projectionMatrix as it is.
         /// </summary>
         public float4x4 GetProjection(Eye eye, float near, float far) => Projection(GetFrustum(eye), near, far);

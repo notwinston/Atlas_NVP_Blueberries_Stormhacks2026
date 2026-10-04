@@ -1,0 +1,23 @@
+{
+  "room": "sample_4x5_table",
+  "boxId": 1,
+  "category": "table",
+  "dims": [
+    1.0,
+    0.75,
+    0.6
+  ],
+  "yaw": -1.570796,
+  "triTarget": 5000,
+  "sha256": "270e7d3da050039bcad7ad297c44ef3a9bcdfb60032cb461182d82d5f484539e",
+  "bytes": 46352,
+  "tris": 1500,
+  "maxEdge": 0.14577,
+  "bounds": [
+    1.0,
+    0.75,
+    0.6
+  ],
+  "palette": 97,
+  "jobUrl": "/assets/270e7d3da050039bcad7ad297c44ef3a9bcdfb60032cb461182d82d5f484539e.glb"
+}

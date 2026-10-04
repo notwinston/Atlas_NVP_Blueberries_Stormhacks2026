@@ -1,7 +1,9 @@
 using System.IO;
 using System.Reflection;
+using Atlas.Rendering;
 using UnityEditor;
 using UnityEditor.Build;
+using UnityEditor.Build.Reporting;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.InputSystem.XR;
@@ -15,6 +17,9 @@ namespace Atlas.EditorTools
     /// Applies the Project, Player and URP settings of Master Plan Appendix C.4 and section 8.2.
     /// Idempotent: run it from the Atlas menu, or with
     /// -executeMethod Atlas.EditorTools.AtlasProjectSetup.Apply, after any settings merge.
+    /// The render set-up (URP asset, renderer features, layers) is also applied by itself: when the Editor
+    /// loads a project whose assets are behind this code, and at the start of every player build, so neither
+    /// a rehearsal in the Editor nor the one-command build can run on stale settings.
     /// </summary>
     public static class AtlasProjectSetup
     {
@@ -41,6 +46,85 @@ namespace Atlas.EditorTools
             Debug.Log("Atlas: project settings applied (Master Plan Appendix C.4).");
         }
 
+        /// <summary>
+        /// The part of <see cref="Apply"/> that the stereo rig, the head-locked layer and the doorways depend
+        /// on: the URP asset, the renderer with its features, and the layer names. Idempotent, touches no
+        /// scene, so it is safe at the start of a build.
+        /// </summary>
+        public static void ApplyRenderSetup()
+        {
+            ApplyUrpSettings();
+            ApplyLayers();
+            AssetDatabase.SaveAssets();
+        }
+
+        /// <summary>
+        /// True when the assets on disk already carry the render set-up. A cheap check of the values that
+        /// were wrong in an untouched template project, not a full comparison.
+        /// </summary>
+        public static bool IsRenderSetupCurrent()
+        {
+            var renderer = AssetDatabase.LoadAssetAtPath<UniversalRendererData>(UrpRendererPath);
+            var urp = AssetDatabase.LoadAssetAtPath<UniversalRenderPipelineAsset>(UrpAssetPath);
+            if (renderer == null || urp == null)
+                return false;
+            if (renderer.intermediateTextureMode != IntermediateTextureMode.Auto || urp.renderScale != 1f)
+                return false;
+            if ((renderer.opaqueLayerMask.value & PortalStencilTable.FeatureLayerMask) != 0)
+                return false;
+            if (LayerMask.LayerToName(PortalStencilTable.HudLayer) != PortalStencilTable.HudLayerName)
+                return false;
+
+            bool masks = false, lastRoom = false, hud = false, hudText = false;
+            string lastRoomName = PortalStencilTable.FeatureName(PortalStencilTable.MaxSlots);
+            foreach (ScriptableRendererFeature feature in renderer.rendererFeatures)
+            {
+                if (feature == null)
+                    continue;
+                masks |= feature.name == PortalStencilTable.MaskFeature;
+                lastRoom |= feature.name == lastRoomName;
+                hud |= feature.name == PortalStencilTable.HudFeature;
+                hudText |= feature.name == PortalStencilTable.HudTextFeature;
+            }
+            return masks && lastRoom && hud && hudText;
+        }
+
+        // Opening the project (or recompiling) with assets that are behind this code brings them up to date,
+        // so play mode in the Editor shows what the phone will show. Deferred: assets cannot be written
+        // while the Editor is still loading.
+        [InitializeOnLoadMethod]
+        static void ApplyRenderSetupWhenStale()
+        {
+            EditorApplication.delayCall += () =>
+            {
+                if (EditorApplication.isPlayingOrWillChangePlaymode || BuildPipeline.isBuildingPlayer)
+                    return;
+                if (IsRenderSetupCurrent())
+                    return;
+                ApplyRenderSetup();
+                Debug.Log("Atlas: the render set-up on disk was out of date and has been applied; commit the changed settings assets.");
+            };
+        }
+
+        /// <summary>
+        /// Runs the render set-up before anything else in a player build, ahead of the render pipelines' own
+        /// build steps (int.MinValue + 50 and + 100), which read the URP asset and its features for stripping.
+        /// A batch-mode build runs no deferred Editor callback before its build method, so this is the step
+        /// that keeps <c>tools/build_ios.sh</c> from shipping stale settings.
+        /// </summary>
+        sealed class BeforeBuild : IPreprocessBuildWithReport
+        {
+            public int callbackOrder => int.MinValue;
+
+            public void OnPreprocessBuild(BuildReport report)
+            {
+                ApplyRenderSetup();
+                if (!IsRenderSetupCurrent())
+                    throw new BuildFailedException("Atlas: the render set-up could not be applied; see the errors above.");
+                Debug.Log("Atlas: render set-up applied for the build.");
+            }
+        }
+
         static void ApplyPlayerSettings()
         {
             var ios = NamedBuildTarget.iOS;
@@ -57,6 +141,8 @@ namespace Atlas.EditorTools
             PlayerSettings.iOS.cameraUsageDescription = AtlasUsageText.Camera;
             PlayerSettings.defaultInterfaceOrientation = UIOrientation.LandscapeLeft;
             PlayerSettings.enableFrameTimingStats = true;
+            // The Forge and the Hub are plain http on the local network: UnityWebRequest refuses them otherwise.
+            PlayerSettings.insecureHttpOption = InsecureHttpOption.AlwaysAllowed;
 
             // Static and dynamic batching off (C.4); the toggle has no public API.
             typeof(PlayerSettings)
@@ -124,7 +210,111 @@ namespace Atlas.EditorTools
             // renderer. It enqueues its pass only for a camera with an enabled ARCameraBackground, so with
             // intermediate textures on Auto the eye cameras and the Screen camera carry nothing from it.
 
+            // A layer drawn by a feature is taken out of the renderer's own passes, or it is drawn twice.
+            int ownLayers = ~PortalStencilTable.FeatureLayerMask;
+            renderer.opaqueLayerMask = renderer.opaqueLayerMask.value & ownLayers;
+            renderer.transparentLayerMask = renderer.transparentLayerMask.value & ownLayers;
+
+            EnsureLayerFeatures(renderer);
+
             EditorUtility.SetDirty(renderer);
+        }
+
+        // The Render Objects features of the layer table (lane A contract section 12.2): the doorway masks,
+        // one feature per room layer with its stencil reference, and the head-locked layer on top of the
+        // world. Found by name, so a second run changes nothing.
+        static void EnsureLayerFeatures(UniversalRendererData renderer)
+        {
+            // Masks: the mask shader brings its own stencil and depth state. Off until a doorway is in view.
+            RenderObjects masks = EnsureFeature(renderer, PortalStencilTable.MaskFeature);
+            SetFilter(masks, PortalStencilTable.MaskEvent, PortalStencilTable.MaskLayer, RenderQueueType.Opaque);
+            masks.settings.stencilSettings.overrideStencilState = false;
+            masks.settings.overrideDepthState = false;
+            FinishFeature(masks, false);
+
+            // Rooms behind doorways: drawn only where the mask wrote their reference. A feature is switched
+            // on by the portal renderer while its reference is in use.
+            for (int reference = 1; reference <= PortalStencilTable.MaxSlots; reference++)
+            {
+                RenderObjects room = EnsureFeature(renderer, PortalStencilTable.FeatureName(reference));
+                SetFilter(room, PortalStencilTable.PassEvent(reference), PortalStencilTable.Layer(reference), RenderQueueType.Opaque);
+                StencilStateData stencil = room.settings.stencilSettings;
+                stencil.overrideStencilState = true;
+                stencil.stencilReference = reference;
+                stencil.stencilCompareFunction = CompareFunction.Equal;
+                stencil.passOperation = StencilOp.Keep;
+                stencil.failOperation = StencilOp.Keep;
+                stencil.zFailOperation = StencilOp.Keep;
+                room.settings.overrideDepthState = false;
+                FinishFeature(room, false);
+            }
+
+            // Head-locked content: after everything, never hidden by the world, in two queues.
+            RenderObjects hud = EnsureFeature(renderer, PortalStencilTable.HudFeature);
+            SetFilter(hud, PortalStencilTable.HudEvent, PortalStencilTable.HudLayer, RenderQueueType.Opaque);
+            SetOnTop(hud);
+            FinishFeature(hud, true);
+
+            RenderObjects hudText = EnsureFeature(renderer, PortalStencilTable.HudTextFeature);
+            SetFilter(hudText, PortalStencilTable.HudTextEvent, PortalStencilTable.HudLayer, RenderQueueType.Transparent);
+            SetOnTop(hudText);
+            FinishFeature(hudText, true);
+
+            AssetDatabase.SaveAssetIfDirty(renderer);
+        }
+
+        // The feature of that name on the renderer, added the way the inspector adds one when it is missing.
+        static RenderObjects EnsureFeature(UniversalRendererData renderer, string name)
+        {
+            foreach (ScriptableRendererFeature existing in renderer.rendererFeatures)
+            {
+                if (existing is RenderObjects found && found.name == name)
+                    return found;
+            }
+
+            var feature = ScriptableObject.CreateInstance<RenderObjects>();
+            feature.name = name;
+            AssetDatabase.AddObjectToAsset(feature, renderer);
+            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(feature, out _, out long localId);
+
+            var r = new SerializedObject(renderer);
+            SerializedProperty features = r.FindProperty("m_RendererFeatures");
+            SerializedProperty map = r.FindProperty("m_RendererFeatureMap");
+            features.arraySize++;
+            features.GetArrayElementAtIndex(features.arraySize - 1).objectReferenceValue = feature;
+            map.arraySize++;
+            map.GetArrayElementAtIndex(map.arraySize - 1).longValue = localId;
+            r.ApplyModifiedPropertiesWithoutUndo();
+            return feature;
+        }
+
+        static void SetFilter(RenderObjects feature, int passEvent, int layer, RenderQueueType queue)
+        {
+            RenderObjects.RenderObjectsSettings s = feature.settings;
+            s.passTag = feature.name;
+            s.Event = (RenderPassEvent)passEvent;
+            s.filterSettings.RenderQueueType = queue;
+            s.filterSettings.LayerMask = 1 << layer;
+            // The default, Material, would replace the surface shader with the feature's own material.
+            s.overrideMode = RenderObjects.RenderObjectsSettings.OverrideMaterialMode.None;
+            s.overrideMaterial = null;
+            s.overrideShader = null;
+            s.cameraSettings.overrideCamera = false;
+        }
+
+        static void SetOnTop(RenderObjects feature)
+        {
+            feature.settings.stencilSettings.overrideStencilState = false;
+            feature.settings.overrideDepthState = true;
+            feature.settings.depthCompareFunction = CompareFunction.Always;
+            feature.settings.enableWrite = false;
+        }
+
+        static void FinishFeature(RenderObjects feature, bool active)
+        {
+            feature.Create();
+            feature.SetActive(active);
+            EditorUtility.SetDirty(feature);
         }
 
         static void ConfigureUrpAsset(UniversalRenderPipelineAsset urp, UniversalRendererData renderer)
@@ -184,10 +374,10 @@ namespace Atlas.EditorTools
             SerializedProperty layers = tags.FindProperty("layers");
             if (layers == null)
                 return;
-            SetLayer(layers, 6, "AtlasPortalMask");
-            SetLayer(layers, 7, "AtlasHud");
-            for (int i = 1; i <= 15; i++)
-                SetLayer(layers, 7 + i, "AtlasRoom" + i.ToString("00"));
+            SetLayer(layers, PortalStencilTable.MaskLayer, PortalStencilTable.MaskLayerName);
+            SetLayer(layers, PortalStencilTable.HudLayer, PortalStencilTable.HudLayerName);
+            for (int reference = 1; reference <= PortalStencilTable.MaxSlots; reference++)
+                SetLayer(layers, PortalStencilTable.Layer(reference), PortalStencilTable.LayerName(reference));
             SetLayer(layers, 23, "AtlasSpectator");
             tags.ApplyModifiedPropertiesWithoutUndo();
         }

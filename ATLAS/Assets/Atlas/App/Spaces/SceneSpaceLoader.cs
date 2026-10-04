@@ -80,7 +80,7 @@ namespace Atlas.App
                 return;
             }
             var component = module as Component;
-            if (component != null) Object.Destroy(component.gameObject);
+            if (component != null) AppObjects.Kill(component.gameObject);
         }
 
         ISpaceModule FindModule(Scene scene)

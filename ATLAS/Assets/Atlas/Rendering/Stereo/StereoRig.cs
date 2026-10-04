@@ -10,7 +10,7 @@ namespace Atlas.Rendering
     /// <summary>
     /// Our own two-camera stereo rig (Master Plan D7, task P1-A04), built in code under the tracked camera:
     /// two eye cameras at -/+ IPD / 2, each drawing with a full viewport into its own eye texture through the
-    /// one shared renderer, with the off-axis projection of the lens model. No camera image, no
+    /// one shared renderer, with the projection of the lens model. No camera image, no
     /// post-processing. The AR camera only carries the pose.
     /// </summary>
     public sealed class StereoRig : MonoBehaviour, IStereoRig

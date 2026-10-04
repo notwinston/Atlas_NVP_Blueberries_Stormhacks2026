@@ -10,6 +10,7 @@
         "Unity.Mathematics",
         "Unity.Collections",
         "Unity.TextMeshPro",
+        "UnityEngine.UI",
         "Unity.InputSystem"
     ]
 }

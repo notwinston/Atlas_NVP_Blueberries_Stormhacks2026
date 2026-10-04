@@ -1,0 +1,155 @@
+{
+  "version": 1,
+  "license": "CC0-1.0",
+  "source": "tools/gen_fallback_set.py",
+  "maxTemplateTriangles": 300,
+  "templates": {
+    "couch": {
+      "file": "couch.glb.bytes",
+      "resource": "AtlasFallback/couch.glb",
+      "palette": 103,
+      "triangles": 46,
+      "vertices": 92
+    },
+    "table": {
+      "file": "table.glb.bytes",
+      "resource": "AtlasFallback/table.glb",
+      "palette": 110,
+      "triangles": 52,
+      "vertices": 104
+    },
+    "bed": {
+      "file": "bed.glb.bytes",
+      "resource": "AtlasFallback/bed.glb",
+      "palette": 120,
+      "triangles": 22,
+      "vertices": 44
+    },
+    "lamp": {
+      "file": "lamp.glb.bytes",
+      "resource": "AtlasFallback/lamp.glb",
+      "palette": 114,
+      "triangles": 34,
+      "vertices": 68
+    },
+    "plant": {
+      "file": "plant.glb.bytes",
+      "resource": "AtlasFallback/plant.glb",
+      "palette": 84,
+      "triangles": 46,
+      "vertices": 92
+    },
+    "screen": {
+      "file": "screen.glb.bytes",
+      "resource": "AtlasFallback/screen.glb",
+      "palette": 79,
+      "triangles": 34,
+      "vertices": 68
+    },
+    "storage": {
+      "file": "storage.glb.bytes",
+      "resource": "AtlasFallback/storage.glb",
+      "palette": 94,
+      "triangles": 10,
+      "vertices": 20
+    },
+    "bathtub": {
+      "file": "bathtub.glb.bytes",
+      "resource": "AtlasFallback/bathtub.glb",
+      "palette": 119,
+      "triangles": 50,
+      "vertices": 100
+    },
+    "chair": {
+      "file": "chair.glb.bytes",
+      "resource": "AtlasFallback/chair.glb",
+      "palette": 97,
+      "triangles": 64,
+      "vertices": 128
+    },
+    "dishwasher": {
+      "file": "dishwasher.glb.bytes",
+      "resource": "AtlasFallback/dishwasher.glb",
+      "palette": 109,
+      "triangles": 34,
+      "vertices": 68
+    },
+    "fireplace": {
+      "file": "fireplace.glb.bytes",
+      "resource": "AtlasFallback/fireplace.glb",
+      "palette": 80,
+      "triangles": 42,
+      "vertices": 84
+    },
+    "oven": {
+      "file": "oven.glb.bytes",
+      "resource": "AtlasFallback/oven.glb",
+      "palette": 95,
+      "triangles": 22,
+      "vertices": 44
+    },
+    "refrigerator": {
+      "file": "refrigerator.glb.bytes",
+      "resource": "AtlasFallback/refrigerator.glb",
+      "palette": 124,
+      "triangles": 34,
+      "vertices": 68
+    },
+    "sink": {
+      "file": "sink.glb.bytes",
+      "resource": "AtlasFallback/sink.glb",
+      "palette": 118,
+      "triangles": 58,
+      "vertices": 116
+    },
+    "stairs": {
+      "file": "stairs.glb.bytes",
+      "resource": "AtlasFallback/stairs.glb",
+      "palette": 126,
+      "triangles": 40,
+      "vertices": 80
+    },
+    "stove": {
+      "file": "stove.glb.bytes",
+      "resource": "AtlasFallback/stove.glb",
+      "palette": 111,
+      "triangles": 70,
+      "vertices": 140
+    },
+    "toilet": {
+      "file": "toilet.glb.bytes",
+      "resource": "AtlasFallback/toilet.glb",
+      "palette": 127,
+      "triangles": 32,
+      "vertices": 64
+    },
+    "washerDryer": {
+      "file": "washerDryer.glb.bytes",
+      "resource": "AtlasFallback/washerDryer.glb",
+      "palette": 125,
+      "triangles": 22,
+      "vertices": 44
+    },
+    "keyboard": {
+      "file": "keyboard.glb.bytes",
+      "resource": "AtlasFallback/keyboard.glb",
+      "palette": 79,
+      "triangles": 22,
+      "vertices": 44
+    },
+    "mouse": {
+      "file": "mouse.glb.bytes",
+      "resource": "AtlasFallback/mouse.glb",
+      "palette": 93,
+      "triangles": 22,
+      "vertices": 44
+    },
+    "laptop": {
+      "file": "laptop.glb.bytes",
+      "resource": "AtlasFallback/laptop.glb",
+      "palette": 109,
+      "triangles": 22,
+      "vertices": 44
+    }
+  }
+}

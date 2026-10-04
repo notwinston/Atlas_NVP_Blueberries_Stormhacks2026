@@ -1,0 +1,10 @@
+{
+  "name": "atlas-console-tests",
+  "private": true,
+  "type": "module",
+  "description": "Headless tests of the Console's modules (station/hub/wwwroot/js) and a live check against a running Hub.",
+  "scripts": {
+    "test": "node --test",
+    "live": "node --experimental-websocket live-check.mjs"
+  }
+}

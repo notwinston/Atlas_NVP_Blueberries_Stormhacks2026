@@ -182,11 +182,13 @@ namespace Atlas.Telemetry
                         System.IO.Directory.CreateDirectory(_directory);
                         var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
                         c.Writer = new StreamWriter(stream, new UTF8Encoding(false));
-                        // A new perf file starts with the column names.
+                        // A new perf file starts with the column names, written by the link library as the Hub
+                        // writes them, so the two files are the same from their first byte.
                         if (i == Perf && stream.Length == 0)
                         {
-                            c.Writer.Write(TelemetryCsv.Header);
-                            c.Writer.Write('\n');
+                            var header = new StringBuilder(Atlas.Link.TelemetryCsv.MaxRowLength);
+                            Atlas.Link.TelemetryCsv.AppendHeader(header);
+                            c.Writer.Write(header.ToString());
                         }
                     }
                     c.Writer.Write(c.Writing, 0, n);

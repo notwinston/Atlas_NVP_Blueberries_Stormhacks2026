@@ -1,0 +1,129 @@
+{
+  "fixtures": [
+    {
+      "file": "forge_table.glb.bytes",
+      "category": "table",
+      "dims": [
+        1.2,
+        0.75,
+        0.8
+      ],
+      "yaw": 0.0,
+      "triTarget": 5000,
+      "sha256": "ac61105d6ad0136a843aeb621f1515273239b95978791937e3e3254e5128daac",
+      "triangles": 1500,
+      "vertices": 954,
+      "expect": "ok"
+    },
+    {
+      "file": "forge_chair.glb.bytes",
+      "category": "chair",
+      "dims": [
+        0.5,
+        0.9,
+        0.5
+      ],
+      "yaw": 1.570796,
+      "triTarget": 3000,
+      "sha256": "a8d02345d8265a3d8e1247cace1650705877ea5df47bb1eb374ec7e5c48405ef",
+      "triangles": 1500,
+      "vertices": 999,
+      "expect": "ok"
+    },
+    {
+      "file": "forge_couch.glb.bytes",
+      "category": "couch",
+      "dims": [
+        2.0,
+        0.85,
+        0.9
+      ],
+      "yaw": -0.6,
+      "triTarget": 4615,
+      "sha256": "158a5546d6c2701c90ce66cfee6130aa5badb11674019d1ff53d275931eba1ed",
+      "triangles": 2640,
+      "vertices": 1593,
+      "expect": "ok"
+    },
+    {
+      "file": "forge_plant.glb.bytes",
+      "category": "plant",
+      "dims": [
+        0.4,
+        1.2,
+        0.4
+      ],
+      "yaw": 0.0,
+      "triTarget": 3000,
+      "sha256": "f2ebb4c4163bfdd3441120cc3a640a8b00e11af71be25caa94e9b51d5e4dc639",
+      "triangles": 1500,
+      "vertices": 898,
+      "expect": "ok"
+    },
+    {
+      "file": "bad_too_many_triangles.glb.bytes",
+      "category": "chair",
+      "dims": [
+        0.5,
+        0.9,
+        0.5
+      ],
+      "yaw": 1.570796,
+      "triTarget": 3000,
+      "sha256": "ebb48dc82fab3b2d4ab9980c3a04aec998f85122561bec5eaf55e8e0e21505ec",
+      "expect": "tris_max"
+    },
+    {
+      "file": "bad_long_edge.glb.bytes",
+      "category": "table",
+      "dims": [
+        1.2,
+        0.75,
+        0.8
+      ],
+      "yaw": 0.0,
+      "triTarget": 5000,
+      "sha256": "01ea57a1afa298e8c1bea763441d7a666e82ea71e8c5623f092526f9af8fc439",
+      "expect": "edge"
+    },
+    {
+      "file": "bad_texture.glb.bytes",
+      "category": "table",
+      "dims": [
+        1.2,
+        0.75,
+        0.8
+      ],
+      "yaw": 0.0,
+      "triTarget": 5000,
+      "sha256": "631f9ee28154573d918c3345ef46dcc2e0d0dfa7f60c63488f3f0b910b719d64",
+      "expect": "no_material"
+    },
+    {
+      "file": "bad_node_transform.glb.bytes",
+      "category": "table",
+      "dims": [
+        1.2,
+        0.75,
+        0.8
+      ],
+      "yaw": 0.0,
+      "triTarget": 5000,
+      "sha256": "4b76a1abb58ce9b1301ff83b6790045d8176eea4dfae2f9b17c61cd9a6215aa8",
+      "expect": "structure"
+    },
+    {
+      "file": "bad_off_the_floor.glb.bytes",
+      "category": "table",
+      "dims": [
+        1.2,
+        0.75,
+        0.8
+      ],
+      "yaw": 0.0,
+      "triTarget": 5000,
+      "sha256": "411936f753603bc9d85cd520ea92c5993008095970c1adb834f25b35685b395b",
+      "expect": "origin"
+    }
+  ]
+}

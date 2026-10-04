@@ -59,7 +59,7 @@ namespace Atlas.Telemetry
         public bool Hooked { get { return _hooked; } }
 
         /// <summary>
-        /// A new session: a new id, new files, row numbers from 0 and a new handshake with the Station.
+        /// A new session: a new id, new files, row numbers from 0 and the id announced to the Station.
         /// Onboarding calls it when a new walker starts.
         /// </summary>
         public string BeginSession()
@@ -69,7 +69,8 @@ namespace Atlas.Telemetry
             Probe.ResetSession();
             Pump.ResetSession();
             Events.Log("session", "sessionId", SessionId);
-            Pump.ReconnectNow();
+            // A Station that is connected is told with a second Hello; the handshake is not repeated.
+            Link.SetSession(SessionId);
             return SessionId;
         }
 

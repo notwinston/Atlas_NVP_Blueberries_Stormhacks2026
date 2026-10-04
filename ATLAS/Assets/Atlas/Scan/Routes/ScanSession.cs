@@ -29,6 +29,7 @@ namespace Atlas.Scan
         readonly ScanFlow _flow;
         readonly ScanSensors _sensors;
         readonly List<ARRaycastHit> _hits = new List<ARRaycastHit>(16);
+        readonly ScanPhotoDriver _photos;
 
         bool _featuresOn, _meshOn, _boxesOn, _capturing, _classesAsked;
         bool _depthBefore;
@@ -36,12 +37,20 @@ namespace Atlas.Scan
         GameObject _anchorObject;
 
         /// <summary>rig and pose come from the pose systems (ArPoseSystems.Rig and .Pipeline). Neither is searched for.</summary>
-        public ScanSession(ArSessionRig rig, IPosePipeline pose)
+        public ScanSession(ArSessionRig rig, IPosePipeline pose) : this(rig, pose, null) { }
+
+        /// <summary>
+        /// The same, with the object photo capture this session drives (contract sections 10.3 and 11): key
+        /// frames during the sweep, selection and cropping once the room is confirmed. Null takes no photos.
+        /// </summary>
+        public ScanSession(ArSessionRig rig, IPosePipeline pose, ObjectPhotoCapture photos)
         {
             if (rig == null) throw new ArgumentNullException(nameof(rig));
             if (pose == null) throw new ArgumentNullException(nameof(pose));
             _rig = rig;
             _pose = pose;
+            Photos = photos;
+            _photos = new ScanPhotoDriver(photos);
             _sensors = new ScanSensors(rig);
             _flow = new ScanFlow(_sensors.Capture);
             _flow.StateChanged += OnFlowState;
@@ -50,6 +59,14 @@ namespace Atlas.Scan
         /// <summary>The engine-free state machine behind this session: the grid of the floor found so far, the corners, the path.</summary>
         public ScanFlow Flow { get { return _flow; } }
         public ScanSensors Sensors { get { return _sensors; } }
+        /// <summary>The object photo capture this session drives; the composition root sets its Sink. Null when none was given.</summary>
+        public ObjectPhotoCapture Photos { get; private set; }
+        /// <summary>
+        /// Step 8b of the frame: hands the crops of a confirmed room to the photo sink, one object per frame,
+        /// and does nothing otherwise. Added to the frame loop by ScanSystems.Publish, so the hand-over runs
+        /// on after the scan is Done, whoever ticks the session.
+        /// </summary>
+        public IAfterFrameStep PhotoDelivery { get { return _photos; } }
 
         public ScanState State { get { return _flow.State; } }
         public ScanFailure Failure { get { return _flow.Failure; } }
@@ -89,6 +106,9 @@ namespace Atlas.Scan
             if (state == ScanState.Idle || state == ScanState.Done || state == ScanState.Failed) return;
             if (_featuresOn) WatchProvider(deltaTime);
             HeadPose head = _pose.Raw;
+            // Key frames for the object photos: only while Sweeping, and a few comparisons on most frames.
+            _photos.OnFrame(state, in _pose.Sensors);
+            _flow.KeyFrames = _photos.KeyFrameCount;
             _flow.Tick(deltaTime, head.Tracking, ToSession(head.Position));
             if (_flow.State == ScanState.Finalising) Finalise();
         }
@@ -203,6 +223,8 @@ namespace Atlas.Scan
         public void UseRoom(RoomModel room)
         {
             ReleaseAnchor();
+            // Crops of an earlier scan still waiting belong to the room this one replaces.
+            _photos.Drop();
             _flow.UseRoom(room);
         }
 
@@ -221,6 +243,9 @@ namespace Atlas.Scan
 
         void OnFlowState(ScanState state)
         {
+            // Photo capture follows the scan: ring emptied at Starting, selection and cropping at Done after
+            // a confirmation (the room is final by then), everything dropped when the scan is given up.
+            _photos.OnState(state, _flow.Result);
             switch (state)
             {
                 case ScanState.Starting:

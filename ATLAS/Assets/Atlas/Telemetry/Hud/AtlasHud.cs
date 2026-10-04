@@ -1,14 +1,16 @@
 using System.Text;
 using Atlas.Link;
 using Atlas.World;
+using TMPro;
 using UnityEngine;
 
 namespace Atlas.Telemetry
 {
     /// <summary>
-    /// The in-headset HUD and the link dot (Master Plan sections 7.2 and 8.8, task P1-D04). Two small text
-    /// objects built in code under the head-locked HUD root, so both eyes draw them at their real depth. The
-    /// text is rebuilt twice per second from the last telemetry row; between refreshes the HUD does no work.
+    /// The in-headset HUD and the link dot (Master Plan sections 7.2 and 8.8, task P1-D04). Two small
+    /// TextMeshPro objects built in code under the head-locked HUD root, so both eyes draw them at their real
+    /// depth. The text is rebuilt twice per second from the last telemetry row into one cached builder and
+    /// handed over without making a string; between refreshes the HUD does no work.
     /// </summary>
     public sealed class AtlasHud : IAfterFrameStep
     {
@@ -21,8 +23,12 @@ namespace Atlas.Telemetry
         public const float DotBelowDegrees = 22f;
         /// <summary>Height of one line of the panel, metres: five lines stay inside a 0.45 m wide panel.</summary>
         public const float LineHeight = 0.02f;
+        /// <summary>Width of the panel, metres.</summary>
+        public const float PanelWidth = 0.45f;
 
-        const int FontPixels = 64;
+        // One point of a TextMeshPro world text is a tenth of a unit, and a line of the default font is about
+        // 1.15 times its point size.
+        const float PointsPerLineMetre = 10f / 1.15f;
 
         static readonly Color s_text = new Color(0.92f, 0.95f, 0.92f, 1f);
         static readonly Color s_linkOk = new Color(0.25f, 0.85f, 0.40f, 1f);
@@ -33,7 +39,7 @@ namespace Atlas.Telemetry
         readonly LinkPump _pump;
         readonly StringBuilder _text = new StringBuilder(256);
         readonly GameObject _panelObject, _dotObject;
-        readonly TextMesh _panel, _dot;
+        readonly TextMeshPro _panel, _dot;
         float _sinceRefresh = RefreshSeconds;
         bool _panelShown, _dotShown;
         LinkState _dotState = (LinkState)255;
@@ -48,13 +54,18 @@ namespace Atlas.Telemetry
             LinkDotEnabled = true;
             if (parent == null) return;
 
-            Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            // The default font asset of the project's TextMeshPro resources. A build without them has no HUD
+            // and runs on.
+            TMP_FontAsset font = TMP_Settings.instance != null ? TMP_Settings.defaultFontAsset : null;
             if (font == null) return;
 
-            _panel = MakeText(parent, "AtlasHudPanel", font, PanelBelowDegrees, LineHeight, out _panelObject);
+            _panel = MakeText(parent, "AtlasHudPanel", font, PanelBelowDegrees, LineHeight,
+                new Vector2(PanelWidth, LineHeight * 6f), TextAlignmentOptions.Left, out _panelObject);
             _panel.color = s_text;
-            _dot = MakeText(parent, "AtlasLinkDot", font, DotBelowDegrees, LineHeight * 1.5f, out _dotObject);
-            _dot.text = "•";
+            _dot = MakeText(parent, "AtlasLinkDot", font, DotBelowDegrees, LineHeight * 1.5f,
+                new Vector2(LineHeight * 3f, LineHeight * 3f), TextAlignmentOptions.Center, out _dotObject);
+            _dot.text = "\u2022";
+            _dot.color = s_linkOff;
             _panelObject.SetActive(false);
             _dotObject.SetActive(false);
         }
@@ -71,29 +82,37 @@ namespace Atlas.Telemetry
         /// <summary>The panel's text as last built. For tests and the Editor.</summary>
         public StringBuilder Text { get { return _text; } }
 
-        static TextMesh MakeText(Transform parent, string name, Font font, float belowDegrees, float lineHeight, out GameObject go)
+        static TextMeshPro MakeText(Transform parent, string name, TMP_FontAsset font, float belowDegrees, float lineHeight,
+            Vector2 size, TextAlignmentOptions alignment, out GameObject go)
         {
             go = new GameObject(name);
             go.layer = parent.gameObject.layer;
             go.transform.SetParent(parent, false);
-            float a = belowDegrees * Mathf.Deg2Rad;
-            go.transform.localPosition = new Vector3(0f, -Mathf.Sin(a) * Distance, Mathf.Cos(a) * Distance);
-            // Tilted to face the eyes.
-            go.transform.localRotation = Quaternion.Euler(belowDegrees, 0f, 0f);
 
-            var text = go.AddComponent<TextMesh>();
-            var renderer = go.GetComponent<MeshRenderer>();
-            if (renderer == null) renderer = go.AddComponent<MeshRenderer>();
-            renderer.sharedMaterial = font.material;
-            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            renderer.receiveShadows = false;
+            var text = go.AddComponent<TextMeshPro>();
             text.font = font;
-            text.fontSize = FontPixels;
-            // A line of legacy 3D text is characterSize * fontSize / 10 units tall.
-            text.characterSize = lineHeight * 10f / FontPixels;
-            text.anchor = TextAnchor.MiddleCenter;
-            text.alignment = TextAlignment.Left;
+            text.fontSize = lineHeight * PointsPerLineMetre;
+            text.enableAutoSizing = false;
+            text.alignment = alignment;
+            text.textWrappingMode = TextWrappingModes.NoWrap;
+            text.overflowMode = TextOverflowModes.Overflow;
             text.richText = false;
+            text.raycastTarget = false;
+
+            // The component turns the transform into a RectTransform: place it after the component exists.
+            RectTransform rect = text.rectTransform;
+            rect.sizeDelta = size;
+            float a = belowDegrees * Mathf.Deg2Rad;
+            rect.localPosition = new Vector3(0f, -Mathf.Sin(a) * Distance, Mathf.Cos(a) * Distance);
+            // Tilted to face the eyes.
+            rect.localRotation = Quaternion.Euler(belowDegrees, 0f, 0f);
+
+            Renderer renderer = text.renderer;
+            if (renderer != null)
+            {
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+            }
             return text;
         }
 
@@ -142,8 +161,8 @@ namespace Atlas.Telemetry
         public void Refresh(in TelemetryMessage row, LinkState link, int bumpLevel, bool sessionOver)
         {
             HudText.Build(_text, in row, link, bumpLevel, sessionOver);
-            // Legacy 3D text takes a string: one small allocation per refresh, and only while the panel shows.
-            if (_panel != null) _panel.text = _text.ToString();
+            // The builder's characters are copied into the text object's own array: no string is made.
+            if (_panel != null) _panel.SetText(_text);
         }
     }
 }

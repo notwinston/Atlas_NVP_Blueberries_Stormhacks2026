@@ -82,7 +82,7 @@ namespace Atlas.App
             }
             if (_mesh != null)
             {
-                Destroy(_mesh);
+                AppObjects.Kill(_mesh);
                 _mesh = null;
             }
         }

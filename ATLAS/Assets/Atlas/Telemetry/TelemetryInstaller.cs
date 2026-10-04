@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using Atlas.Kernel;
 using Atlas.Link;
 using Atlas.World;
 using UnityEngine;
@@ -64,12 +65,20 @@ namespace Atlas.Telemetry
                 Device = SystemInfo.deviceModel ?? string.Empty,
                 Build = Application.version ?? string.Empty
             };
+            // The session names the phone's files and, through Hello, the Hub's log folder (contract section 5.5).
+            if (!boot.IsSpectator) client.SetSession(telemetry.SessionId);
             var pump = new LinkPump(client, events, telemetry.Files);
             telemetry.Link = client;
             telemetry.Pump = pump;
             var pairing = new PairingController(new PlayerPrefsPairingStore(), pump);
             telemetry.Pairing = pairing;
             AtlasServices.Replace(pairing);
+            // The registry is the one owner of the demo lock: a Hub that welcomes with the lock switches the
+            // parameter, and the parameter's callback switches the client. A Welcome never lifts a lock.
+            client.Welcomed += welcome =>
+            {
+                if (welcome.DemoLock) registry.Set(ParamDemoLock, 1f, ParamSource.Remote);
+            };
 
             // 4. Probe and HUD.
             var probe = new AtlasPerfProbe(pump);
@@ -125,8 +134,10 @@ namespace Atlas.Telemetry
             if (AtlasServices.TryGet(out loop)) telemetry.AddHooks(loop);
             AtlasServices.Booted += () => ResolveLate(telemetry);
 
-            // 8. The link. Without a Station this costs one small packet per second and nothing else.
-            if (registry.GetBool(ParamLinkEnabled, true)) pump.Start();
+            // 8. The link, when this phone has been paired before. On a first launch nothing is sent until
+            //    onboarding asks (PairingController.BeginPairing): the first packet raises the iOS Local Network
+            //    prompt, and it must not come up at boot towards an address the walker never chose.
+            if (registry.GetBool(ParamLinkEnabled, true) && pairing.WasPaired) pump.Start();
             return telemetry;
         }
 
@@ -154,12 +165,13 @@ namespace Atlas.Telemetry
             LinkClient client = t.Link;
             LinkPump pump = t.Pump;
             AtlasHud hud = t.Hud;
+            PairingController pairing = t.Pairing;
 
             registry.DeclareBool(ParamDemoLock, "app", false, on => client.DemoLock = on);
             registry.DeclareBool(ParamLinkEnabled, "link", true, on =>
             {
-                if (on) pump.Start();
-                else pump.Stop("link.enabled off");
+                if (!on) pump.Stop("link.enabled off");
+                else if (pairing.WasPaired) pump.Start();
                 hud.LinkDotEnabled = on;
             });
             registry.DeclareInt(ParamStateHz, "link", 10, 60, 60, hz => client.StateHz = hz);
@@ -194,6 +206,9 @@ namespace Atlas.Telemetry
         {
             IFrameLoop loop;
             if (!t.Hooked && AtlasServices.TryGet(out loop)) t.AddHooks(loop);
+
+            IWalkerKernel kernel;
+            if (t.Pump.Kernel == null && AtlasServices.TryGet(out kernel)) t.Pump.Kernel = kernel;
 
             IOperatorCommands commands;
             if (t.Pump.Commands == null && AtlasServices.TryGet(out commands)) t.Pump.Commands = commands;

@@ -177,19 +177,155 @@ namespace Atlas.Telemetry.Tests
         }
 
         [Test]
-        public void A_value_written_by_code_every_frame_is_logged_once_per_second()
+        public void A_value_written_by_code_every_frame_is_reported_once_per_second()
         {
             var rig = new Rig();
-            ParamEntry w = rig.Registry.DeclareFloat("slicer.w", "slicer", -1.1f, 1.1f, 0f);
-            rig.Client.EchoParamChanges = false;
+            ParamEntry copies = rig.Registry.DeclareFloat("glued.copies", "glued", 1f, 9f, 5f);
+            Assert.That(rig.Client.EchoParamChanges, Is.False, "the driver owns the echo, not the client");
             rig.Connect();
             rig.Logged.Clear();
+            rig.HubEvents.Clear();
             for (int i = 0; i < 400; i++)
             {
-                w.Set((i % 100) * 0.01f);
+                copies.Set(1f + (i % 100) * 0.01f);
                 rig.Step();
             }
+            rig.Run(50);
             Assert.That(rig.Count(LinkEvents.Param), Is.InRange(1, 3), "two seconds of per-frame writes");
+            int atHub = 0;
+            for (int i = 0; i < rig.HubEvents.Count; i++) if (rig.HubEvents[i].GetString("ev") == LinkEvents.Param) atHub++;
+            Assert.That(atHub, Is.EqualTo(rig.Count(LinkEvents.Param)), "the Station hears each batched report, and no more");
+            Assert.That(rig.LastHubEvent(LinkEvents.Param)["data"].GetString("source"), Is.EqualTo("local"));
+        }
+
+        [Test]
+        public void A_live_parameter_written_by_code_raises_no_event_and_allocates_nothing()
+        {
+            var rig = new Rig();
+            rig.Connect();
+            // Declared after the driver exists, as a space declares its parameters when it is first entered.
+            ParamEntry w = rig.Registry.DeclareFloat("slicer.w", "slicer", -1.1f, 1.1f, 0f);
+            ParamEntry xw = rig.Registry.DeclareFloat("slicer.xw", "slicer", -180f, 180f, 0f);
+            rig.Run(1200);
+            rig.Logged.Clear();
+            rig.HubEvents.Clear();
+
+            long allocated = 0;
+            for (int i = 0; i < 400; i++)
+            {
+                rig.Clock.AdvanceMs(5.0);
+                rig.Host.Poll();
+                long before = GC.GetAllocatedBytesForCurrentThread();
+                w.Set((i % 100) * 0.01f);
+                xw.Set(i % 180);
+                rig.Pump.Send(in rig.State);
+                rig.Pump.Tick();
+                allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+                rig.Host.Poll();
+            }
+            Assert.That(rig.Count(LinkEvents.Param), Is.EqualTo(0), "live values travel in State.p[3..6]");
+            Assert.That(rig.LastHubEvent(LinkEvents.Param), Is.Null);
+            Assert.That(allocated, Is.EqualTo(0), "writing the slicer's values every frame must cost nothing");
+
+            // A person at the Console sets it: that is reported.
+            rig.Host.SendParam("slicer.w", 0.5f);
+            rig.Run(100);
+            Assert.That(rig.Count(LinkEvents.Param), Is.EqualTo(1));
+            Assert.That(rig.LastHubEvent(LinkEvents.Param)["data"].GetString("source"), Is.EqualTo("remote"));
+        }
+
+        [Test]
+        public void The_manifest_is_sent_again_when_a_group_is_switched()
+        {
+            var rig = new Rig();
+            int manifests = 0;
+            rig.Host.ManifestReceived += (peer, manifest) => manifests++;
+            rig.Connect();
+            rig.Run(100);
+            Assert.That(manifests, Is.EqualTo(1), "one manifest per handshake");
+
+            rig.Registry.SetGroupActive("curved", false);
+            rig.Run(100);
+            Assert.That(manifests, Is.EqualTo(2), "the Console learns that the group folded");
+            rig.Run(500);
+            Assert.That(manifests, Is.EqualTo(2), "and it is sent once");
+
+            // A change made while the Station is away is covered by the manifest of the next handshake.
+            rig.Network.Cut = true;
+            rig.Run(4000);
+            rig.Registry.SetGroupActive("curved", true);
+            rig.Network.Cut = false;
+            Assert.That(rig.RunUntilConnected(6000), Is.GreaterThanOrEqualTo(0.0));
+            rig.Run(300);
+            Assert.That(manifests, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void The_world_hash_goes_into_the_world_event_and_into_hello()
+        {
+            var rig = new Rig();
+            string helloHash = null, helloRoom = null;
+            rig.Host.HelloReceived += (peer, hello) => { helloHash = hello.WorldHash; helloRoom = hello.RoomId; };
+            rig.State.SpaceId = 1;
+            rig.Connect();
+            rig.Run(50);
+
+            string noRoom = WorldHash.Compute(1, 4, 0, 1, null, 1000);
+            Assert.That(rig.Pump.WorldHashNow, Is.EqualTo(noRoom));
+            Assert.That(rig.Last(LinkEvents.World).Data.GetString("worldHash"), Is.EqualTo(noRoom));
+            Assert.That(helloHash, Is.EqualTo(noRoom), "Hello carries it");
+
+            RoomModel room = RoomFixtures.LoadFromProject(RoomFixtures.All[0]);
+            rig.Pump.SetRoom(room);
+            rig.State.WorldVer = 3;
+            rig.Run(50);
+
+            string geometry = RoomModelJson.GeometryHash(room);
+            string withRoom = WorldHash.Compute(1, 4, 0, 1, geometry, 1000);
+            Assert.That(withRoom, Is.Not.EqualTo(noRoom));
+            JsonValue world = rig.LastHubEvent(LinkEvents.World);
+            Assert.That(world, Is.Not.Null);
+            Assert.That(world["data"].GetString("worldHash"), Is.EqualTo(withRoom));
+            Assert.That(world["data"].GetString("geomHash"), Is.EqualTo(geometry));
+            Assert.That(world["data"].GetString("roomId"), Is.EqualTo(room.Id));
+            Assert.That(world["data"].GetInt("worldVer"), Is.EqualTo(3));
+            Assert.That(world["data"].GetInt("q"), Is.EqualTo(4));
+            Assert.That(world["data"].GetInt("lMm"), Is.EqualTo(1000));
+            Assert.That(helloHash, Is.EqualTo(withRoom), "a connected Station is told with another Hello");
+            Assert.That(helloRoom, Is.EqualTo(room.Id));
+            Assert.That(rig.Pump.State, Is.EqualTo(LinkState.Connected), "without a new handshake");
+
+            // No space: no world to compare.
+            rig.State.SpaceId = 255;
+            rig.Run(50);
+            Assert.That(rig.Pump.WorldHashNow, Is.Empty);
+        }
+
+        [Test]
+        public void Telemetry_rows_keep_the_number_the_probe_gave_them()
+        {
+            var rig = new Rig();
+            rig.Connect();
+            // Rows 0 to 2 never left the phone (phoneCsv mode); the Station's file must still say 3, 4.
+            var row = new TelemetryMessage { Seq = 3, TimeUs = 77, Fps = 60f };
+            rig.Pump.SubmitRow(in row);
+            row.Seq = 4; row.TimeUs = 78;
+            rig.Pump.SubmitRow(in row);
+            rig.Run(50);
+            Assert.That(rig.HubRows.Count, Is.EqualTo(2));
+            Assert.That(rig.HubRows[0].Seq, Is.EqualTo(3u));
+            Assert.That(rig.HubRows[0].TimeUs, Is.EqualTo(77));
+            Assert.That(rig.HubRows[1].Seq, Is.EqualTo(4u));
+
+            // The backlog keeps them too.
+            rig.Network.Cut = true;
+            rig.Run(4000);
+            row.Seq = 9; row.TimeUs = 90;
+            rig.Pump.SubmitRow(in row);
+            rig.Network.Cut = false;
+            Assert.That(rig.RunUntilConnected(6000), Is.GreaterThanOrEqualTo(0.0));
+            rig.Run(200);
+            Assert.That(rig.HubRows[rig.HubRows.Count - 1].Seq, Is.EqualTo(9u));
         }
 
         [Test]
@@ -263,7 +399,7 @@ namespace Atlas.Telemetry.Tests
         }
 
         [Test]
-        public void The_app_runs_unchanged_with_no_station_and_connects_within_a_second_of_one_appearing()
+        public void The_app_runs_unchanged_with_no_station_and_connects_when_one_appears()
         {
             var rig = new Rig();
             Assert.That(rig.Pump.Start(), Is.True);
@@ -273,10 +409,28 @@ namespace Atlas.Telemetry.Tests
             Assert.That(rig.HubStateSeq.Count, Is.EqualTo(0));
 
             rig.Host.Start(Port);
+            double ms = rig.RunUntilConnected(6000);
+            Assert.That(ms, Is.GreaterThanOrEqualTo(0.0));
+            // Outside pairing the client's back-off decides: four seconds at most, then the handshake.
+            Assert.That(ms, Is.LessThanOrEqualTo(5000.0), "back within five seconds (P1-D11)");
+        }
+
+        [Test]
+        public void While_pairing_the_station_is_tried_every_second()
+        {
+            var rig = new Rig();
+            var store = new MemoryPairingStore();
+            store.SetString(PairingController.AddressKey, HubAddress + ":" + Port);
+            var pairing = new PairingController(store, rig.Pump);
+            pairing.BeginPairing();
+            rig.Run(10000);
+            Assert.That(rig.Pump.State, Is.EqualTo(LinkState.Offline));
+            Assert.That(pairing.Phase, Is.EqualTo(PairingPhase.Trying));
+
+            rig.Host.Start(Port);
             double ms = rig.RunUntilConnected(4000);
             Assert.That(ms, Is.GreaterThanOrEqualTo(0.0));
-            // One attempt per second, then Hello, Welcome and the eight-ping burst.
-            Assert.That(ms, Is.LessThanOrEqualTo(2000.0), "the retry is every second, not the four-second back-off");
+            Assert.That(ms, Is.LessThanOrEqualTo(2000.0), "one attempt per second with the phone in the hand (Appendix C.7)");
         }
 
         [Test]

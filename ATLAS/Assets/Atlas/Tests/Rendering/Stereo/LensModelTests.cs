@@ -118,38 +118,74 @@ namespace Atlas.Rendering.Tests.Stereo
         }
 
         [Test]
-        public void Frustum_DefaultHeadset_Numbers()
+        public void Frustum_DefaultHeadset_IsTheContractFieldOfView()
+        {
+            // Lane A contract section 9.2 and 9.4: symmetric, 96 degrees vertically at aspect 1398 / 1290, so
+            // tanV = 1.1106 and tanH = 1.2036 (50.3 degrees to each side, 48 up and down). The screen reaches
+            // further on every side (inner 1.2129, outer 2.838, up and down 1.5201) and is clamped.
+            var lens = new LensModel();
+            foreach (Eye eye in new[] { Eye.Left, Eye.Right })
+            {
+                EyeFrustum f = lens.GetFrustum(eye);
+                Assert.That(f.TanLeft, Is.EqualTo(1.2036f).Within(2e-4f));
+                Assert.That(f.TanRight, Is.EqualTo(1.2036f).Within(2e-4f));
+                Assert.That(f.TanDown, Is.EqualTo(1.1106f).Within(1e-4f));
+                Assert.That(f.TanUp, Is.EqualTo(1.1106f).Within(1e-4f));
+                Assert.That(f.HorizontalFovDegrees, Is.EqualTo(100.56f).Within(0.02f));
+                Assert.That(f.VerticalFovDegrees, Is.EqualTo(96f).Within(0.01f));
+                // The eye texture (1118 x 1032 at scale 0.8) has the same shape, so its pixels are square.
+                Assert.That((f.TanLeft + f.TanRight) / (f.TanDown + f.TanUp), Is.EqualTo(1398f / 1290f).Within(2e-4f));
+            }
+        }
+
+        [Test]
+        public void Projection_DefaultHeadset_IsSymmetricAndTheSameForBothEyes()
         {
             var lens = new LensModel();
-            EyeFrustum left = lens.GetFrustum(Eye.Left);
+            float4x4 left = lens.GetProjection(Eye.Left, 0.05f, 60f);
+            float4x4 right = lens.GetProjection(Eye.Right, 0.05f, 60f);
+            Assert.That(left.c2.x, Is.EqualTo(0f));
+            Assert.That(left.c2.y, Is.EqualTo(0f));
+            Assert.That(left.c0.x, Is.EqualTo(1f / 1.2036f).Within(2e-4f));
+            Assert.That(left.c1.y, Is.EqualTo(1f / 1.1106f).Within(1e-4f));
+            Assert.That(right, Is.EqualTo(left));
+        }
 
-            // Inner side: 32 mm of screen to the centre line. r = 0.032 / 0.039 = 0.82051,
-            // r' = r (1 + 0.34 r^2 + 0.55 r^4) = 1.21291, 50.50 degrees.
-            Assert.That(left.TanRight, Is.EqualTo(1.21291f).Within(2e-4f));
-            // Outer side: 45.2 mm to the screen edge gives r' = 2.838, beyond the lens: clamped to 60 degrees.
-            Assert.That(left.TanLeft, Is.EqualTo(math.tan(math.radians(60f))).Within(1e-5f));
-            // Up and down: 35.6 mm. r = 0.91282, r' = 1.52010, 56.66 degrees.
-            Assert.That(left.TanUp, Is.EqualTo(1.52010f).Within(2e-4f));
-            Assert.That(left.TanDown, Is.EqualTo(left.TanUp).Within(1e-6f));
+        [Test]
+        public void Blit_DefaultHeadset_MatchesTheContractMapping()
+        {
+            // Section 9.4: uv = 0.5 + r' / (2 (tanH, tanV)), black outside [0, 1].
+            var lens = new LensModel();
+            float2 screen = new float2(0.5f + 0.5f * (-0.032f + 0.010f) / (0.5f * 0.1544f), 0.5f + 0.5f * 0.008f / (0.5f * 0.0712f));
+            float2 seen = lens.Distort(new float2(0.010f, 0.008f) / 0.039f);
+            float2 uv = lens.ScreenToEyeUv(screen, true, out Eye eye);
+            Assert.That(eye, Is.EqualTo(Eye.Left));
+            Assert.That(uv.x, Is.EqualTo(0.5f + seen.x / (2f * 1.2036f)).Within(2e-4f));
+            Assert.That(uv.y, Is.EqualTo(0.5f + seen.y / (2f * 1.1106f)).Within(2e-4f));
 
-            Assert.That(left.HorizontalFovDegrees, Is.EqualTo(60f + 50.50f).Within(0.02f));
-            Assert.That(left.VerticalFovDegrees, Is.EqualTo(2f * 56.66f).Within(0.02f));
+            // The top edge of the screen (r' = 1.52) lies beyond 48 degrees: outside the texture, so black.
+            float2 top = lens.ScreenToEyeUv(new float2(0.25f, 0.999f), true, out _);
+            Assert.That(top.y, Is.GreaterThan(1f));
         }
 
         [Test]
         public void Frustum_WithoutTheClamp_FollowsTheScreenEdge()
         {
-            var lens = new LensModel { MaxFovDegrees = 85f };
+            var lens = new LensModel { MaxFovHorizontalDegrees = 85f, MaxFovVerticalDegrees = 85f };
             EyeFrustum left = lens.GetFrustum(Eye.Left);
             float r = 0.5f * (0.1544f - 0.064f) / 0.039f;
             Assert.That(left.TanLeft, Is.EqualTo(lens.Distort(r)).Within(1e-5f));
             Assert.That(left.TanLeft, Is.GreaterThan(left.TanRight));
+            // Inner side: r = 0.032 / 0.039 = 0.82051, r' = 1.21291. Up and down: r = 0.91282, r' = 1.52010.
+            Assert.That(left.TanRight, Is.EqualTo(1.21291f).Within(2e-4f));
+            Assert.That(left.TanUp, Is.EqualTo(1.52010f).Within(2e-4f));
+            Assert.That(left.TanDown, Is.EqualTo(left.TanUp).Within(1e-6f));
         }
 
         [Test]
         public void Frustum_IsMirroredBetweenTheEyes()
         {
-            var lens = new LensModel { VerticalOffset = 0.004f, LensSeparation = 0.061f, MaxFovDegrees = 80f };
+            var lens = new LensModel { VerticalOffset = 0.004f, LensSeparation = 0.061f, MaxFovHorizontalDegrees = 80f, MaxFovVerticalDegrees = 80f };
             EyeFrustum left = lens.GetFrustum(Eye.Left);
             EyeFrustum right = lens.GetFrustum(Eye.Right);
             Assert.That(right.TanLeft, Is.EqualTo(left.TanRight));
@@ -163,7 +199,8 @@ namespace Atlas.Rendering.Tests.Stereo
         [Test]
         public void Projection_IsOffAxis_AndMirroredBetweenTheEyes()
         {
-            var lens = new LensModel();
+            // Limits beyond the screen, so the frustum follows the screen: nose side narrower than the outer side.
+            var lens = new LensModel { MaxFovHorizontalDegrees = 85f, MaxFovVerticalDegrees = 85f };
             float4x4 left = lens.GetProjection(Eye.Left, 0.05f, 60f);
             float4x4 right = lens.GetProjection(Eye.Right, 0.05f, 60f);
 

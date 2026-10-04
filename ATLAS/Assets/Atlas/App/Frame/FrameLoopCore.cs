@@ -56,6 +56,8 @@ namespace Atlas.App
         public const float MinDeltaTime = 0.004f, MaxDeltaTime = 0.1f;
 
         readonly List<ISenseStep> _sense = new List<ISenseStep>(4);
+        // One flag per sense hook: its first exception has been reported.
+        readonly List<bool> _senseFaulted = new List<bool>(4);
         readonly List<IUploadStep> _upload = new List<IUploadStep>(8);
         readonly List<IAfterFrameStep> _after = new List<IAfterFrameStep>(8);
         readonly IWalkerKernel _kernel;
@@ -74,6 +76,8 @@ namespace Atlas.App
         bool _statePending;
         bool _afterPending;
         bool _sealed;
+        bool _eyesFaulted;
+        bool _tailFaulted;
 
         public FrameLoopCore(IWalkerKernel kernel)
         {
@@ -98,8 +102,22 @@ namespace Atlas.App
         public IQualityState Quality { get; set; }
         /// <summary>The stereo rig's eyes. May be null (both eyes at the head).</summary>
         public IEyePositions Eyes { get; set; }
-        /// <summary>Receives one line for each misuse (a second guard, a hook added after boot). May be null.</summary>
+        /// <summary>
+        /// Receives one line for each misuse (a second guard, a hook added after boot) and one for the first
+        /// exception of each step-1 hook. May be null.
+        /// </summary>
         public Action<string> Warning { get; set; }
+
+        /// <summary>Step-1 hooks (and the eye fill, and the late tail) that have thrown at least once.</summary>
+        public int FaultedSenseCount
+        {
+            get
+            {
+                int count = (_eyesFaulted ? 1 : 0) + (_tailFaulted ? 1 : 0);
+                for (int i = 0; i < _senseFaulted.Count; i++) if (_senseFaulted[i]) count++;
+                return count;
+            }
+        }
 
         /// <summary>Frames run so far.</summary>
         public int FrameCount { get { return _nextFrameIndex; } }
@@ -119,6 +137,7 @@ namespace Atlas.App
             if (step == null) throw new ArgumentNullException(nameof(step));
             NoteLate("sense");
             _sense.Add(step);
+            _senseFaulted.Add(false);
         }
 
         public void SetGuard(ISafetyStep step)
@@ -188,8 +207,20 @@ namespace Atlas.App
         {
             // A frame that was never rendered (no camera, a paused Editor view) still gets its tail, so a
             // space switch and the link keep moving.
-            if (_statePending) RunState();
-            if (_afterPending) RunAfterFrame();
+            // A fault in that late tail must not cost this frame its Bump Guard step either.
+            if (_statePending || _afterPending)
+            {
+                try
+                {
+                    RunState();
+                    RunAfterFrame();
+                }
+                catch (Exception e)
+                {
+                    if (!_tailFaulted) ReportFault("the late tail of the last frame", e);
+                    _tailFaulted = true;
+                }
+            }
 
             // BeginFrame
             _frame.FrameIndex = _nextFrameIndex++;
@@ -198,14 +229,40 @@ namespace Atlas.App
             IQualityState quality = Quality;
             _frame.Tier = quality != null ? quality.Tier : QualityTier.Nominal;
 
-            // 1  Read: the pose pipeline first, then input (the order they were added in).
+            // 1  Read: the pose pipeline first, then input (the order they were added in). Bump Guard runs
+            //    whatever happens here (Master Plan section 6.3, step 2; lane A contract, section 7.2): a hook
+            //    that throws is reported once, keeps being called, and the frame goes on with what it has.
             int senseCount = _sense.Count;
-            for (int i = 0; i < senseCount; i++) _sense[i].Sense(ref _frame);
+            for (int i = 0; i < senseCount; i++)
+            {
+                try
+                {
+                    _sense[i].Sense(ref _frame);
+                }
+                catch (Exception e)
+                {
+                    if (!_senseFaulted[i]) ReportFault("sense hook " + i + " (" + _sense[i].GetType().Name + ")", e);
+                    _senseFaulted[i] = true;
+                }
+            }
             if (senseCount == 0) _frame.Tracking = TrackingState.Normal;   // neutral: the pose stays as it was set
 
             IEyePositions eyes = Eyes;
-            if (eyes != null) eyes.GetEyes(out _frame.LeftEyePosition, out _frame.RightEyePosition);
-            else
+            bool haveEyes = false;
+            if (eyes != null)
+            {
+                try
+                {
+                    eyes.GetEyes(out _frame.LeftEyePosition, out _frame.RightEyePosition);
+                    haveEyes = true;
+                }
+                catch (Exception e)
+                {
+                    if (!_eyesFaulted) ReportFault("the eye positions", e);
+                    _eyesFaulted = true;
+                }
+            }
+            if (!haveEyes)
             {
                 _frame.LeftEyePosition = _frame.RawHeadPosition;
                 _frame.RightEyePosition = _frame.RawHeadPosition;
@@ -325,6 +382,20 @@ namespace Atlas.App
         void NoteLate(string what)
         {
             if (_sealed) Warn("frame loop: a " + what + " hook was added after boot");
+        }
+
+        // Only on the first exception of a hook, so the strings cost nothing in a healthy frame. A warning
+        // sink that throws is not allowed to stop the frame either.
+        void ReportFault(string what, Exception e)
+        {
+            try
+            {
+                Warn("frame loop: " + what + " threw " + e.GetType().Name + ": " + e.Message +
+                     ". Bump Guard still runs; the hook is called again next frame.");
+            }
+            catch (Exception)
+            {
+            }
         }
 
         void Warn(string message)

@@ -7,7 +7,8 @@ namespace Atlas.Safety
     /// <summary>
     /// The phone's own haptic engine, felt through the headset (Master Plan section 4.10), through
     /// Assets/Plugins/iOS/AtlasHaptics.mm. In the Editor and off iOS every call does nothing and
-    /// <see cref="Available"/> is false (contracts F9).
+    /// <see cref="Available"/> is false (contracts F9). The plugin uses UIKit's impact generators only, so the
+    /// Xcode project needs no extra framework (lane C contract section 8.9).
     /// </summary>
     public sealed class IosHaptics : IHaptics
     {
@@ -16,7 +17,7 @@ namespace Atlas.Safety
         [DllImport("__Internal")] static extern void AtlasHapticPulse(float intensity);
         [DllImport("__Internal")] static extern void AtlasHapticStop();
 
-        /// <summary>Starts the engine now, so that the first pulse of a cue is not delayed by its start-up.</summary>
+        /// <summary>Prepares the generators now, so that the first pulse of a cue is not delayed.</summary>
         public IosHaptics()
         {
             AtlasHapticPrepare();
@@ -29,7 +30,7 @@ namespace Atlas.Safety
             AtlasHapticPulse(strength < 0f ? 0f : (strength > 1f ? 1f : strength));
         }
 
-        /// <summary>Stops the engine. The next pulse starts it again.</summary>
+        /// <summary>Lets the haptics idle. The next pulse works without another call.</summary>
         public void Stop()
         {
             AtlasHapticStop();
@@ -41,7 +42,7 @@ namespace Atlas.Safety
         {
         }
 
-        /// <summary>Stops the engine. The next pulse starts it again.</summary>
+        /// <summary>Lets the haptics idle. The next pulse works without another call.</summary>
         public void Stop()
         {
         }

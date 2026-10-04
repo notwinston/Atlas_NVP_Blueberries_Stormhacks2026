@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+using Atlas.Kernel;
 using Atlas.Link;
 using Atlas.World;
 
@@ -20,7 +21,8 @@ namespace Atlas.Telemetry
     /// The link driver of the app: step 8 of the frame (Master Plan section 6.3). It owns the
     /// <see cref="LinkClient"/>, sends the frame's <c>State</c> at step 8a, and at step 8b polls the link, which
     /// applies received parameter sets to the registry, hands operator commands to <see cref="IOperatorCommands"/>
-    /// and sends what was waiting. While the Station is away it tries again once per second.
+    /// and sends what was waiting. It also owns the echo of parameter changes (section 7.3.2), the world hash
+    /// (section 7.3.1) and the re-sending of the manifest when the registry's shape changed.
     /// <para>
     /// Nothing here blocks and the steady frame path allocates nothing. With no Station, or with the link
     /// switched off, the app runs unchanged (section 7.5, rule 4). Operator commands leave as plain calls on an
@@ -29,7 +31,7 @@ namespace Atlas.Telemetry
     /// </summary>
     public sealed class LinkPump : IStateSink, IAfterFrameStep
     {
-        /// <summary>Seconds between connect attempts while the Station is away (Appendix C.7).</summary>
+        /// <summary>Seconds between connect attempts while the walker is pairing, phone in hand (Appendix C.7).</summary>
         public const double RetrySeconds = 1.0;
         /// <summary>Telemetry rows kept while offline: ten minutes.</summary>
         public const int RowBacklog = 600;
@@ -49,9 +51,19 @@ namespace Atlas.Telemetry
         int _rowHead, _rowCount;
         bool _hasOutline, _outlineSent;
 
+        // Parameters whose owner writes them every frame (contract section 1.4, flag L). Their values travel in
+        // State.p[3..6]; a change made by code raises no event.
+        static readonly string[] s_liveNames = { "slicer.w", "slicer.xw", "slicer.yw", "slicer.zw" };
+
         bool[] _dirty = new bool[64];
+        bool[] _live = new bool[64];
         int _dirtyCount;
         long _lastParamFlushUs;
+        int _manifestSent;
+
+        // The world this phone holds, for the world hash.
+        string _roomId = string.Empty;
+        string _geometryHash;
 
         string _host;
         int _port = LinkProtocol.DefaultPort;
@@ -83,7 +95,16 @@ namespace Atlas.Telemetry
             _files = files;
             _registry = client.Registry;
             _client.StateChanged += OnLinkStateChanged;
-            if (_registry != null) _registry.Changed += OnParamChanged;
+            if (_registry != null)
+            {
+                // The driver owns the echo: the client's own would build JSON wherever a value is written, the
+                // frame's steps 1 to 7 included (rule 8 of the plan).
+                _client.EchoParamChanges = false;
+                _registry.Changed += OnParamChanged;
+                _registry.Declared += OnParamDeclared;
+                for (int i = 0; i < _registry.Count; i++) OnParamDeclared(_registry[i]);
+                _manifestSent = _registry.ManifestVersion;
+            }
             if (_events != null) _events.Link = client;
         }
 
@@ -111,6 +132,15 @@ namespace Atlas.Telemetry
 
         /// <summary>Ticked once per frame when set; <see cref="PairingController"/> sets it itself.</summary>
         public PairingController Pairing { get; set; }
+
+        /// <summary>
+        /// The walker's kernel, for the world hash (q and metres per unit). While null the values of the flat
+        /// kernel of this build are used: q 4, one metre per unit.
+        /// </summary>
+        public IWalkerKernel Kernel { get; set; }
+
+        /// <summary>The world hash last computed: 16 hexadecimal digits, or empty while no space is entered.</summary>
+        public string WorldHashNow { get { return _client.WorldHash; } }
 
         /// <summary>Raised at step 8a when <c>State.spaceId</c> changed, with (previous, current); 255 is "no space".</summary>
         public event Action<byte, byte> SpaceChanged;
@@ -228,17 +258,46 @@ namespace Atlas.Telemetry
             _prevWorldVer = state.WorldVer;
             string scene = SceneOf(space);
             _client.Scene = scene;
+
+            // The world hash (section 7.3.1): into Hello, so the Hub can tell a Spectator, and into the event.
+            int q, lMm;
+            string hash = ComputeWorldHash(space, out q, out lMm);
+            _client.SetWorld(hash, _roomId);
             if (_events != null)
             {
                 _events.Scene = scene;
                 if (spaceChanged && space != NoSpace) _events.Log("space.entered", JsonValue.Object().Set("from", SceneOf(previous)).Set("to", scene));
-                _events.Log("world", "worldVer", state.WorldVer, "space", space);
+                _events.Log(LinkEvents.World, JsonValue.Object()
+                    .Set("worldVer", (int)state.WorldVer)
+                    .Set("worldHash", hash)
+                    .Set("space", (int)space)
+                    .Set("roomId", _roomId)
+                    .Set("geomHash", string.IsNullOrEmpty(_geometryHash) ? WorldHash.NoGeometry : _geometryHash)
+                    .Set("q", q)
+                    .Set("seed", WorldSeed)
+                    .Set("genVer", GeneratorVersion)
+                    .Set("lMm", lMm));
             }
             if (spaceChanged)
             {
                 Action<byte, byte> changed = SpaceChanged;
                 if (changed != null) changed(previous, space);
             }
+        }
+
+        // The world generator has no seed yet and is at its first version (contract section 2.5).
+        const int WorldSeed = 0;
+        const int GeneratorVersion = 1;
+
+        // Runs on a change of space, world version or room, never per frame. Empty while no space is entered:
+        // there is no world to compare.
+        string ComputeWorldHash(byte space, out int q, out int lMm)
+        {
+            IWalkerKernel kernel = Kernel;
+            q = kernel != null && kernel.Graph != null ? kernel.Graph.Q : 4;
+            lMm = WorldHash.Millimetres(kernel != null ? kernel.MetresPerUnit : 1.0);
+            if (space == NoSpace) return string.Empty;
+            return WorldHash.Compute(space, q, WorldSeed, GeneratorVersion, _geometryHash, lMm);
         }
 
         static string SceneOf(byte space)
@@ -261,9 +320,11 @@ namespace Atlas.Telemetry
             long now = _client.NowUs;
             if (_started)
             {
-                // The client's own back-off grows to four seconds; a walker waiting for the Station gets one
-                // attempt per second instead (Appendix C.7).
-                if (_client.State == LinkState.Offline && now - _lastKickUs >= RetryUs)
+                // While the walker is pairing, phone in hand, the Station gets one attempt per second (Appendix
+                // C.7). At every other time the client's own back-off (0.5, 1, 2, 4, 4 ... s) decides: each
+                // attempt costs the transport an end point, and a session with no Station must stay free of
+                // that (section 7.5, rule 4).
+                if (_client.State == LinkState.Offline && now - _lastKickUs >= RetryUs && IsPairing())
                 {
                     _lastKickUs = now;
                     _client.ReconnectNow();
@@ -279,6 +340,13 @@ namespace Atlas.Telemetry
 
                 if (_client.IsReady)
                 {
+                    // The manifest again when a group was switched or a range changed, so the Console and the
+                    // Spectator fold and grey the right sliders. A version compare on every other frame.
+                    if (_registry != null && _registry.ManifestVersion != _manifestSent && _client.Role == LinkRole.Phone)
+                    {
+                        int version = _registry.ManifestVersion;
+                        if (_client.SendManifest()) _manifestSent = version;
+                    }
                     if (_hasOutline && !_outlineSent) _outlineSent = _client.SendRoomOutline(_outline);
                     if (_events != null) _events.SendQueued(SendsPerTick);
                     SendWaitingRows(SendsPerTick);
@@ -289,6 +357,12 @@ namespace Atlas.Telemetry
 
             PairingController pairing = Pairing;
             if (pairing != null) pairing.Tick(now, _client.State);
+        }
+
+        bool IsPairing()
+        {
+            PairingController pairing = Pairing;
+            return pairing != null && (pairing.Phase == PairingPhase.Trying || pairing.Phase == PairingPhase.Hint);
         }
 
         // ---- operator commands -------------------------------------------------------------------------
@@ -348,22 +422,31 @@ namespace Atlas.Telemetry
 
         // ---- parameters --------------------------------------------------------------------------------
 
-        // The link client echoes every applied value to the Console itself. Here the change goes into the
-        // phone's own log: at once when the Station or a preset set it, and at most once per second for a value
-        // that code keeps writing (the slicer's w, for one), so a live parameter cannot flood the file.
+        // The echo of section 7.3.2 and the phone's own log. A change made by the Station, a preset or a person
+        // goes out at once: it arrives at step 8b or from a menu, never from the frame's steps. A value that
+        // code writes (Local) only marks a flag here, which costs nothing, and is reported at step 8b at most
+        // once per second; a live parameter written by code is not reported at all.
         void OnParamChanged(ParamEntry entry, ParamSource source)
         {
-            if (_events == null) return;
             if (source != ParamSource.Local)
             {
-                _events.LogLocal(LinkEvents.ParamChanged(_client.NowUs, _client.Scene, entry, source));
+                Report(LinkEvents.ParamChanged(_client.NowUs, _client.Scene, entry, source));
                 return;
             }
             int id = entry.Id;
+            if (id < _live.Length && _live[id]) return;
             if (id >= _dirty.Length) Array.Resize(ref _dirty, Math.Max(id + 1, _dirty.Length * 2));
             if (_dirty[id]) return;
             _dirty[id] = true;
             _dirtyCount++;
+        }
+
+        void OnParamDeclared(ParamEntry entry)
+        {
+            if (entry == null || Array.IndexOf(s_liveNames, entry.Name) < 0) return;
+            int id = entry.Id;
+            if (id >= _live.Length) Array.Resize(ref _live, Math.Max(id + 1, _live.Length * 2));
+            _live[id] = true;
         }
 
         void FlushLocalParams(long now)
@@ -376,8 +459,21 @@ namespace Atlas.Telemetry
                 _dirtyCount--;
                 ParamEntry entry;
                 if (_registry.TryGet((ushort)id, out entry))
-                    _events.LogLocal(LinkEvents.ParamChanged(now, _client.Scene, entry, ParamSource.Local));
+                    Report(LinkEvents.ParamChanged(now, _client.Scene, entry, ParamSource.Local));
             }
+        }
+
+        // To the phone's file always; to the Station while the link is up. A change made while the Station is
+        // away is not kept for it: the manifest of the next handshake carries the values of that moment.
+        void Report(EventMessage message)
+        {
+            bool toLink = _client.IsReady && _client.Role == LinkRole.Phone;
+            if (_events != null)
+            {
+                if (toLink) _events.Log(message);
+                else _events.LogLocal(message);
+            }
+            else if (toLink) _client.Send(message);
         }
 
         // ---- link state --------------------------------------------------------------------------------
@@ -386,6 +482,8 @@ namespace Atlas.Telemetry
         {
             // A new handshake: the Station has forgotten the room.
             if (current == LinkState.Resync || current == LinkState.Offline) _outlineSent = false;
+            // The client has just sent the manifest as the last step of its handshake.
+            else if (previous == LinkState.Resync && _registry != null) _manifestSent = _registry.ManifestVersion;
             if (_events != null)
                 _events.Log(LinkEvents.Link, JsonValue.Object().Set("state", StateName(current)).Set("prev", StateName(previous)));
         }
@@ -435,7 +533,7 @@ namespace Atlas.Telemetry
 
         /// <summary>
         /// Takes the row of a completed second: one CSV line for the phone's file and, in live mode, one
-        /// <c>Telemetry</c> message. A row that cannot be sent waits (up to 600) and goes out after the next
+        /// <c>Telemetry</c> message with the same <c>Seq</c> and time. A row that cannot be sent waits (up to 600) and goes out after the next
         /// handshake, so the Station's CSV has no hole. Allocates nothing.
         /// </summary>
         public void SubmitRow(in TelemetryMessage row)
@@ -448,11 +546,8 @@ namespace Atlas.Telemetry
                 _files.Append(LogFileWriter.Perf, _csv);
             }
             if (Mode != TelemetryMode.Live || !_started || _client.Role != LinkRole.Phone) return;
-            if (_rowCount == 0 && _client.IsReady)
-            {
-                TelemetryMessage copy = row;
-                if (_client.SendTelemetry(ref copy)) return;
-            }
+            // The row goes out as the probe numbered it, so the Station's CSV is the phone's, byte for byte.
+            if (_rowCount == 0 && _client.IsReady && _client.SendTelemetryRow(in row)) return;
             if (_rowCount == RowBacklog)
             {
                 _rowHead = (_rowHead + 1) % RowBacklog;
@@ -466,7 +561,7 @@ namespace Atlas.Telemetry
         {
             for (int i = 0; i < max && _rowCount > 0; i++)
             {
-                if (!_client.SendTelemetry(ref _rows[_rowHead])) return;
+                if (!_client.SendTelemetryRow(in _rows[_rowHead])) return;
                 _rowHead = (_rowHead + 1) % RowBacklog;
                 _rowCount--;
             }
@@ -482,6 +577,23 @@ namespace Atlas.Telemetry
             _bumpMax = _prevBump;
         }
 
+        // A Hub that is connected hears of the new room at once (another Hello); the world event follows at
+        // step 8a when the host has raised the world version.
+        void TellWorld()
+        {
+            int q, lMm;
+            _client.SetWorld(ComputeWorldHash(_prevSpace, out q, out lMm), _roomId);
+        }
+
+        // A room that is not complete (no distance field yet) has no geometry hash; it counts as no geometry
+        // rather than stopping whoever set the room.
+        static string GeometryHashOf(RoomModel room)
+        {
+            if (room == null) return null;
+            try { return RoomModelJson.GeometryHash(room); }
+            catch (ArgumentException) { return null; }
+        }
+
         // ---- room outline ------------------------------------------------------------------------------
 
         /// <summary>
@@ -493,7 +605,13 @@ namespace Atlas.Telemetry
             _outline.Clear();
             _hasOutline = room != null;
             _outlineSent = false;
-            if (room == null) return;
+            _roomId = room != null && room.Id != null ? room.Id : string.Empty;
+            _geometryHash = GeometryHashOf(room);
+            if (room == null)
+            {
+                TellWorld();
+                return;
+            }
 
             for (int i = 0; i < room.Outline.Length; i++)
                 if (!_outline.AddPoint(room.Outline[i].x, room.Outline[i].y)) break;
@@ -518,7 +636,7 @@ namespace Atlas.Telemetry
                 };
                 if (!_outline.AddBox(in box)) break;
             }
-            _client.RoomId = room.Id ?? string.Empty;
+            TellWorld();
             if (_started && _client.IsReady) _outlineSent = _client.SendRoomOutline(_outline);
         }
     }
