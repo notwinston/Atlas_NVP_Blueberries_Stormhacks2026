@@ -85,6 +85,8 @@ namespace Atlas.Station.Tests
         public readonly ConcurrentQueue<OperatorCommand> Commands = new ConcurrentQueue<OperatorCommand>();
         public readonly ConcurrentQueue<uint> ReceivedSeqs = new ConcurrentQueue<uint>();
         public readonly ConcurrentQueue<string> Jobs = new ConcurrentQueue<string>();
+        /// <summary>Every AssetReady as received, for the fields Jobs does not show.</summary>
+        public readonly ConcurrentQueue<AssetReadyMessage> Readies = new ConcurrentQueue<AssetReadyMessage>();
         public readonly ConcurrentQueue<LinkState> States = new ConcurrentQueue<LinkState>();
         /// <summary>What a Spectator is sent beside <c>State</c>: Welcomes, manifests, the phone's events, outlines.</summary>
         public readonly ConcurrentQueue<WelcomeMessage> Welcomes = new ConcurrentQueue<WelcomeMessage>();
@@ -125,7 +127,7 @@ namespace Atlas.Station.Tests
             Client.StateChanged += (previous, current) => States.Enqueue(current);
             Client.StateReceived += OnState;
             Client.JobStatusReceived += m => Jobs.Enqueue("status:" + m.JobId + ":" + m.State);
-            Client.AssetReadyReceived += m => Jobs.Enqueue("ready:" + m.JobId + ":" + m.Sha256);
+            Client.AssetReadyReceived += m => { Jobs.Enqueue("ready:" + m.JobId + ":" + m.Sha256); Readies.Enqueue(m); };
             Client.Welcomed += w => { LastWelcome = w; Welcomes.Enqueue(w); };
             Client.ManifestReceived += m => Manifests.Enqueue(m);
             Client.EventReceived += e => Events.Enqueue(e);

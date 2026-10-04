@@ -120,5 +120,51 @@ namespace Atlas.Station.Tests
                 await t.PostJson("/internal/job", "not json", 400);
             }
         }
+
+        // A message may arrive more than once (an unacknowledged AssetReady is sent again), so look by job.
+        static AssetReadyMessage Find(TestClient client, string jobId)
+        {
+            foreach (AssetReadyMessage m in client.Readies.ToArray()) if (m.JobId == jobId) return m;
+            return null;
+        }
+
+        static bool HasBoth(TestClient client) { return Find(client, "j1") != null && Find(client, "j2") != null; }
+
+        [Test]
+        public async Task ForgeJob_LightCopyFields_ArePassedThroughUnchanged()
+        {
+            await using (TestHub t = await TestHub.StartAsync())
+            using (var phone = new TestClient(LinkRole.Phone, t.Hub.UdpPort))
+            using (var spectator = new TestClient(LinkRole.Spectator, t.Hub.UdpPort))
+            {
+                Wait.Ready(phone);
+                Wait.Ready(spectator);
+
+                string light = new string('c', 64);
+                await t.PostJson("/internal/job",
+                    "{\"jobId\":\"j1\",\"roomId\":\"r1\",\"boxId\":3,\"sha256\":\"abc123\",\"url\":\"/assets/abc123.glb\",\"bytes\":1000,\"tris\":9000,"
+                    + "\"lightSha256\":\"" + light + "\",\"lightUrl\":\"/assets/" + light + ".glb\",\"lightBytes\":400,\"lightTris\":3000}", 204);
+                await t.PostJson("/internal/job",
+                    "{\"jobId\":\"j2\",\"roomId\":\"r1\",\"boxId\":4,\"sha256\":\"def456\",\"url\":\"/assets/def456.glb\",\"bytes\":1000,\"tris\":3000}", 204);
+
+                Wait.Until(() => HasBoth(phone) && HasBoth(spectator), "both AssetReady messages to be relayed");
+                foreach (TestClient receiver in new[] { phone, spectator })
+                {
+                    AssetReadyMessage withLight = Find(receiver, "j1"), without = Find(receiver, "j2");
+                    Assert.That(withLight.Sha256, Is.EqualTo("abc123"));
+                    Assert.That(withLight.Tris, Is.EqualTo(9000));
+                    Assert.That(withLight.LightSha256, Is.EqualTo(light));
+                    Assert.That(withLight.LightUrl, Is.EqualTo("/assets/" + light + ".glb"));
+                    Assert.That(withLight.LightBytes, Is.EqualTo(400));
+                    Assert.That(withLight.LightTris, Is.EqualTo(3000));
+                    // A job with no light copy still reads as before.
+                    Assert.That(without.Sha256, Is.EqualTo("def456"));
+                    Assert.That(without.LightSha256, Is.EqualTo(string.Empty));
+                    Assert.That(without.LightUrl, Is.EqualTo(string.Empty));
+                    Assert.That(without.LightBytes, Is.EqualTo(0));
+                    Assert.That(without.LightTris, Is.EqualTo(0));
+                }
+            }
+        }
     }
 }

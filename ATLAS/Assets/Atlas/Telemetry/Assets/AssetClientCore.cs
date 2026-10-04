@@ -33,6 +33,8 @@ namespace Atlas.Telemetry
 
         public const string BackendLocal = "local", BackendHosted = "hosted", BackendCache = "cache", BackendOff = "off";
         public const string EventName = "asset";
+        /// <summary>The reason logged with the built-in mesh an object gets as soon as the room content is built.</summary>
+        public const string FirstShapeReason = "first_shape";
 
         static readonly float[] s_retryWaits = { 1f, 2f };
 
@@ -47,6 +49,10 @@ namespace Atlas.Telemetry
             public ObjectCategory Category;
             public float3 Size;
             public float Yaw;
+            /// <summary>The object's profile (RoomObject.Profile), or null: it shapes the first shape.</summary>
+            public byte[] Profile;
+            /// <summary>The full target of the object's job; 0 for an object that receives no mesh.</summary>
+            public int TriTarget;
             public ObjectAssetState State;
             /// <summary>Built-in for good: no photo, a failed job or a rejected asset is never retried.</summary>
             public bool Sticky;
@@ -82,6 +88,8 @@ namespace Atlas.Telemetry
         readonly Action<object> _runWork = RunWork;
 
         Entry[] _entries = new Entry[0];
+        // Objects that receive no mesh (no triangle target, or beyond the largest): they keep their first shape.
+        Entry[] _extras = new Entry[0];
         RoomModel _room;
         string _roomId = string.Empty, _roomJson;
         bool _built, _beginSeen, _graceDone, _roomPosted;
@@ -164,13 +172,14 @@ namespace Atlas.Telemetry
         public int PlacedCount { get { return Count(ObjectAssetState.Ready, ObjectAssetState.Ready); } }
         /// <summary>Objects on their way: uploading, requested, downloading or loading.</summary>
         public int PendingCount { get { return Count(ObjectAssetState.Uploading, ObjectAssetState.Loading); } }
-        /// <summary>Objects showing their built-in mesh.</summary>
+        /// <summary>Objects showing their built-in mesh: their first shape or the one they fell back to.</summary>
         public int BuiltInCount
         {
             get
             {
                 int n = 0;
                 for (int i = 0; i < _entries.Length; i++) if (_entries[i].ShowsBuiltIn) n++;
+                for (int i = 0; i < _extras.Length; i++) if (_extras[i].ShowsBuiltIn) n++;
                 return n;
             }
         }
@@ -191,7 +200,8 @@ namespace Atlas.Telemetry
         /// <summary>The triangle target sent with the object's job; 0 when it receives no mesh.</summary>
         public int TriTarget(int objectId)
         {
-            return Find(objectId) != null ? ObjectMeshRules.TriTarget(_entries.Length) : 0;
+            Entry e = Find(objectId);
+            return e != null ? e.TriTarget : 0;
         }
 
         /// <summary>The id of the k-th object in the order the client serves them: largest box first.</summary>
@@ -211,13 +221,12 @@ namespace Atlas.Telemetry
             _built = true;
             _builtAt = _now;
             _graceDone = false;
+            for (int i = 0; i < _extras.Length; i++) FirstShapeDue(_extras[i]);
             for (int i = 0; i < _entries.Length; i++)
             {
                 Entry e = _entries[i];
-                // The views are new: whatever was shown is a placeholder box again.
-                e.ShowsBuiltIn = false;
-                e.BuiltInTried = false;
-                e.NeedsBuiltIn = e.State == ObjectAssetState.BuiltIn;
+                // The views are new: whatever was shown is a placeholder box again, and the first shape is due.
+                FirstShapeDue(e);
                 if (e.State == ObjectAssetState.Ready || (e.State == ObjectAssetState.Placeholder && e.Sha.Length > 0))
                 {
                     // From the cache: the pre-scan path needs no Station, and no job waits for an answer.
@@ -230,6 +239,16 @@ namespace Atlas.Telemetry
             else if (_reach == Reach.Unreachable) AllToBuiltIn("unreachable", false);
         }
 
+        // The views are new: whatever was shown is a box again. Every object gets its first shape, whatever the
+        // Forge's state; the generated mesh replaces it when it arrives.
+        static void FirstShapeDue(Entry e)
+        {
+            e.ShowsBuiltIn = false;
+            e.BuiltInTried = false;
+            e.NeedsBuiltIn = true;
+            if (e.State != ObjectAssetState.BuiltIn || string.IsNullOrEmpty(e.BuiltInReason)) e.BuiltInReason = FirstShapeReason;
+        }
+
         /// <summary>The room is gone: requests are cancelled and late answers dropped.</summary>
         public void RoomCleared()
         {
@@ -238,6 +257,7 @@ namespace Atlas.Telemetry
             _roomId = string.Empty;
             _roomJson = null;
             _entries = new Entry[0];
+            _extras = new Entry[0];
             _built = false;
         }
 
@@ -363,21 +383,38 @@ namespace Atlas.Telemetry
 
             // The objects that take part: those lane C gave a triangle target, largest box first, twenty at most.
             RoomObject[] objects = room.Objects ?? new RoomObject[0];
-            int n = 0;
+            int n = 0, rest = 0;
             var picked = new RoomObject[objects.Length];
+            var others = new RoomObject[objects.Length];
             for (int i = 0; i < objects.Length; i++)
-                if (objects[i] != null && objects[i].TriTarget > 0 && objects[i].Mesh != MeshState.StandIn) picked[n++] = objects[i];
+            {
+                if (objects[i] == null || objects[i].Mesh == MeshState.StandIn) continue;
+                if (objects[i].TriTarget > 0) picked[n++] = objects[i];
+                else others[rest++] = objects[i];
+            }
             Array.Sort(picked, 0, n, s_largestFirst);
+            // An object beyond the largest keeps its first shape, like one the room gave no target.
+            for (int i = MaxObjects; i < n; i++) others[rest++] = picked[i];
             if (n > MaxObjects) n = MaxObjects;
 
             _entries = new Entry[n];
             for (int i = 0; i < n; i++)
             {
                 RoomObject o = picked[i];
-                var e = new Entry { Id = o.Id, Category = o.Category, Size = o.Size, Yaw = o.Yaw };
+                var e = new Entry { Id = o.Id, Category = o.Category, Size = o.Size, Yaw = o.Yaw, Profile = o.Profile, TriTarget = o.TriTarget };
                 // A saved room names the mesh it had; it comes back from the cache.
                 if (ForgeProtocol.IsSha256(o.AssetHash)) e.Sha = o.AssetHash;
                 _entries[i] = e;
+            }
+            _extras = new Entry[rest];
+            for (int i = 0; i < rest; i++)
+            {
+                RoomObject o = others[i];
+                _extras[i] = new Entry
+                {
+                    Id = o.Id, Category = o.Category, Size = o.Size, Yaw = o.Yaw, Profile = o.Profile,
+                    State = ObjectAssetState.BuiltIn, Sticky = true
+                };
             }
         }
 
@@ -406,6 +443,7 @@ namespace Atlas.Telemetry
         Entry Find(int objectId)
         {
             for (int i = 0; i < _entries.Length; i++) if (_entries[i].Id == objectId) return _entries[i];
+            for (int i = 0; i < _extras.Length; i++) if (_extras[i].Id == objectId) return _extras[i];
             return null;
         }
 
@@ -438,6 +476,7 @@ namespace Atlas.Telemetry
         {
             if (_download == e) EndDownload();
             if (_uploadEntry == e && sticky) _uploadEntry = null;
+            bool changed = e.State != ObjectAssetState.BuiltIn;
             e.State = ObjectAssetState.BuiltIn;
             if (sticky)
             {
@@ -449,30 +488,51 @@ namespace Atlas.Telemetry
                 e.NeedsBuiltIn = true;
                 e.BuiltInReason = reason;
             }
+            else if (changed && e.ShowsBuiltIn)
+            {
+                // The first shape is already there and stays: say why the object will have nothing else.
+                LogStep("builtin", e, JsonValue.Object().Set("reason", reason ?? string.Empty).Set("placed", true)
+                    .Set("kept", string.Empty).Set("shape", "kept").Set("tris", 0));
+            }
         }
 
         void TickBuiltIn()
         {
             if (!_built) return;
             int placed = 0;
-            for (int i = 0; i < _entries.Length && placed < BuiltInPerTick; i++)
-            {
-                Entry e = _entries[i];
-                if (!e.NeedsBuiltIn) continue;
-                e.NeedsBuiltIn = false;
-                e.BuiltInTried = true;
-                if (e.State != ObjectAssetState.BuiltIn) continue;
-                placed++;
+            for (int i = 0; i < _entries.Length && placed < BuiltInPerTick; i++) PlaceFirstShape(_entries[i], ref placed);
+            for (int i = 0; i < _extras.Length && placed < BuiltInPerTick; i++) PlaceFirstShape(_extras[i], ref placed);
+        }
 
-                FallbackTemplate template = _fallback != null ? _fallback.Get(e.Category) : null;
-                string kept = null;
-                if (template == null) kept = "no_template";               // Unknown and Other keep their box
-                else if (!_builder.Build(template, e.Size, e.Yaw, _builtInMesh)) kept = "too_large";
-                else if (!_roomView.PlaceBuiltIn(e.Id, _builtInMesh)) kept = "no_view";
-                if (kept == null) e.ShowsBuiltIn = true;
-                LogStep("builtin", e, JsonValue.Object().Set("reason", e.BuiltInReason ?? string.Empty)
-                    .Set("placed", kept == null).Set("kept", kept ?? string.Empty)
-                    .Set("tris", kept == null ? _builtInMesh.TriangleCount : 0));
+        // The built-in mesh of one object: the fitted template, the template, or the shape cut from the scan.
+        void PlaceFirstShape(Entry e, ref int placed)
+        {
+            if (!e.NeedsBuiltIn) return;
+            e.NeedsBuiltIn = false;
+            e.BuiltInTried = true;
+            if (e.State == ObjectAssetState.Ready) return;              // the generated mesh got there first
+            placed++;
+
+            FirstShapeKind kind = FittedShapes.Build(_builder, _fallback, e.Category, e.Size, e.Yaw, e.Profile, _builtInMesh);
+            string kept = null;
+            if (kind == FirstShapeKind.None)
+                kept = _fallback != null && _fallback.Get(e.Category) != null ? "too_large" : "no_template";    // the box stays
+            else if (!_roomView.PlaceBuiltIn(e.Id, _builtInMesh)) kept = "no_view";
+            if (kept == null) e.ShowsBuiltIn = true;
+            LogStep("builtin", e, JsonValue.Object().Set("reason", e.BuiltInReason ?? string.Empty)
+                .Set("placed", kept == null).Set("kept", kept ?? string.Empty)
+                .Set("shape", kept == null ? ShapeName(kind) : string.Empty)
+                .Set("tris", kept == null ? _builtInMesh.TriangleCount : 0));
+        }
+
+        static string ShapeName(FirstShapeKind kind)
+        {
+            switch (kind)
+            {
+                case FirstShapeKind.Template: return "template";
+                case FirstShapeKind.Fitted: return "fitted";
+                case FirstShapeKind.ScanCut: return "scancut";
+                default: return string.Empty;
             }
         }
 
@@ -547,7 +607,7 @@ namespace Atlas.Telemetry
                     if (next == null) break;
                     _uploadEntry = next;
                     _uploadStep = UploadStep.Object;
-                    int target = ObjectMeshRules.TriTarget(_entries.Length);
+                    int target = next.TriTarget;
                     _uploadHandle = _transport.Begin("POST", _forgeUrl + "/rooms/" + _roomId + "/objects",
                         ForgeProtocol.ObjectBody(next.Photos, target, _backend), ForgeProtocol.MultipartContentType, ObjectTimeout);
                     LogStep("upload", next, JsonValue.Object().Set("attempt", _attempts + 1).Set("triTarget", target)
@@ -856,7 +916,7 @@ namespace Atlas.Telemetry
             work.Expect = new GlbExpectation
             {
                 DimX = e.Size.x, DimY = e.Size.y, DimZ = e.Size.z,
-                TriTarget = ObjectMeshRules.TriTarget(_entries.Length),
+                TriTarget = e.TriTarget,
                 Sha256 = e.Sha
             };
             work.Done = false;
@@ -878,7 +938,7 @@ namespace Atlas.Telemetry
                     bytes = work.Cache.TryRead(work.Sha);
                     if (bytes == null) { work.Outcome = WorkOutcome.NeedDownload; return; }
                 }
-                GlbReport report = bytes.Length > GlbValidator.MaxBytes
+                GlbReport report = bytes.Length > GlbValidator.MaxBytesOf(work.Expect.Level)
                     ? new GlbReport { FailedCheck = GlbValidator.CodeSize }
                     : GlbValidator.Validate(bytes, in work.Expect);
                 if (!report.Ok)

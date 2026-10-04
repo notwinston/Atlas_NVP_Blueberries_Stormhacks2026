@@ -97,7 +97,7 @@ namespace Atlas.Telemetry
                     .Set("intrinsics", JsonValue.Array(view.Intrinsics.x, view.Intrinsics.y, view.Intrinsics.z, view.Intrinsics.w))
                     .Set("camToBox", camToBox));
             }
-            return JsonValue.Object()
+            JsonValue meta = JsonValue.Object()
                 .Set("boxId", photos.ObjectId)
                 .Set("category", ObjectCategories.Name(photos.Category))
                 .Set("dims", JsonValue.Array(photos.Size.x, photos.Size.y, photos.Size.z))
@@ -105,6 +105,10 @@ namespace Atlas.Telemetry
                 .Set("triTarget", triTarget)
                 .Set("backend", backend)
                 .Set("views", views);
+            // Both are optional: a Forge that does not know them works as before for the job.
+            if (photos.TriTargetLight > 0) meta.Set("triTargetLight", photos.TriTargetLight);
+            if (photos.Profile != null) meta.Set("profile", Convert.ToBase64String(photos.Profile));
+            return meta;
         }
 
         /// <summary>Views that carry a JPEG, at most three; the Forge reads view0, view1, view2 in order.</summary>
