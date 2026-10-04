@@ -11,8 +11,10 @@ namespace Atlas.Input
         Vector2 Stick { get; }                // left stick, -1..1 ("stick + A", Master Plan §10.2.2)
     }
 
-    // Placeholder source: Gamepad.current only. ReturnHome is "B held" in the plan; the hold time is lane C's.
-    public sealed class GamepadActionSource : IActionSource
+    // Placeholder-only helper, internal (not part of the contract surface). Gamepad.current only.
+    // ReturnHome is "B held" in the plan: here Triggered(ReturnHome) is true on every frame B is held (not once);
+    // the hold threshold and the fire-once behaviour are lane C's (deviation PH-40).
+    internal sealed class GamepadActionSource : IActionSource
     {
         public bool Triggered(AtlasAction action)
         {

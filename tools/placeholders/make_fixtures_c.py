@@ -120,15 +120,15 @@ def poselog(name, samples):
 def main():
     os.makedirs(ROOT, exist_ok=True)
     r3 = square(-1.5, -1.5, 1.5, 1.5)
-    write("room_3x3.json", room("sample_3x3", r3, square(-1.25, -1.25, 1.25, 1.25), [], (2.4, 2.4), [],
+    write("room_3x3.json", room("sample_3x3", r3, square(-1.2, -1.2, 1.2, 1.2), [], (2.4, 2.4), [],
                                 glued(2.4, 2.4), aligned(2.4, 2.4)))
     L = [(-1.5, -1.5), (1.5, -1.5), (1.5, 1.5), (0.5, 1.5), (0.5, 2.5), (-1.5, 2.5)]
-    Li = [(-1.25, -1.25), (1.25, -1.25), (1.25, 1.25), (0.25, 1.25), (0.25, 2.25), (-1.25, 2.25)]
+    Li = [(-1.2, -1.2), (1.2, -1.2), (1.2, 1.2), (0.2, 1.2), (0.2, 2.2), (-1.2, 2.2)]   # WALK boundary: 0.30 m from every wall (Master Plan §4.2)
     write("room_3x4_L.json", room("sample_3x4_L", L, Li, [], (2.4, 2.4), [], glued(2.4, 2.4), aligned(2.4, 2.4)))
     table = {"id": 0, "category": "table", "pos": (0, 0, 1.45), "size": (1.2, 0.75, 0.8), "mesh": "placeholder", "hash": ""}
     write("room_4x5_table.json", room(
-        "sample_4x5_table", square(-2, -1.05, 2, 3.95), square(-1.75, -0.8, 1.75, 3.7),
-        [square(-0.85, 0.8, 0.85, 2.1)], (3.4, 1.5), [table], glued(3.4, 1.5), aligned(3.4, 1.5)))
+        "sample_4x5_table", square(-2, -1.05, 2, 3.95), square(-1.7, -0.75, 1.7, 3.65),
+        [square(-0.9, 0.75, 0.9, 2.15)], (3.4, 1.5), [table], glued(3.4, 1.5), aligned(3.4, 1.5)))
     objs = []
     k = 0
     for sx in (-1, 1):
@@ -140,7 +140,7 @@ def main():
     for o in objs:
         o["mesh"], o["hash"] = "ready", FLOOR_OBJ_HASH
     write("budget_room.json", room(
-        "budget_room", square(-2, -2.5, 2, 2.5), square(-1.45, -1.95, 1.45, 1.95), [], (2.8, 3.8), objs,
+        "budget_room", square(-2, -2.5, 2, 2.5), square(-1.4, -1.9, 1.4, 1.9), [], (2.8, 3.8), objs,
         glued(2.8, 3.8), aligned(2.8, 3.8)))
 
     # pose logs: 60 Hz, head y = 1.6 m

@@ -6,12 +6,6 @@ using Atlas.Link;
 
 namespace Atlas.World
 {
-    /// <summary>Step 4 of the frame loop (Master Plan §6.3): the kernel step. Optional on a module (deviation PH-3).</summary>
-    public interface IKernelStage { void KernelStep(in FrameContext frame); }
-
-    /// <summary>Step 6 of the frame loop (Master Plan §6.3): upload. Optional on a module (deviation PH-3).</summary>
-    public interface IUploadStage { void Upload(in FrameContext frame); }
-
     /// <summary>
     /// Owns the registered spaces and switches between them (Master Plan §6.2, World; P1-A08).
     /// Placeholder: the switch is synchronous at the next Tick, with no fade or scene load (PH-4);
@@ -27,6 +21,8 @@ namespace Atlas.World
         public RoomModel Room { get; }
         public ParamRegistry Registry { get; }
         public ISpaceModule Active { get; private set; }   // null until the first switch
+        // The Home rebuild's meshes, set by the app (PH-25, Master Plan §6.2, §9.3): Atlas.Spaces.* may not reference Atlas.Scan.
+        public IHomeShell Home { get; set; }                // null until the Home rebuild has run
         public bool Switching => _pending != null;          // true from Request until the switch is applied
 
         public void Register(ISpaceModule module)           // one per SpaceId; a duplicate throws

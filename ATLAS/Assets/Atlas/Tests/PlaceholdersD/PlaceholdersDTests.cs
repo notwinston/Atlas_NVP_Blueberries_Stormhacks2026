@@ -146,8 +146,10 @@ namespace Atlas.PlaceholdersD.Tests
 
         static float Dot(float[] a, double[] b) => (float)(a[0] * b[0] + a[1] * b[1] + a[2] * b[2]);
 
-        [Test] // P2-D07: 16 generations addressable; ratio 0.794 +- 0.08; exactly 1 Two Compasses fork on the route
-        public void Placeholder_Tree_P2D07()
+        // P2-D07 checks: 16 generations addressable; ratio 0.794 +- 0.08; exactly 1 wrong Euclidean-compass fork on the route.
+        // NOT checked, and not met (PH-39): P2-D07 says "on the 4-fork route"; this route has target.address.Length = 6 forks.
+        [Test]
+        public void Placeholder_Tree_AddressableRatioOneWrongFork()
         {
             var t = JsonUtility.FromJson<TreeFile>(File.ReadAllText(Path.Combine(Case, "airway", "tree.json")));
             Assert.That(t.schema, Is.EqualTo("atlas.tree/2"));

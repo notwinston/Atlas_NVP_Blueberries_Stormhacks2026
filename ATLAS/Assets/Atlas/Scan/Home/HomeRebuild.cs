@@ -10,7 +10,7 @@ namespace Atlas.Scan
     public static class HomeRebuild
     {
         const float Grid = 0.25f;   // Master Plan §4.5
-        public const string BudgetStandInHash = "budget-standin-5000";   // Master Plan §4.3 budget_room
+        internal const string BudgetStandInHash = "budget-standin-5000";   // Master Plan §4.3 budget_room
 
         public static IHomeShell Build(RoomModel room) => new Shell(room);
 
@@ -77,12 +77,18 @@ namespace Atlas.Scan
         static Mesh BuildWalls(RoomModel room)
         {
             var v = new List<Vector3>(); var t = new List<int>();
-            foreach (var wall in room.walls)   // quads of height `height`; openings are not cut in the placeholder
+            // Quads face into the room (AtlasSurface culls back faces): the winding follows the outline's orientation,
+            // anticlockwise in (x, z) (positive shoelace area) for the fixtures. Openings are not cut in the placeholder.
+            float area = 0;
+            foreach (var wall in room.walls) area += wall.a.x * wall.b.z - wall.b.x * wall.a.z;
+            bool ccw = area > 0;
+            foreach (var wall in room.walls)
             {
                 int k = v.Count;
                 v.Add(new Vector3(wall.a.x, 0, wall.a.z)); v.Add(new Vector3(wall.a.x, wall.height, wall.a.z));
                 v.Add(new Vector3(wall.b.x, wall.height, wall.b.z)); v.Add(new Vector3(wall.b.x, 0, wall.b.z));
-                t.AddRange(new[] { k, k + 1, k + 2, k, k + 2, k + 3 });
+                if (ccw) t.AddRange(new[] { k, k + 3, k + 2, k, k + 2, k + 1 });   // a, b, b_top ; a, b_top, a_top
+                else t.AddRange(new[] { k, k + 1, k + 2, k, k + 2, k + 3 });
             }
             return Make("HomeWalls", v, t);
         }

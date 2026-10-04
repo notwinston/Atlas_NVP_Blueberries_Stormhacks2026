@@ -80,6 +80,48 @@ namespace Atlas.PlaceholdersC.Tests
             Assert.Less(r.sdf.Sample(r.walls[0].a.x - 0.2f, r.walls[0].a.z - 0.2f), 0f);
         }
 
+        // Master Plan §4.2: WALK = {SDF > 0.25 m} and the SDF reads 0.05 m less, so the walkable boundary lies 0.30 m from every
+        // wall and obstacle; checked on edge midpoints of the outer outline and the holes (nearest cell, 5 cm grid).
+        [Test]
+        public void Placeholder_Fixture_WalkableMatchesSdfContour([ValueSource(nameof(Rooms))] string name)
+        {
+            var r = Room(name);
+            var rings = new System.Collections.Generic.List<FloorPoint[]> { r.walkable.outer };
+            foreach (var h in r.walkable.holes) rings.Add(h.points);
+            foreach (var ring in rings)
+                for (int i = 0; i < ring.Length; i++)
+                {
+                    var a = ring[i]; var b = ring[(i + 1) % ring.Length];
+                    if (Mathf.Abs(a.x - b.x) + Mathf.Abs(a.z - b.z) < 0.5f) continue;   // short edges sit at rounded corners
+                    float d = r.sdf.Sample((a.x + b.x) / 2, (a.z + b.z) / 2);
+                    Assert.AreEqual(0.25f, d, 0.05f, name + " edge " + i);
+                }
+        }
+
+        // Master Plan §4.5, §8.1 (AtlasSurface culls back faces): the Home wall quads face into the room.
+        [Test]
+        public void Placeholder_Home_WallsFaceInward([ValueSource(nameof(Rooms))] string name)
+        {
+            var r = Room(name);
+            var m = HomeRebuild.Build(r).Walls;
+            var v = m.vertices; var n = m.normals;
+            for (int i = 0; i < r.walls.Length; i++)
+            {
+                var a = r.walls[i].a; var b = r.walls[i].b;
+                var mid = new Vector2((a.x + b.x) / 2, (a.z + b.z) / 2);
+                var nn = new Vector2(n[4 * i].x, n[4 * i].z).normalized;
+                Assert.IsTrue(InsideOutline(r.walls, mid.x + nn.x * 0.2f, mid.y + nn.y * 0.2f), name + " wall " + i);   // furniture can sit against a wall, so test the outline, not the sdf
+            }
+        }
+
+        static bool InsideOutline(Wall[] w, float x, float z)
+        {
+            bool inside = false;
+            foreach (var e in w)
+                if ((e.a.z > z) != (e.b.z > z) && x < (e.b.x - e.a.x) * (z - e.a.z) / (e.b.z - e.a.z) + e.a.x) inside = !inside;
+            return inside;
+        }
+
         // Master Plan §4.3: walls form a closed outline; objects carry u8 ids.
         [Test]
         public void Placeholder_Fixture_WallsClosedObjectsValid([ValueSource(nameof(Rooms))] string name)

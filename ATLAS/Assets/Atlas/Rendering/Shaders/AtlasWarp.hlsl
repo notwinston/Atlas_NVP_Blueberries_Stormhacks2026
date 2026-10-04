@@ -1,4 +1,4 @@
-// PLACEHOLDER (lane A, P1-A06): contract surface only; replaced by lane A's implementation
+// PLACEHOLDER (lane B stub, P1-B03): contract surface only; replaced by lane B's implementation (kernel.md §6.1)
 // Stand-in for lane B's AtlasWarp.hlsl (P1-B03, kernel.md §6.1) so that the shared shader compiles; mode 0 behaviour only.
 #ifndef ATLAS_WARP_INCLUDED
 #define ATLAS_WARP_INCLUDED

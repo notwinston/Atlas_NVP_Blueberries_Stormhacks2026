@@ -63,6 +63,23 @@ namespace Atlas.PlaceholdersA.Tests
             Assert.AreEqual(new[] { "S0.Kernel", "S0.Tick", "S0.Upload" }, log);
         }
 
+        [Test] // Master Plan §6.2, §9.3 (PH-25): Spaces reach the Home meshes through SpaceLab.Home, not Atlas.Scan
+        public void Placeholder_SpaceLab_HomeProperty()
+        {
+            var lab = new SpaceLab(null, null);
+            Assert.IsNull(lab.Home);
+            var shell = new NullShell();
+            lab.Home = shell;
+            Assert.AreSame(shell, lab.Home);
+        }
+
+        sealed class NullShell : IHomeShell
+        {
+            public Mesh Floor => null; public Mesh Walls => null; public int ObjectCount => 0;
+            public RoomObject ObjectRecord(int i) => null; public Mesh ObjectMesh(int i) => null;
+            public event Action<int> ObjectMeshChanged { add { } remove { } }
+        }
+
         [Test] // Master Plan §6.2 (World): one module per SpaceId, a duplicate throws; switch exits the old space first
         public void Placeholder_SpaceLab_RegisterAndSwitch()
         {

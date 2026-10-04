@@ -16,7 +16,7 @@ namespace Atlas.Scan
         public readonly Quaternion Rotation;
         public readonly byte Tracking;
 
-        public PoseSample(double time, Vector3 position, Quaternion rotation, byte tracking)
+        internal PoseSample(double time, Vector3 position, Quaternion rotation, byte tracking)
         {
             Time = time; Position = position; Rotation = rotation; Tracking = tracking;
         }
