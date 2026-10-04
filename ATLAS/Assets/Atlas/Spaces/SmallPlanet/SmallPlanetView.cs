@@ -100,6 +100,7 @@ namespace Atlas.Spaces.SmallPlanet
             if (!(radius > 0)) throw new ArgumentOutOfRangeException(nameof(radius));
             pool = materialPool ?? throw new ArgumentNullException(nameof(materialPool));
             kit = kitTiles;
+            WarpMode = AtlasWarpCpu.ModeSpherical;
             if (kit == null) return;
             kitScratch = new AtlasMeshBuilder(kit.MaxVertices, kit.MaxIndices);
             for (int f = 0; f < CubeTiling.FaceCount; f++)
@@ -145,6 +146,16 @@ namespace Atlas.Spaces.SmallPlanet
                 shown = value;
                 for (int i = 0; i < children.Count; i++) children[i].SetActive(value);
             }
+        }
+
+        /// <summary>The tiles' warp mode: spherical (2, the default) or S3 (3, planet.view3d).</summary>
+        public float WarpMode { get; private set; } = AtlasWarpCpu.ModeSpherical;
+
+        /// <summary>Spherical (2) or S3 (3) for every tile material; kept across SetRadius, back to 2 on Build.</summary>
+        public void SetWarpMode(float mode)
+        {
+            WarpMode = mode;
+            for (int i = 0; i < materials.Count; i++) materials[i].SetFloat(AtlasShaderIDs.WarpMode, mode);
         }
 
         public void Upload(Iso2[] tileAnchors)

@@ -27,17 +27,21 @@ namespace Atlas.Spaces.SmallPlanet
         readonly Camera[] eyes = new Camera[2];
         readonly Color[] savedClear = new Color[2];
 
-        /// <summary>The look's part of the sky, with nothing to draw (the Station, or a build without a look's pool).</summary>
-        public static void ApplyLook()
+        bool view3d;
+
+        /// <summary>The look's part of the sky, with nothing to draw (the Station, or a build without a look's pool).
+        /// view3d (planet.view3d): fog and zenith both the meadow green, the S3 view's "sky" of far ground.</summary>
+        public static void ApplyLook(bool view3d = false)
         {
-            AtlasLook.SetFogColor(SmallPlanetSkyMesh.HorizonLinear, true);
-            AtlasLook.SetSkyTop(SmallPlanetSkyMesh.ZenithLinear);
+            AtlasLook.SetFogColor(view3d ? SmallPlanetSkyMesh.MeadowLinear : SmallPlanetSkyMesh.HorizonLinear, true);
+            AtlasLook.SetSkyTop(view3d ? SmallPlanetSkyMesh.MeadowLinear : SmallPlanetSkyMesh.ZenithLinear);
         }
 
-        public SmallPlanetSky(Transform parent, MaterialPool materialPool, IStereoRig rig)
+        public SmallPlanetSky(Transform parent, MaterialPool materialPool, IStereoRig rig, bool view3d = false)
         {
             pool = materialPool ?? throw new ArgumentNullException(nameof(materialPool));
-            ApplyLook();
+            this.view3d = view3d;
+            ApplyLook(view3d);
 
             var sunData = new AtlasMeshBuilder(64, 192);
             SmallPlanetSkyMesh.BuildSun(sunData);
@@ -63,9 +67,35 @@ namespace Atlas.Spaces.SmallPlanet
                     if (eye == null) continue;
                     eyes[e] = eye;
                     savedClear[e] = eye.backgroundColor;
-                    float3 h = SmallPlanetSkyMesh.HorizonSrgb;
-                    eye.backgroundColor = new Color(h.x, h.y, h.z, 1f);
                 }
+            ApplyClear();
+            sun.SetActive(!view3d);
+            clouds.SetActive(!view3d);
+        }
+
+        /// <summary>
+        /// planet.view3d: on hides the sun and clouds and turns fog, zenith and the eyes' clear colour meadow green
+        /// (in S3 the ground fills the sky); off is the daytime sky exactly as built.
+        /// </summary>
+        public bool View3d
+        {
+            get => view3d;
+            set
+            {
+                if (view3d == value) return;
+                view3d = value;
+                ApplyLook(value);
+                ApplyClear();
+                sun.SetActive(!value);
+                clouds.SetActive(!value);
+            }
+        }
+
+        void ApplyClear()
+        {
+            float3 h = view3d ? SmallPlanetSkyMesh.MeadowSrgb : SmallPlanetSkyMesh.HorizonSrgb;
+            for (int e = 0; e < 2; e++)
+                if (eyes[e] != null) eyes[e].backgroundColor = new Color(h.x, h.y, h.z, 1f);
         }
 
         public MeshRenderer SunRenderer => sun.GetComponent<MeshRenderer>();

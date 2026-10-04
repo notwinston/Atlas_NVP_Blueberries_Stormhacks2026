@@ -137,3 +137,24 @@ Left over:
   infinity and never swims; only the clouds turn about the vertical, 0.2 degrees a second.
 - **Clear colour:** the eye cameras' background colour (used only if the skybox were missing) is set to the horizon
   on Enter and given back on Exit.
+
+## View switch: `planet.view3d` (the "Hyperbolica look")
+
+- **Off (default): the comfortable view.** Warp mode 2, S2 x R: the floor is curved, heights are added flat, the far
+  side never rises above the horizon; the daytime sky above. Exactly the behaviour described above.
+- **On: full 3D spherical space.** Warp mode 3 (`AtlasWarp.hlsl`, `LogS3`; C# mirror `AtlasWarpCpu.LogS3`): the world is
+  the round 3-space S3 of radius R and the floor is one of its great 2-spheres. A vertex at floor point p (unit,
+  head-relative) and height h is q = (cos(h/R) p, sin(h/R)); the eye at height e is E = (0, 0, cos(e/R), sin(e/R));
+  the vertex is drawn at the head plus R Log_E(q) (right = world x, forward = world z, up = world y). Every sight line
+  meets the floor again: past a quarter turn (pi R / 2, about 3.6 m) the ground rises above the horizon, far things grow
+  in every direction, and the foot's antipode hangs straight overhead (pi R - e away). There is no sky: the sun and
+  clouds are hidden and fog, zenith and the eyes' clear colour are meadow green `#6E9F5A`
+  (`SmallPlanetSkyMesh.MeadowSrgb`), so the far ground fades into it. In mode 3 the fog and the 2.6 rad discard use
+  the 3D distance from the head (standing, the farthest floor is pi - e/R = 2.44 rad, under the discard).
+- Tiles, the room's kerbs and furniture and the lap markers all switch (`SmallPlanetSpace.ApplyView`). Mode 3 is used by
+  nothing else. Like planet.R, the switch takes effect only while the walker stands; it rides p[6] of the State, so
+  the Station draws what the phone draws.
+- **Strong by design:** R is about 2.3 m and the eye about 1.6 m up (e/R about 0.7 rad), so the curvature shows even close
+  by: horizontal sizes at height h shrink by cos(h/R) (0.76 at eye height), so props taper upwards a little.
+- Toggle: on the phone, menu > Parameters > group "planet" > `planet.view3d`; on the Hub, the same parameter in the
+  planet group.

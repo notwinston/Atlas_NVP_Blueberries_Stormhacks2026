@@ -217,6 +217,46 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             StringAssert.IsMatch(@"AtlasWarpClip\s*\(\s*input\.positionWS\s*\)", Hlsl("AtlasSurface.shader"));
         }
 
+        // planet.view3d, warp mode 3 (S3, the "Hyperbolica look"), through the C# mirror of AtlasWarp.hlsl: the eye maps to
+        // itself, the floor at a quarter turn is on the horizon and beyond it rises above eye level, the foot's antipode is
+        // overhead, vertical offsets at the eye are 1:1 (horizontal ones cos(e/R), the S3 metric), and at e = h = 0 it is mode 2.
+        [Test]
+        public void Warp_S3_HyperbolicaLook()
+        {
+            const float R = (float)SmallPlanetConstants.KitRadius, e = 1.6f;
+            float4x4 id = float4x4.identity;
+            var head = new float3(0.3f, e, -0.2f);
+            float3 W(float3 os, float3 h) => AtlasWarpCpu.AtlasWarp(os, id, AtlasWarpCpu.ModeS3, R, h, id);
+
+            Assert.Less(math.length(W(new float3(0, e, 0), head) - head), 1e-5f, "the eye is the eye");
+            float3 up = W(new float3(0, e + 0.01f, 0), head) - head;
+            Assert.AreEqual(0.01f, up.y, 1e-5f); Assert.Less(math.length(up.xz), 1e-6f);
+            float3 side = W(new float3(0.01f, e, 0), head) - head;
+            Assert.AreEqual(0.01f * math.cos(e / R), side.x, 1e-5f, "horizontal sizes at height h shrink by cos(h/R)");
+            float3 foot = W(new float3(0, 0, 0), head);
+            Assert.AreEqual(0f, foot.y, 1e-5f, "the floor under the head is e below the eye");
+
+            float3 quarter = W(new float3(0.5f * math.PI * R, 0, 0), head);
+            Assert.AreEqual(e, quarter.y, 1e-4f, "a quarter turn out the floor is on the horizon");
+            Assert.AreEqual(0.5f * math.PI * R, math.length(quarter - head), 1e-4f);
+            Assert.Greater(W(new float3(0, 0, 0.7f * math.PI * R), head).y, e + 0.5f, "beyond it the ground rises above the eye");
+            float3 anti = W(new float3(0, 0, 0.99f * math.PI * R), head) - head;
+            Assert.Greater(anti.y / math.length(anti), math.cos(math.radians(10f)), "the foot's antipode is overhead");
+            Assert.AreEqual(math.PI * R - e, math.length(anti), 0.05f);
+            Assert.Less(math.length(anti) / R, (float)SmallPlanetConstants.DiscardRad, "standing, no floor reaches the 2.6 rad discard");
+
+            var rng = new Random(3);
+            var floorHead = new float3(0.3f, 0f, -0.2f);
+            for (int i = 0; i < 50; i++)
+            {
+                var os = new float3((float)(rng.NextDouble() * 10 - 5), 0f, (float)(rng.NextDouble() * 10 - 5));
+                float3 m2 = AtlasWarpCpu.AtlasWarp(os, id, AtlasWarpCpu.ModeSpherical, R, floorHead, id);
+                Assert.Less(math.length(W(os, floorHead) - m2), 1e-4f, "e = h = 0: mode 2");
+            }
+            StringAssert.IsMatch(@"_WarpMode\s*>\s*2\.5[\s\S]*LogS3\s*\(", Hlsl("AtlasWarp.hlsl"));
+            StringAssert.IsMatch(@"_WarpMode\s*>\s*2\.5\s*&&\s*_HypL\s*>\s*0\s*\)\s*clip\s*\(\s*2\.6\s*-\s*length\s*\(\s*positionWS\s*-\s*_HeadPosWS\.xyz\s*\)", Hlsl("AtlasWarp.hlsl"));
+        }
+
         // The sky (SmallPlanetSkyMesh): beyond the fogged planet and inside the eye cameras' far plane, above the horizon,
         // palette colours only (the sun emissive), no lines; one sun and the clouds, under two thousand triangles.
         [Test]

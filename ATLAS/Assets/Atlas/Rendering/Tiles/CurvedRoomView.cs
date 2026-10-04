@@ -26,6 +26,8 @@ namespace Atlas.Rendering
         }
 
         public IRoomContent Room => room;
+        /// <summary>The warp mode at kappa > 0: spherical (2), or S3 (3) for the Small Planet's planet.view3d.</summary>
+        public float SphericalMode { get; set; } = AtlasWarpCpu.ModeSpherical;
         public int ObjectCount => room.ObjectCount;
         public Renderer FloorRenderer => room.FloorRenderer;
         /// <summary>The full walls at kappa = 0, the kerbs in curved space.</summary>
@@ -47,7 +49,7 @@ namespace Atlas.Rendering
                 SetWalls(drawRoom ? WallMode.Full : WallMode.Hidden);
                 return;
             }
-            float mode = kappa < 0 ? AtlasWarpCpu.ModeHyperbolic : AtlasWarpCpu.ModeSpherical;
+            float mode = kappa < 0 ? AtlasWarpCpu.ModeHyperbolic : SphericalMode;
             warped = true;
             room.FloorVisible = false;                                          // [D10]
             room.KerbHeight = CurvedRoomConstants.KerbHeightM;

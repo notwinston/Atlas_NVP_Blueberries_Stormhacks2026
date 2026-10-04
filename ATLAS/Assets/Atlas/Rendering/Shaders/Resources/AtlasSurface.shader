@@ -15,7 +15,7 @@ Shader "Atlas/Surface"
         _Gate2 ("Gate 2 (post.x, post.z, sign)", Vector) = (0, 0, 0, 0)
         _Gate3 ("Gate 3 (post.x, post.z, sign)", Vector) = (0, 0, 0, 0)
         _SurfaceParams ("Emissive gain, fog weight, near fade (m), fade weight", Vector) = (1, 1, 0, 1)
-        _WarpMode ("Warp mode (0 none, 1 hyperbolic, 2 spherical)", Float) = 0
+        _WarpMode ("Warp mode (0 none, 1 hyperbolic, 2 spherical, 3 spherical 3-space)", Float) = 0
         _Cull ("Cull (0 off, 1 front, 2 back)", Float) = 2
         _StencilRef ("Stencil reference (0..15)", Float) = 0
         _StencilComp ("Stencil comparison (8 = always, 3 = equal)", Float) = 8

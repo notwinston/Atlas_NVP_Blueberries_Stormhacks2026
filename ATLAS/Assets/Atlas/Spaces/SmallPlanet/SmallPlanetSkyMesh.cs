@@ -62,6 +62,12 @@ namespace Atlas.Spaces.SmallPlanet
         public static float3 HorizonLinear => AtlasPalette.SrgbToLinear(HorizonSrgb);
         public static float3 ZenithLinear => AtlasPalette.Linear(ZenithCell);
 
+        /// <summary>planet.view3d's "sky", sRGB 0..1: a soft meadow green (#6E9F5A) between the grass cells 116 (5EBD5E) and
+        /// 100 (4A944A) under their baked shade. Fog, zenith and clear colour at once: in S3 every sight line ends on the
+        /// ground, so the far (fogged) ground is all there is above the horizon.</summary>
+        public static readonly float3 MeadowSrgb = new float3(0x6E, 0x9F, 0x5A) / 255f;
+        public static float3 MeadowLinear => AtlasPalette.SrgbToLinear(MeadowSrgb);
+
         /// <summary>Unit direction at this azimuth (from +z towards +x) and elevation, degrees.</summary>
         public static float3 Direction(float azimuthDeg, float elevationDeg)
         {

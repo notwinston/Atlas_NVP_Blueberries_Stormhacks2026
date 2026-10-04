@@ -101,12 +101,13 @@ namespace Atlas.Spaces.SmallPlanet
                 view.Build(core.R, pool);   // without the kit (one error logged) nothing is drawn; the walk goes on
                 view.Shown = core.Placed;
                 AtlasServices.TryGet(out IStereoRig rig);
-                sky = new SmallPlanetSky(transform, pool, rig);
+                sky = new SmallPlanetSky(transform, pool, rig, core.View3d);
                 markers = new LapMarkerView(transform, pool);
                 markers.Visible = false;
             }
-            else SmallPlanetSky.ApplyLook();
+            else SmallPlanetSky.ApplyLook(core.View3d);
             if (room != null && room.IsBuilt) roomView = new CurvedRoomView(room);
+            ApplyView();
             // Rule 5: the dial is read in Tick, so its gaze twin lives as long as the space is entered.
             ReleaseDial();
             if (input != null)
@@ -138,6 +139,7 @@ namespace Atlas.Spaces.SmallPlanet
                 // A planet of another size is another world: the hash and the Station follow.
                 if (host != null) host.BumpWorldVersion();
             }
+            if (core.ViewChanged) ApplyView();
             if (core.SwitchWanted && (host == null || !host.RequestSwitch(SpaceId.CurvedWalk))) core.SwitchRefused();
         }
 
@@ -215,6 +217,19 @@ namespace Atlas.Spaces.SmallPlanet
             mr.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
             mr.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
             dialChip.SetActive(false);
+        }
+
+        // planet.view3d: warp mode 3 (S3) or 2 for everything of the planet that is warped (tiles, room, lap markers),
+        // and the sky to match. Off is exactly the comfortable view: mode 2 and the daytime sky.
+        void ApplyView()
+        {
+            bool on = core.View3d;
+            float mode = on ? AtlasWarpCpu.ModeS3 : AtlasWarpCpu.ModeSpherical;
+            if (view != null) view.SetWarpMode(mode);
+            if (markers != null) markers.SphericalMode = mode;
+            if (roomView != null) roomView.SphericalMode = mode;
+            if (sky != null) sky.View3d = on;
+            else if (pool == null) SmallPlanetSky.ApplyLook(on);
         }
 
         void ReleaseDial()

@@ -410,6 +410,27 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             Assert.AreEqual(rig.Core.R, rig.Kernel.MetresPerUnit, 0.0);
         }
 
+        // planet.view3d (the S3 "Hyperbolica look"): off by default, switched only while the walker stands, sent in p[6].
+        [Test]
+        public void View3d_ChangesOnlyWhileStanding_AndRidesTheState()
+        {
+            var rig = new Rig(RoomFixtures.SampleL3x4, double2.zero);
+            Assert.IsFalse(rig.Core.View3d, "the comfortable view by default");
+            double x = 0;
+            for (int i = 0; i < 40; i++) { x += 0.01; rig.Frame(new double2(x, 0.3 * x)); }
+            rig.Registry.Find(SmallPlanetCore.ParamView3d).Set(true);
+            x += 0.01; rig.Frame(new double2(x, 0.3 * x));
+            Assert.IsFalse(rig.Core.View3d, "not while walking");
+            rig.Frame(new double2(x, 0.3 * x));
+            Assert.IsTrue(rig.Core.View3d);
+            Assert.IsTrue(rig.Core.ViewChanged);
+            rig.Frame(new double2(x, 0.3 * x));
+            Assert.IsFalse(rig.Core.ViewChanged, "once");
+            StateMessage state = StateMessage.Identity;
+            rig.Core.WriteState(ref state);
+            Assert.AreEqual(1f, state.P6);
+        }
+
         // ---- State -----------------------------------------------------------------------------------------
 
         // kernel.md §4.5 and lane D's table: the loop writes the face, U and p[0] = R from the kernel; the module adds p[3..5].
