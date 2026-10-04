@@ -9,6 +9,8 @@
         "Atlas.Telemetry",
         "Atlas.Scan",
         "Atlas.Safety",
-        "Atlas.Link"
+        "Atlas.Link",
+        "Unity.Mathematics",
+        "Unity.TextMeshPro"
     ]
 }
