@@ -163,7 +163,7 @@ namespace Atlas.App.Tests
         {
             string[] hands =
             {
-                "hands.enabled", "hands.rate", "hands.reach", "hands.sound", "hands.draw", "hands.editor", "hands.bench", "hands.record"
+                "hands.enabled", "hands.rate", "hands.reach", "hands.sound", "hands.draw", "hands.editor", "hands.bench", "hands.record", "hands.ignoreHeat"
             };
             ParamEntry first = registry.Find(hands[0]);
             Assert.That(first, Is.Not.Null, "hands.enabled is not declared");

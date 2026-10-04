@@ -149,6 +149,8 @@ namespace Atlas.App.Menu
         const string SpaceParam = "space.id";
         /// <summary>The tracked hands' switch, shown at the top of the Spaces page as "Hands".</summary>
         public const string HandsEnabled = "hands.enabled";
+        /// <summary>Keeps the hands on when the phone is hot, shown under it as "Hands in heat".</summary>
+        public const string HandsIgnoreHeat = "hands.ignoreHeat";
 
         static readonly string[] s_pageNames = { "Spaces", "Quality", "Parameters", "Session" };
 
@@ -316,6 +318,8 @@ namespace Atlas.App.Menu
             // with the kill switch on the Quality page and with the Station.
             ParamEntry hands = _registry.Find(HandsEnabled);
             if (hands != null) _rows.Add(new MenuRow { Kind = MenuRowKind.Param, Entry = hands, Label = "Hands" });
+            ParamEntry heat = _registry.Find(HandsIgnoreHeat);
+            if (heat != null) _rows.Add(new MenuRow { Kind = MenuRowKind.Param, Entry = heat, Label = "Hands in heat" });
             for (int i = 0; i < SpaceIds.Count; i++)
             {
                 var id = (SpaceId)i;

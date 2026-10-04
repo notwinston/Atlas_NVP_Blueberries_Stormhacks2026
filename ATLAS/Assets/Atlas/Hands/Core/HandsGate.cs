@@ -44,6 +44,8 @@ namespace Atlas.Hands
         public bool HeadFromCamera;
         /// <summary>FrameContext.Tier.</summary>
         public QualityTier Tier;
+        /// <summary>hands.ignoreHeat: a hot phone (Serious or Critical) keeps its hands, at the reduced rate.</summary>
+        public bool IgnoreHeat;
         /// <summary>The hands.rate parameter: 0 is auto, else 30 or 15.</summary>
         public int RateOverride;
         /// <summary>How long the newest detector result's Vision request took, seconds (HandsDetection.RequestMs / 1000).</summary>
@@ -222,7 +224,7 @@ namespace Atlas.Hands
             if (!inputs.SourceAvailable) return HandsOffReason.Source;
             if (!inputs.HeadFromCamera) return HandsOffReason.Pose;
             QualityTier tier = inputs.Tier;
-            if (tier != QualityTier.Nominal && tier != QualityTier.High && tier != QualityTier.Fair) return HandsOffReason.Heat;
+            if (tier != QualityTier.Nominal && tier != QualityTier.High && tier != QualityTier.Fair && !inputs.IgnoreHeat) return HandsOffReason.Heat;
             return HandsOffReason.None;
         }
 
@@ -232,7 +234,8 @@ namespace Atlas.Hands
             _noHand = inputs.AnyHandSeen ? 0.0 : _noHand + dt;
             bool idle = _noHand >= HandsConstants.IdleAfterSeconds;
 
-            int tierRate = inputs.Tier == QualityTier.Fair ? HandsConstants.RateReduced : HandsConstants.RateFull;
+            bool hot = inputs.Tier == QualityTier.Serious || inputs.Tier == QualityTier.Critical;
+            int tierRate = inputs.Tier == QualityTier.Fair || hot ? HandsConstants.RateReduced : HandsConstants.RateFull;
             int overrideRate = OverrideRate(inputs.RateOverride);
 
             // The self-governor watches the full rate, the one it can drop, and only when nothing else sets it.

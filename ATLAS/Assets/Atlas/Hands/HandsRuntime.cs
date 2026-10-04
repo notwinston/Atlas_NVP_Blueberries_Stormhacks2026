@@ -131,6 +131,8 @@ namespace Atlas.Hands
         public bool Enabled { get; set; }
         /// <summary>hands.rate: 0 follows the tier; 30 or 15 fixes the detector's rate (for the bench).</summary>
         public int RateOverride { get; set; }
+        /// <summary>hands.ignoreHeat: the hands stay on when the phone is hot, at the reduced rate.</summary>
+        public bool IgnoreHeat { get; set; }
         /// <summary>hands.sound.</summary>
         public bool Sound { get; set; }
         /// <summary>hands.draw: off hides the meshes while everything else runs (the blind-reach check of the camera-to-eye offset).</summary>
@@ -271,6 +273,7 @@ namespace Atlas.Hands
             gate.SourceAvailable = source.Available;
             gate.HeadFromCamera = _deps.HeadFromCamera == null || _deps.HeadFromCamera();
             gate.Tier = frame.Tier;
+            gate.IgnoreHeat = IgnoreHeat;
             gate.RateOverride = RateOverride;
             gate.RequestSeconds = _lastRequestMs * 0.001f;
             gate.MainThreadMs = _mainThreadMs;

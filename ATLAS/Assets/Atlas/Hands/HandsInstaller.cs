@@ -47,7 +47,7 @@ namespace Atlas.Hands
         public const string Group = "hands";
         public const string ParamEnabled = "hands.enabled", ParamRate = "hands.rate", ParamReach = "hands.reach",
                             ParamSound = "hands.sound", ParamDraw = "hands.draw", ParamEditor = "hands.editor",
-                            ParamBench = "hands.bench", ParamRecord = "hands.record";
+                            ParamBench = "hands.bench", ParamRecord = "hands.record", ParamIgnoreHeat = "hands.ignoreHeat";
         static readonly string[] s_rates = { "auto", "30", "15" };
 
         public HandsRuntime Runtime { get; internal set; }
@@ -86,6 +86,9 @@ namespace Atlas.Hands
             registry.DeclareBool(ParamEditor, Group, false, on => { if (editor != null) editor.Enabled = on; });
             registry.DeclareBool(ParamBench, Group, false, on => runtime.Bench = on);
             registry.DeclareBool(ParamRecord, Group, false, on => runtime.Record = on);
+            // On by default: the hands keep running on a hot phone, at the reduced rate. The menu's "Hands in heat" row turns it off.
+            ParamEntry ignoreHeat = registry.DeclareBool(ParamIgnoreHeat, Group, true, on => runtime.IgnoreHeat = on);
+            if (runtime != null) runtime.IgnoreHeat = ignoreHeat.Bool;
         }
 
         /// <summary>Stops the detector, returns the materials, destroys the objects. Safe to call twice.</summary>
