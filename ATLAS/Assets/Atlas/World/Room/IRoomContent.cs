@@ -94,9 +94,10 @@ namespace Atlas.World
         bool SetGeneratedLightMesh(int objectId, Mesh mesh, string assetHashLight);
 
         /// <summary>
-        /// The asset client's call when a built-in fallback mesh takes the object's place (state BuiltIn). The
-        /// mesh is shared between objects and is never destroyed here; `scale` fits it to the box and is put on
-        /// the mesh's own transform. Sets Data.Mesh = BuiltIn and clears Data.AssetHash.
+        /// The asset client's call when a first shape or a built-in fallback mesh takes the object's place (state
+        /// BuiltIn). The mesh belongs to the caller, which builds one per object and destroys it, and is never
+        /// destroyed here; `scale` fits it to the box and is put on the mesh's own transform. Sets
+        /// Data.Mesh = BuiltIn and clears Data.AssetHash.
         /// </summary>
         bool SetBuiltInMesh(int objectId, Mesh sharedMesh, Vector3 scale, float fadeSeconds = 0.3f);
 

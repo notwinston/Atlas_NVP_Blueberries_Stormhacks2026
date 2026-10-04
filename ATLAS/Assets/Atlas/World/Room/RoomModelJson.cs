@@ -648,7 +648,7 @@ namespace Atlas.World
         // ---- checking ----------------------------------------------------------------------------------
 
         /// <summary>Cheap consistency check for a room built in code: the free rectangle, the loop-fit values, the
-        /// cell grids, the standing flag and the object rules (R6, R10 to R13, R16, R17 of the contract page).
+        /// cell grids, the standing flag and the object rules (R6, R10 to R13, R16, R17, R21 of the contract page).
         /// Returns null when they hold, otherwise the first violated rule as text. The full rule set is
         /// RoomModelValidator.Validate.</summary>
         public static string Check(RoomModel room)
