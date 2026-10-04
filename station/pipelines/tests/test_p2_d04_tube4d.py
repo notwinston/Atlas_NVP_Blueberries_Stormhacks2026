@@ -1,10 +1,29 @@
 """P2-D04 `atlas case tube4d`: the 4D tube of the real case's target lesion (lung101).
 
-Acceptance (Master Plan 10.2.8, row P2-D04):
+Master Plan 10.2.8, row P2-D04:
     18,000 tets; no cracks (every interior face shared by exactly 2 tets); slice at each phase
     within 1 mm Hausdorff of that phase's contour mesh.
 
-What the three statements mean here, precisely:
+TWO APPROVED DEVIATIONS (decided by the plan owner's delegate, 4 Oct 2026; the numbers of the second
+were fixed before the results of the first were known):
+
+1. Method (plan 10.2.4 step 3 says "Newton projection"). The template is first warped onto each phase
+   by a demons registration of the mean shape onto the phase field, then projected by the plan's 5
+   Newton steps, a step being withheld where it would turn a triangle more than 90 degrees from where
+   the registration put it. See ``atlas_pipelines/steps/tube4d.py``.
+
+2. Acceptance of the third statement. "Within 1 mm Hausdorff" is not reachable with one closed
+   600-triangle surface for this lesion, by any method:
+     - phase 3's field has a detached piece (2 voxels) 2.5 to 3.7 mm from the body, and the fields of
+       phases 5 and 8 have a handle (Euler characteristic 0); the template is one piece without one;
+     - even a 600-triangle quadric decimation of each phase's OWN contour mesh, with no shared
+       connectivity at all, is 0.73 to 0.94 mm from it on the other seven phases.
+   The test is therefore, per phase and in BOTH directions (slice -> contour mesh, contour mesh ->
+   slice): mean surface distance <= 0.5 mm AND 95th-percentile surface distance <= 1.5 mm. The
+   two-sided Hausdorff distance (the maximum) is still computed, printed and stored in
+   out/work/lung101/tube4d_report.json, next to the plan's 1 mm, but not asserted.
+
+What the statements mean here, precisely:
 
 * 18,000 tetrahedra: 600 template triangles x 10 layers x 3, in tube4d.bin and in tube4d_rigid.bin.
 
@@ -19,13 +38,19 @@ What the three statements mean here, precisely:
   by 3 or more. Layer 10 repeats layer 0 exactly, so the two ends fit each other and the tube
   closes over one breath.
 
-* Hausdorff. "That phase's contour mesh" is the undecimated marching-cubes surface of that
+* Surface distance. "That phase's contour mesh" is the undecimated marching-cubes surface of that
   phase's own smoothed signed distance field (CT-grid mask -> signed distance -> 1 mm isotropic
-  -> Gaussian sigma 1 mm). The distance is the two-sided Hausdorff distance in patient
-  millimetres (before the magnification M) between that mesh and the tau-slice of tube4d.bin at
-  tau = Lambda * k / 10. Both directions are measured: slice -> contour mesh on a lattice of 15
-  points per slice triangle, contour mesh -> slice on a lattice of 15 points per contour triangle,
-  each with the exact point-to-triangle distance.
+  -> Gaussian sigma 1 mm). Distances are in patient millimetres (before the magnification M)
+  between that mesh and the tau-slice of tube4d.bin at tau = Lambda * k / 10. Both directions are
+  measured: slice -> contour on a lattice of 15 points per slice triangle, contour -> slice on a
+  lattice of 15 points per contour triangle, each with the exact point-to-triangle distance. Mean
+  and 95th percentile are over the lattice points of one direction (percentile by linear
+  interpolation); the Hausdorff distance is the larger of the two maxima.
+
+* No folds. Every phase mesh, and the surfaces a quarter, half and three quarters of the way between
+  neighbouring phases, do not cut through themselves (no edge passes through a triangle), and no
+  triangle is folded flat onto its neighbour. A closed surface that does not cut through itself and
+  has a positive volume faces outward everywhere.
 """
 
 from __future__ import annotations
@@ -40,13 +65,17 @@ from atlas_pipelines.steps import tube4d
 N_TETS = 18_000
 N_TRIS = 600
 LAYERS = 10
-HAUSDORFF_MM = 1.0
+HAUSDORFF_MM = 1.0  # the plan's acceptance number: reported, not asserted (deviation 2)
 SIGMA_MM = 1.0
 VOXEL_MM = 1.0
 ROI_MARGIN_MM = 15.0
 NEWTON_ITERS = 5
 M = 15.0
 LAMBDA_M = 1.5
+
+# ---- the acceptance numbers in force (deviation 2; fixed before the results were known) -----------
+MEAN_MM = 0.5
+P95_MM = 1.5
 
 CASE = "lung101"
 TUBE_FILES = ["phases.glb", "tube4d.bin", "tube4d_rigid.bin"]
@@ -89,7 +118,8 @@ def template_faces(lung_dir):
 
 @pytest.fixture(scope="session")
 def hausdorff_per_phase(tube, frame, fields):
-    """Two-sided Hausdorff distance per phase, measured here from tube4d.bin and the phase fields."""
+    """Surface distances per phase (both directions: maximum, mean, 95th percentile), measured here
+    from tube4d.bin and the phase fields. "a" is the slice, "b" the contour mesh."""
     out = []
     for k in range(LAYERS):
         tris_m = tubelib.slice_tau(tube, LAMBDA_M * k / LAYERS)
@@ -115,8 +145,8 @@ def face_counts(T: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return np.unique(faces, axis=0, return_counts=True)
 
 
-# ---- the method is the plan's ------------------------------------------------------------------
-def test_method_parameters_are_the_plans():
+# ---- the method is the plan's, plus the registration of deviation 1 --------------------------------
+def test_method_parameters_are_the_plans_plus_the_registration():
     assert tube4d.PARAMS == {
         "roi": "tumor",
         "roi_margin_mm": ROI_MARGIN_MM,
@@ -125,7 +155,19 @@ def test_method_parameters_are_the_plans():
         "n_tris": N_TRIS,
         "newton_iters": NEWTON_ITERS,
         "interp": "cubic",
+        # deviation 1: the registration, with the chest step's own parameters, and the fold-free projection
+        "correspondence": "register",
+        "reg_iters": 200,
+        "reg_sigma_vox": 1.0,
+        "reg_max_step_vox": 0.5,
+        "no_fold_cos_min": 0.0,
+        "no_fold_max_step_mm": 1.0,
     }
+    from atlas_pipelines import chest
+
+    assert (tubelib.REG_ITERS, tubelib.REG_SIGMA_VOX, tubelib.REG_MAX_STEP_VOX) == \
+        (chest.REG_ITERS, chest.REG_SIGMA_VOX, chest.REG_MAX_STEP_VOX)
+    assert (tube4d.ACCEPT_MEAN_MM, tube4d.ACCEPT_P95_MM, tube4d.PLAN_HAUSDORFF_MM) == (MEAN_MM, P95_MM, HAUSDORFF_MM)
 
 
 def test_fields_are_built_as_the_plan_says(fields, tcia_101):
@@ -221,7 +263,7 @@ def test_slices_are_closed_surfaces(tube):
         assert (counts == 2).all(), tau
 
 
-# ---- acceptance 3: the slice at each phase within 1 mm Hausdorff of that phase's contour mesh ---
+# ---- acceptance 3 (deviation 2): the slice at each phase against that phase's contour mesh --------
 def test_slice_at_each_phase_is_that_ring(tube, template_faces):
     nV = n_template_verts(tube)
     for k in range(LAYERS):
@@ -236,25 +278,94 @@ def test_slice_at_each_phase_is_that_ring(tube, template_faces):
         assert d.max() < 1e-9
 
 
-def test_slice_at_each_phase_within_1mm_hausdorff_of_that_phases_contour_mesh(hausdorff_per_phase):
-    per = [h["hausdorff"] for h in hausdorff_per_phase]
-    report = ", ".join(f"phase {k}: {v:.3f} (slice->contour {h['a_to_b']:.3f}, contour->slice {h['b_to_a']:.3f})"
-                       for k, (v, h) in enumerate(zip(per, hausdorff_per_phase)))
-    assert max(per) <= HAUSDORFF_MM, f"two-sided Hausdorff in patient mm, max {max(per):.3f}: {report}"
+def test_slice_at_each_phase_mean_0_5mm_and_p95_1_5mm_from_that_phases_contour_mesh(hausdorff_per_phase):
+    """The acceptance in force: per phase and per direction, mean <= 0.5 mm and 95th percentile <= 1.5 mm.
+    The Hausdorff distance (the plan's quantity) is printed and not asserted."""
+    print("phase: mean slice->contour / contour->slice, p95 slice->contour / contour->slice, "
+          "Hausdorff (slice->contour / contour->slice), all in patient mm")
+    for k, h in enumerate(hausdorff_per_phase):
+        print(f"  {k}: mean {h['mean_a_to_b']:.3f} / {h['mean_b_to_a']:.3f}, p95 {h['p95_a_to_b']:.3f} / {h['p95_b_to_a']:.3f}, "
+              f"Hausdorff {h['hausdorff']:.3f} ({h['a_to_b']:.3f} / {h['b_to_a']:.3f})")
+    worst_h = max(h["hausdorff"] for h in hausdorff_per_phase)
+    print(f"  largest Hausdorff {worst_h:.3f} mm (plan: {HAUSDORFF_MM} mm; reported, not asserted)")
+    for k, h in enumerate(hausdorff_per_phase):
+        assert h["mean_a_to_b"] <= MEAN_MM and h["mean_b_to_a"] <= MEAN_MM, (k, h)
+        assert h["p95_a_to_b"] <= P95_MM and h["p95_b_to_a"] <= P95_MM, (k, h)
+        assert h["hausdorff"] == max(h["a_to_b"], h["b_to_a"]) and np.isfinite(h["hausdorff"])
 
 
-def test_report_holds_the_same_hausdorff_numbers(lung_dir, out_dir, hausdorff_per_phase):
+def test_report_holds_the_same_distances_and_the_hausdorff(lung_dir, out_dir, hausdorff_per_phase):
+    """out/work/lung101/tube4d_report.json stores what this file measures, including the Hausdorff
+    distance that is no longer asserted, and says plainly that the plan's 1 mm is not met."""
     rep = contract.read_json(paths.work_dir(CASE, out_dir) / tube4d.REPORT_NAME)
     assert rep["hausdorff_measured"] is True
     assert rep["tets"] == N_TETS and rep["template_triangles"] == N_TRIS
-    got = [p["hausdorff"] for p in rep["hausdorff_mm"]]
-    np.testing.assert_allclose(got, [h["hausdorff"] for h in hausdorff_per_phase], atol=1e-5)
-    assert abs(rep["hausdorff_max_mm"] - max(got)) < 1e-6
+    per = rep["hausdorff_mm"]
+    assert len(per) == LAYERS
+    for mine, theirs in (("hausdorff", "hausdorff"), ("a_to_b", "slice_to_contour"), ("b_to_a", "contour_to_slice"),
+                         ("mean_a_to_b", "mean_slice_to_contour"), ("mean_b_to_a", "mean_contour_to_slice"),
+                         ("p95_a_to_b", "p95_slice_to_contour"), ("p95_b_to_a", "p95_contour_to_slice")):
+        np.testing.assert_allclose([p[theirs] for p in per], [h[mine] for h in hausdorff_per_phase], atol=1e-5, err_msg=theirs)
+    assert abs(rep["hausdorff_max_mm"] - max(p["hausdorff"] for p in per)) < 1e-6
+    acc = rep["acceptance"]
+    assert acc["mean_mm"] == MEAN_MM and acc["p95_mm"] == P95_MM and acc["plan_hausdorff_mm"] == HAUSDORFF_MM
+    assert acc["met"] is (rep["mean_max_mm"] <= MEAN_MM and rep["p95_max_mm"] <= P95_MM)
+    assert acc["plan_hausdorff_met"] is (rep["hausdorff_max_mm"] <= HAUSDORFF_MM)
+    # the comparison with the plan's projection alone is recorded next to it
+    assert rep["plan_method"]["correspondence"] == "translate" and len(rep["plan_method"]["hausdorff_mm"]) == LAYERS
+
+
+# ---- no folds, and how far the surface moves from phase to phase -----------------------------------
+def test_no_phase_mesh_cuts_through_itself_or_folds_flat(tube, frame, template_faces, lung_dir, out_dir):
+    nV = n_template_verts(tube)
+    V = np.stack([ring_mm(tube, k, frame.origin_mm) for k in range(LAYERS)])
+    F = template_faces
+    crease = []
+    for k in range(LAYERS):
+        assert tubelib.self_intersections(V[k], F) == 0, k
+        assert tubelib.mesh_volume(V[k], F) > 0, k  # closed, not self-crossing, positive volume: outward everywhere
+        nxt = V[(k + 1) % LAYERS]
+        for a in (0.25, 0.5, 0.75):  # the surfaces between two phases
+            assert tubelib.self_intersections((1 - a) * V[k] + a * nxt, F) == 0, (k, a)
+        crease.append(tubelib.min_adjacent_normal_cos(V[k], F))
+    print("sharpest crease per phase (cosine between neighbouring triangle normals):", np.round(crease, 3))
+    assert min(crease) > np.cos(np.radians(170.0))  # no triangle is folded flat onto its neighbour
+    rep = contract.read_json(paths.work_dir(CASE, out_dir) / tube4d.REPORT_NAME)
+    assert rep["folds"]["self_intersections"] == [0] * LAYERS and rep["folds"]["self_intersections_between"] == [0] * LAYERS
+    np.testing.assert_allclose(rep["folds"]["min_adjacent_normal_cos"], crease, atol=1e-4)
+    # the registration itself does not fold space near the surface
+    assert min(rep["registration"]["min_jacobian"]) > 0.0
+    assert nV == V.shape[1]
+
+
+def test_self_intersection_counter_on_known_shapes():
+    V = np.array([[1.0, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]])
+    F = np.array([[0, 1, 2], [0, 3, 1], [0, 2, 3], [1, 3, 2]])
+    assert tubelib.mesh_volume(V, F) > 0 and tubelib.self_intersections(V, F) == 0
+    assert abs(tubelib.min_adjacent_normal_cos(V, F) - (-1.0 / 3.0)) < 1e-12  # regular tetrahedron
+    two = (np.concatenate([V, V + [0.5, 0.4, 0.3]]), np.concatenate([F, F + 4]))
+    assert tubelib.self_intersections(*two) > 0  # two tetrahedra pushed into each other
+    apart = (np.concatenate([V, V + [5.0, 0.0, 0.0]]), np.concatenate([F, F + 4]))
+    assert tubelib.self_intersections(*apart) == 0
+
+
+def test_vertex_steps_between_neighbouring_phases_are_reported(tube, frame, out_dir):
+    """Not an acceptance number: the largest vertex move from one phase to the next (wrap 9 -> 0
+    included), for the tube as shipped and for the plan's projection alone, stored in the report."""
+    V = np.stack([ring_mm(tube, k, frame.origin_mm) for k in range(LAYERS)])
+    steps = tubelib.phase_steps_mm(V)
+    rep = contract.read_json(paths.work_dir(CASE, out_dir) / tube4d.REPORT_NAME)
+    np.testing.assert_allclose(rep["folds"]["step_mm"], steps, atol=1e-3)
+    before = rep["plan_method"]["folds"]
+    print(f"largest vertex step per interval (mm), shipped: {np.round(steps, 2)} max {steps.max():.2f}; "
+          f"plan's projection alone: {np.round(before['step_mm'], 2)} max {before['step_max_mm']:.2f}")
+    assert len(before["step_mm"]) == LAYERS
 
 
 def test_tube_vertices_lie_on_the_phase_surfaces_or_report_how_far(tube, frame, fields):
     """Not an acceptance number: the 5 Newton iterations leave each vertex this far from its phase
-    surface. Guards against a broken projection (a vertex left many millimetres away)."""
+    surface (a vertex whose step was withheld to avoid a fold stays off it). Guards against a broken
+    projection (a vertex left many millimetres away)."""
     worst = []
     for k in range(LAYERS):
         v = ring_mm(tube, k, frame.origin_mm)

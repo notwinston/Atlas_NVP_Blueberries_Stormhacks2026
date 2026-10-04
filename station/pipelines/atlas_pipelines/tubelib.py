@@ -18,9 +18,12 @@ API (in the order a step calls it)
     grid  = Grid(origin_mm=(x, y, z), spacing_mm=1.0, shape=sdfs[0].shape)
     sdfs  = [sdf_from_mask(mask_k, mask_origin_mm, mask_spacing_mm, grid) ...]     # real case only
 
-    tube  = build_tube(sdfs, grid, centroids_mm=None, n_tris=600, newton_iters=5, interp="cubic") -> TubeResult
+    tube  = build_tube(sdfs, grid, centroids_mm=None, n_tris=600, newton_iters=5, interp="cubic",
+                       correspondence="translate") -> TubeResult
             # .V0 .F  template (mean shape at the mean centroid), exactly n_tris triangles, closed
-            # .V      (10, nV, 3) template projected onto each phase
+            # .V      (10, nV, 3) template carried onto each phase: correspondence="translate" moves it to the
+            #         phase centroid and projects (the twin); "register" first warps it with a registration of
+            #         the mean field onto the phase field, then projects without folding (the real case)
             # .V_rigid(10, nV, 3) phase-0 shape translated along the centroid path
             # .centroids_mm (10, 3), .origin_mm = their mean (the display origin of the case)
     write_tube_files(tube, case_dir)        -> tube4d.bin, tube4d_rigid.bin, phases.glb
@@ -45,7 +48,12 @@ Helpers (also used by the tests)
     slice_tau(tube4d, tau)                         the tau = const slice, triangles (K, 3, 3) in display metres
     weld(tris)                                     triangle soup -> indexed mesh
     point_mesh_distance(pts, V, F)                 exact point-to-triangle-mesh distance
-    hausdorff(Va, Fa, Vb, Fb)                      symmetric mesh-to-mesh Hausdorff distance
+    hausdorff(Va, Fa, Vb, Fb)                      symmetric mesh-to-mesh distance: maximum (Hausdorff), mean and
+                                                   95th percentile of each direction
+    self_intersections(V, F)                       how many (edge, triangle) pairs of a mesh cross each other
+    min_adjacent_normal_cos(V, F)                  the sharpest crease between two neighbouring triangles
+    register_fields(fixed, moving, spacing_mm)     demons registration of two distance fields (displacement field)
+    project_no_fold(W, sdf, grid, F)               Newton projection that refuses to turn a triangle over
     face_sharing(T)                                the crack check: how many tets share each face
     voxel_volume_cm3(inside, grid)                 voxel count times voxel volume
 
@@ -56,6 +64,16 @@ Method notes (each is a decision of this module; they are also recorded in docs/
     * Newton projection samples each phase field with a cubic B-spline interpolant of the grid
       values, not a trilinear one (``interp="linear"`` selects trilinear). See FieldSampler for the
       reason: trilinear sampling of a distance field pulls a convex surface inward.
+    * Correspondence "register" (the real case; a documented departure from plan 10.2.4 step 3, which
+      says only "Newton projection"): the phase shapes of a contoured lesion differ by lobes that a
+      projection along the field gradient cannot reach, and that projection folds the template (the
+      plan-method tube of lung101 crossed itself at two phases). So the template is first carried by a
+      smooth displacement u_k with phase_k(x + u_k(x)) = mean shape at the phase centroid (x), found
+      by a demons registration of the two distance fields (the method and the parameters of
+      ``chest.register``, on the full 1 mm grid), and then projected by the same 5 Newton steps, each
+      vertex's step being withheld when it would turn a triangle more than 90 degrees away from where
+      the registration put it (``project_no_fold``). The twin keeps "translate": a sphere needs no
+      registration.
     * Sub-steps: sub-step j of S between phases k and k + 1 (a = j / (S + 1)) is the blend
       ``(1 - a) * sdf_k(x - a d) + a * sdf_k+1(x + (1 - a) d)`` with ``d = c_k+1 - c_k``: each
       phase shape is carried along the straight segment between the two centroids and the two
@@ -86,13 +104,19 @@ from scipy.spatial import cKDTree
 from . import contract
 from .glb import GlbMesh, write_glb
 
-VERSION = "tubelib/2"  #: bump when this module changes what it writes (steps put it in their cache key)
+VERSION = "tubelib/3"  #: bump when this module changes what it writes (steps put it in their cache key)
 
 N_TEMPLATE_TRIS = contract.TEMPLATE_TRIS  # 600
 SHELL_MAX_TRIS = 1500
 NEWTON_ITERS = 5
 SUBSTEPS = 4
 OCC_MARGIN_MM = 2.0
+REG_ITERS = 200  #: demons iterations (the values of atlas_pipelines.chest, unchanged)
+REG_SIGMA_VOX = 1.0  #: Gaussian on the displacement field after every iteration, in voxels
+REG_MAX_STEP_VOX = 0.5  #: largest update of one iteration, in voxels
+NO_FOLD_COS_MIN = 0.0  #: a projection step may not turn a triangle more than 90 degrees from its registered normal
+NO_FOLD_MAX_STEP_MM = 1.0  #: longest move of one Newton step in the fold-free projection (one voxel)
+REG_JOBS = 3  #: worker processes for the 10 registrations (the result does not depend on it)
 
 
 class TubeError(ValueError):
@@ -566,6 +590,157 @@ def mean_shape_field(sdfs: Sequence[np.ndarray], grid: Grid, centroids_mm: np.nd
     return (acc / len(sdfs)).astype(np.float32)
 
 
+def register_fields(fixed: np.ndarray, moving: np.ndarray, spacing_mm: float, iters: int = REG_ITERS,
+                    sigma_vox: float = REG_SIGMA_VOX, max_step_vox: float = REG_MAX_STEP_VOX) -> np.ndarray:
+    """Demons registration of two distance fields on one grid: the displacement u (3, nx, ny, nz), in
+    voxels, with moving(x + u(x)) ~ fixed(x). The same iteration as ``chest.register`` (copied, so
+    that this module does not depend on the chest):
+
+    update = -(m - f) * J / (|J|^2 + (m - f)^2 / h^2), with m the moving field at x + u, J the mean
+    of the gradients of the fixed field and of the warped moving field, h the voxel size; the update
+    is limited to ``max_step_vox``; then u is smoothed by a Gaussian of ``sigma_vox``.
+    Deterministic, single precision."""
+    f = np.asarray(fixed, dtype=np.float32)
+    m = np.asarray(moving, dtype=np.float32)
+    if f.shape != m.shape:
+        raise TubeError("register_fields: the two fields must share one grid")
+    gf = np.stack(np.gradient(f))
+    gm = np.gradient(m)
+    idx = np.stack(np.meshgrid(*[np.arange(n, dtype=np.float32) for n in f.shape], indexing="ij"))
+    u = np.zeros_like(idx)
+    inv_h2 = np.float32(1.0 / (spacing_mm * spacing_mm))
+    for _ in range(iters):
+        at = idx + u
+        diff = ndimage.map_coordinates(m, at, order=1, mode="nearest") - f
+        J = np.stack([ndimage.map_coordinates(q, at, order=1, mode="nearest") for q in gm])
+        J += gf
+        J *= np.float32(0.5)
+        du = -diff * J / ((J * J).sum(axis=0) + diff * diff * inv_h2 + np.float32(1e-9))
+        ln = np.sqrt((du * du).sum(axis=0))
+        du *= np.minimum(np.float32(1.0), np.float32(max_step_vox) / np.maximum(ln, np.float32(1e-9)))
+        u += du
+        for a in range(3):
+            u[a] = ndimage.gaussian_filter(u[a], sigma_vox, mode="nearest")
+    return u
+
+
+def displace(V: np.ndarray, u_vox: np.ndarray, grid: Grid) -> np.ndarray:
+    """V + u(V): the displacement field ``u_vox`` (voxels of ``grid``) sampled trilinearly, in mm."""
+    at = grid.to_index(V).T
+    d = np.stack([ndimage.map_coordinates(u_vox[a], at, order=1, mode="nearest") for a in range(3)], axis=1)
+    return np.asarray(V, float) + d * grid.spacing_mm
+
+
+def min_jacobian(u_vox: np.ndarray, where: np.ndarray | None = None) -> float:
+    """Smallest determinant of the Jacobian of x -> x + u(x) (central differences), over the voxels
+    selected by ``where`` (all when None). Positive everywhere means the map does not fold space."""
+    J = np.stack([np.stack(np.gradient(np.asarray(u_vox[a], np.float64))) for a in range(3)])  # J[a, b] = d u_a / d x_b
+    J += np.eye(3)[:, :, None, None, None]
+    det = np.linalg.det(np.moveaxis(J, (0, 1), (-2, -1)))
+    return float(det.min() if where is None else det[where].min())
+
+
+def _tri_normals(V: np.ndarray, F: np.ndarray) -> np.ndarray:
+    return np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]])
+
+
+def project_no_fold(W: np.ndarray, sdf: np.ndarray, grid: Grid, F: np.ndarray, iters: int = NEWTON_ITERS,
+                    interp: str = "cubic", cos_min: float = NO_FOLD_COS_MIN,
+                    max_step_mm: float = NO_FOLD_MAX_STEP_MM) -> tuple[np.ndarray, int]:
+    """``newton_project`` for a mesh that must not fold: ``iters`` times V -= sdf(V) * normalise(grad sdf(V)),
+    each move no longer than ``max_step_mm``, and in every iteration the moves of the vertices of any
+    triangle whose normal would end more than acos(``cos_min``) away from its normal in ``W`` (the mesh
+    as given) are withheld; withholding is repeated until no such triangle is left. A withheld vertex
+    stays where it was in that iteration, so it may end off the surface.
+
+    Returns (V, the number of withheld vertex moves summed over the iterations)."""
+    F = np.asarray(F, dtype=np.int64)
+    V = np.array(W, dtype=np.float64)
+    smp = FieldSampler(sdf, grid, interp)
+    n_ref = _tri_normals(V, F)
+    l_ref = np.linalg.norm(n_ref, axis=1)
+    withheld = 0
+    for _ in range(iters):
+        val, g = smp.value_and_gradient(V)
+        ln = np.linalg.norm(g, axis=1, keepdims=True)
+        step = -val[:, None] * g / np.where(ln > 1e-12, ln, 1.0)
+        sl = np.linalg.norm(step, axis=1)
+        step *= np.minimum(1.0, max_step_mm / np.maximum(sl, 1e-12))[:, None]
+        active = np.ones(len(V), dtype=bool)
+        while True:
+            Vn = V + step * active[:, None]
+            n = _tri_normals(Vn, F)
+            cos = np.einsum("ij,ij->i", n, n_ref) / np.maximum(np.linalg.norm(n, axis=1) * l_ref, 1e-300)
+            stop = np.unique(F[cos < cos_min])
+            stop = stop[active[stop]]
+            if len(stop) == 0:
+                break
+            active[stop] = False
+        withheld += int((~active).sum())
+        V = Vn
+    return V, withheld
+
+
+def self_intersections(V: np.ndarray, F: np.ndarray) -> int:
+    """How many (edge, triangle) pairs of the mesh cross: an edge passing through a triangle that
+    holds neither of its two ends. 0 for a surface that does not cut through itself."""
+    V = np.asarray(V, float)
+    F = np.asarray(F, dtype=np.int64).reshape(-1, 3)
+    E = np.unique(np.sort(np.concatenate([F[:, [0, 1]], F[:, [1, 2]], F[:, [2, 0]]]), axis=1), axis=0)
+    a, e1, e2 = V[F[:, 0]][None], (V[F[:, 1]] - V[F[:, 0]])[None], (V[F[:, 2]] - V[F[:, 0]])[None]
+    total = 0
+    chunk = max(1, 400_000 // max(1, len(F)))
+    for s in range(0, len(E), chunk):  # Moeller-Trumbore, one block of edges against all triangles
+        Es = E[s:s + chunk]
+        p = V[Es[:, 0]][:, None, :]
+        d = (V[Es[:, 1]] - V[Es[:, 0]])[:, None, :]
+        h = np.cross(d, e2)
+        det = np.einsum("...i,...i", e1, h)
+        ok = np.abs(det) > 1e-12
+        inv = 1.0 / np.where(ok, det, 1.0)
+        sv = p - a
+        u = np.einsum("...i,...i", sv, h) * inv
+        q = np.cross(sv, e1)
+        v = np.einsum("...i,...i", d, q) * inv
+        t = np.einsum("...i,...i", e2, q) * inv
+        hit = ok & (u >= 0) & (v >= 0) & (u + v <= 1) & (t >= 0) & (t <= 1)
+        share = (Es[:, 0, None, None] == F[None]).any(axis=-1) | (Es[:, 1, None, None] == F[None]).any(axis=-1)
+        total += int((hit & ~share).sum())
+    return total
+
+
+def min_adjacent_normal_cos(V: np.ndarray, F: np.ndarray) -> float:
+    """Sharpest crease of a closed manifold: the smallest cosine between the normals of two triangles
+    that share an edge. 1 is flat, 0 a right-angled crease, -1 a triangle folded flat onto its neighbour."""
+    V = np.asarray(V, float)
+    F = np.asarray(F, dtype=np.int64).reshape(-1, 3)
+    n = _tri_normals(V, F)
+    n = n / np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-300)
+    e = np.sort(np.concatenate([F[:, [0, 1]], F[:, [1, 2]], F[:, [2, 0]]]), axis=1)
+    key = e[:, 0] * (int(F.max()) + 1) + e[:, 1]
+    order = np.argsort(key, kind="stable")
+    tri = np.tile(np.arange(len(F)), 3)[order]
+    if len(key) % 2 or not np.array_equal(key[order][0::2], key[order][1::2]):
+        raise TubeError("min_adjacent_normal_cos: not a closed manifold")
+    return float(np.einsum("ij,ij->i", n[tri[0::2]], n[tri[1::2]]).min())
+
+
+def phase_steps_mm(V: np.ndarray) -> np.ndarray:
+    """(10,) the largest vertex move from phase k to phase k + 1 (the last entry is the wrap 9 -> 0), mm."""
+    V = np.asarray(V, float)
+    n = len(V)
+    return np.array([float(np.linalg.norm(V[(k + 1) % n] - V[k], axis=1).max()) for k in range(n)])
+
+
+def _register_phase(job) -> tuple[np.ndarray, int, float]:
+    """One phase of correspondence="register" (a module-level function so that it can run in a worker)."""
+    V0, F, mean_field, sdf, grid, shift, newton_iters, interp = job
+    fixed = shifted(mean_field, grid, shift)  # the mean shape at this phase's centroid
+    u = register_fields(fixed, sdf, grid.spacing_mm)
+    V, withheld = project_no_fold(displace(V0 + shift, u, grid), sdf, grid, F, newton_iters, interp)
+    return V, withheld, min_jacobian(u, np.abs(fixed) < 3.0 * grid.spacing_mm)
+
+
 def build_template(mean_field: np.ndarray, grid: Grid, n_tris: int = N_TEMPLATE_TRIS,
                    newton_iters: int = NEWTON_ITERS, interp: str = "cubic") -> tuple[np.ndarray, np.ndarray]:
     """Marching cubes of the mean field at 0 (largest component), decimated to exactly ``n_tris``
@@ -596,12 +771,14 @@ def build_template(mean_field: np.ndarray, grid: Grid, n_tris: int = N_TEMPLATE_
 class TubeResult:
     V0: np.ndarray  #: (nV, 3) template, mm: the mean shape at the mean centroid
     F: np.ndarray  #: (600, 3) template triangles
-    V: np.ndarray  #: (10, nV, 3) mm: the template projected onto each phase
+    V: np.ndarray  #: (10, nV, 3) mm: the template carried onto each phase
     V_rigid: np.ndarray  #: (10, nV, 3) mm: phase-0 shape translated along the centroid path
     centroids_mm: np.ndarray  #: (10, 3)
     origin_mm: np.ndarray  #: (3,) mean of the 10 centroids: the display origin of the case
     residual_mm: np.ndarray  #: (10,) max |sdf_k| at the projected vertices
     interp: str = "cubic"  #: how the fields were sampled in the projection
+    correspondence: str = "translate"  #: "translate" (centroid shift + projection) or "register" (registration first)
+    info: dict = field(default_factory=dict)  #: "register" only: withheld_moves[10], min_jacobian[10]
 
     def frame(self, case_id: str) -> contract.Frame:
         return contract.Frame(id=case_id, origin_mm=[float(v) for v in self.origin_mm])
@@ -612,10 +789,19 @@ class TubeResult:
 
 
 def build_tube(sdfs: Sequence[np.ndarray], grid: Grid, centroids_mm: np.ndarray | None = None,
-               n_tris: int = N_TEMPLATE_TRIS, newton_iters: int = NEWTON_ITERS, interp: str = "cubic") -> TubeResult:
+               n_tris: int = N_TEMPLATE_TRIS, newton_iters: int = NEWTON_ITERS, interp: str = "cubic",
+               correspondence: str = "translate", jobs: int = REG_JOBS) -> TubeResult:
     """Plan step 3 from the fields onward. ``centroids_mm`` (10, 3) may be given (mask centroids
     of the real case, analytic centres of the twin); otherwise the centroid of the inside voxels
-    is used. ``interp``: how the fields are sampled in the Newton projection (see FieldSampler)."""
+    is used. ``interp``: how the fields are sampled in the Newton projection (see FieldSampler).
+
+    ``correspondence``: how the template reaches phase k.
+        "translate"  the plan's step 3: move it by (c_k - mean centroid), then Newton projection.
+        "register"   move it likewise, warp it by the demons registration of the mean shape onto the
+                     phase field, then the fold-free Newton projection (see the module notes).
+    ``jobs``: worker processes for "register" (at most 3; the result does not depend on it)."""
+    if correspondence not in ("translate", "register"):
+        raise TubeError(f"unknown correspondence {correspondence!r}")
     sdfs = _check_fields(sdfs, grid)
     if centroids_mm is None:
         c = np.array([centroid_of_inside(s, grid) for s in sdfs])
@@ -626,11 +812,28 @@ def build_tube(sdfs: Sequence[np.ndarray], grid: Grid, centroids_mm: np.ndarray 
     V0, F = build_template(mean_field, grid, n_tris, newton_iters, interp)
     V = np.empty((len(sdfs),) + V0.shape)
     res = np.empty(len(sdfs))
+    info: dict = {}
+    if correspondence == "register":
+        work = [(V0, F, mean_field, s, grid, c[k] - cm, newton_iters, interp) for k, s in enumerate(sdfs)]
+        jobs = max(1, min(int(jobs), REG_JOBS, len(work)))
+        if jobs == 1:
+            out = [_register_phase(w) for w in work]
+        else:
+            from concurrent.futures import ProcessPoolExecutor
+
+            with ProcessPoolExecutor(max_workers=jobs) as ex:
+                out = list(ex.map(_register_phase, work))
+        for k, (Vk, _, _) in enumerate(out):
+            V[k] = Vk
+        info = {"withheld_moves": [int(o[1]) for o in out], "min_jacobian": [float(o[2]) for o in out]}
+    else:
+        for k, s in enumerate(sdfs):
+            V[k] = newton_project(V0 + (c[k] - cm), s, grid, newton_iters, interp)
     for k, s in enumerate(sdfs):
-        V[k] = newton_project(V0 + (c[k] - cm), s, grid, newton_iters, interp)
         res[k] = float(np.abs(FieldSampler(s, grid, interp).value(V[k])).max())
     V_rigid = np.stack([V[0] + (c[k] - c[0]) for k in range(len(sdfs))])
-    return TubeResult(V0=V0, F=F, V=V, V_rigid=V_rigid, centroids_mm=c, origin_mm=cm, residual_mm=res, interp=interp)
+    return TubeResult(V0=V0, F=F, V=V, V_rigid=V_rigid, centroids_mm=c, origin_mm=cm, residual_mm=res, interp=interp,
+                      correspondence=correspondence, info=info)
 
 
 def write_tube_files(tube: TubeResult, case_dir: Path | str) -> list[Path]:
@@ -1041,14 +1244,19 @@ def hausdorff(Va: np.ndarray, Fa: np.ndarray, Vb: np.ndarray, Fb: np.ndarray, le
     """Symmetric Hausdorff distance between two triangle meshes, in the meshes' units.
 
     Each surface is sampled on a barycentric lattice (``level``) and every sample's exact
-    distance to the other mesh is taken. Returns {"a_to_b", "b_to_a", "hausdorff", "mean"}.
+    distance to the other mesh is taken. Returns {"a_to_b", "b_to_a", "hausdorff", "mean"} (the two
+    one-sided maxima, the larger of them, and the average of the two one-sided means) and, per
+    direction, the mean and the 95th percentile over that direction's samples: "mean_a_to_b",
+    "mean_b_to_a", "p95_a_to_b", "p95_b_to_a" (percentiles by linear interpolation, numpy's default).
     The one-sided maxima are over samples, so they can miss the true maximum by at most half the
     sample spacing (edge length / level / 2).
     """
     dab = point_mesh_distance(sample_surface(Va, Fa, level), Vb, Fb)
     dba = point_mesh_distance(sample_surface(Vb, Fb, level), Va, Fa)
     return {"a_to_b": float(dab.max()), "b_to_a": float(dba.max()), "hausdorff": float(max(dab.max(), dba.max())),
-            "mean": float(0.5 * (dab.mean() + dba.mean()))}
+            "mean": float(0.5 * (dab.mean() + dba.mean())),
+            "mean_a_to_b": float(dab.mean()), "mean_b_to_a": float(dba.mean()),
+            "p95_a_to_b": float(np.percentile(dab, 95)), "p95_b_to_a": float(np.percentile(dba, 95))}
 
 
 def hausdorff_tris(tris: np.ndarray, Vb: np.ndarray, Fb: np.ndarray, level: int = 4) -> dict:

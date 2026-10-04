@@ -1,19 +1,27 @@
 """P2-D05 `atlas case shells`: union, intersection and occupancy of the real case's target lesion.
 
-Acceptance (Master Plan 10.2.8, row P2-D05):
-    ITV 47.4 cm3 and core 17.2 cm3 within 5 % (R2 C.2). Shells of at most 1,500 triangles each,
-    occ.r8 of 64^3 (10.2.4 step 4).
+Master Plan 10.2.8, row P2-D05: "ITV 47.4 cm3 and core 17.2 cm3 within 5 % (R2 C.2)". Shells of at
+most 1,500 triangles each, occ.r8 of 64^3 (10.2.4 step 4).
 
-What is measured: ``itv_cm3`` and ``core_cm3`` of table.json, which are the plan's step-4 values:
-counts of 1 mm voxels of the smoothed signed distance fields (CT-grid mask -> signed distance ->
-1 mm isotropic -> Gaussian sigma 1 mm); union over the 10 phases and the 4 sub-steps between
+APPROVED DEVIATION for the ITV (decided by the plan owner's delegate, 4 Oct 2026). There are two
+unions, and the plan's sentence mixes them:
+
+* R2 C.2 measured 47.4 cm3 as the plain union of the 10 raw contour masks (no smoothing, no sub-steps).
+* Plan 10.2.4 step 4 builds the shell from the smoothed signed distance fields (sigma = 1 mm on 3 mm
+  slices) with 4 sub-steps. That union is smaller (43.98 cm3, -7.2 %), because the smoothing rounds
+  off what a single slice or a single phase adds to the outline.
+
+``itv_cm3`` of table.json stays the step-4 value, because the app shows table.json beside itv.glb and
+the two must agree. So the acceptance is, in three tests:
+
+1. the raw-mask union, stored in table.json under ``extra.raw_masks.union_cm3`` and recounted here
+   from the masks, is 47.4 cm3 within 5 %;
+2. ``itv_cm3`` of table.json agrees within 1 % with the volume enclosed by the shipped itv.glb;
+3. the core, ``core_cm3`` of table.json (step-4 method), is 17.2 cm3 within 5 % (unchanged).
+
+The step-4 numbers are counts of 1 mm voxels of the smoothed fields (CT-grid mask -> signed distance
+-> 1 mm isotropic -> Gaussian sigma 1 mm); union over the 10 phases and the 4 sub-steps between
 neighbouring phases, wrapping 9 -> 0; intersection over the 10 phases.
-
-For comparison only, and never in place of the acceptance values: table.json also records under
-``extra.raw_masks`` the plain union and intersection of the 10 raw masks counted on the CT grid,
-with no smoothing and no sub-steps. The R2 prototype's 47.4 and 17.2 cm3 are numbers of that
-raw-mask kind (its masks were rasterised at 1 mm in-plane on the 3 mm slices).
-``test_raw_masks_reproduce_the_r2_prototype`` checks those; it is not the acceptance test.
 """
 
 from __future__ import annotations
@@ -25,9 +33,10 @@ from atlas_pipelines import contract, glb, masks, paths, tubelib
 from atlas_pipelines.steps import shells, tube4d
 
 # ---- the plan's numbers ------------------------------------------------------------------------
-ITV_CM3 = 47.4
+ITV_CM3 = 47.4  # R2 C.2: the plain union of the raw masks
 CORE_CM3 = 17.2
 TOL = 0.05
+ITV_TABLE_VS_GLB_TOL = 0.01  # table.json itv_cm3 against the volume enclosed by itv.glb
 MAX_SHELL_TRIS = 1500
 OCC_SIZE = 64
 SUBSTEPS = 4
@@ -70,16 +79,45 @@ def shell_mesh_mm(lung_dir, name, origin_mm):
     return V, np.asarray(mesh.indices, dtype=np.int64).reshape(-1, 3)
 
 
-# ---- acceptance: the plan's numbers, on the plan's method ----------------------------------------
-def test_itv_47_4_cm3_within_5_percent(table):
+def directed_edge_counts(F):
+    """How often each directed edge (a, b) occurs among the triangles."""
+    from collections import Counter
+
+    return Counter(map(tuple, np.concatenate([F[:, [0, 1]], F[:, [1, 2]], F[:, [2, 0]]]).tolist()))
+
+
+# ---- acceptance (see the module text for the approved deviation) ----------------------------------
+def test_raw_mask_union_47_4_cm3_within_5_percent(table, raw_stack):
+    """Acceptance 1: R2's 47.4 cm3 is the plain union of the 10 raw masks."""
+    stack, vox = raw_stack
+    union = float(stack.any(axis=0).sum()) * vox  # recounted here from the masks
+    stored = table.extra["raw_masks"]["union_cm3"]
+    assert abs(stored - union) < 1e-5
+    print(f"raw-mask union {stored:.3f} cm3 ({100.0 * (stored / ITV_CM3 - 1.0):+.2f} % against {ITV_CM3}); "
+          f"table.json itv_cm3 (smoothed fields, {table.substeps} sub-steps) {table.itv_cm3:.3f} cm3 "
+          f"({100.0 * (table.itv_cm3 / ITV_CM3 - 1.0):+.2f} %)")
+    assert abs(stored - ITV_CM3) <= TOL * ITV_CM3, stored
+
+
+def test_itv_in_table_agrees_with_the_shipped_itv_glb_within_1_percent(lung_dir, table):
+    """Acceptance 2: the number shown (table.json itv_cm3) is the volume of the surface shown (itv.glb)."""
     assert table.substeps == SUBSTEPS
-    assert abs(table.itv_cm3 - ITV_CM3) <= TOL * ITV_CM3, (
-        f"ITV by the plan's step-4 method (smoothed fields, {table.substeps} sub-steps) is {table.itv_cm3:.3f} cm3, "
-        f"{100.0 * (table.itv_cm3 / ITV_CM3 - 1.0):+.2f} % against {ITV_CM3}; "
-        f"the plain union of the raw masks is {table.extra['raw_masks']['union_cm3']:.3f} cm3")
+    V, F = shell_mesh_mm(lung_dir, "itv", table.origin_mm)
+    # the shipped surface has no open edge: every directed edge is matched by its reverse, equally often.
+    # (So the enclosed volume is defined. It need not be a manifold: decimation may pinch two sheets
+    # together along an edge; the number of such edges is printed.)
+    edges = directed_edge_counts(F)
+    assert all(edges.get((b, a), 0) == n for (a, b), n in edges.items())
+    pinched = sum(1 for n in edges.values() if n > 1) // 2
+    mesh_cm3 = tubelib.mesh_volume(V, F) / 1000.0
+    gap = mesh_cm3 / table.itv_cm3 - 1.0
+    print(f"itv.glb encloses {mesh_cm3:.4f} cm3 ({len(F)} triangles, {pinched} pinched edges); table.json itv_cm3 "
+          f"{table.itv_cm3:.4f} cm3; difference {100.0 * gap:+.3f} %")
+    assert abs(gap) <= ITV_TABLE_VS_GLB_TOL, (mesh_cm3, table.itv_cm3)
 
 
 def test_core_17_2_cm3_within_5_percent(table):
+    """Acceptance 3 (the plan's, unchanged)."""
     assert abs(table.core_cm3 - CORE_CM3) <= TOL * CORE_CM3, (
         f"core by the plan's step-4 method is {table.core_cm3:.3f} cm3, {100.0 * (table.core_cm3 / CORE_CM3 - 1.0):+.2f} % "
         f"against {CORE_CM3}; the plain intersection of the raw masks is {table.extra['raw_masks']['intersection_cm3']:.3f} cm3")
@@ -148,8 +186,9 @@ def test_raw_mask_values_in_the_table_are_the_raw_masks(table, raw_stack):
 
 
 def test_raw_masks_reproduce_the_r2_prototype(raw_stack):
-    """NOT the acceptance test. The R2 numbers (47.4 and 17.2 cm3) were measured as the plain union
-    and intersection of the 10 raw masks; the raw masks of this pipeline give the same within 5 %."""
+    """The R2 numbers (47.4 and 17.2 cm3) were measured as the plain union and intersection of the 10
+    raw masks; the raw masks of this pipeline give both within 5 %. (The union half is acceptance 1;
+    the raw intersection is extra: the core's acceptance is the step-4 value.)"""
     stack, vox = raw_stack
     union, core = stack.any(axis=0).sum() * vox, stack.all(axis=0).sum() * vox
     assert abs(union - ITV_CM3) <= TOL * ITV_CM3, union
@@ -178,7 +217,9 @@ def test_gating_table(table):
 
 def test_occupancy(lung_dir, table, fields):
     occ = np.frombuffer((lung_dir / "occ.r8").read_bytes(), dtype=np.uint8).reshape(OCC_SIZE, OCC_SIZE, OCC_SIZE)  # [iz, iy, ix]
-    assert set(np.unique(occ).tolist()) <= {int(round(255 * k / 10)) for k in range(11)}
+    # contract section 7: round half to even on doubles, so 76 and 178 (not 77 and 179)
+    assert [int(np.rint(255.0 * k / 10.0)) for k in range(11)] == [0, 26, 51, 76, 102, 128, 153, 178, 204, 230, 255]
+    assert set(np.unique(occ).tolist()) <= {0, 26, 51, 76, 102, 128, 153, 178, 204, 230, 255}
     assert table.max_rho == 1.0 and occ.max() == 255  # the core is not empty: some point is inside in all 10 phases
     lo, hi = np.array(table.occ_bbox_min_mm), np.array(table.occ_bbox_max_mm)
     step = (hi - lo) / OCC_SIZE
@@ -191,8 +232,11 @@ def test_occupancy(lung_dir, table, fields):
     cell = float(np.prod(step)) / 1000.0
     assert abs((occ == 255).sum() * cell - table.core_cm3) <= 0.03 * table.core_cm3
     assert abs((occ > 0).sum() * cell - table.extra["itv_phases_only_cm3"]) <= 0.03 * table.extra["itv_phases_only_cm3"]
-    # the sky's target: a point of the highest occupancy, inside the core
+    # the sky's target: a point of the highest occupancy, inside the core. Contract section 5: it is a
+    # voxel centre of the 1 mm shell grid (whole millimetres), not of the 64^3 occ grid
     p = np.array(table.argmax_rho_mm)
+    assert np.array_equal(p, np.round(p)) and table.extra["voxel_mm"] == 1.0
+    assert not np.allclose((p - lo) / step - 0.5, np.round((p - lo) / step - 0.5), atol=1e-6)  # not an occ cell centre
     i = np.floor((p - lo) / step).astype(int)
     assert occ[i[2], i[1], i[0]] == 255
     assert all(tubelib.FieldSampler(s, fields.grid).value(p[None])[0] < 0 for s in fields.sdfs)

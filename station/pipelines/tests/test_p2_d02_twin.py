@@ -1,7 +1,8 @@
 """P2-D02 `atlas case twin`: the illustrative twin, and the tube / shells library it is built with.
 
 Acceptance (Master Plan 10.2.8, row P2-D02):
-    GTV 0.52 cm3 within 3 %; with the hysteresis off (b_AP = 0) ITV 1.70 cm3 within 3 %; with
+    GTV 0.52 cm3 within 3 % (the table value, and also the volume enclosed by each shipped phase
+    mesh of phases.glb); with the hysteresis off (b_AP = 0) ITV 1.70 cm3 within 3 %; with
     b_AP = 4 mm and delta = 24 deg ITV about 2.2 cm3 (pinned from the first run of the pipeline's
     own 0.25 mm voxel union, then held within 3 %); core volume 0 in both.
 Also: 18,000 tets, no cracks, the tau-slice at each phase within 1 mm Hausdorff (patient mm,
@@ -82,6 +83,26 @@ def test_gtv_052_within_3_percent(table, table0):
         assert len(t.gtv_cm3) == 10
         for v in t.gtv_cm3:
             assert abs(v - GTV_CM3) <= TOL * GTV_CM3, v
+
+
+@pytest.mark.parametrize("which", ["hysteresis", "no hysteresis"])
+def test_gtv_052_within_3_percent_on_the_shipped_phase_meshes(which, twin_dir, twin0_dir):
+    """The same acceptance number measured on what is shown: the closed-mesh volume of each of the 10
+    phase meshes of phases.glb (base + phase_k, 600 triangles), at patient scale. A 600-triangle mesh
+    with its vertices on a sphere encloses a little less than the sphere (-1.5 %)."""
+    d = twin_dir if which == "hysteresis" else twin0_dir
+    (m,) = glb.read_glb(d / "phases.glb")
+    F = np.asarray(m.indices, dtype=np.int64).reshape(-1, 3)
+    assert tubelib.is_closed_manifold(F)
+    base = np.asarray(m.positions, dtype=np.float64)
+    vols = []
+    for k in range(10):
+        V_mm = contract.from_display(base + np.asarray(m.targets[f"phase_{k}"], dtype=np.float64), [0.0, 0.0, 0.0])
+        vols.append(tubelib.mesh_volume(V_mm, F) / 1000.0)  # the origin does not change a volume
+    print(f"closed-mesh volume of the 10 phase meshes ({which}): {min(vols):.4f} to {max(vols):.4f} cm3 "
+          f"({100.0 * (min(vols) / GTV_CM3 - 1.0):+.2f} % to {100.0 * (max(vols) / GTV_CM3 - 1.0):+.2f} % against {GTV_CM3})")
+    for k, v in enumerate(vols):
+        assert abs(v - GTV_CM3) <= TOL * GTV_CM3, (k, v)
 
 
 def test_itv_170_within_3_percent_without_hysteresis(table0):
@@ -253,6 +274,37 @@ def test_slice_at_each_phase_within_1mm_hausdorff(tube, table):
         r = np.linalg.norm(tris_mm.reshape(-1, 3) - c[k], axis=1)
         assert np.abs(r - R_MM).max() < 0.05, (k, r.min(), r.max())
     print(f"worst Hausdorff over the 10 phases: {worst:.4f} mm")
+
+
+def test_no_phase_mesh_cuts_through_itself(tube, twin_dir):
+    """The fold checks of the real tube (P2-D04), on the twin: no ring's mesh, and no surface between
+    two neighbouring rings, cuts through itself; each has positive volume."""
+    (m,) = glb.read_glb(twin_dir / "phases.glb")
+    F = np.asarray(m.indices, dtype=np.int64).reshape(-1, 3)
+    nV = tube.n_verts // (tube.layers + 1)
+    V = [tube.P[k * nV:(k + 1) * nV, :3].astype(np.float64) for k in range(10)]
+    for k in range(10):
+        assert tubelib.self_intersections(V[k], F) == 0 and tubelib.mesh_volume(V[k], F) > 0, k
+        for a in (0.25, 0.5, 0.75):
+            assert tubelib.self_intersections((1 - a) * V[k] + a * V[(k + 1) % 10], F) == 0, (k, a)
+        assert tubelib.min_adjacent_normal_cos(V[k], F) > 0.9  # a 600-triangle sphere is nowhere creased
+
+
+def test_occ_bytes_round_half_to_even_and_argmax_is_a_shell_grid_voxel(twin_dir, table):
+    """Contract section 7: value = round-half-to-even(255 * count / 10). The twin's highest occupancy
+    is 0.7, i.e. 178.5, stored as 178 (round half up would store 179). Contract section 5:
+    argmax_rho_mm is a voxel centre of the 0.25 mm shell grid, and the occ.r8 cell that contains it
+    holds max_rho."""
+    occ = np.frombuffer((twin_dir / "occ.r8").read_bytes(), dtype=np.uint8).reshape(64, 64, 64)  # [iz, iy, ix]
+    allowed = [int(np.rint(255.0 * k / 10.0)) for k in range(11)]
+    assert allowed == [0, 26, 51, 76, 102, 128, 153, 178, 204, 230, 255]
+    assert set(np.unique(occ).tolist()) <= set(allowed)
+    assert table.max_rho == 0.7 and int(occ.max()) == 178
+    p = np.array(table.argmax_rho_mm)
+    assert table.extra["voxel_mm"] == 0.25 and np.array_equal(p / 0.25, np.round(p / 0.25))
+    lo, hi = np.array(table.occ_bbox_min_mm), np.array(table.occ_bbox_max_mm)
+    i = np.floor((p - lo) / ((hi - lo) / 64)).astype(int)
+    assert occ[i[2], i[1], i[0]] == 178
 
 
 def test_slice_at_phase_0_is_a_sphere_within_2_percent_area(tube):

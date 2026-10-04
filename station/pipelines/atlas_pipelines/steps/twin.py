@@ -78,7 +78,8 @@ def build(b_ap_mm: float = B_AP_MM, delta_deg: float = DELTA_DEG) -> tuple[tubel
     """The whole twin in memory: (tube, shells, the model parameters recorded in table.json)."""
     c = centres_mm(b_ap_mm, delta_deg)
     g1 = grid_for(c, TUBE_VOXEL_MM, TUBE_MARGIN_MM)
-    tube = tubelib.build_tube(sphere_fields(c, g1), g1, centroids_mm=c)
+    # the plan's step 3 as written (centroid shift + Newton projection): a sphere needs no registration
+    tube = tubelib.build_tube(sphere_fields(c, g1), g1, centroids_mm=c, correspondence="translate")
     g2 = grid_for(c, SHELL_VOXEL_MM, SHELL_MARGIN_MM)
     shells = tubelib.build_shells(sphere_fields(c, g2), g2, centroids_mm=c, substeps=tubelib.SUBSTEPS)
     model = {

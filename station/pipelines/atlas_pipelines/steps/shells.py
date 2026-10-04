@@ -21,6 +21,18 @@ the 10 raw masks counted on the CT grid, with no smoothing and no sub-steps. The
 47.4 and 17.2 cm3 are numbers of that raw-mask kind (rasterised at 1 mm in-plane on the 3 mm
 slices). The smoothed-field method gives a smaller union: see ``extra.method_note``.
 
+Which number is which (acceptance of P2-D05, changed with the owner's approval; see
+tests/test_p2_d05_shells.py):
+
+    itv_cm3                     43.98 cm3  the union by the plan's step 4 (smoothed fields, 4 sub-steps). It is the
+                                           volume of the surface in itv.glb (the decimated mesh encloses 43.91 cm3,
+                                           -0.16 %), so the app may show the two side by side. Accepted against
+                                           itv.glb within 1 %, NOT against 47.4.
+    extra.raw_masks.union_cm3   47.29 cm3  the plain union of the 10 raw masks, the quantity R2 C.2 measured as
+                                           47.4 cm3. Accepted against 47.4 within 5 %. No file of the package shows
+                                           a surface of this volume.
+    core_cm3                    16.98 cm3  the intersection by step 4; accepted against 17.2 within 5 % (unchanged).
+
 The twin's shells are written by ``atlas case twin``.
 """
 
