@@ -80,6 +80,44 @@ namespace Atlas.Hands.Tests
             return set;
         }
 
+        /// <summary>
+        /// A pose a hand can take, drawn at random: every finger curled by its own angles (the knuckle from 20
+        /// degrees back to 100 forward, the middle joint up to 110, the end joint up to 80), spread up to 12 degrees
+        /// either way in the palm, the thumb swung up to 30 degrees about its base and curled up to 55.
+        /// </summary>
+        public static JointSet RandomPose(HandSide side, ref Unity.Mathematics.Random random, float scale = 1f)
+        {
+            JointSet set = default(JointSet);
+            set[0] = float3.zero;
+            for (int finger = 0; finger < HandJoints.FingerCount; finger++)
+            {
+                int joint = HandJoints.Base(finger);
+                float3 position = HandModel.Rest(HandSide.Right, joint);
+                float3 direction = math.normalize(HandModel.Rest(HandSide.Right, joint + 3) - position);
+                float3 bends;
+                if (finger == 0)
+                {
+                    direction = math.mul(quaternion.AxisAngle(random.NextFloat3Direction(), math.radians(random.NextFloat(0f, 30f))), direction);
+                    bends = math.radians(random.NextFloat3(new float3(-10f, 0f, 0f), new float3(35f, 55f, 55f)));
+                }
+                else
+                {
+                    direction = math.mul(quaternion.AxisAngle(PalmUp, math.radians(random.NextFloat(-12f, 12f))), direction);
+                    bends = math.radians(random.NextFloat3(new float3(-20f, 0f, 0f), new float3(100f, 110f, 80f)));
+                }
+                float3 axis = math.normalize(math.cross(direction, PalmUp));
+                set[joint] = Sided(side, position) * scale;
+                float angle = 0f;
+                for (int bone = 0; bone < 3; bone++)
+                {
+                    angle += bends[bone];
+                    position += math.mul(quaternion.AxisAngle(axis, angle), direction) * HandModel.BoneLength(joint + 1 + bone);
+                    set[joint + 1 + bone] = Sided(side, position) * scale;
+                }
+            }
+            return set;
+        }
+
         /// <summary>A fist as HandModel curls it: 80, 100 and 70 degrees, the thumb folded over.</summary>
         public static JointSet Fist(HandSide side, float scale = 1f)
         {
@@ -122,7 +160,7 @@ namespace Atlas.Hands.Tests
         /// </summary>
         public static JointSet Stretched(in JointSet pose, uint seed)
         {
-            var random = new Random(seed);
+            var random = new Unity.Mathematics.Random(seed);
             JointSet set = default(JointSet);
             set[0] = pose[0];
             for (int joint = 1; joint < HandJoints.Count; joint++)

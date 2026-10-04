@@ -281,6 +281,31 @@ namespace Atlas.Hands.Tests
             }
         }
 
+        [Test]
+        public void Hands_Skin_Mesh_AnyPoseAHandCanTake_KeepsEveryTriangleTheRightWayOut()
+        {
+            // A thousand hands drawn at random from what joints allow, each finger on its own, half of them with
+            // 2 mm of error on every joint as well: no band inside out, no triangle flat.
+            var random = new Unity.Mathematics.Random(4242u);
+            HandsMeshTemplate left = HandsMeshTemplate.Build(HandSide.Left), right = HandsMeshTemplate.Build(HandSide.Right);
+            int[] leftIndices = HandsSkinRig.Indices(left), rightIndices = HandsSkinRig.Indices(right);
+            for (int trial = 0; trial < 1000; trial++)
+            {
+                HandSide side = (trial & 1) == 0 ? HandSide.Left : HandSide.Right;
+                HandsMeshTemplate template = side == HandSide.Left ? left : right;
+                float scale = random.NextFloat(HandsConstants.ScaleMin, HandsConstants.ScaleMax);
+                JointSet pose = HandsSkinRig.RandomPose(side, ref random, scale);
+                if (trial % 4 >= 2)
+                    for (int joint = 1; joint < HandJoints.Count; joint++)
+                        pose[joint] = pose[joint] + random.NextFloat3Direction() * random.NextFloat(0f, 0.002f);
+                string what = "trial " + trial;
+                AtlasVertex[] vertices = HandsSkinRig.Skin(template, in pose, HandsSkinRig.PalmUp, out float3 min, out float3 max);
+                AssertSound(template, vertices, min, max, AtlasShading.LightDirection, what);
+                int flat = AssertWoundOutwards(vertices, side == HandSide.Left ? leftIndices : rightIndices, template.IndexCount, 0f, what);
+                Assert.That(flat, Is.EqualTo(0), what + ": flat triangles");
+            }
+        }
+
         // True when the point lies inside the closed shell made by the triangles from firstIndex on: a ray from it
         // crosses the shell an odd number of times.
         static bool IsInside(float3 point, AtlasVertex[] vertices, int[] indices, int firstIndex, int indexCount)

@@ -318,7 +318,7 @@ namespace Atlas.Hands
             // the knuckles, down the little finger's side and back along the wrist.
             var outline = new Corner[PalmOutline]
             {
-                new Corner(wrist, wrist, WristHalfWidth - 0.002f, -0.003f),              // the wrist's corner, thumb's side
+                new Corner(wrist, wrist, WristHalfWidth - 0.0015f, -0.003f),             // the wrist's corner, thumb's side
                 new Corner(thumb, thumb, 0.010f, -0.013f),                               // round the thumb's base
                 new Corner(thumb, thumb, 0.015f, 0.010f),
                 new Corner(thumb, index, 0.012f, 0.004f),                                // the web
@@ -329,7 +329,7 @@ namespace Atlas.Hands
                 new Corner(little, little, -0.002f, PalmRim),
                 new Corner(little, little, -(littleRadius + 0.0015f), -0.003f),          // beside the little knuckle
                 new Corner(wrist, little, -0.0255f, 0.003f),                             // the heel of the hand
-                new Corner(wrist, wrist, -(WristHalfWidth - 0.001f), -0.003f),           // the wrist's corner, little finger's side
+                new Corner(wrist, wrist, -(WristHalfWidth - 0.0015f), -0.003f),          // the wrist's corner, little finger's side
                 new Corner(wrist, wrist, 0f, -0.005f),
             };
 

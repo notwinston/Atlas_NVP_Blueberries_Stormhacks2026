@@ -1,6 +1,9 @@
+using System;
+using System.Reflection;
 using Atlas.Kernel;
 using Atlas.World;
 using NUnit.Framework;
+using Unity.Collections;
 using Unity.Mathematics;
 
 namespace Atlas.Hands.Tests
@@ -13,6 +16,42 @@ namespace Atlas.Hands.Tests
     public unsafe class HandsMeshTemplateTests
     {
         static readonly HandSide[] Sides = { HandSide.Right, HandSide.Left };
+
+        [Test]
+        public void Hands_Skin_Mesh_ThePublicSurfaceIsWhatTheViewIsWrittenAgainst()
+        {
+            // The hands' view fills a dynamic mesh from native arrays; those two entry points cannot run without
+            // the engine, so here they are only held to their shape. HandsSkinUnityTests runs them.
+            const BindingFlags instance = BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly;
+            const BindingFlags statics = BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly;
+            Type template = typeof(HandsMeshTemplate), skin = typeof(HandsSkin), byRef = typeof(float3).MakeByRefType();
+
+            MethodInfo build = template.GetMethod("Build", statics, null, new[] { typeof(HandSide) }, null);
+            Assert.That(build, Is.Not.Null);
+            Assert.That(build.ReturnType, Is.EqualTo(template));
+            Assert.That(template.GetMethod("CopyIndices", instance, null, new[] { typeof(NativeArray<int>) }, null), Is.Not.Null);
+            Assert.That(template.GetProperty("Side", instance).PropertyType, Is.EqualTo(typeof(HandSide)));
+            foreach (string count in new[] { "VertexCount", "IndexCount", "TriangleCount" })
+                Assert.That(template.GetProperty(count, instance).PropertyType, Is.EqualTo(typeof(int)), count);
+            Assert.That(template.IsSealed, Is.True);
+            Assert.That(template.GetConstructors(BindingFlags.Public | BindingFlags.Instance), Is.Empty, "a template comes from Build");
+
+            MethodInfo pose = skin.GetMethod("Skin", statics, null, new[]
+            {
+                template, typeof(JointSet).MakeByRefType(), typeof(float3), typeof(float2), typeof(float3),
+                typeof(NativeArray<AtlasVertex>), byRef, byRef,
+            }, null);
+            Assert.That(pose, Is.Not.Null);
+            ParameterInfo[] parameters = pose.GetParameters();
+            Assert.That(parameters[1].IsIn, Is.True, "the joints are passed by reference and not written");
+            Assert.That(parameters[6].IsOut && parameters[7].IsOut, Is.True, "the bounds come back");
+
+            // Nothing else is public: the kernel and the template's tables are the module's own.
+            Assert.That(template.GetMethods(instance | statics).Length, Is.EqualTo(6), "Build, CopyIndices and four property getters");
+            Assert.That(skin.GetMethods(statics).Length, Is.EqualTo(1));
+            Assert.That(template.GetFields(instance | statics), Is.Empty);
+            Assert.That(skin.GetFields(statics), Is.Empty);
+        }
 
         [Test]
         public void Hands_Skin_Mesh_CountsEqualThePublishedConstants_AndFitTheBudget()
