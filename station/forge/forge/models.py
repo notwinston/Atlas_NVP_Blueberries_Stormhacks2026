@@ -114,6 +114,11 @@ class JobCreated(BaseModel):
     jobId: str
     cached: Optional[bool] = None
     sha256: Optional[str] = None
+    # With `cached`: the light copy of the cached mesh, when it has one.
+    lightSha256: Optional[str] = None
+    lightUrl: Optional[str] = None
+    lightBytes: Optional[int] = None
+    lightTris: Optional[int] = None
     placeholder: Optional[bool] = None
 
 

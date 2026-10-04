@@ -520,9 +520,24 @@ class Forge:
                 out["report"] = job.report
             return out
 
+    def light_fields(self, job: Job) -> dict:
+        """The four members that name a job's light copy; empty when it has none.
+
+        They go wherever the full copy is announced: `JobStatus`, `AssetReady`, and the answer to an
+        upload that the cache satisfied, which is the only word the phone gets of such a mesh.
+        """
+        if not job.lightSha256:
+            return {}
+        return {
+            "lightSha256": job.lightSha256,
+            "lightUrl": f"{self.settings.public_url}/assets/{job.lightSha256}.glb",
+            "lightBytes": job.lightBytes,
+            "lightTris": job.lightTris,
+        }
+
     def _asset_fields(self, job: Job) -> dict:
         """The members of `AssetReady`; those of the light copy only when the job has one."""
-        fields = {
+        return {
             "sha256": job.sha256,
             "url": f"{self.settings.public_url}/assets/{job.sha256}.glb",
             "bytes": job.bytes,
@@ -530,15 +545,8 @@ class Forge:
             "maxEdge": job.maxEdge,
             "bounds": list(job.bounds),
             "palette": job.palette,
+            **self.light_fields(job),
         }
-        if job.lightSha256:
-            fields.update({
-                "lightSha256": job.lightSha256,
-                "lightUrl": f"{self.settings.public_url}/assets/{job.lightSha256}.glb",
-                "lightBytes": job.lightBytes,
-                "lightTris": job.lightTris,
-            })
-        return fields
 
     def _fill_from_asset(self, job: Job, info: dict) -> None:
         job.sha256, job.bytes, job.tris = info["sha256"], info["bytes"], info["tris"]

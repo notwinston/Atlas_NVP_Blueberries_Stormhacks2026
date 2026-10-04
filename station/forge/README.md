@@ -85,7 +85,7 @@ The port and host are uvicorn's own arguments. `forge/config.py` holds every set
 | `PUT /rooms/{roomId}/mesh` | binary, ≤ 2 MB | 204 |
 | `GET /rooms/{roomId}` | – | The RoomModel as uploaded |
 | `DELETE /rooms/{roomId}` | – | 204. Removes the room, its mesh, its jobs and the GLBs made for it |
-| `POST /rooms/{roomId}/objects` | multipart: `meta` (JSON, Appendix B.4), files `view0`…`view2` | 202 `{jobId}` · 200 `{jobId, cached: true, sha256}` · 200 `{jobId, placeholder: true}` |
+| `POST /rooms/{roomId}/objects` | multipart: `meta` (JSON, Appendix B.4), files `view0`…`view2` | 202 `{jobId}` · 200 `{jobId, cached: true, sha256}`, with `lightSha256`, `lightUrl`, `lightBytes`, `lightTris` when the cached mesh has a light copy · 200 `{jobId, placeholder: true}` |
 | `GET /jobs/{jobId}` | – | `JobStatus`, with the `AssetReady` fields and the clean-up report once ready |
 | `GET /jobs?room={roomId}` | – | A list of the same |
 | `GET /queue` | – | `{active, queued, placeholders, generator}`; `queued` is in the order the worker takes it |

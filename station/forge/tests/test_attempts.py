@@ -287,6 +287,75 @@ def test_the_light_copy_is_published_as_its_own_asset(tmp_path):
     assert [p for p in (tmp_path / "data").rglob("*") if p.is_file()] == []
 
 
+def test_the_answer_from_the_cache_names_the_light_copy(tmp_path):
+    """The phone learns of a cached mesh from the answer to its upload alone: that answer names both copies."""
+    settings = make_settings(tmp_path / "data", public_url="http://station:8000")
+    light_keys = {"lightSha256", "lightUrl", "lightBytes", "lightTris"}
+    with TestClient(create_app(settings)) as client:
+        model = room_model("warm", [(2.0, 0.6, 1.6), (0.5, 0.9, 0.5)], ["bed", "chair"])
+        client.post("/rooms", json=model)
+        bed = {**meta_for(model["objects"][0], 15000), "triTargetLight": 1600}
+        first = wait_for(client, post_object(client, "warm", bed, [jpeg(seed=1)]).json()["jobId"])
+        assert first["state"] == "ready" and first["lightSha256"] != first["sha256"]
+
+        # With a light copy: the four members are in the answer itself, the same as the job's.
+        answer = post_object(client, "warm", bed, [jpeg(seed=1)])
+        assert answer.status_code == 200
+        body = answer.json()
+        assert body["cached"] is True and body["sha256"] == first["sha256"]
+        assert {k: body[k] for k in light_keys} == {k: first[k] for k in light_keys}
+        assert body["lightUrl"] == f"http://station:8000/assets/{first['lightSha256']}.glb"
+        assert set(body) == {"jobId", "cached", "sha256"} | light_keys
+        assert client.get(f"/assets/{body['lightSha256']}.glb").status_code == 200
+        # GET /jobs/{jobId} and GET /jobs?room= say the same of the cached job.
+        one = client.get(f"/jobs/{body['jobId']}").json()
+        listed = {j["jobId"]: j for j in client.get("/jobs", params={"room": "warm"}).json()}
+        for status in (one, listed[body["jobId"]], listed[first["jobId"]]):
+            assert {k: status[k] for k in light_keys} == {k: first[k] for k in light_keys}
+        assert one["cached"] is True and one["source"] == "cache"
+
+        # A light copy that is the full copy's own file is named too: the phone need not know they are one.
+        chair = meta_for(model["objects"][1], 15000)
+        made = wait_for(client, post_object(client, "warm", chair, [jpeg(seed=2)]).json()["jobId"])
+        same = post_object(client, "warm", chair, [jpeg(seed=2)]).json()
+        assert made["lightSha256"] == made["sha256"] == same["sha256"] == same["lightSha256"]
+
+    # A cached mesh with no light copy recorded: an entry from before the light copy existed. The answer
+    # is what it was then, and the job's status has no light member.
+    cache = settings.data_dir / "cache"
+    for entry in cache.glob("*.json"):
+        record = json.loads(entry.read_text())
+        if record["sha256"] != first["sha256"]:
+            continue
+        old_info = {k: v for k, v in record.items() if k not in ("lightSha256", "lightBytes", "lightTris",
+                                                                  "fit", "fitYaw", "fitUp")}
+        old_info["report"] = {k: v for k, v in record["report"].items() if k != "light"}
+        (settings.data_dir / "assets" / f"{first['sha256']}.json").write_text(json.dumps(old_info))
+        entry.write_text(json.dumps({"sha256": first["sha256"]}))  # the entry named only the asset
+    with TestClient(create_app(settings)) as client:
+        answer = post_object(client, "warm", bed, [jpeg(seed=1)])
+        assert answer.status_code == 200 and answer.json() == {
+            "jobId": answer.json()["jobId"], "cached": True, "sha256": first["sha256"]}
+        status = client.get(f"/jobs/{answer.json()['jobId']}").json()
+        assert status["state"] == "ready" and status["sha256"] == first["sha256"] and not light_keys & set(status)
+        assert "fit" not in status and "fitUp" not in status and client.get(status["url"]).status_code == 200
+        listed = client.get("/jobs", params={"room": "warm"}).json()
+        assert not light_keys & set(listed[-1]) and listed[-1]["jobId"] == status["jobId"]
+
+
+def test_a_cached_light_copy_whose_file_is_gone_is_not_promised(tmp_path):
+    settings = make_settings(tmp_path / "data")
+    with TestClient(create_app(settings)) as client:
+        model = room_model("lost", [(2.0, 0.6, 1.6)], ["bed"])
+        client.post("/rooms", json=model)
+        bed = {**meta_for(model["objects"][0], 15000), "triTargetLight": 1600}
+        first = wait_for(client, post_object(client, "lost", bed, [jpeg()]).json()["jobId"])
+        (settings.data_dir / "assets" / f"{first['lightSha256']}.glb").unlink()
+        answer = post_object(client, "lost", bed, [jpeg()])
+        assert answer.status_code == 200 and set(answer.json()) == {"jobId", "cached", "sha256"}
+        assert "lightSha256" not in client.get(f"/jobs/{answer.json()['jobId']}").json()
+
+
 def test_an_old_style_job_still_works(tmp_path):
     # A phone from before the mesh design: one view, no profile, no light target, a target of 5,000.
     with TestClient(create_app(make_settings(tmp_path / "data"))) as client:

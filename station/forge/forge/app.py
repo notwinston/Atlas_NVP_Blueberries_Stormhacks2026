@@ -139,7 +139,9 @@ def create_app(settings: Optional[Settings] = None, generator: Optional[Generato
         if job.state == "placeholder":
             return JSONResponse({"jobId": job.jobId, "placeholder": True}, status_code=200)
         if job.cached and job.state == "ready":
-            return JSONResponse({"jobId": job.jobId, "cached": True, "sha256": job.sha256}, status_code=200)
+            # The phone learns of a cached mesh from this answer alone, so both copies are named here.
+            return JSONResponse({"jobId": job.jobId, "cached": True, "sha256": job.sha256,
+                                 **forge.light_fields(job)}, status_code=200)
         return JSONResponse({"jobId": job.jobId}, status_code=202)
 
     @app.get("/jobs/{job_id}", response_model=JobStatus, response_model_exclude_none=True)
