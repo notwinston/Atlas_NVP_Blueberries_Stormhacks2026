@@ -12,6 +12,7 @@ from PIL import Image
 
 from conftest import ROOT, jpeg, make_settings
 from forge.app import create_app
+from forge import profile
 from forge.cleanup import _UP, clean
 from forge.generators.procedural import build_furniture
 
@@ -31,8 +32,8 @@ def turn(points, degrees):
 
 def chair(front_azimuth=0.0):
     """A chair, upright and right-handed, whose front points at ``front_azimuth`` of Unity's box frame."""
-    v, f = build_furniture("chair", DIMS)  # as built its back is on +Z: the front is at 180
-    return turn(v, front_azimuth - 180.0), f
+    v, f = build_furniture("chair", DIMS)  # as built its back is on -Z: the front is at 0
+    return turn(v, front_azimuth), f
 
 
 def test_a_chair_with_its_front_on_plus_z_reads_canonical():
@@ -104,6 +105,30 @@ def test_the_frame_is_read_from_a_glb_through_its_report(tmp_path):
         assert abs(abs(reading["frontAzimuth"]) - abs(front)) < 12
 
 
+def test_a_turn_the_fit_chose_is_taken_out_of_the_glb_too():
+    # With a profile clean-up may turn a mesh by any quarter turn; the report says which, and the reading undoes it.
+    v, f = chair(0)
+    scan = profile.of_mesh(v, f, DIMS)
+    for quarter in range(4):
+        delivered = turn(v, 90 * quarter)  # the generator's frame has the front at this azimuth
+        result = clean(delivered, f, DIMS, 5000, scan=scan)
+        assert result.report.fit < 0.01
+        reading = first_run.read_frame(*glb_mesh(result.glb), result.report.up_axis, result.report.yaw_degrees)
+        raw = first_run.read_frame(delivered, f)
+        assert reading["up"] == raw["up"] == "Y"
+        assert abs(abs(reading["frontAzimuth"]) - abs(raw["frontAzimuth"])) < 12
+        assert reading["front"] == raw["front"] == ("canonical" if quarter == 0 else "unknown")
+
+
+def glb_mesh(glb: bytes):
+    from forge.glb import read_glb
+
+    file = read_glb(glb)
+    primitive = file.doc["meshes"][0]["primitives"][0]
+    return (file.accessor(primitive["attributes"]["POSITION"]).astype(np.float64),
+            file.accessor(primitive["indices"]).reshape(-1, 3).astype(np.int64))
+
+
 def test_photo_and_form():
     small = jpeg()
     path_bytes = io.BytesIO(small).getvalue()
@@ -163,15 +188,15 @@ def test_the_round_trip_against_a_running_forge(served, tmp_path, capsys):
     record = json.loads((out / "first_run.json").read_text())
     assert record["job"]["state"] == "ready" and record["validator"]["ok"] is True
     assert (out / "asset.glb").read_bytes()[:4] == b"glTF" and (out / "raw_view0.npz").is_file()
-    # The procedural chair has its back on +Z, which is no frame the settings name: the tool says so.
+    # The procedural chair is built upright with its front on +Z, and that is what the tool reads.
     assert record["reading"]["source"] == "raw" and record["reading"]["up"] == "Y"
-    assert record["reading"]["front"] == "unknown" and abs(abs(record["reading"]["frontAzimuth"]) - 180) < 1
-    assert "FORGE_TRIPOSG_UP=Y" in printed and "FORGE_TRIPOSG_FRONT=unknown" in printed
+    assert record["reading"]["front"] == "canonical" and abs(record["reading"]["frontAzimuth"]) < 1
+    assert "FORGE_TRIPOSG_UP=Y" in printed and "FORGE_TRIPOSG_FRONT=canonical" in printed
 
     # Reading the saved files again, without the service.
     assert first_run.main(["--analyse", str(out / "raw_view0.npz")]) == 0
     assert first_run.main(["--analyse", str(out / "asset.glb"), "--up-axis", "Y"]) == 0
-    assert capsys.readouterr().out.count("FORGE_TRIPOSG_FRONT=unknown") == 2
+    assert capsys.readouterr().out.count("FORGE_TRIPOSG_FRONT=canonical") == 2
 
 
 def test_a_forge_that_is_not_there_or_not_ready_stops_the_tool(tmp_path, capsys):

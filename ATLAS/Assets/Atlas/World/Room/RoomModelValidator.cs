@@ -592,6 +592,7 @@ namespace Atlas.World
                 if (!(o.Base.x > ox && o.Base.x < xHi && o.Base.z > oz && o.Base.z < zHi))
                     errors.Add("R16 object " + I(o.Id) + " lies outside the grid");
                 if (o.Base.y < -0.05f) errors.Add("R16 object " + I(o.Id) + " starts below the floor");
+                if (!YawReadable(o.Yaw)) errors.Add("R16 object " + I(o.Id) + ": yaw is outside (-3.1415928, 3.1415928] once written");
                 if (o.Mesh == MeshState.StandIn) standIns++;
                 if (o.Profile != null && o.Profile.Length != ObjectProfileBytes)
                     errors.Add("R21 object " + I(o.Id) + ": profile is " + I(o.Profile.Length) + " bytes, expected 256");
@@ -608,6 +609,18 @@ namespace Atlas.World
             for (int k = 0; k < objects.Length; k++)
                 if (objects[k].TriTarget != expected[k])
                     errors.Add("R17 object " + I(objects[k].Id) + ": triTarget = " + I(objects[k].TriTarget) + ", expected " + I(expected[k]));
+        }
+
+        /// <summary>
+        /// True when the yaw, as RoomModelJson writes it (six decimals), is inside the range the reader and the
+        /// schema accept: a room that validates must read back.
+        /// </summary>
+        static bool YawReadable(float yaw)
+        {
+            if (float.IsNaN(yaw) || float.IsInfinity(yaw)) return false;
+            double written = double.Parse(RoomModelJson.FormatNumber(RoomModelJson.Widen(yaw)), NumberStyles.Float,
+                CultureInfo.InvariantCulture);
+            return written > -3.1415928 && written <= 3.1415928;
         }
 
         static void ObjectsOffFreeFloor(RoomModel room, bool[] free, int w, int h, double ox, double oz, List<string> errors)

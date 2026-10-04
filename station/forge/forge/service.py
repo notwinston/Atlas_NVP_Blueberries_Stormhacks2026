@@ -4,9 +4,14 @@ One worker thread owns the generator and takes one job at a time, the largest
 box first. Everything the service knows is kept under the data folder:
 
     rooms/<roomId>/room.json, room.meta.json, mesh.bin
-    jobs/<jobId>/job.json            (and view<i>.jpg, raw_view<i>.npz only under FORGE_DEBUG_KEEP=1)
-    assets/<sha256>.glb, <sha256>.json
+    jobs/<jobId>/job.json
+    assets/<sha256>.glb, <sha256>.json      (both copies of a mesh; the record beside the full one)
     cache/<key>.json
+
+Under FORGE_DEBUG_KEEP=1 a job's folder also holds the record of mesh design
+section 5.6, from which `python -m forge.reclean` runs clean-up again without
+the generator: view<i>.jpg, matte<i>.png, raw_view<i>.npz (the generator's
+output of each attempt), full.glb, light.glb and report.json.
 
 Files are written to a temporary name and renamed, so a crash never leaves a
 half-written record, and the folder is read back at start-up. Crops, and the
@@ -35,14 +40,20 @@ from typing import Any, Callable, Optional
 
 import numpy as np
 
-from . import PIPELINE_VER, imaging
+from . import PIPELINE_VER, attempts, imaging
 from .budget import MAX_GENERATED_PER_ROOM, box_volume, plan_room
-from .cleanup import CleanupError, clean
+from .cleanup import CleanupError, CleanResult, Oriented
 from .config import Settings
-from .generators import GenerationRequest, Generator, GeneratorError, HostedGenerator, make_generator
-from .imaging import ImageError, MattedView, decode_crop, dominant_colour, frame_for_generator
+from .generators import (
+    GenerationRequest,
+    Generator,
+    GeneratorError,
+    GeneratorUnavailable,
+    HostedGenerator,
+    make_generator,
+)
+from .imaging import ImageError, MattedView, decode_crop, frame_for_generator
 from .models import ObjectMeta, RoomModel
-from .validator import validate_glb
 
 log = logging.getLogger("forge")
 
@@ -130,7 +141,9 @@ class Job:
     fit: Optional[float] = None
     fitYaw: Optional[int] = None
     fitUp: str = ""
-    attempts: int = 0
+    attempts: int = 0  # generations made for the object, failed ones included
+    # One line per generation: view, generator, decoder, seconds, fit, fitYaw, fitUp, error, published.
+    attemptLog: list[dict] = field(default_factory=list)
     report: Optional[dict] = None
 
     @classmethod
@@ -228,6 +241,10 @@ class Forge:
             if job.state == "ready" and not self._asset_path(job.sha256).is_file():
                 job.state, job.error = "failed", "the asset file is missing after a restart"
                 self._save(job)
+            elif job.state == "ready" and job.lightSha256 and not self._asset_path(job.lightSha256).is_file():
+                # The full copy is what every reader can show; the job goes on without its light one.
+                job.lightSha256, job.lightBytes, job.lightTris = "", 0, 0
+                self._save(job)
             elif job.state not in TERMINAL_STATES:
                 crops = self._kept_crops(job)
                 if crops:
@@ -316,7 +333,8 @@ class Forge:
                 raise NotFound(room_id)
             del self._rooms[room_id]
             mine = [j for j in self._jobs.values() if j.roomId == room_id]
-            others = {j.sha256 for j in self._jobs.values() if j.roomId != room_id and j.sha256}
+            others = {sha for j in self._jobs.values() if j.roomId != room_id
+                      for sha in (j.sha256, j.lightSha256) if sha}
             for job in mine:
                 del self._jobs[job.jobId]
                 self._crops.pop(job.jobId, None)
@@ -324,7 +342,7 @@ class Forge:
                 if job.jobId == self._active:
                     self._cancelled.add(job.jobId)
                 shutil.rmtree(self._job_dir(job.jobId), ignore_errors=True)
-            doomed = {j.sha256 for j in mine if j.sha256} - others
+            doomed = {sha for j in mine for sha in (j.sha256, j.lightSha256) if sha} - others
             for sha in doomed:
                 self._asset_path(sha).unlink(missing_ok=True)
                 self._asset_path(sha).with_suffix(".json").unlink(missing_ok=True)
@@ -338,24 +356,35 @@ class Forge:
 
     # ------------------------------------------------------------------ jobs
 
-    def _cache_key(self, view0: bytes, job: Job) -> str:
+    def _cache_key(self, crops: list[bytes], job: Job) -> str:
         # Section 7.4 keys the cache on the photo, the triangle target and the pipeline version.
-        # The box, its yaw (the baked shade depends on it) and the generator are added because
-        # each of them changes the mesh that comes out.
+        # Everything else that changes the meshes that come out is added: the box and its yaw (the
+        # baked shade depends on it), the generator, the other photos and every camera (the colours,
+        # and the attempts on a poor fit), the light target, the scanned profile, and the settings
+        # the fit works with.
+        settings = self.settings
         dims = ",".join(f"{d:.3f}" for d in [*job.dims, job.yaw])
+        cameras = json.dumps([[v.get("intrinsics"), v.get("camToBox")] for v in job.views])
         text = "|".join(
-            [hashlib.sha256(view0).hexdigest(), str(job.triTarget), PIPELINE_VER, dims, job.category,
-             self.generator.name]
+            [",".join(hashlib.sha256(crop).hexdigest() for crop in crops), str(job.triTarget), PIPELINE_VER, dims,
+             job.category, self.generator.name, str(job.triTargetLight),
+             hashlib.sha256(job.profile.encode("ascii", "replace")).hexdigest() if job.profile else "-",
+             hashlib.sha256(cameras.encode("ascii", "replace")).hexdigest(),
+             settings.triposg_up, settings.triposg_front, f"{settings.poor_fit:g}", f"{settings.max_anisotropy:g}"]
         )
         return hashlib.sha256(text.encode("ascii", "replace")).hexdigest()
 
     def _cache_lookup(self, key: str) -> Optional[dict]:
+        """What a job with this key published, when its full copy is still there."""
         path = self._root / "cache" / f"{key}.json"
         if not path.is_file():
             return None
         try:
-            sha = _read_json(path)["sha256"]
-            info = _read_json(self._asset_path(sha).with_suffix(".json"))
+            info = _read_json(path)
+            sha = info["sha256"]
+            if "tris" not in info:
+                # An entry from before the light copy named only the asset; its record lies beside the asset.
+                info = _read_json(self._asset_path(sha).with_suffix(".json"))
         except (OSError, ValueError, KeyError):
             return None
         return info if self._asset_path(sha).is_file() else None
@@ -411,7 +440,7 @@ class Forge:
                 self._save(job)
                 return job, False
 
-            job.cacheKey = self._cache_key(crops[0], job)
+            job.cacheKey = self._cache_key(crops, job)
             hit = self._cache_lookup(job.cacheKey)
             if hit is not None:
                 self._fill_from_asset(job, hit)
@@ -481,16 +510,34 @@ class Forge:
                 out["queuePosition"] = [j.jobId for j in self.queued()].index(job.jobId)
             if job.state == "ready":
                 out.update(self._asset_fields(job))
+                # How the mesh was turned, and how well it then fitted the scan (no `fit` without a profile).
+                if job.fitUp:
+                    out.update({"fitYaw": job.fitYaw, "fitUp": job.fitUp})
                 if job.fit is not None:
-                    out.update({"fit": job.fit, "fitYaw": job.fitYaw, "fitUp": job.fitUp})
+                    out["fit"] = job.fit
                 if job.attempts:
                     out["attempts"] = job.attempts
                 out["report"] = job.report
             return out
 
+    def light_fields(self, job: Job) -> dict:
+        """The four members that name a job's light copy; empty when it has none.
+
+        They go wherever the full copy is announced: `JobStatus`, `AssetReady`, and the answer to an
+        upload that the cache satisfied, which is the only word the phone gets of such a mesh.
+        """
+        if not job.lightSha256:
+            return {}
+        return {
+            "lightSha256": job.lightSha256,
+            "lightUrl": f"{self.settings.public_url}/assets/{job.lightSha256}.glb",
+            "lightBytes": job.lightBytes,
+            "lightTris": job.lightTris,
+        }
+
     def _asset_fields(self, job: Job) -> dict:
         """The members of `AssetReady`; those of the light copy only when the job has one."""
-        fields = {
+        return {
             "sha256": job.sha256,
             "url": f"{self.settings.public_url}/assets/{job.sha256}.glb",
             "bytes": job.bytes,
@@ -498,21 +545,19 @@ class Forge:
             "maxEdge": job.maxEdge,
             "bounds": list(job.bounds),
             "palette": job.palette,
+            **self.light_fields(job),
         }
-        if job.lightSha256:
-            fields.update({
-                "lightSha256": job.lightSha256,
-                "lightUrl": f"{self.settings.public_url}/assets/{job.lightSha256}.glb",
-                "lightBytes": job.lightBytes,
-                "lightTris": job.lightTris,
-            })
-        return fields
 
     def _fill_from_asset(self, job: Job, info: dict) -> None:
         job.sha256, job.bytes, job.tris = info["sha256"], info["bytes"], info["tris"]
         job.maxEdge, job.bounds, job.palette = info["maxEdge"], info["bounds"], info["palette"]
         job.report, job.generator = info.get("report"), info.get("generator", "")
         job.decoder = info.get("decoder", "")
+        job.lightSha256 = info.get("lightSha256", "")
+        job.lightBytes, job.lightTris = info.get("lightBytes", 0), info.get("lightTris", 0)
+        job.fit, job.fitYaw, job.fitUp = info.get("fit"), info.get("fitYaw"), info.get("fitUp", "")
+        if job.lightSha256 and not self._asset_path(job.lightSha256).is_file():
+            job.lightSha256, job.lightBytes, job.lightTris = "", 0, 0
 
     def asset(self, sha: str) -> Optional[bytes]:
         if not SHA_PATTERN.match(sha):
@@ -664,6 +709,12 @@ class Forge:
                 log.warning("background removal failed on view %d, the crop stays as it is: %s", index, exc)
                 cutout, method, note = crop.convert("RGBA"), "none", f"background removal failed: {exc}"
             views[index] = MattedView(crop=crop, matte=cutout.getchannel("A"), method=method, note=note)
+            if self.settings.debug_keep and method != "none":
+                packed = io.BytesIO()
+                views[index].matte.save(packed, format="PNG")
+                with self._lock:
+                    if job.jobId in self._jobs:
+                        _write_atomic(self._job_dir(job.jobId) / f"matte{index}.png", packed.getvalue())
         return views[index]
 
     @staticmethod
@@ -695,13 +746,47 @@ class Forge:
         """Under FORGE_DEBUG_KEEP=1: the generator's output as it came, before clean-up touches it.
 
         With it clean-up can be run again without the GPU, and the generator's own frame can be
-        read (mesh design sections 5.1 and 5.6).
+        read (mesh design sections 5.1 and 5.6). The numbers are kept exactly as clean-up was
+        given them, so that running it again gives the same bytes.
         """
         packed = io.BytesIO()
-        np.savez_compressed(packed, vertices=np.asarray(raw.vertices, dtype=np.float32),
+        np.savez_compressed(packed, vertices=np.asarray(raw.vertices, dtype=np.float64),
                             faces=np.asarray(raw.faces, dtype=np.int32),
                             decoder=np.array(getattr(raw, "decoder", "")))
         _write_atomic(self._job_dir(job.jobId) / f"raw_view{index}.npz", packed.getvalue())
+
+    def _attempt(self, job: Job, generator: Generator, index: int, crops: list[bytes], seconds: float,
+                 entry: dict) -> Oriented:
+        """One generation from view ``index``, turned and scaled to the box; ``entry`` is its line in the log.
+
+        ``entry["seconds"]`` is set once a generation was really made, also when
+        it failed: a view that cannot be matted, and a generator that cannot
+        run, make none.
+        """
+        view = self._view(job, crops, index)
+        mark = time.monotonic()
+        try:
+            raw = self._generate(generator, view, index, job, seconds)
+        except (ImageError, GeneratorUnavailable):
+            raise
+        except BaseException:
+            entry["seconds"] = round(time.monotonic() - mark, 3)
+            raise
+        entry["seconds"] = round(time.monotonic() - mark, 3)
+        entry["decoder"] = getattr(raw, "decoder", "")
+        if self.settings.debug_keep:
+            with self._lock:
+                if job.jobId in self._jobs:
+                    self._keep_raw(job, index, raw)
+        oriented = self._timed(
+            "clean-up", self.settings.cleaning_timeout_s,
+            lambda: attempts.orient_attempt(raw.vertices, raw.faces, dims=job.dims, tri_target=job.triTarget,
+                                            profile_text=job.profile, views=job.views,
+                                            generator_name=generator.name, settings=self.settings),
+        )
+        entry.update(fit=None if oriented.fit is None else round(oriented.fit, 4),
+                     fitYaw=(360 - oriented.turns * 90) % 360, fitUp=oriented.up_axis)
+        return oriented
 
     def _process(self, job: Job) -> None:
         settings = self.settings
@@ -727,62 +812,101 @@ class Forge:
         job.timings["matting"] = round(time.monotonic() - started, 3)
 
         # generating ------------------------------------------------------------
+        # Each generation is turned and scaled to the box at once, which gives its fit to the scan.
+        # A poor fit sends the next view to the generator; at most three generations are made, and
+        # the one that fits best is finished and published (mesh design section 5.3, decision M7).
         self._enter(job, "generating")
         mark = time.monotonic()
-        raw, errors, used, used_view = None, [], None, 0
-        attempts: list[tuple[Generator, int, float]] = []  # the generator, the view it is given, the time-out
-        if job.backend == "hosted":
-            attempts.append((self.hosted, 0, settings.hosted_timeout_s))
-        else:
-            attempts.append((self.generator, 0, settings.generate_timeout_s))
-            if len(crops) > 1:
-                attempts.append((self.generator, 1, settings.generate_timeout_s))  # one retry with view 1
-            if self.generator.source != "hosted" and self.hosted.availability()[0]:
-                attempts.append((self.hosted, 0, settings.hosted_timeout_s))
-        for generator, index, seconds in attempts:
+        made: list[tuple[dict, Generator, Oriented]] = []
+        errors: list[str] = []
+        failures = 0
+
+        def attempt(generator: Generator, index: int, seconds: float) -> None:
+            nonlocal failures
+            entry = {"view": index, "generator": generator.name, "decoder": "", "error": "", "published": False}
             try:
-                raw = self._generate(generator, self._view(job, crops, index), index, job, seconds)
-                used, used_view = generator, index
-                break
-            except (GeneratorError, StageTimeout, ImageError) as exc:
+                oriented = self._attempt(job, generator, index, crops, seconds, entry)
+            except CleanupError as exc:
+                entry["error"] = f"clean-up: {exc}"
+            except ImageError as exc:
+                # This view cannot be used (it is not matted, its matte is empty, the file is no picture).
+                # Nothing was generated, and it says nothing about the next view: it is not a failure of
+                # the generator.
                 errors.append(str(exc))
+            except (GeneratorError, StageTimeout) as exc:
+                entry["error"] = str(exc)
             except Exception as exc:  # model code raises anything; keep the worker alive
-                errors.append(f"{generator.name}: {exc}")
+                entry["error"] = f"{generator.name}: {exc}"
+            else:
+                made.append((entry, generator, oriented))
+            if entry["error"]:
+                failures += 1
+                errors.append(entry["error"])
+            if "seconds" in entry:  # a generation was made
+                job.attempts += 1
+                job.attemptLog.append(entry)
             with self._lock:
                 if job.jobId in self._cancelled:
                     raise _Cancelled()
-        if raw is None or used is None:
+
+        def poor() -> bool:
+            fits = [oriented.fit for _, _, oriented in made]
+            return None not in fits and min(fits) > settings.poor_fit
+
+        if job.backend != "hosted":
+            for index in range(len(crops)):
+                if job.attempts >= attempts.MAX_GENERATIONS or failures >= attempts.MAX_FAILURES:
+                    break
+                # With a mesh in hand another view is generated only for a poor fit, and only by the
+                # Station's own generator: a third party is never sent more photos than it needs.
+                if made and not (poor() and self.generator.source == "local"):
+                    break
+                attempt(self.generator, index, settings.generate_timeout_s)
+        if not made and (job.backend == "hosted"
+                         or (self.generator.source != "hosted" and self.hosted.availability()[0])):
+            attempt(self.hosted, 0, settings.hosted_timeout_s)
+        job.timings["generating"] = round(time.monotonic() - mark, 3)
+        if not made:
             self._fail(job, "; ".join(errors) or "no generator produced a mesh")
             return
-        job.generator, job.source = used.name, used.source
-        job.decoder = getattr(raw, "decoder", "")
-        job.timings["generating"] = round(time.monotonic() - mark, 3)
-        if settings.debug_keep:
-            with self._lock:
-                if job.jobId in self._jobs:
-                    self._keep_raw(job, used_view, raw)
 
         # cleaning --------------------------------------------------------------
         self._enter(job, "cleaning")
         mark = time.monotonic()
-        try:
-            colour = dominant_colour(first.cutout)
-            result = self._timed(
-                "clean-up",
-                settings.cleaning_timeout_s,
-                lambda: clean(raw.vertices, raw.faces, job.dims, job.triTarget, colour,
-                              yaw=job.yaw, max_anisotropy=settings.max_anisotropy),
-            )
-        except (CleanupError, StageTimeout) as exc:
-            self._fail(job, f"clean-up: {exc}")
+        # The colours are read from every photo the phone sent, not only from those a generation used.
+        for index in range(1, len(crops)):
+            try:
+                self._view(job, crops, index)
+            except (ImageError, StageTimeout) as exc:
+                log.warning("job %s: view %d gives no colour: %s", job.jobId, index, exc)
+        matted = dict(self._views.get(job.jobId) or {0: first})
+        chosen: Optional[tuple[dict, Generator, CleanResult]] = None
+        problems: list[str] = []
+        for place in attempts.in_order_of_fit([oriented.fit for _, _, oriented in made]):
+            entry, generator, oriented = made[place]
+            try:
+                result = self._timed(
+                    "clean-up", settings.cleaning_timeout_s,
+                    lambda: attempts.finish_attempt(oriented, yaw=job.yaw, tri_target_light=job.triTargetLight,
+                                                    matted=matted, views=job.views),
+                )
+            except (CleanupError, StageTimeout) as exc:
+                problems.append(f"clean-up: {exc}")
+                continue
+            if result.report.violations:
+                problems.append("asset contract: " + "; ".join(result.report.violations))
+                continue
+            chosen = (entry, generator, result)
+            break
+        if chosen is None:
+            self._fail(job, "; ".join(dict.fromkeys(problems)))
             return
-        verdict = validate_glb(result.glb, tri_target=job.triTarget, box=job.dims, level="full")
-        if not verdict.ok:
-            self._fail(job, "asset contract: " + "; ".join(f"[{v.code}] {v.message}" for v in verdict.violations))
-            return
+        entry, used, result = chosen
+        entry["published"] = True
+        job.generator, job.source, job.decoder = used.name, used.source, entry["decoder"]
         job.timings["cleaning"] = round(time.monotonic() - mark, 3)
 
-        report = result.report
+        report, light = result.report, result.light_report
         info = {
             "sha256": report.sha256,
             "bytes": report.bytes,
@@ -790,18 +914,35 @@ class Forge:
             "maxEdge": round(report.longest_edge, 5),
             "bounds": [round(v, 5) for v in report.size],
             "palette": report.palette_index,
-            "report": report.to_dict(),
+            "report": {**report.to_dict(), "attempts": job.attempts},
             "generator": used.name,
             "decoder": job.decoder,
+            "fit": entry["fit"],
+            "fitYaw": report.fit_yaw,
+            "fitUp": report.up_axis,
         }
+        if light is not None:
+            info.update(lightSha256=light.sha256, lightBytes=light.bytes, lightTris=light.triangles)
         with self._lock:
             if job.jobId in self._cancelled or job.jobId not in self._jobs:
                 raise _Cancelled()
             _write_atomic(self._asset_path(report.sha256), result.glb)
+            if light is not None:
+                _write_atomic(self._asset_path(light.sha256), result.light_glb)
             _write_json(self._asset_path(report.sha256).with_suffix(".json"), info)
-            _write_json(self._root / "cache" / f"{job.cacheKey}.json", {"sha256": report.sha256})
+            # The cache keeps the whole answer under the job's own key: two jobs may give the same full
+            # copy and still differ in their light copy, their fit or their attempts.
+            _write_json(self._root / "cache" / f"{job.cacheKey}.json", info)
             self._fill_from_asset(job, info)
-            if not settings.debug_keep:
+            if settings.debug_keep:
+                # The record: both copies and both reports beside the crops, the mattes and the raw meshes.
+                folder = self._job_dir(job.jobId)
+                _write_atomic(folder / "full.glb", result.glb)
+                if light is not None:
+                    _write_atomic(folder / "light.glb", result.light_glb)
+                _write_json(folder / "report.json", {"full": info["report"],
+                                                     "light": None if light is None else light.to_dict()})
+            else:
                 self._crops.pop(job.jobId, None)
         self._enter(job, "ready")
         log.info("job %s ready: box %d, %d triangles, %s", job.jobId, job.boxId, job.tris, job.sha256[:12])

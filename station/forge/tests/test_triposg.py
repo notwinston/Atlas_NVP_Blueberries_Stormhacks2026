@@ -148,36 +148,6 @@ def station(tmp_path, weights="complete", **overrides):
     return make_settings(tmp_path / "data", generator="triposg", triposg_repo=str(repo), **overrides)
 
 
-def object_alpha(image: Image.Image) -> Image.Image:
-    """A matte for the test crops of conftest.jpeg: whatever is not the grey background."""
-    pixels = np.asarray(image.convert("RGB")).astype(np.int16)
-    return Image.fromarray(((np.abs(pixels - 96).max(axis=2) > 24) * 255).astype(np.uint8))
-
-
-@pytest.fixture
-def matting(monkeypatch):
-    """A matting model is installed: stands in for rembg, which the tests do not have."""
-    state = SimpleNamespace(calls=0, fail_on=set(), empty=False, load_error=None)
-
-    def remove(image):
-        state.calls += 1
-        if state.calls in state.fail_on:
-            raise RuntimeError("onnxruntime ran out of memory")
-        cut = image.convert("RGBA")
-        cut.putalpha(Image.new("L", image.size, 0) if state.empty else object_alpha(image))
-        return cut, "rembg"
-
-    def load():
-        if state.load_error:
-            raise OSError(state.load_error)
-        return "rembg"
-
-    monkeypatch.setattr(imaging, "matting_method", lambda: "rembg")
-    monkeypatch.setattr(imaging, "load_matting", load)
-    monkeypatch.setattr(imaging, "remove_background", remove)
-    return state
-
-
 @pytest.fixture
 def no_matting(monkeypatch):
     """No matting model is installed, whatever this machine has."""
@@ -539,6 +509,23 @@ def test_a_view_whose_matting_fails_is_not_sent_and_the_next_view_is(tmp_path, m
                                    "triposg is given matted pictures only")
 
 
+def test_views_that_cannot_be_matted_are_passed_over_and_are_no_failed_generations(tmp_path, matting):
+    runtime = FakeRuntime()
+    app, _ = served(tmp_path, runtime)
+    with TestClient(app) as client:
+        wait_until(lambda: client.get("/health").json()["generatorReady"])
+        matting.fail_on = {1, 2}  # the first two photos
+        model = room_model("third", [(0.6, 0.6, 0.6)])
+        client.post("/rooms", json=model)
+        meta = meta_for(model["objects"][0], 15000)
+        meta["views"] = meta["views"] * 3
+        photos = [jpeg(seed=1), jpeg(seed=2), jpeg((40, 54, 92), seed=3)]
+        status = wait_for(client, post_object(client, "third", meta, photos).json()["jobId"])
+        # Two views gave no picture; the third was generated, and it is the only generation.
+        assert status["state"] == "ready" and status["attempts"] == 1 and len(runtime.pipe.calls) == 1
+        assert [e["view"] for e in app.state.forge.job(status["jobId"]).attemptLog] == [2]
+
+
 def test_an_empty_matte_is_not_sent(tmp_path, matting):
     runtime = FakeRuntime()
     app, _ = served(tmp_path, runtime)
@@ -600,6 +587,39 @@ def test_the_job_reports_the_decoder_that_made_its_mesh(tmp_path, matting):
         status = wait_for(client, one_job(client))
         assert status["state"] == "failed" and "flash decoder" in status["error"]
         assert "hierarchical decoder: CUDA error" in status["error"] and "decoder" not in status
+
+
+def test_what_was_measured_of_triposgs_frame_steers_the_fit(tmp_path, matting):
+    """`FORGE_TRIPOSG_FRONT` breaks a tie of the fit, and `FORGE_TRIPOSG_UP` names the one up axis that is tried."""
+    from forge import profile
+
+    flat = profile.encode(np.full(256, 255, dtype=np.uint8))  # a cupboard's flat top: every yaw fits it equally
+
+    def job(front, up="Y", camera=(2.0, 0.4, 0.1), name="frame"):
+        runtime = FakeRuntime()
+        app, _ = served(tmp_path / f"{name}_{front}_{up}", runtime, triposg_front=front, triposg_up=up)
+        with TestClient(app) as client:
+            model = room_model(name, [(0.6, 0.6, 0.6)])
+            assert client.post("/rooms", json=model).status_code == 201
+            meta = meta_for(model["objects"][0], 15000)
+            x, y, z = camera
+            meta["views"][0]["camToBox"] = [1, 0, 0, x, 0, 1, 0, y, 0, 0, 1, z, 0, 0, 0, 1]
+            meta["profile"] = flat
+            return wait_for(client, post_object(client, name, meta, [jpeg()]).json()["jobId"])
+
+    # The camera stood on Unity's +X side of the box.
+    unknown, canonical, view = job("unknown"), job("canonical"), job("view")
+    for status in (unknown, canonical, view):
+        assert status["state"] == "ready" and status["fit"] == 0.0 and status["fitUp"] == "Y"
+    assert unknown["fitYaw"] == 0 and canonical["fitYaw"] == 0
+    # `view`: the mesh's own +Z side is put where the camera stood, at azimuth 90.
+    assert view["fitYaw"] == 90 and view["report"]["yawDegrees"] == 270
+    assert job("view", camera=(0.1, 0.4, -2.0), name="behind")["fitYaw"] == 180
+    assert job("view", camera=(-2.0, 0.4, 0.1), name="left")["fitYaw"] == 270
+    # Only the measured up axis is tried: every candidate of the fit has it.
+    lying = job("unknown", up="Z", name="up")
+    assert lying["fitUp"] == "Z" and {c["up"] for c in lying["report"]["candidates"]} == {"Z"}
+    assert {c["up"] for c in unknown["report"]["candidates"]} == {"Y"}
 
 
 @pytest.mark.skipif(importlib.util.find_spec("torch") is not None,

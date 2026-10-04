@@ -81,6 +81,33 @@ rootObject = 00000000000000000000A000;
         }
 
         [Test]
+        public void Apply_KeepsTheSwiftSettingsAnotherPluginMade()
+        {
+            PBXProject project = Read(Skeleton());
+            project.SetBuildProperty(Framework, "OTHER_SWIFT_FLAGS", "-DOTHER_PLUGIN");
+            project.SetBuildProperty(Framework, "SWIFT_VERSION", "6.0");
+
+            Assert.That(AtlasRoomPlanProject.Apply(project, Framework, Main), Is.True);
+            string flags = project.GetBuildPropertyForAnyConfig(Framework, "OTHER_SWIFT_FLAGS");
+            StringAssert.Contains("-DOTHER_PLUGIN", flags);
+            StringAssert.Contains("-Xfrontend -disable-autolink-framework -Xfrontend RoomPlan", flags);
+            Assert.That(project.GetBuildPropertyForAnyConfig(Framework, "SWIFT_VERSION"), Is.EqualTo("6.0"));
+
+            // A second run adds the flag no second time.
+            string first = project.WriteToString();
+            Assert.That(AtlasRoomPlanProject.Apply(project, Framework, Main), Is.False);
+            Assert.That(project.WriteToString(), Is.EqualTo(first));
+            Assert.That(Count(first, "-disable-autolink-framework"), Is.EqualTo(Count(Applied(), "-disable-autolink-framework")));
+        }
+
+        static string Applied()
+        {
+            PBXProject project = Read(Skeleton());
+            AtlasRoomPlanProject.Apply(project, Framework, Main);
+            return project.WriteToString();
+        }
+
+        [Test]
         public void Apply_TwiceGivesTheSameProjectAsOnce()
         {
             PBXProject once = Read(Skeleton());

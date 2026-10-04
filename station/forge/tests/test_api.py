@@ -325,7 +325,9 @@ def test_debug_keep_is_reported_and_keeps_crops(tmp_path):
         with np.load(folder / "raw_view0.npz") as raw:
             assert raw["vertices"].shape[1] == 3 and raw["faces"].shape[1] == 3 and str(raw["decoder"]) == ""
             assert np.abs(raw["vertices"]).max() <= 0.5 + 1e-6  # a unit cube about the origin: not yet the box
-        assert sorted(p.name for p in folder.iterdir()) == ["job.json", "raw_view0.npz", "view0.jpg"]
+        # The record of a job: the crop, the raw mesh, both copies and their reports (no matte: none was made).
+        assert sorted(p.name for p in folder.iterdir()) == ["full.glb", "job.json", "light.glb", "raw_view0.npz",
+                                                            "report.json", "view0.jpg"]
         assert status["state"] == "ready"
 
 
@@ -386,7 +388,7 @@ def test_job_keeps_what_the_phone_sent(tmp_path):
         assert (job.triTarget, job.requestedTriTarget) == (15000, 15000)
         assert (job.triTargetLight, job.requestedTriTargetLight) == (4000, 4000)
         assert base64.b64decode(job.profile) == bytes([77]) * 256
-        assert job.views[0]["camToBox"][14] == 1.5 and list(job.views[0]["intrinsics"]) == [600.0, 600.0, 384.0, 384.0]
+        assert job.views[0]["camToBox"][11] == 1.5 and list(job.views[0]["intrinsics"]) == [600.0, 600.0, 384.0, 384.0]
 
         # An older phone sends neither: no profile, and the light target is the room's own.
         old = forge.job(post_object(client, "sent", meta_for(chair, 5000), [jpeg(seed=2)]).json()["jobId"])
@@ -400,11 +402,16 @@ def test_job_keeps_what_the_phone_sent(tmp_path):
         forge.pause(False)
         done = [wait_for(client, j["jobId"]) for j in client.get("/jobs", params={"room": "sent"}).json()]
         assert [s["state"] for s in done] == ["ready"] * 3
-        # No light copy, no fit and no attempts are made yet: their members are absent.
         for status in done:
-            assert not {"lightSha256", "lightUrl", "lightBytes", "lightTris", "fit", "fitYaw", "fitUp", "attempts",
-                        "decoder"} & set(status)
-        assert done[2]["tris"] <= 3200
+            # One generation each, a light copy each, and how the mesh was turned.
+            assert status["attempts"] == 1 and status["fitUp"] == "Y" and status["fitYaw"] in (0, 90, 180, 270)
+            assert len(status["lightSha256"]) == 64 and status["lightUrl"].endswith(status["lightSha256"] + ".glb")
+            assert 1500 <= status["lightTris"] <= status["triTargetLight"] and "decoder" not in status
+            assert client.get(status["lightUrl"]).status_code == 200
+        # Only the job with a profile has a fit; a flat profile is no table, and the report says so.
+        assert done[0]["fit"] > 0.2 and done[0]["report"]["fit"] == done[0]["fit"]
+        assert "fit" not in done[1] and done[1]["report"]["fit"] is None and "fit" not in done[2]
+        assert done[2]["tris"] <= 3200 and done[2]["lightTris"] <= 1600
 
     # What was sent is on disk with the job, so it survives a restart.
     with TestClient(create_app(make_settings(tmp_path / "data"))) as client:

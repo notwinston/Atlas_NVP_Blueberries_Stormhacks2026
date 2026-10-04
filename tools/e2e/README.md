@@ -87,11 +87,15 @@ it too. The exit code is 0 only when every check passed.
      the phone's own `cmd` event appears in the Hub's `events.jsonl`, and the `State` digest shows the effect;
      a parameter set under lock answers 423;
    - `sample_4x5_table` and `budget_room` are posted to the Forge with one photo per object (the phone's own
-     multipart body); all 13 jobs become ready; each GLB is downloaded, its SHA-256 compared with its name,
-     and measured by a reader written here with nothing but `struct` (1,500 to 5,000 triangles and no more
-     than the target, no edge over 0.25 m, within 10 % of the box, base centred, no material or texture, under
-     1 MB), then by the Forge's own `forge.validator`; the room total is under 60,000 triangles; the same
-     crop uploaded again is a cache hit; the Forge keeps no crop file.
+     multipart body). The targets the Forge answers are compared with the reference rule
+     (`tools/rooms/roommath.py`, mesh design section 5.4): a full target per object and the room's light
+     target. All 13 jobs become ready, each after one generation. Both copies of each mesh are downloaded,
+     their SHA-256 compared with their names, and measured by a reader written here with nothing but `struct`:
+     the full copy 1,500 to 15,000 triangles and under 2 MB, the light copy 1,500 to 5,000 and under 1 MB,
+     each no more than its target, no edge over 0.25 m, within 10 % of the box, base centred, no material or
+     texture; then by the Forge's own `forge.validator` at the copy's level. The room's full copies hold at
+     most 120,000 triangles and its light copies at most 60,000; the same crop uploaded again is a cache
+     hit; the Forge keeps no crop file.
 4. Turns each walked recording of `recordings/` (the two laps, the wall approach, the jump) into a Hub recording (`station_rehearsal.py record`), plays it through
    ReplayPhone, and reads the session's `state.bin` back from the Hub: every recorded pose is there, bit for
    bit and in order.
@@ -101,8 +105,10 @@ it too. The exit code is 0 only when every check passed.
 
 What it cannot prove: the phone is ReplayPhone, which shares the link sources with the app but none of its
 frame. The link runs over UDP on the loopback interface, so nothing is learnt about Wi-Fi. The meshes come from
-the procedural generator; TripoSG has never run. The Console is only fetched, not operated (see
-`station/console-tests` for that).
+the procedural generator; TripoSG has never run. The fixture rooms carry no object profile and the Forge here
+has no matting model, so the fit to the scan, the attempts on a poor fit and the colours per face are not
+exercised (the Forge's own tests do that). The procedural shapes are small, so every light copy here is the
+same file as its full copy. The Console is only fetched, not operated (see `station/console-tests` for that).
 
 ## 3. The gates (`tools/e2e/gates.py`)
 
