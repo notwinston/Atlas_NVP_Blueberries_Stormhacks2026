@@ -2281,6 +2281,7 @@ thread owns the GPU.
 | `FORGE_POOR_FIT` | 0.20 | A fit to the scanned profile above this is poor, in fractions of the box height: the next photo is then tried (§3.7) |
 | `FORGE_TRIPOSG_REPO`, `_WEIGHTS`, `_STEPS`, `_GUIDANCE`, `_SEED`, `_FP16`; `FORGE_RMBG_WEIGHTS` | empty, empty, 50, 7.0, 42, on; empty | TripoSG checkout, weights and inference settings |
 | `FORGE_TRIPOSG_FALLBACK_DECODER` | on | `1`, `true`, `yes` or `on` (anything else is off): when TripoSG's default decoder fails, generate once more with `use_flash_decoder=False` (§3.8) |
+| `FORGE_TRIPOSG_INSIDE_OUT` | off | `1`, `true`, `yes` or `on`: the adapter reverses the winding of every face TripoSG returns. For use when the first run (`tools/first_run.py` reports `outwards`, `inwards` or `unclear` from the sign of the volume the faces enclose) finds the mesh inside out. TripoSG's two decoders may wind differently, and one flag cannot serve both: not known |
 | `FORGE_TRIPOSG_UP`, `FORGE_TRIPOSG_FRONT` | `Y`, `unknown` | Which axis of TripoSG's own frame is up, and where the front of its meshes is (§3.8). Read and checked at start-up; another value stops it |
 
 Appendix B.4, with status codes. Errors are FastAPI's `{"detail": …}`: a sentence, or for a body that does not
@@ -2289,7 +2290,7 @@ validate the list of what is wrong.
 | Route | Request | Response |
 |---|---|---|
 | `GET /health` | – | 200 `{"ok": true, "gpu": true, "gpuName": "NVIDIA GeForce RTX 5070", "queue": 2, "pipelineVer": "3", "debugKeep": false, "generator": "triposg", "generatorReady": true, "generatorNote": "", "hosted": false, "hostedEnabled": false, "matting": "rembg"}`. Answers at once and never waits for the model. `gpu` is false and `gpuName` null with no CUDA device, and for `triposg` until the model load has imported PyTorch. `queue` counts jobs not yet `ready`, `failed` or `placeholder`. `hostedEnabled` is the same flag as `hosted` under its older name. `matting` is `rembg` or `none`. For `triposg`, `generatorReady` is true only after the model has loaded and with a matting model; `generatorNote` is then empty, and otherwise says what is missing or going on (below) |
-| `POST /rooms` | RoomModel JSON (`docs/contracts/roommodel.schema.json`), at most 2 MB. The Forge checks `version` 1, `id`, and each object's `id` (1 … 255, unique) and `size`; at most 64 objects | 201 `{"roomId": "…", "roomHash": "…", "generated": [ids], "placeholders": [ids], "triTarget": 15000, "triTargets": {"4": 15000, "7": 6120}, "triTargetLight": 5000}`, also when the id existed (the record is replaced). 422 when it does not validate; 413 |
+| `POST /rooms` | RoomModel JSON (`docs/contracts/roommodel.schema.json`), at most 2 MB. The Forge checks `version` 1, `id`, and each object's `id` (1 … 255, unique) and `size`, whose three sides must be finite and above zero (else 422, and the room is not stored); at most 64 objects | 201 `{"roomId": "…", "roomHash": "…", "generated": [ids], "placeholders": [ids], "triTarget": 15000, "triTargets": {"4": 15000, "7": 6120}, "triTargetLight": 5000}`, also when the id existed (the record is replaced). 422 when it does not validate; 413 |
 | `PUT /rooms/{roomId}/mesh` | Binary mesh, at most 2 MB | 204; 404; 413. Optional (§7.4); the app does not send it in Phase 1 |
 | `GET /rooms/{roomId}` | – | 200: the exact bytes that were posted; 404 |
 | `DELETE /rooms/{roomId}` | – | 204: the room record, its mesh, its jobs and the GLBs made for it alone, both copies of each, are removed (§13.5); 404 |
@@ -2304,7 +2305,7 @@ The job object of `GET /jobs/…`: `{"jobId", "roomId", "boxId", "state", "sourc
 generator that has two decoders) and `queuePosition` while `queued`. When `ready` it holds the `AssetReady` members
 (`sha256`, `url`, `bytes`, `tris`, `maxEdge`, `bounds`, `palette`), the four light members (`lightSha256`,
 `lightUrl`, `lightBytes`, `lightTris`) when there is a light copy, `fitUp` and `fitYaw` (how clean-up turned the
-mesh, §3.9), `fit` when the job had a profile, `attempts` (the generations made for the object, failed ones
+mesh, §3.9), `fit` when the job had a profile that covers at least 0.10 of the box, `attempts` (the generations made for the object, failed ones
 included; absent for an answer from the cache) and `report` (§3.9). Members with no value are absent, not `null`.
 
 - `roomId` is the RoomModel's `id` (lane C's schema: `[A-Za-z0-9_]{1,40}`). The body is lane C's canonical text
@@ -2326,10 +2327,9 @@ joined by `"; "`: `PyTorch is not installed`; `FORGE_TRIPOSG_REPO does not point
 installed (TripoSG's decoder; it is built from source, see the README)`; `no matting model is installed (rembg; pip
 install -r requirements-gpu.txt)`; `CUDA is not available to PyTorch`; while the worker loads, `PyTorch is being
 imported`, `diso is being imported`, `the weights are being downloaded to <dir>` or `the model is being loaded`; before
-the load has begun, `the model is not loaded yet`, with `, and the weights are not complete (no model_index.json in
-<dir>): they are downloaded first` when that is so; and after a failed load `PyTorch cannot be imported: …`, `diso
+the load has begun, `the model is not loaded yet`, with `, and the weights are not complete (<the gap>): they are downloaded first` when that is so, the gap being `no model_index.json in <dir>` or `a download into <dir> stopped before it was whole`; and after a failed load `PyTorch cannot be imported: …`, `diso
 cannot be imported: …`, `the TripoSG package cannot be imported from <repo>: …`, `the weights could not be downloaded
-to <dir>: …`, `the download left no model_index.json in <dir>`, `the model could not be loaded from <dir>: …` or `the
+to <dir>: …`, `the download left no model_index.json in <dir>`, `the model could not be loaded from <dir>: …` (ending ` (a download into <dir> stopped before it was whole)` when a file is still half-way) or `the
 matting model could not be loaded: …`.
 
 `meta`:
@@ -2345,7 +2345,7 @@ matting model could not be loaded: …`.
 |---|---|---|
 | `boxId` | int 1 … 255 | `RoomObject.Id` |
 | `category` | string, at most 32 characters | `ObjectCategories.Name(Category)`: `couch`, `table`, … (lane C §6) |
-| `dims` | 3 numbers, m | `RoomObject.Size`: `[w, h, d]` = extent along the box's local X, Y (up), Z |
+| `dims` | 3 numbers, m | `RoomObject.Size`: `[w, h, d]` = extent along the box's local X, Y (up), Z. Each must be finite and above zero, else 422 |
 | `yaw` | number, rad | `RoomObject.Yaw` |
 | `triTarget` | int 1500 … 15000 | The full target of this object: the phone sends its own `RoomObject.TriTarget`, which `ObjectMeshRules.Targets` gave it by the rule of §4.1 (15,000 for an object when few share the budget, 3,000 at the floor). 422 outside the range. The Forge works to the smaller of this and its own figure for the box |
 | `triTargetLight` | int 1500 … 5000, optional | The light copy's target: the phone sends `ObjectMeshRules.LightTarget(n)` = `clamp(60000 ÷ n, 1500, 5000)`, n = objects the client follows. 422 outside the range; `null` reads as absent. An older phone sends none and the Forge uses its own figure for the room |
@@ -2395,7 +2395,7 @@ the generator, view 1 and then view 2 when they exist; any other fit stops. The 
 - **Restart.** Rooms, finished jobs and assets are read back from `data/`. A ready job whose full copy's file is gone
   is `failed`; one whose light copy's file is gone keeps its full copy and loses its light members. A job that was
   waiting or running is marked `failed` (its crops are gone) and the phone sends it again; with `FORGE_DEBUG_KEEP=1`
-  it runs again by itself. A room record from before the furniture budget is planned again.
+  it runs again by itself, with `attempts` 0 and an empty attempt log and timings. A room record from before the furniture budget is planned again.
 - `jobId` is sixteen hexadecimal digits. `pipelineVer` is a version string (`"3"`), part of the cache key and of
   `asset.generator`: raising it makes every earlier cache entry a miss. It was raised to `"2"` when the picture TripoSG
   receives changed and to `"3"` with the fit, the colours and the light copy.
@@ -2461,7 +2461,7 @@ Contract of `generate`:
 
 - **Matting is required.** TripoSG is never given a picture that is not matted. With no matting model, `generatorReady`
   is false and a job fails with `TripoSG cannot run: no matting model is installed …`. A view whose matting fails, whose
-  matte is empty (`the matte is empty: no object was found in the crop`) or holds an object under 16 pixels on its long
+  matte is empty (`the matte is empty: no object was found in the crop`) or holds only specks (`the matte holds only specks: no object was found in the crop`) or holds an object under 16 pixels on its long
   side is not sent; the error names the view and ends `triposg is given matted pictures only` where matting was missing.
 - **The picture is framed** as TripoSG's own script frames it (`imaging.frame_for_generator`): detached pieces of
   matte under 0.5 % of it are left out, the crop is cut to the bounding box of the matte, put on white, and padded to a
@@ -2470,7 +2470,7 @@ Contract of `generate`:
   and its matte stay in memory for the colours (§3.9).
 - **The model is loaded when the service starts**, by the worker, so the first object does not pay for it; the matting
   model is loaded then too. Jobs wait in `queued` meanwhile. A load that failed is tried again by each generation.
-  The weights are complete when their folder holds `model_index.json`; a folder without it is downloaded again.
+  The weights count as incomplete when their folder has no `model_index.json` or holds a half-way file (`*.incomplete` under its download cache); such a folder is downloaded (resumed) before the load. `model_index.json` alone proves nothing, since it arrives first: a folder that shows no gap and still does not load is fetched once and read again, and a load that fails then says if a file is still half-way. After a download that returned without an error the load is tried whatever lies in the folder.
 - **Two decoders.** The default (`flash`, which needs `diso`) is called exactly as upstream calls it. If it raises or
   returns nothing, the object is generated once more with `use_flash_decoder=False` (`hierarchical`) when
   `FORGE_TRIPOSG_FALLBACK_DECODER` is on, and the job reports which decoder made its mesh. Both calls share the one
@@ -2484,7 +2484,7 @@ ignored, and describe TripoSG's meshes only; for any other generator clean-up as
 | Setting | Values | Meaning |
 |---|---|---|
 | `triposg_up` (default `Y`) | `Y`, `Z`, `X` | The axis of TripoSG's own output frame that points up. It is the **only** up axis clean-up tries for a TripoSG mesh (another generator's meshes are tried with all three). Not measured: `Y` is the guess of the design |
-| `triposg_front` (default `unknown`) | `canonical`, `view`, `unknown` | Where the front of a TripoSG mesh is. `canonical`: on the mesh's own +Z, so clean-up prefers no turn. `view`: towards the camera of the photo, so it prefers the turn that puts the mesh's +Z side on the side of the box that view 0's `camToBox` places the camera on. `unknown`: nothing is preferred. It breaks ties of the fit (§3.9) and, for a job with no profile, decides alone among the orientations the bounds allow; with `unknown` and no profile the bounds choose |
+| `triposg_front` (default `unknown`) | `canonical`, `view`, `unknown` | Where the front of a TripoSG mesh is. `canonical`: on the mesh's own +Z, so clean-up prefers no turn. `view`: towards the camera of the photo, so it prefers the turn that puts the mesh's +Z side on the side of the box that the `camToBox` of the view the mesh was generated from (not always view 0) places the camera on. `unknown`: nothing is preferred. It breaks ties of the fit (§3.9) and, for a job with no profile, decides alone among the orientations the bounds allow; with `unknown` and no profile the bounds choose |
 
 **Unmeasured.** TripoSG's output frame has never been seen, so both settings are guesses until the first run on the
 Station; `tools/first_run.py --analyse FILE --up-axis Y|Z|X --yaw-degrees 0|90|180|270` and the raw output kept under
@@ -2534,7 +2534,7 @@ and so the same hash.
   axes); then the lower score. The last two rules are an addition of the Forge **(decided here)**: a scan seen from
   above cannot tell a cube on a plinth from the same cube on its side, so another up axis must fit better by 0.02 to be
   taken.
-- **No profile**, or a profile in which the scan saw no cell: the turn `triposg_front` prefers decides among the
+- **No profile**, or a profile in which the scan saw no cell or covers under 0.10 of the box (`attempts.MIN_FIT_COVERAGE`, the fit's own floor, not the phone's 0.30 for facing and first shapes; the job still stores the profile the phone sent): the turn `triposg_front` prefers decides among the
   candidates the bounds allow (the one with the better bounds, if several); with nothing preferred, the bounds alone
   choose, as before the fit existed: the up axis among Y, Z and X and a yaw of 0° or 90° (bounds cannot tell 0° from
   180°), the generator's own frame winning unless another fits the box clearly better. `fit` is then absent.
@@ -2564,7 +2564,7 @@ colour of the matted `view0`, as before.
    line up, and the object takes one cell, from the dominant colour of the matted `view0`.
 
 `AssetReady.palette` and `report.colour.paletteIndex` are the cell that covers the most surface. The shader, the
-palette and the vertex format do not change. Only faces wound counter-clockwise seen from outside count as seen.
+palette and the vertex format do not change. Only faces wound counter-clockwise seen from outside count as seen (`FORGE_TRIPOSG_INSIDE_OUT`, §3.6, turns a mesh that is not).
 
 **The light copy** (step 11; decision M10). It is made when the job has a light target: the full copy's surface is
 decimated to the light target (1,500 … 5,000), put back on the full copy's bounds so that both fill the same box, then
@@ -2597,7 +2597,7 @@ copy; the numbers here are an example, made up for the layout:
 | `upAxis`, `fitUp` | The axis of the generator's frame taken as up: `Y`, `Z` or `X` |
 | `yawDegrees` | Clean-up's own quarter turns, 0, 90, 180 or 270, right-handed in the GLB frame |
 | `fitYaw` | The same turn as a yaw in Unity's box frame, `(360 − yawDegrees) mod 360` |
-| `fit` | The score of the chosen orientation, 4 decimals; `null` for a job with no profile |
+| `fit` | The score of the chosen orientation, 4 decimals; `null` for a job with no profile or one that covers under 0.10 |
 | `candidates` | Every orientation that was scored, best first: `{up, yawDegrees, fit, stretch}`; empty with no profile |
 | `colour` | `paletteIndex`, `name`, `rgb`: the cell that covers the most surface; `photoRgb`: the dominant colour of the photo; `cells`: `[{index, share}]`, every cell of the mesh and the share of the surface it covers, largest first; `views`: how many photos the colours were read from, 0 meaning one cell from the dominant colour |
 | `violations` | What the validator found at the copy's level; empty for a published copy |
@@ -2627,8 +2627,7 @@ the attempt log. None of it enters git (`station/forge/.gitignore` holds `data/`
   total. `truth.json` (`rooms/<roomId>/truth.json` of the data folder unless `--truth` names another) is written by
   hand: for each object id the side of its box, as the RoomModel holds it, that is really the front (`+Z`, `+X`, `-Z`,
   `-X`) or `none`; the phone's facing is right when it is `+Z`. Thresholds: 90 % facing, median fit 0.12, 60 s per
-  attempt, poor fit 0.20. Exit 0 when no line that could be judged failed, 1 when one did, 2 when the record cannot be
-  read. It reads a mesh's front by the phone's own profile rule, so an object that is flat on top is named, not
+  attempt, poor fit 0.20. A line gives a verdict only for what the record settles: with nothing measured (for example no object has a profile), or with objects missing from `truth.json` or without a fit or a timed attempt, it gives none and names them. The exit code is 0 only when every line that asks for something passes, 1 when one fails, 3 when none fails and one is not settled (the last line prints `N of M lines pass, … no pass`), 2 when the record cannot be read. `--json` carries `cached` on each job and `asks` on each line; a box is judged by the last job that generated, a cached answer standing in only when it is the box's only job. It reads a mesh's front by the phone's own profile rule, so an object that is flat on top is named, not
   judged. `--pictures` writes the scan's profile beside the mesh's for each object.
 
 ## 3.10 Forge: the hosted fallback and its disclosure
@@ -3929,7 +3928,7 @@ L22 of §7.6.
     unmeasured: the time and memory per object, the size of the raw mesh, whether `diso` builds and runs on the Station,
     and whether the fallback decoder works where the default one fails.
 12. **The thresholds are starting values.** The Forge's poor fit 0.20 (`FORGE_POOR_FIT`) and tie width 0.02
-    (`FIT_TIE`), the colour step's 6 cells, 2 % merge and speckle share of one half, and the phone's coverage of 0.30
+    (`FIT_TIE`), the fit's coverage floor of 0.10, the colour step's 6 cells, 2 % merge and speckle share of one half, and the phone's coverage of 0.30
     for a first shape are set by reading, not by measurement. Checks M1 and M2 of the mesh design, on a recorded
     team scan (`tools/meshcheck/check.py`), are where they are tuned.
 13. **What is unproven on a real generated mesh.** The fit has been seen only on perfect or clean cases: how a TripoSG
@@ -3938,7 +3937,8 @@ L22 of §7.6.
     photographed at an angle, nor how a raw mesh of several hundred thousand triangles behaves when reduced. The colours
     are proven only where the mesh matches the photo and the camera is exact: not with ARKit's intrinsics and
     `camToBox`, not with rembg on a real room photo, not with a mesh that does not line up with the photo, and a mesh
-    wound clockwise from outside would be seen by no photo (one cell, and an inverted baked shade). What collapsing a
+    wound clockwise from outside would be seen by no photo (one cell, and an inverted baked shade): the first run reads
+    the winding, and `FORGE_TRIPOSG_INSIDE_OUT` turns it round, but TripoSG's two decoders may wind differently. What collapsing a
     real 15,000-triangle chair to its light target does to its legs is not known; the light copy is left out when it
     cannot keep every edge under 0.25 m. Three generations of one object take three times its time on the Station, and
     with 32 objects of poor fit the queue is long; neither is measured.

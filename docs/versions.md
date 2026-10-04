@@ -59,7 +59,7 @@ order: `station/forge/README.md`, "First run on the Station".
 | `diso` | 0.1.4, TripoSG's default decoder (CC BY-NC 4.0) | Its own command, after PyTorch: `pip install setuptools wheel`, then `pip install --no-build-isolation diso==0.1.4` with `CUDA_HOME` set. It cannot be in a requirements file: its build script imports PyTorch | Never built. Replaced by a stub on the build Mac |
 | rembg | `rembg[gpu]==2.0.69` | `requirements-gpu.txt`; what it brings (onnxruntime-gpu and others) is not pinned: write the installed versions here | `rembg[cpu]==2.0.69` cut TripoSG's four example pictures on the build Mac, 0.2 s each; the `gpu` extra was never installed |
 | TripoSG | Commit `fc5c40990181e2a756c4e0b1c2f4d6b5202faf8c` (18 April 2025, its last) | `FORGE_TRIPOSG_REPO` points at the checkout | Imported on the build Mac; never run |
-| TripoSG weights | `VAST-AI/TripoSG`, 7.95 GB; complete when the folder holds `model_index.json` | `FORGE_TRIPOSG_WEIGHTS`, or `<checkout>/pretrained_weights/TripoSG` | Never downloaded |
+| TripoSG weights | `VAST-AI/TripoSG`, 7.95 GB; counted incomplete when the folder lacks `model_index.json` or holds a half-way (`*.incomplete`) file; the marker alone proves nothing | `FORGE_TRIPOSG_WEIGHTS`, or `<checkout>/pretrained_weights/TripoSG` | Never downloaded |
 
 What really ran on the build Mac, on 4 October 2026, in a throw-away Python 3.11.16 environment (deleted): the lock file,
 `requirements-triposg.txt`, PyTorch 2.7.1 for the processor and `rembg[cpu]==2.0.69` were installed, and the TripoSG package
