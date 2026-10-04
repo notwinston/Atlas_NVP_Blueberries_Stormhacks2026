@@ -1,4 +1,5 @@
 .venv/
 data/
+first_run*/
 __pycache__/
 .pytest_cache/
