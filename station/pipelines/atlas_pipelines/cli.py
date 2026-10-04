@@ -1,4 +1,5 @@
-"""The ``atlas`` console script: ``atlas case <step> [options]`` (Master Plan 10.2.4).
+"""The ``atlas`` console script: ``atlas case <step> [options]`` (Master Plan 10.2.4);
+also ``atlas pilot export|check`` (P2-D13, see pilot.py).
 
 Steps are discovered, not registered: every module ``atlas_pipelines/steps/<name>.py`` whose file
 name does not start with an underscore is one step. To add a step, add a file; never edit this one.
@@ -37,7 +38,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Sequence
 
-from . import __version__, paths
+from . import __version__, paths, pilot
 
 DEFAULT_CASE = paths.REAL_CASE
 
@@ -114,6 +115,7 @@ def build_parser() -> argparse.ArgumentParser:
         _add_common(sp, DEFAULT_CASE)
         sp.set_defaults(_run=_broken_runner(module_name, error))
     parser.set_defaults(_case_parser=case)
+    pilot.add_pilot_parser(groups)  # `atlas pilot export|check` (P2-D13, atlas_pipelines/pilot.py)
     return parser
 
 
@@ -123,6 +125,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.group is None:
         parser.print_help()
         return 2
+    if args.group == "pilot":
+        return pilot.run_from_args(args)
     if getattr(args, "step", None) is None:
         args._case_parser.print_help()
         return 2

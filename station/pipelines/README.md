@@ -201,3 +201,38 @@ Tests that need the TCIA data download it themselves into `.cache/` when it is m
 The C# tests build `csharp/` with `dotnet build`; without a .NET SDK they are reported as skipped, with the reason.
 
 Regenerate the P2-D01 fixture after a deliberate contract change: `.venv/bin/python tests/fixtures/make_p2_d01_fixture.py`.
+
+## Pilot export (P2-D13)
+
+`atlas pilot export <events.jsonl> [<events.jsonl> ...] [--out lung_summary.csv]` turns the Hub's per-session
+`events.jsonl` (docs/contracts/lane-d-link.md 2.6 and 3.4) into `lung_summary.csv`, one row per input file.
+`atlas pilot check <events.jsonl>` lists which of the 7 Core event types of Master Plan 10.2.6 (`m2_place`, `m4_gate`,
+`m3_pick`, `fork`, `compass_choice`, `sky_pick`, `gc_check`) are present and exits 1, naming the missing ones, when any
+is absent. Code: `atlas_pipelines/pilot.py`; test: `tests/test_p2_d13_pilot.py`, which runs on a SYNTHETIC session from
+`tests/synthetic_pilot_session.py` (test data only, never real people).
+
+Rules: unknown event types and bad lines are skipped (counted in `n_bad_lines`); a measure with no data is an empty
+cell, never a guess; `*_n` counts are 0 when absent. Floats have 12 significant digits, booleans are 1/0, line ends
+are `\n`, so the same input gives the same bytes. "last" below means the last such event in file order.
+
+| Column(s) | Meaning |
+|---|---|
+| `session_id` | `session` event `sessionId`, else the file's parent folder name |
+| `n_events`, `n_bad_lines`, `duration_s`, `core_types_present` | parsed lines, skipped lines, last minus first phone `t_us` in seconds (Hub events excluded), Core types seen (0..7) |
+| `m2_n`, `m2_hit_last`, `m2_hit_max`, `m2_best` | M2 placements; `hit` (H = rho(p)) of the last and the largest; largest `best` |
+| `m4_n`, `m4_start`, `m4_len`, `m4_duty`, `m4_itv_cm3`, `m4_best_cm3`, `m4_gap_cm3`, `m4_ratio` | M4 gates; the last gate's fields; gap = itv - best (0 is the best arc of equal duty); ratio = best / itv (1 is the best arc) |
+| `m3_n`, `m3_before_n`, `m3_before_correct_n`, `m3_after_n`, `m3_after_correct_n` | M3 picks, split by `when` = before / after beat f |
+| `fork_n`, `fork_correct_n`, `fork_beacon_n`, `fork_beacon_correct_n`, `fork_nobeacon_n`, `fork_nobeacon_correct_n` | forks and correct ones, overall and split by `beacon_shown` |
+| `fork_t_sum_s`, `fork_t_mean_s`, `fork_t_max_s` | sum, mean, max of `t_s` |
+| `compass_n`, `compass_choice`, `compass_correct` | Two Compasses: count, `choice` of the last (text), `correct` (1/0). Data members assumed: the plan names the event only |
+| `sky_n`, `sky_az_deg`, `sky_el_deg`, `sky_clear_mm`, `sky_robust` | needle sky: picks; the last pick's fields |
+| `gc_n`, `gc_angle_sum_deg` | Gauss-Bonnet check: count; `angle_sum_deg` of the last |
+| `walked_m` | `dist_m` of the last `walked` event (event name and member assumed: the plan logs a walked distance but fixes no name) |
+| `fms_n`, `fms_mean`, `fms_min`, `fms_max`, `fms_last`, `fms_per_min` | Hub `fms` scores (0..20): count, mean, min, max, last; count per minute of session |
+| `seq` | Single Ease Question score (1..7) of the last `seq` event |
+| `m1_n`, `m1_C`, `m1_O`, `m1_pass` | Extended tier M1: fits; last coverage C, excess O, C >= 0.95 |
+
+Event names are matched case-insensitively with a leading `lung.` dropped and `.` read as `_`. The plan's names contain an
+underscore, which the contract's name rule (`[a-z][A-Za-z0-9]*` per segment) does not allow: to be settled with lane D when
+the phone code is written; the exporter accepts both spellings. A pilot claim ("in a pilot with n people, hit fraction
+changed from X to Y") is made from many rows of this table by whoever runs the pilot; the exporter makes no claim.
