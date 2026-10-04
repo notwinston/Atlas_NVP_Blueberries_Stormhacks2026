@@ -1,7 +1,6 @@
-using Atlas.Spaces.Glued;
 using Unity.Mathematics;
 
-namespace Atlas.Blades.Playground.Exhibits
+namespace Atlas.Spaces.Glued
 {
     /// <summary>
     /// The look-up of the 3-torus task (Master Plan task P2-C14): in T3 the walker's copy stands one vertical

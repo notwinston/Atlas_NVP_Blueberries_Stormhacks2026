@@ -127,6 +127,13 @@ namespace Atlas.Spaces.Glued
         public const int SpaceDrawCalls = 150, SpaceTriangles = 250000;
         public const int SpaceTorus3DrawCalls = 160, SpaceTorus3Triangles = 250000;
 
+        /// <summary>
+        /// The info card and the gluing sign at their worst, per eye: the plate with the three gluing buttons, the plan
+        /// with the walker's dot, three blocks of text, the button words (one text), the "seen it" button, one gaze ring
+        /// and one dwell bar. The triangles are counted generously for the text (two per glyph, about 320 glyphs).
+        /// </summary>
+        public const int CardDrawCallsPerEye = 9, CardTrianglesPerEye = 1500;
+
         /// <summary>Triangles of the cell mesh for this cell size, with the kit landmark when one is given.</summary>
         public static int CellTriangles(float sizeX, float sizeZ, MeshData landmark = null)
         {
@@ -178,13 +185,16 @@ namespace Atlas.Spaces.Glued
                            avatars, prompt ? PromptTriangles() : 0);
         }
 
-        /// <summary>The whole space: the lattice plus the room drawn once, walls as kerbs, its own floor hidden.</summary>
+        /// <summary>
+        /// The whole space: the lattice plus the room drawn once, walls as kerbs, its own floor hidden, and the info card
+        /// with the gluing sign.
+        /// </summary>
         public static GluedDrawCost Space(RoomModel room, GluedLayout layout, int copies, bool avatars = true)
         {
             GluedDrawCost cost = Lattice(room, layout, copies, avatars);
             RoomDrawCost shell = RoomBudget.Estimate(room, WallMode.Kerbs, false, true);
-            cost.DrawCallsPerEye += shell.DrawCallsPerEye;
-            cost.TrianglesPerEye += shell.TrianglesPerEye;
+            cost.DrawCallsPerEye += shell.DrawCallsPerEye + CardDrawCallsPerEye;
+            cost.TrianglesPerEye += shell.TrianglesPerEye + CardTrianglesPerEye;
             return cost;
         }
 
