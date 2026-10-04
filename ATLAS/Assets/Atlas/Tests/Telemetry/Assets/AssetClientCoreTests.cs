@@ -1019,6 +1019,32 @@ namespace Atlas.Telemetry.Tests
         }
 
         [Test]
+        public void Asset_LightCopy_WithTheSameHashAsTheFullOne_NeedsNoSecondDownload()
+        {
+            byte[] full = TestGlb.Make(4000);
+            var rig = new Rig();
+            RoomModel room = LightRoom();
+            rig.Scan(room);
+            rig.Run(2.0);
+            string sha = rig.Forge.Finish(1, full);
+            rig.Forge.JobOf(1).LightSha = sha;                       // the Forge published one file as both copies
+            rig.Run(6.0);
+            AssertFullStillShown(rig);
+            Assert.That(rig.Forge.CountOf("GET /assets/"), Is.EqualTo(1), "one download");
+            Assert.That(rig.Room.Calls.FindAll(c => c.StartsWith("light")), Is.Empty, "no light placement, no refusal");
+            Assert.That(rig.Events.CountOf("light_same", 1), Is.EqualTo(1));
+            Assert.That(rig.Events.Last("light_same", 1).GetString("reason"), Is.EqualTo("same_as_full"));
+            Assert.That(room.Objects[0].AssetHashLight, Is.EqualTo(sha), "the hash is recorded");
+            Assert.That(rig.Events.CountOf("light_dropped") + rig.Events.CountOf("light_deferred"), Is.EqualTo(0));
+
+            // Built again: still nothing separate to fetch.
+            rig.Room.Shown.Clear();
+            rig.Core.RoomBuilt(room);
+            rig.Run(4.0);
+            Assert.That(rig.Room.Calls.FindAll(c => c.StartsWith("light")), Is.Empty);
+        }
+
+        [Test]
         public void Asset_LightCopy_WithAWrongHash_IsDroppedAndTheFullMeshStays()
         {
             string claimed = new string('e', 64);
