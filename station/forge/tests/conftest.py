@@ -114,6 +114,15 @@ def object_alpha(image: Image.Image) -> Image.Image:
     return Image.fromarray(((np.abs(pixels - 96).max(axis=2) > 24) * 255).astype(np.uint8))
 
 
+@pytest.fixture(autouse=True)
+def _no_matting_model(monkeypatch):
+    """No matting model, whatever this machine has installed: every test starts from the same Forge.
+
+    A test that wants one asks for the ``matting`` fixture, which stands in for rembg.
+    """
+    monkeypatch.setattr(imaging, "matting_method", lambda: "none")
+
+
 @pytest.fixture
 def matting(monkeypatch):
     """A matting model is installed: stands in for rembg, which the tests do not have."""
