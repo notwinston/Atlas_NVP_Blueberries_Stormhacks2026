@@ -803,9 +803,8 @@ class AreaGraph:
             blocks = all((pg.ancestors(m) & src) for m in members_y)
             (self.solid if blocks else self.dashed).add((x, y))
         self.solid_r = {(x, y) for (x, y) in self.solid if not self._path(x, y, self.solid, skip=(x, y))}
-        # a dashed edge is left out when the same need already follows from other edges
-        both = self.solid | self.dashed
-        self.dashed_r = {(x, y) for (x, y) in self.dashed if not self._path(x, y, both, skip=(x, y))}
+        # a need is listed unless the area already starts after that source anyway
+        self.dashed_r = {(x, y) for (x, y) in self.dashed if not self._path(x, y, self.solid)}
         # step of an area: the first step in which at least one of its tasks can begin.
         # A task sits one step after the latest area or gate it waits for.
         entry, depth = set(self.entry), {}

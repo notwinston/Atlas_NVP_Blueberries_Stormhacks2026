@@ -1510,7 +1510,7 @@ Three facts from the graph:
 
 #### 9.5.2 Overview: the work areas
 
-Sixteen work areas, a handful per lane. An area is the unit a person plans in ("hyperbolic world generation", "Bump Guard", "Forge: live furniture"); the tasks inside it (§9.5.4 onwards) are the units handed to agents. An arrow means the area at its head needs something from the area at its tail.
+Sixteen work areas, a handful per lane. An area is the unit a person plans in, about the size of "Implement hyperbolic terrain generation" or "Build the Forge: object photos to furniture meshes"; the tasks inside it (§9.5.4 onwards) are the units handed to agents. An arrow means the area at its head needs something from the area at its tail.
 
 ```mermaid
 flowchart LR
