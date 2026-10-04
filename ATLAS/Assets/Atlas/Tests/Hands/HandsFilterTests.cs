@@ -264,6 +264,7 @@ namespace Atlas.Hands.Tests
             var jitter = new float[runs];
             var tipJitter = new float[runs];
             var steps = new List<float>();
+            var offsets = new List<float>();
             float3 truth = Right(RightWrist).PalmCentre;
             float3 tipTruth = Right(RightWrist).Joints[HandJoint.IndexTip];
             for (int run = 0; run < runs; run++)
@@ -285,6 +286,7 @@ namespace Atlas.Hands.Tests
                     ref readonly TrackedHand h = ref rig.Filter.Hand(HandSide.Right);
                     palmSum += math.lengthsq(h.PalmCentre - truth);
                     tipSum += math.lengthsq(h.World[HandJoint.IndexTip] - tipTruth);
+                    if (run == 0) offsets.Add(math.distance(h.PalmCentre, truth));
                     if (n > 0) steps.Add(math.distance(h.PalmCentre, previous));
                     previous = h.PalmCentre;
                     n++;
@@ -297,9 +299,12 @@ namespace Atlas.Hands.Tests
             float p95 = jitter[(int)Math.Ceiling(0.95 * runs) - 1];
             float tipP95 = tipJitter[(int)Math.Ceiling(0.95 * runs) - 1];
             steps.Sort();
+            offsets.Sort();
             float stepP95 = steps[(int)(0.95 * steps.Count)];
+            float offsetP95 = offsets[(int)(0.95 * offsets.Count)];
             TestContext.WriteLine("palm jitter, per axis, 95th percentile of " + runs + " runs: " + (p95 * 1000f) + " mm; index tip " + (tipP95 * 1000f)
-                + " mm; frame-to-frame palm step, 95th percentile: " + (stepP95 * 1000f) + " mm");
+                + " mm; frame-to-frame palm step, 95th percentile: " + (stepP95 * 1000f) + " mm; distance of the palm from its true place, 95th percentile of one run: "
+                + (offsetP95 * 1000f) + " mm");
             Assert.That(p95, Is.LessThan(0.001f), "2 mm of noise in, under 1 mm of jitter out (palm)");
             Assert.That(tipP95, Is.LessThan(0.002f), "a fingertip is no noisier than the noise put in (index tip)");
         }
