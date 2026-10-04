@@ -212,6 +212,46 @@ namespace Atlas.Hands.Tests
                                            HandsLiftFixture.Uniform(random, 30f, 60f), HandsLiftFixture.Uniform(random, -20f, 20f));
         }
 
+        /// <summary>
+        /// A hand LiDAR has only just seen (a few detections, far fewer than the walker's scale needs) reaches
+        /// in to press: the size branch runs on spans LiDAR showed on this hand, so a press can still fire.
+        /// </summary>
+        [Test]
+        public void Hands_Lift_PressReach_BeforeTheHandIsMeasured()
+        {
+            for (int pass = 0; pass < 6; pass++)
+            {
+                var random = new Random(70 + pass);
+                var lift = new HandsLift();
+                HandSide side = pass % 2 == 0 ? HandSide.Right : HandSide.Left;
+                JointSet palmSpace = HandsLiftFixture.Shape(HandsLiftShape.Pointing, side);
+                float3x3 orientation = PressOrientation(random);
+                float3 lateral = new float3(HandsLiftFixture.Uniform(random, -0.03f, 0.03f), HandsLiftFixture.Uniform(random, -0.03f, 0.01f), 0f);
+                HandsDetection detection = default(HandsDetection);
+                int sequence = 0;
+                double time = 5.0;
+                float lowest = 1f, worstTip = 0f;
+                // Six detections square-on at 0.45 m, then the palm moves to 0.28 m in 17 mm steps and rests there.
+                for (int frame = 0; frame < 28; frame++)
+                {
+                    float palmDistance = frame < 6 ? 0.45f : math.max(0.45f - (frame - 5) * 0.017f, 0.28f);
+                    JointSet truth = HandsLiftFixture.Place(in palmSpace, orientation, lateral + new float3(0f, 0f, palmDistance));
+                    time += 1.0 / 30.0;
+                    HandsLiftFixture.Detect(ref detection, ++sequence, time, in truth, side, random, palmDepth: palmDistance >= HandsConstants.DepthMinMetres);
+                    Assert.That(lift.TryLift(in detection, 0, out ObservedHand hand), Is.True);
+                    if (frame >= 6)
+                    {
+                        lowest = math.min(lowest, hand.Confidence);
+                        worstTip = math.max(worstTip, math.distance(hand.Joints[HandJoint.IndexTip], truth[HandJoint.IndexTip]));
+                    }
+                }
+                Assert.That(lift.ScaleMeasured, Is.False, "the hand is still unmeasured");
+                TestContext.WriteLine("pass {0}: lowest confidence {1:0.00}, worst fingertip {2:0.0} mm", pass, lowest, worstTip * 1000f);
+                Assert.That(lowest, Is.GreaterThanOrEqualTo(HandsConstants.InteractConfidence), "a press must be able to fire");
+                Assert.That(worstTip, Is.LessThanOrEqualTo(0.030f), "index fingertip while pressing");
+            }
+        }
+
         [Test]
         public void Hands_Lift_PressReach()
         {

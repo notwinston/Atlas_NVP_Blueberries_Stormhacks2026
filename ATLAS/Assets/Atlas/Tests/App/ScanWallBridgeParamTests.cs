@@ -28,14 +28,14 @@ namespace Atlas.App.Tests
         }
 
         [Test]
-        public void Parameter_IsABoolDeclaredOnInGroupScan_AfterTheTeamPrescanOne()
+        public void Parameter_IsABoolDeclaredOffInGroupScan_AfterTheTeamPrescanOne()
         {
             var registry = new ParamRegistry();
             AppParams.DeclareScan(registry, new ScanSettings());
             ParamEntry entry = registry.Find(AppParams.ScanWallBridge);
             Assert.That(AppParams.ScanWallBridge, Is.EqualTo("scan.wallBridge"));
             Assert.That(entry, Is.Not.Null);
-            Assert.That(entry.Bool, Is.True, "on by default");
+            Assert.That(entry.Bool, Is.False, "off by default: a second RoomPlan capture crashed the scan on the device");
             Assert.That(entry.Id, Is.EqualTo(registry.Find(AppParams.TeamPrescan).Id + 1));
         }
 
@@ -47,14 +47,14 @@ namespace Atlas.App.Tests
             var registry = new ParamRegistry();
             AppParams.DeclareScan(registry, new ScanSettings());
             registry.PushAll();
-            Assert.That(WallBridge.Enabled, Is.True, "default on");
+            Assert.That(WallBridge.Enabled, Is.False, "default off");
 
-            registry.Set(AppParams.ScanWallBridge, 0f);
-            Assert.That(WallBridge.Enabled, Is.False);
             int asked = bridge.AvailableAsked;
             registry.Set(AppParams.ScanWallBridge, 1f);
             Assert.That(WallBridge.Enabled, Is.True);
             Assert.That(bridge.AvailableAsked, Is.GreaterThan(asked));
+            registry.Set(AppParams.ScanWallBridge, 0f);
+            Assert.That(WallBridge.Enabled, Is.False);
         }
 
         [Test]

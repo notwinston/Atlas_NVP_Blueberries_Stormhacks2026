@@ -145,21 +145,15 @@ namespace Atlas.Spaces.Tests
             Assert.That(math.length(actual - expected), Is.LessThan(tolerance), what + ": " + actual + " against " + expected);
         }
 
-        // The body as it stands today: the numbers are those of GluedAvatarMesh.Build before the hands existed.
-        static void AssertIsTodaysBody(AtlasMeshBuilder data)
-        {
-            Assert.That(data.VertexCount, Is.EqualTo(241));
-            Assert.That(data.IndexCount, Is.EqualTo(546));
-            Assert.That(data.TriangleCount, Is.EqualTo(182));
-            Assert.That(data.BoundsMin.x, Is.EqualTo(-0.29f).Within(1e-6f));
-            Assert.That(data.BoundsMin.y, Is.EqualTo(-0.78f).Within(1e-6f));
-            Assert.That(data.BoundsMin.z, Is.EqualTo(-0.185f).Within(1e-6f));
-            Assert.That(data.BoundsMax.x, Is.EqualTo(0.29f).Within(1e-6f));
-            Assert.That(data.BoundsMax.y, Is.EqualTo(0.105f).Within(1e-6f));
-            Assert.That(data.BoundsMax.z, Is.EqualTo(0.055f).Within(1e-6f));
+        // A body that leaves room for the full hands (a few boxes, no hand in it): the built-in body (216 triangles) leaves
+        // room only for the reduced ones, so the tests of the three-bone fingers give the rig this one instead.
+        internal static MeshData FullHandsBody() { return GluedHandsLevelTests.Body(6); }
 
+        // The rig's body as it stands before any hand: the same vertices and indices as GluedAvatarMesh.Build gives.
+        static void AssertIsTodaysBody(AtlasMeshBuilder data, MeshData kit = null)
+        {
             var fresh = new AtlasMeshBuilder();
-            GluedAvatarMesh.Build(fresh);
+            GluedAvatarMesh.Build(fresh, kit);
             Assert.That(data.VertexCount, Is.EqualTo(fresh.VertexCount));
             for (int v = 0; v < fresh.VertexCount; v++)
             {
@@ -171,12 +165,21 @@ namespace Atlas.Spaces.Tests
             for (int i = 0; i < fresh.IndexCount; i++) Assert.That(data.Indices[i], Is.EqualTo(fresh.Indices[i]), "index " + i);
         }
 
+        // The built-in body's own figures: the neon cube head, the visor and the two controller sticks, 18 boxes.
+        static void AssertIsTheBuiltInBody(AtlasMeshBuilder data)
+        {
+            Assert.That(data.VertexCount, Is.EqualTo(432));
+            Assert.That(data.IndexCount, Is.EqualTo(648));
+            Assert.That(data.TriangleCount, Is.EqualTo(216));
+            AssertIsTodaysBody(data);
+        }
+
         [Test]
         public void WithNoService_TheMeshIsTodaysBody_AndNothingIsUploaded()
         {
             var rig = new GluedAvatarRig();
-            AssertIsTodaysBody(rig.Data);
-            Assert.That(rig.BodyVertexCount, Is.EqualTo(241));
+            AssertIsTheBuiltInBody(rig.Data);
+            Assert.That(rig.BodyVertexCount, Is.EqualTo(432));
             Assert.That(rig.HandCount, Is.EqualTo(0));
             for (int frame = 0; frame < 100; frame++)
                 Assert.That(rig.Update(null, Head + new float3(0.01f * frame, 0f, 0f), 0.01f * frame), Is.False, "frame " + frame);
@@ -193,13 +196,15 @@ namespace Atlas.Spaces.Tests
             for (int j = 0; j < HandJoints.Count; j++) hands.Joints[0][j] = hands.Joints[1][j] = new float3(0.1f * j, 1f, 0.5f);
             for (int frame = 0; frame < 100; frame++)
                 Assert.That(rig.Update(hands, Head, 0.01f * frame), Is.False, "frame " + frame);
-            AssertIsTodaysBody(rig.Data);
+            AssertIsTheBuiltInBody(rig.Data);
         }
 
         [Test]
         public void TwoTrackedHands_StayWithinTheAvatarBudget_AndTheGeometryIsSound()
         {
-            var rig = new GluedAvatarRig();
+            MeshData body = FullHandsBody();
+            var rig = new GluedAvatarRig(body);
+            Assert.That(rig.Level, Is.EqualTo(GluedHandsLevel.Full));
             foreach (float curl in new[] { 0f, 0.5f, 1f })
             {
                 GluedFakeHands hands = BothHands(Head, Heading, curl, out _, out _);
@@ -207,10 +212,10 @@ namespace Atlas.Spaces.Tests
                 AtlasMeshBuilder data = rig.Data;
 
                 Assert.That(rig.HandCount, Is.EqualTo(2));
-                Assert.That(data.TriangleCount, Is.EqualTo(182 + 2 * GluedAvatarHands.TrianglesPerHand));
-                Assert.That(data.TriangleCount, Is.EqualTo(GluedBudget.AvatarTriangles()), "the accounting counts what is built");
+                Assert.That(data.TriangleCount, Is.EqualTo(body.TriangleCount + 2 * GluedAvatarHands.TrianglesPerHand));
+                Assert.That(data.TriangleCount, Is.EqualTo(GluedBudget.AvatarTriangles(body)), "the accounting counts what is built");
                 Assert.That(data.TriangleCount, Is.LessThanOrEqualTo(AtlasMeshBudget.SelfAvatar));
-                Assert.That(data.VertexCount, Is.EqualTo(241 + 2 * GluedAvatarHands.VerticesPerHand));
+                Assert.That(data.VertexCount, Is.EqualTo(body.VertexCount + 2 * GluedAvatarHands.VerticesPerHand));
                 Assert.That(data.IndexCount, Is.EqualTo(3 * data.TriangleCount));
                 GluedBudgetTests.AssertFacesAgreeWithNormals(data);
 
@@ -246,6 +251,24 @@ namespace Atlas.Spaces.Tests
         }
 
         [Test]
+        public void OnTheBuiltInBody_TwoTrackedHandsAreTheReducedOnes_AndTheAvatarIs384()
+        {
+            var rig = new GluedAvatarRig();
+            Assert.That(rig.Level, Is.EqualTo(GluedHandsLevel.Reduced), "216 + 408 is over 600, 216 + 168 is not");
+            foreach (float curl in new[] { 0f, 1f })
+            {
+                GluedFakeHands hands = BothHands(Head, Heading, curl, out _, out _);
+                Assert.That(rig.Update(hands, Head, Heading), Is.True, "curl " + curl);
+                Assert.That(rig.HandCount, Is.EqualTo(2));
+                Assert.That(rig.Data.TriangleCount, Is.EqualTo(216 + 168));
+                Assert.That(rig.Data.TriangleCount, Is.EqualTo(GluedBudget.AvatarTriangles()));
+                Assert.That(rig.Data.VertexCount, Is.EqualTo(432 + 2 * GluedAvatarHands.ReducedVerticesPerHand));
+                Assert.That(rig.Data.TriangleCount, Is.LessThanOrEqualTo(AtlasMeshBudget.SelfAvatar));
+                GluedBudgetTests.AssertFacesAgreeWithNormals(rig.Data, 3 * 216);
+            }
+        }
+
+        [Test]
         public void TheGeometryOfAHand_RunsFromJointToJoint_WhereIHandsSaysTheyAre_InTheAvatarFrame()
         {
             // The hand is placed in the avatar's frame and moved into the room by the head and the heading, so a
@@ -253,7 +276,7 @@ namespace Atlas.Spaces.Tests
             foreach (float heading in new[] { 0.7f, -2.4f, 3.0f, 0f })
             {
                 float3 head = new float3(-1.4f, 1.1f, 2.3f);
-                var rig = new GluedAvatarRig();
+                var rig = new GluedAvatarRig(FullHandsBody());
                 GluedFakeHands hands = BothHands(head, heading, 0.4f, out float3[] left, out float3[] right);
                 Assert.That(GluedAvatarPose.Heading(HeadRotation(heading)), Is.EqualTo(heading).Within(1e-5f));
                 Assert.That(rig.Update(hands, head, GluedAvatarPose.Heading(HeadRotation(heading))), Is.True);
@@ -301,7 +324,7 @@ namespace Atlas.Spaces.Tests
             float2 leftCell = AtlasPalette.Uv(AtlasPalette.AvatarLeft), rightCell = AtlasPalette.Uv(AtlasPalette.AvatarRight);
             GluedFakeHands both = BothHands(Head, Heading, 0f, out float3[] left, out float3[] right);
 
-            var rig = new GluedAvatarRig();
+            var rig = new GluedAvatarRig(FullHandsBody());
             Assert.That(rig.Update(both, Head, Heading), Is.True);
             int body = rig.BodyVertexCount;
             for (int v = body; v < body + GluedAvatarHands.VerticesPerHand; v++)
@@ -316,7 +339,7 @@ namespace Atlas.Spaces.Tests
             Assert.That(rig.Shows(HandSide.Left), Is.True);
             Assert.That(rig.Shows(HandSide.Right), Is.False);
             Assert.That(rig.Data.VertexCount, Is.EqualTo(body + GluedAvatarHands.VerticesPerHand));
-            Assert.That(rig.Data.TriangleCount, Is.EqualTo(182 + GluedAvatarHands.TrianglesPerHand));
+            Assert.That(rig.Data.TriangleCount, Is.EqualTo(rig.BodyIndexCount / 3 + GluedAvatarHands.TrianglesPerHand));
             for (int v = body; v < rig.Data.VertexCount; v++)
                 Assert.That(math.all(rig.Data.Vertices[v].Uv0 == leftCell), Is.True, "vertex " + v);
 
@@ -338,7 +361,7 @@ namespace Atlas.Spaces.Tests
             var rig = new GluedAvatarRig();
             GluedFakeHands hands = BothHands(Head, Heading, 0f, out _, out _);
             Assert.That(rig.Update(hands, Head, Heading), Is.True);
-            Assert.That(rig.Data.VertexCount, Is.GreaterThan(241));
+            Assert.That(rig.Data.VertexCount, Is.GreaterThan(rig.BodyVertexCount));
 
             hands.Lose(HandSide.Left);
             hands.Lose(HandSide.Right);
@@ -436,7 +459,7 @@ namespace Atlas.Spaces.Tests
         [Test]
         public void TheHandsScale_WithTheWalkersHand_AndAScaleOfNothingMeansTheTemplate()
         {
-            var rig = new GluedAvatarRig();
+            var rig = new GluedAvatarRig(FullHandsBody());
             GluedFakeHands hands = BothHands(Head, Heading, 0f, out _, out _);
             rig.Update(hands, Head, Heading);
             int tip = rig.BodyVertexCount + (2 + 3 * 1 + 2) * GluedAvatarHands.VerticesPerBox + 4;     // the end cap of the index fingertip
@@ -460,13 +483,16 @@ namespace Atlas.Spaces.Tests
             // The hands are in the mesh once. Every copy shows them through its own transform, as GluedSpace sets it
             // (position and heading from GluedAvatarPose.InCell, a scale of -1 along X when mirrored), and that must put
             // every point of the hands where the gluing puts the walker's real one.
-            float2 leftCell = AtlasPalette.Uv(AtlasPalette.AvatarLeft);
+            float2 leftCell = AtlasPalette.Uv(GluedAvatarMesh.LeftHand);
+            // The side of the walker's left is read off the built-in body's left controller, the hand-held thing on that side.
+            var look = new AtlasMeshBuilder();
+            GluedAvatarMesh.Build(look);
             foreach (GluedLayout layout in new[] { GluedLayout.Torus, GluedLayout.Klein, GluedLayout.Torus3 })
             {
                 var lattice = new GluedLattice(2.4, 3.4, layout);
                 GluedCell walker = lattice.CellOf(Head);
                 float heading = GluedAvatarPose.Heading(HeadRotation(Heading));
-                var rig = new GluedAvatarRig();
+                var rig = new GluedAvatarRig(FullHandsBody());
                 GluedFakeHands hands = BothHands(Head, heading, 0.3f, out float3[] left, out float3[] right);
                 Assert.That(rig.Update(hands, Head, heading), Is.True);
                 AtlasMeshBuilder data = rig.Data;
@@ -496,18 +522,18 @@ namespace Atlas.Spaces.Tests
                         }
                     }
 
-                    // The left hand stays with the left arm: on the same side of the copy as the avatar's left shoulder,
+                    // The left hand stays with the left arm: on the same side of the copy as the avatar's left controller,
                     // and that side is the other one in a mirrored copy.
                     quaternion turn = quaternion.RotateY(copyHeading);
                     float3 copyRight = math.mul(turn, new float3(1f, 0f, 0f));
                     float3 copyHead = CopyPoint(float3.zero, position, copyHeading, mirrored);
                     float shoulder = 0f;
-                    for (int v = 0; v < rig.BodyVertexCount; v++)
+                    for (int v = 0; v < look.VertexCount; v++)
                     {
-                        if (!math.all(data.Vertices[v].Uv0 == leftCell)) continue;
-                        shoulder += math.dot(CopyPoint(data.Vertices[v].Position, position, copyHeading, mirrored) - copyHead, copyRight);
+                        if (!math.all(look.Vertices[v].Uv0 == leftCell)) continue;
+                        shoulder += math.dot(CopyPoint(look.Vertices[v].Position, position, copyHeading, mirrored) - copyHead, copyRight);
                     }
-                    Assert.That(Math.Sign(shoulder), Is.EqualTo(mirrored ? 1 : -1), layout + " " + cell + ": the left arm's side");
+                    Assert.That(Math.Sign(shoulder), Is.EqualTo(mirrored ? 1 : -1), layout + " " + cell + ": the left controller's side");
                     for (int v = rig.BodyVertexCount; v < rig.BodyVertexCount + GluedAvatarHands.VerticesPerHand; v++)
                     {
                         float sideOfCopy = math.dot(CopyPoint(data.Vertices[v].Position, position, copyHeading, mirrored) - copyHead, copyRight);
@@ -555,8 +581,10 @@ namespace Atlas.Spaces.Tests
         [Test]
         public void TheAccounting_CountsTheAvatarWithBothHands_ForEveryPose()
         {
-            Assert.That(GluedBudget.AvatarBodyTriangles(), Is.EqualTo(182));
-            Assert.That(GluedBudget.AvatarHandsTriangles(), Is.EqualTo(2 * GluedAvatarHands.TrianglesPerHand));
+            // The built-in body, 216 triangles, leaves room only for the reduced hands (decision R15): 216 + 168 = 384.
+            Assert.That(GluedBudget.AvatarBodyTriangles(), Is.EqualTo(216));
+            Assert.That(GluedBudget.AvatarHandsTriangles(), Is.EqualTo(2 * GluedAvatarHands.ReducedTrianglesPerHand));
+            Assert.That(GluedBudget.AvatarTriangles(), Is.EqualTo(384));
             Assert.That(GluedBudget.AvatarTriangles(), Is.EqualTo(GluedBudget.AvatarBodyTriangles() + GluedBudget.AvatarHandsTriangles()));
             Assert.That(GluedBudget.AvatarTriangles(), Is.LessThanOrEqualTo(AtlasMeshBudget.SelfAvatar));
 
@@ -568,6 +596,10 @@ namespace Atlas.Spaces.Tests
                 rig.Update(hands, Head, Heading);
                 Assert.That(rig.Data.TriangleCount, Is.EqualTo(GluedBudget.AvatarTriangles()), "curl " + curl);
             }
+            // A body that leaves room for the full hands is counted with them, 204 triangles a hand.
+            MeshData small = FullHandsBody();
+            Assert.That(GluedBudget.AvatarHandsTriangles(small), Is.EqualTo(2 * GluedAvatarHands.TrianglesPerHand));
+            Assert.That(GluedBudget.AvatarTriangles(small), Is.EqualTo(small.TriangleCount + 408));
             Assert.That(GluedAvatarHands.TrianglesPerHand, Is.EqualTo(GluedAvatarHands.BoxesPerHand * 12));
             Assert.That(GluedAvatarHands.BoxesPerHand, Is.EqualTo(1 + 1 + 5 * 3), "a palm, a forearm and five fingers of three segments");
         }

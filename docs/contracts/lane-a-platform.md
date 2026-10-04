@@ -1704,7 +1704,7 @@ Every shader sits in a `Resources` folder, so a player build includes it with no
   `Resources.Load<Shader>("AtlasSurface")` and `("AtlasBackground")` (`AtlasLook.LoadSurfaceShader`,
   `LoadBackgroundShader`), `("AtlasPortalMask")` (`PortalRenderer.MaskShaderResource`), `("AtlasLensBlit")`
   (`LensBlit.ShaderResource`), `("AtlasHexFlip")` (`HexTransition`) and `("AtlasNearText")` (`NearText.ShaderResource`,
-  `App/Menu/NearText.cs`). There is no shader-set asset; `Shader.Find` is only the lens blit's second try
+  `Rendering/NearText.cs`). There is no shader-set asset; `Shader.Find` is only the lens blit's second try
   (U §9). **No other lane loads `Atlas/Surface` or creates a material of it.** Materials come from
   `MaterialPool`.
 - `Atlas/NearText` exists for one reason. The text

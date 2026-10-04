@@ -6,7 +6,7 @@
 |---|---|
 | Date | 4 October 2026 |
 | Status | Implemented on branch `tracked-hands`. Verified headless: the assembly rules, the three build configurations and every test assembly pass (§9.1). Not yet run in the Unity Editor and not yet run on a phone. `hands.enabled` is off by default; `hands.editor` switches the Editor's mouse-and-keys source on |
-| Written against | `tracked-hands` at `515d14c` (4 October). Line numbers are of that commit. The first version of this document was written against `main` at `b039c33`, before any code. Decisions R13, R14 and R15 and the end-to-end tests were being built while this revision was written: they are described as decided, and the tests named in §9.1 hold their measured results |
+| Written against | `tracked-hands` at `515d14c` (4 October). Line numbers are of that commit. The first version of this document was written against `main` at `b039c33`, before any code. Decisions R13, R14 and R15 and the end-to-end tests were being built while this revision was written: they are described as decided, and the tests named in §9.1 hold their measured results. The branch now includes `main` as of `1ba2838` (the Glued interface's new look, the Network Atlas, the wall bridge off by default, the Small Planet's furniture). Where a State column says `515d14c`, it is the state of the branch now |
 | Scope | The phone app (`ATLAS/`). The Station gets events only |
 | How it is built | Two new assemblies, `Atlas.Hands` and `Atlas.Hands.ARKit`, one native plugin, new files in `Atlas.World`, `Atlas.Input` and `Atlas.Safety`, plus a short list of additive edits to existing files (§3.7). Built on `tracked-hands`, off `main` |
 | Read with | Master Plan §0.5 (rules), §4.10 (Bump Guard), §6.3 (the frame), §8 (look and budgets). The earlier, never-built hand design is in the Engineering Spec §4.5, §6.8 and §7.1 |
@@ -120,10 +120,10 @@ Hardware confirmed by the lead: the headset is strapped and both hands are free.
 |---|---|---|
 | R1 | No `InputSource.Hands`. A touch fires its gaze target through the same `Fire` as the dwell, with `InputSource.Gaze`. A pinch with a target under the gaze fires that target at once, also as `InputSource.Gaze`; with nothing under the gaze it fires nothing. The hands log `hands.touch` and `hands.pinch` themselves | §6.2, §6.3, §8.1 |
 | R2 | Loss timing: a lost hand keeps its pose at full opacity for 0.25 s, then fades over 0.15 s, and is no longer tracked at 0.40 s | §4.4, §5.4 |
-| R3 | Reach is measured from the rear camera: 0.48 m by default, 0.40 to 0.60 m. A pressing palm is nearer than LiDAR's 0.32 m, so the lift's size branch stays usable: confidence 0.7 once the walker's hand is measured, and nothing jumps where LiDAR ends | §4.3, §6.1 |
+| R3 | Reach is measured from the rear camera: 0.48 m by default, 0.40 to 0.60 m. A pressing palm is nearer than LiDAR's 0.32 m, so the lift's size branch stays usable: confidence 0.7 once the walker's hand is measured or LiDAR has lately shown this hand, and nothing jumps where LiDAR ends | §4.3, §6.1 |
 | R4 | Bump Guard's young-cell rule counts from the time a cell was first stamped. Every limit of the mask is enforced inside `Atlas.Safety` against `BumpConstants`, whatever the builder did | §7.1 |
 | R5 | Sphere gaze targets are pressable: a sphere is pressed as a disc through its centre facing the head | §6.2 |
-| R6 | Dwell pauses near a finger: while a trusted fingertip is within 0.20 m of a target, the dwell on that target does not advance. A touch that fires resets the dwell and repeat timers as the lever does | §6.2 |
+| R6 | Dwell pauses near a finger. While a trusted fingertip within 0.20 m of a target is still coming nearer it (by 1 cm within the last 1 s), or is pressing it, the dwell on that target does not advance. A fingertip that has come no nearer for 1 s is resting, and the dwell runs on. A touch that fires resets the dwell and repeat timers as the lever does | §6.2 |
 | R7 | Near text needs a depth-tested font shader: `Atlas/NearText` is the built-in font shader with `ZTest LEqual` | §6.1 |
 | R8 | The gate's "head comes from the AR camera" row reads `IPosePipeline.Source.DrivesRig`. The Editor's mouse-and-keys source is available only while `hands.editor` is on. `hands.enabled` defaults to false | §3.5, §8.2 |
 | R9 | The upload and after-frame hooks have no safety net in the frame loop, so the hands catch their own exceptions there, switch off for the session and log once | §3.3 |
@@ -132,7 +132,7 @@ Hardware confirmed by the lead: the headset is strapped and both hands are free.
 | R12 | A touch presses with the unpredicted fingertip. The drawn hand keeps its prediction | §4.4, §6.2 |
 | R13 | Near returns must be seen twice (H17). In a hands session a dynamic cell made by a depth return nearer than 0.80 m does not count for Bump Guard until it is hit again 0.15 s or more after its first hit; a pending cell with no hit for 0.10 s starts again. Outside a session nothing changes, bit for bit | §7.1 |
 | R14 | The forearm strip of a mask region has its own depth gate: the palm's depth plus 0.05 m, never beyond 0.80 m. The hand's rectangle keeps the palm's depth plus 0.20 m | §7.1 |
-| R15 | Copies of the walker show hands with the kit avatar too. Where the body leaves no room for both full hands inside the avatar's 600 triangles, the hands are appended at a reduced level: forearm, palm and one box for each finger | §5.6 |
+| R15 | Copies of the walker show hands with the kit avatar too. Where the body leaves no room for both full hands inside the avatar's 600 triangles, the hands are appended at a reduced level: forearm, palm and one box for each finger. The built-in body now takes them too | §5.6 |
 
 ### 0.5 What this changes in the Master Plan
 
@@ -140,12 +140,12 @@ Nothing in the Master Plan is edited by this document or by the feature's branch
 
 | Place | Today | Becomes | State at `515d14c` |
 |---|---|---|---|
-| §0.5 rule 5 | "hand tracking is not in the Core build and no task depends on it; if the optional HoloKit spike … is ever merged, hand tracking runs only in a space that uses it" | Hands are an extra route to actions and never the only one. Hand tracking runs in every headset session that has no gamepad, and gives way first on heat | Not applied |
-| §8.6 lever 7 | "Hand tracking, if it is ever added, is on only in a space that uses it" | Hand tracking drops to 15 Hz at Fair and stops at Serious | Not applied |
-| Appendix C.3, HoloKit row | "Optional hand-tracking spike on a branch; needs iOS 18+" | Not used. Hands use Apple Vision through our own plugin (§4) | Not applied |
-| Appendix D.1, "Hand input" row | "Not built" | Points to this document | Not applied |
+| §0.5 rule 5 | "hand tracking is not in the Core build and no task depends on it; if the optional HoloKit spike … is ever merged, hand tracking runs only in a space that uses it" | Hands are an extra route to actions and never the only one. Hand tracking runs in every headset session that has no gamepad, and gives way first on heat | Applied in `ATLAS_Master_Plan.md` |
+| §8.6 lever 7 | "Hand tracking, if it is ever added, is on only in a space that uses it" | Hand tracking drops to 15 Hz at Fair and stops at Serious | Applied in `ATLAS_Master_Plan.md` |
+| Appendix C.3, HoloKit row | "Optional hand-tracking spike on a branch; needs iOS 18+" | Not used. Hands use Apple Vision through our own plugin (§4) | Applied in `ATLAS_Master_Plan.md` |
+| Appendix D.1, "Hand input" row | "Not built" | Points to this document | Applied in `ATLAS_Master_Plan.md` |
 | `docs/contracts/README.md` F1 table | No `Atlas.Hands` row | One row for `Atlas.Hands`, one for `Atlas.Hands.ARKit`, and `Atlas.Hands` added to the App row (§3.2) | Applied (README lines 36 to 38) |
-| `docs/contracts/lane-d-link.md` §1.1 and the event table | No `hands` area, no `hands.*` events | The `hands` parameter group and the events of §8.1 | Not in `515d14c`. The second wave has a package that brings the contract pages up to date |
+| `docs/contracts/lane-d-link.md` §1.1 and the event table | No `hands` area, no `hands.*` events | The `hands` parameter group and the events of §8.1 | Not done for the event table. `lane-d-link.md` now names the `hands` operator command (§8.1); the rest of the contract pages are the second wave's package |
 
 Rules 1, 2, 3, 4 and 6 to 10 stand unchanged, and the feature is checked against each in §7 and §9. Rule 10 (no camera frames are stored) holds: the detector reads each frame in memory and keeps only joint positions and depth samples.
 
@@ -312,7 +312,7 @@ ATLAS/Assets/Atlas/Input/                  new files in Atlas.Input: IHandsInput
                                            Core/HandsTouch.cs, Core/ReticleDepth.cs
 ATLAS/Assets/Atlas/Safety/Core/DepthKernelMask.cs   new file in Atlas.Safety: the mask as the depth kernel reads it
 ATLAS/Assets/Atlas/Spaces/Glued/GluedAvatarHands.cs new file: the copies' hands
-ATLAS/Assets/Atlas/App/Menu/NearText.cs    the depth-tested text material of near panels, with its shader
+ATLAS/Assets/Atlas/Rendering/NearText.cs   the depth-tested text material of near panels, with its shader
                                            Rendering/Shaders/Resources/AtlasNearText.shader
 ATLAS/Assets/Atlas/Tests/Hands/            Atlas.Hands.Tests   (engine-free tests; picked up by tools/headless/verify.py)
 recordings/hands_*.handlog                 three synthetic hand logs
@@ -357,7 +357,7 @@ The order as the composition root sets it (`App/AtlasApp.cs`):
 
 Input and rendering therefore see the same hands in the same frame, and Bump Guard sees the mask that belongs to the depth image it is about to read.
 
-**Faults (R9).** A sense hook that throws is reported once by the frame loop and the frame goes on (`FrameLoopCore.cs:244-256`). The hands do not rely on that. `HandsRuntime.Sense` catches any exception of its own, switches the hands off for the session, clears every output (no hand, no fingertip, no mask, panels far) and logs `hands.fault` (`Hands/HandsRuntime.cs:232-249, 512-544`). The frame loop has no net under its upload and after-frame hooks, so `HandsUploadStep` and `HandsAfterFrameStep` each catch their own exceptions and do the same (`Hands/HandsInstaller.cs:173-225`). A fault can therefore never leave a stale hand on screen or a stale mask in front of Bump Guard. A faulted runtime stays off until the app restarts. A mask source that throws does not stop Bump Guard either: the guard step counts it and Bump Guard runs on the unmasked frame (`App/Frame/FrameSteps.cs:106-130`).
+**Faults (R9).** A sense hook that throws is reported once by the frame loop and the frame goes on (`FrameLoopCore.cs:244-256`). The hands do not rely on that. `HandsRuntime.Sense` catches any exception of its own, switches the hands off for the session, clears every output (no hand, no fingertip, no mask, panels far) and logs `hands.fault` (`Hands/HandsRuntime.cs:232-249, 512-544`). The frame loop has no net under its upload and after-frame hooks, so `HandsUploadStep` and `HandsAfterFrameStep` each catch their own exceptions and do the same (`Hands/HandsInstaller.cs:173-225`). `HandsUploadStep` also disposes the view whenever the runtime is faulted, whether the fault came in sense, in upload or in the after-frame hook, so no hand and no mark stays drawn (`DropView`). A fault can therefore never leave a stale hand on screen or a stale mask in front of Bump Guard. A faulted runtime stays off until the app restarts. A mask source that throws does not stop Bump Guard either: the guard step counts it and Bump Guard runs on the unmasked frame (`App/Frame/FrameSteps.cs:106-130`).
 
 ### 3.4 Coordinate frames and time
 
@@ -537,14 +537,14 @@ New files are not listed here: they are the folders of §3.2 and their tests. Th
 | E7 | `Input/AtlasAction.cs` | `InputSource.Hands = 5` | It was to be a source for the event log | Not made (R1). No source is added |
 | E8 | `Input/Core/AtlasInputCore.cs`, `Input/Core/GazeDwell.cs` | `RawInput` gains the fingertips and the pinch edges of this frame (`RawInput.Hands`); `Tick` runs the touch state machine (`Input/Core/HandsTouch.cs`) against the registered targets and fires through the same `Fire` as gaze and lever, with `InputSource.Gaze`. The dwell takes the bits of targets it must wait on (R6), the pinch tap, and reports the distance along the gaze to the focused target (R10) | Touch and pinch become twins of dwell and lever by construction (§6) | Done |
 | E9 | `Input/AtlasInput.cs`, `Input/GazeReticle.cs` | `AtlasInput` implements the new small interface `IHandsInput`: `SetHands(...)` before the tick, the touch state back after it, and a fired target's label and tag. `IAtlasInput` itself gains no member, so its eight test fakes are untouched. The reticle takes a distance (R10) | The hands need a door into input that costs `IAtlasInput` no member | Done |
-| E10 | `App/Menu/MenuView.cs`, `OnDeviceMenu.cs`, `MenuLayout.cs`; `App/Commands/SpaceSigns.cs`, `SpaceSignsView.cs`; `Spaces/CurvedWalk/CurvedWalkChips.cs`, `CurvedWalkTwins.cs`; `Spaces/SmallPlanet/SmallPlanetDial.cs`, `SmallPlanetSpace.cs` | Each asks `ReachSlots.TryGetNear` where to put itself. When it answers true the view stands at its slot about the near anchor, with its targets scaled. The menu and the signs also move from the head-locked layer to the world layer, where they are depth-tested, and take `Atlas/NearText` for their text | H14 | Done for the menu, its chip, the four signs, Curved Walk's chips and Small Planet's dial. Not done: the Playground's `PromptChip` and caption views stay where they were. Curved Walk's drawn chip text keeps its size (`CurvedWalkHud.cs` was not edited) |
+| E10 | `App/Menu/MenuView.cs`, `OnDeviceMenu.cs`, `MenuLayout.cs`; `App/Commands/SpaceSigns.cs`, `SpaceSignsView.cs`; `Spaces/CurvedWalk/CurvedWalkChips.cs`, `CurvedWalkTwins.cs`; `Spaces/SmallPlanet/SmallPlanetDial.cs`, `SmallPlanetSpace.cs` | Each asks `ReachSlots.TryGetNear` where to put itself. When it answers true the view stands at its slot about the near anchor, with its targets scaled. The menu and the signs also move from the head-locked layer to the world layer, where they are depth-tested, and take `Atlas/NearText` for their text | H14 | Done for the menu, its chip, the four signs, Curved Walk's chips and Small Planet's dial. The Playground's prompt chip and caption chip have slots (§6.1) and `HudPanel.PlaceWithin` places them; they take no `Atlas/NearText` for their text, and do not hide while the menu panel is open. Curved Walk's drawn chip text keeps its size (`CurvedWalkHud.cs` was not edited) |
 | E11 | `App/Menu/MenuModel.cs` | `"hands.enabled"` added to `KillSwitchIds` | Reachable from the on-device menu with the Station off | Done (line 145: the last of 22) |
-| E12 | `Spaces/Glued/GluedSpace.cs`, `GluedMeshes.cs`, `GluedCore.cs` | The shared avatar mesh carries two simple hands while `IHands` reports them (§5.6). `GluedSpace` gains an upload step; the budget counts the avatar with both hands | H6 | Done for the built-in avatar and for a kit avatar that leaves room. R15 adds the reduced hands for one that does not |
+| E12 | `Spaces/Glued/GluedSpace.cs`, `GluedMeshes.cs`, `GluedCore.cs` | The shared avatar mesh carries two simple hands while `IHands` reports them (§5.6). `GluedSpace` gains an upload step; the budget counts the avatar with both hands | H6 | Done. The built-in body (216 triangles since the new look) and the kit avatar (356) both take the reduced hands (R15); full hands need a body of at most 192 triangles, and nothing built in is that small |
 | E13 | `Editor/AtlasUsageText.cs` | The camera usage text mentions hands | The privacy string should say what the camera is used for | Done (line 6) |
-| E14 | Tests that mirror the composition root: `Tests/App/BootstrapUnityTests.cs`, `Tests/App/E2E/RehearsalRig.cs` | Expect the `IHands` service; add the hands step to the rehearsal | So the end-to-end tests run with hands present | Not done at `515d14c`. The end-to-end tests are being added as `Tests/App/E2E/E2EHandsTests.cs`. `Tests/App/BumpGuardStepMaskTests.cs` tests the guard step's seam |
-| E15 | `docs/contracts/lane-d-link.md` (parameter groups, event table), `docs/contracts/lane-c-room.md` (input, the sensor frame, Bump Guard's depth kernel) | The `hands` group, the events of §8.1, `IHandsInput`, `SensorFrame.Mask`, `DepthKernelMask` | Documents kept in step with code | Not in `515d14c`: neither page names hands there, and `recordings/README.md` does not describe the hand logs. The second wave has a package for the contract pages and that README |
-| O1 (optional) | `Spaces/Portal/PortalSpace.cs` | Call `IHands.HideThisFrame()` while a doorway's box mask covers an eye | Removes the one-eye flaw of §7.4 | Not done. Nothing calls `HideThisFrame` yet |
-| O2 (optional) | `station/hub/wwwroot/js/app.js` | Fold `hands.on/off/enter/exit` into a status tile | A nicer Console; no message changes | Not done |
+| E14 | Tests that mirror the composition root: `Tests/App/BootstrapUnityTests.cs`, `Tests/App/E2E/RehearsalRig.cs` | Expect the `IHands` service; add the hands step to the rehearsal | So the end-to-end tests run with hands present | Done. `BootstrapUnityTests` expects `IHands`; the rehearsal rig runs the hands step; `E2E_Hands_*` in `Tests/App/E2E/E2EHandsTests.cs` |
+| E15 | `docs/contracts/lane-d-link.md` (parameter groups, event table), `docs/contracts/lane-c-room.md` (input, the sensor frame, Bump Guard's depth kernel) | The `hands` group, the events of §8.1, `IHandsInput`, `SensorFrame.Mask`, `DepthKernelMask` | Documents kept in step with code | Partly. `lane-d-link.md` names the `hands` operator command. `lane-c-room.md` does not name hands, and `recordings/README.md` does not describe the hand logs. The second wave has a package for the contract pages and that README |
+| O1 (optional) | `Spaces/Portal/PortalSpace.cs` | Call `IHands.HideThisFrame()` while a doorway's box mask covers an eye | Removes the one-eye flaw of §7.4 | Done. `PortalSpace.Tick` calls `IHands.HideThisFrame` while either eye is within 10 cm of a doorway plane inside its outline (10 cm of slack), so the hands vanish in both eyes for those frames and not in one |
+| O2 (optional) | `station/hub/wwwroot/js/app.js` | Fold `hands.on/off/enter/exit` into a status tile | A nicer Console; no message changes | Done, with the operator command (§8.1, §8.2) |
 
 Three of these touch code that other people are changing quickly: `AtlasApp.cs`, `AtlasInputCore.cs` and the menu's views. They are kept to a few lines each for that reason.
 
@@ -611,7 +611,7 @@ Engine-free (`Hands/Core/HandsLift.cs`, with `PalmPlane.cs` and `BoneLengths.cs`
 
 - *Tilt.* For 1 s after a valid plane the tilt is carried over from it, fading linearly into what the picture itself shows. The picture shows it this way: the wrist and the four knuckles lie in one plane of known shape, so their picture is that shape under a linear map whose larger stretch is the true scale and whose smaller is the scale times the cosine of the tilt. A second pass allows for perspective, and what the picture's noise could explain is given back, so a palm near square reads square. Of the two tilts that look alike, the one nearer the last detection's is taken; without one, the wrist is taken to be nearer than the knuckles, as on a hand reaching out. Only with fewer than three palm joints is the palm assumed to face the camera.
 - *Distance.* Two spans are measured, the palm's width (index knuckle to little-finger knuckle) and its length (wrist to middle knuckle), each on a plane of that tilt. Each gives a distance, and the smaller is taken: tilt that was not allowed for can only shorten a span in the picture, which makes its estimate too far. With neither span seen there is no hand. The spans in metres are the ones LiDAR last showed on that hand, fading into the walker's own (the template's until the hand has been measured).
-- *Confidence.* The palm's term is 0.5 in this branch until the walker's hand has been measured, which is below what touch and the mask require, and 0.7 afterwards, so that a press can still fire.
+- *Confidence.* The palm's term is 0.7 whenever the spans in use are the walker's measured ones, or ones LiDAR showed on this hand within `PlaneMemorySeconds` (1 s), or while the palm glides. It is 0.5 only for a hand LiDAR never showed (or not for over 1 s) while the walker is unmeasured. 0.5 is below what touch and the mask require; 0.7 lets a press fire.
 
 The other direction has its own rule. When LiDAR takes over from the size branch, as it does for a palm coming out to press, the palm starts where its size had it and glides to LiDAR's plane over 0.2 s. Nothing jumps at 0.32 m, coming or going.
 
@@ -646,14 +646,14 @@ Two more things the phone will show. Until the walker has held an open hand squa
 
 ### 4.4 Filtering, prediction and loss
 
-Detections arrive 30 or 15 times a second, and are expected about 70 to 110 ms after the light hit the sensor (exposure, ARKit's delivery, the wait for a tick, the request itself, the wait for the next frame, then display). Frames are drawn 60 times a second. Engine-free, in `Hands/Core/HandsFilter.cs` and `OneEuro.cs`. The sense step hands the filter every new result, also one with no hand in it, because that is how a loss is known.
+Detections arrive 30 or 15 times a second, and are expected about 70 to 110 ms after the light hit the sensor (exposure, ARKit's delivery, the wait for a tick, the request itself, the wait for the next frame, then display). A result age of 70 to 110 ms is normal pipeline latency, not a signal for the governor of §7.3. Frames are drawn 60 times a second. Engine-free, in `Hands/Core/HandsFilter.cs` and `OneEuro.cs`. The sense step hands the filter every new result, also one with no hand in it, because that is how a loss is known.
 
 1. **Associate.** Each detection is matched to the existing hand whose predicted palm is nearest, within 20 cm; with two hands, the pairing with the least total distance. Otherwise it starts a new hand.
 2. **Filter.** A One-Euro filter (Casiez et al., 2012) on the palm's position and one on its orientation, both in the room frame, and a quicker one on each joint in the palm's own frame. Filtering in the room frame means head motion is not smoothed, only hand motion; filtering fingers relative to the palm means a moving hand does not smear its fingers. A matched hand that has moved more than 15 cm since the last result starts its filters again: that is not a hand's motion.
 3. **Predict.** Each drawn frame shows the palm moved along its filtered velocity by the pose's age, limited to 50 ms. The prediction fades in with speed, as speed squared over speed squared plus (0.05 m/s) squared: at rest the filtered velocity is detector noise, and predicting along it would make a still hand shimmer. Fingers are not predicted. `Hands_Filter_PredictionBeatsNone` holds the predicted palm to less than 0.7 of the unpredicted error at 0.4 m/s, and to less at 0.1, 0.2 and 0.8 m/s. A touch presses with the fingertip as it is without the prediction (R12): the filter reports how far it moved every joint (`TrackedHand.Predicted`), and the runtime takes that off the press point (§6.2).
 4. **Brief loss (R2).** A hand is lost from the first result that leaves it out, or when no result at all has arrived for 0.2 s. It keeps its pose and coasts on a velocity that decays in 0.1 s. It is drawn at full opacity for 0.25 s, fades over the next 0.15 s, and is no longer tracked at 0.40 s (H8). If it is found again within that time and within 15 cm, the filters carry on; found farther away, they start again.
 5. **Left and right.** Vision labels each hand, and the label can be wrong for a frame. A hand's side is the majority of its last 15 labels, and two hands never share a side: the one with the weaker vote takes the other, a tie going to the side's present holder. A lost hand has no vote against one that is being seen: it is given up, not moved aside. One hand with no label takes the side of the half of the view its palm is in. Because both hands are one colour and the mesh is drawn two-sided (§5.2), a wrong side for a few frames changes nothing a walker can see.
-6. **Confidence.** The lowest of four terms, worked out in the lift: the mean joint confidence; the palm's term (1 from a LiDAR plane, 0.5 or 0.7 from the hand's size, between the two while the palm glides); a term that falls as the lift's bones had to be stretched (1 up to a mean stretch of 5 %, 0 at 30 %); and a term that falls as the palm nears the picture's border (1 at 8 % of the picture's height inside it, 0 at the border).
+6. **Confidence.** The lowest of four terms, worked out in the lift: the mean joint confidence; the palm's term (1 from a LiDAR plane, 0.7 from the hand's size when the spans are measured or LiDAR showed this hand within the last second, 0.5 from the hand's size otherwise, 0.7 while the palm glides); a term that falls as the lift's bones had to be stretched (1 up to a mean stretch of 5 %, 0 at 30 %); and a term that falls as the palm nears the picture's border (1 at 8 % of the picture's height inside it, 0 at the border).
 7. **Too far to be the walker.** A hand whose palm is more than 0.9 m from the camera is ignored. It is someone else's.
 
 ### 4.5 Sources off the phone
@@ -773,15 +773,15 @@ None of this has been done: no hand has been on a screen yet.
 
 ### 5.6 The copies in the Glued rooms
 
-Every copy of the walker is one shared avatar mesh, drawn once per copy per eye, turned by the walker's heading and mirrored in the mirrored rows. The built-in avatar (a head, a torso, shoulders and upper arms in a left and a right colour) is 182 triangles of a 600 budget (`AtlasMeshBudget.SelfAvatar`).
+Every copy of the walker is one shared avatar mesh, drawn once per copy per eye, turned by the walker's heading and mirrored in the mirrored rows. The built-in avatar (a neon cube head, a visor and two controllers, in a left and a right colour) is 216 triangles and 432 vertices of a 600 budget (`AtlasMeshBudget.SelfAvatar`).
 
-- Each frame, in the space's upload (step 6), `GluedSpace` asks `AtlasServices` for `IHands` and `GluedAvatarRig` appends the hands it reports as tracked after the body (`Spaces/Glued/GluedSpace.cs:180-200`, `GluedAvatarHands.cs`). A full hand is 17 closed boxes of 12 triangles: a palm, a forearm from the avatar's elbow to the wrist, and five fingers of three segments. That is 204 triangles a hand, and the built-in avatar with both hands is 590.
+- Each frame, in the space's upload (step 6), `GluedSpace` asks `AtlasServices` for `IHands` and `GluedAvatarRig` appends the hands it reports as tracked after the body (`Spaces/Glued/GluedSpace.cs:180-200`, `GluedAvatarHands.cs`). A full hand is 17 closed boxes of 12 triangles: a palm, a forearm from the avatar's elbow to the wrist, and five fingers of three segments. That is 204 triangles a hand. The forearm starts at `GluedAvatarMesh.Elbow`, kept from the old body; the new body has no arms, and the controllers stay drawn.
 - The joints are expressed in the avatar's own frame: relative to the head and turned back by the walker's heading. Every copy then shows them through its own transform, so mirrored copies wave the other hand with no extra work.
 - Draw calls do not change: the hands ride in the avatar's draw. The mesh is rewritten only when a hand came, went or moved.
 - The copies' hands take the avatar's left and right arm colours, not the neutral colour of the walker's own hands, so the mirror image is visible on them. (H2's "one neutral colour" was asked about the walker's own hands; §12 lists this as the lead's to overrule.)
 - A copy shows a hand whenever it is tracked. The copies share one mesh and one material, so a hand cannot fade there on its own: a lost hand stays posed through the 0.40 s of its grace period and then goes at once.
 - A fault in the hands inside the upload is caught: the copies' hands are off for that visit, the plain body is put back, and one warning beginning `glued.hands` is logged. The walker keeps the room.
-- **The kit avatar (R15).** The Glued rooms now draw a modelled avatar from the kit where one ships. The one that ships is 356 triangles (`Spaces/Glued/Resources/AtlasKit/manifest.json`), which leaves no room for both full hands under 600. At `515d14c` such a body is drawn without hands (`GluedAvatarRig.HandsFit`). R15 changes that: where both full hands do not fit, the hands are appended at a reduced level, forearm, palm and one box for each finger. The Playground's Glued exhibit already tells the walker to "turn round and wave"; with this the copies do.
+- **The reduced hands (R15).** Where both full hands do not fit inside the avatar's 600 triangles, the hands are appended at a reduced level: forearm, palm and one box for each finger, 84 triangles a hand, 168 for two. The built-in body is 216 triangles, so with both full hands (408) it would be 624; it gets the reduced hands, and its worst case is 384. Full hands need a body of at most 192 triangles, and nothing built in uses them now. The kit avatar that ships is 356 triangles (`Spaces/Glued/Resources/AtlasKit/manifest.json`); with the reduced hands it is 524, unchanged. Before R15 such a body was drawn without hands (`GluedAvatarRig.HandsFit`). The Playground's Glued exhibit already tells the walker to "turn round and wave"; with this the copies do.
 
 ### 5.7 Cost
 
@@ -790,7 +790,7 @@ Every copy of the walker is one shared avatar mesh, drawn once per copy per eye,
 | Draw calls: two hands | 4 | 300 |
 | Draw calls: the two marks | Up to 4 | |
 | Triangles: two hands | 3,160 | 500,000 |
-| Triangles: Glued copies' hands at 5 × 5 | 19,584 more inside the existing avatar draws, for 24 copies with both full hands | S1 row: 250,000 |
+| Triangles: Glued copies' hands at 5 × 5 | 8,064 more inside the existing avatar draws, for 24 copies with both reduced hands. The lattice per frame: avatar 384; the 5 × 5 torus 72,256 (64,192 with no hand); the 3-torus at 5, 78,096 (69,360 with no hand) | S1 row: 250,000 |
 | Pooled materials | 2 for hands, 2 for marks | 256 |
 | Skinning, upload | 818 vertices per frame. Measured on the build Mac, not on a phone: under 4 microseconds a hand in an optimised build | The 0.3 ms target of §7.3 |
 
@@ -824,17 +824,18 @@ The consequence: a panel fixed in the view 25° below the line of sight, where t
 
 Looking down at the panel brings it to the middle of both the view and the camera's picture, which is where the hand must be to press it. Gaze dwell works on it for the same reason.
 
-**What goes there** in a hands session (H14): the on-device menu panel, the chip that opens it, the four space signs, the dial and mode chips of Curved Walk and the dial chip of Small Planet. One anchor and one scale do not say where each of them goes, so every target has a named slot about the anchor (`World/Hands/ReachSlots.cs`). The slots are a grid of three columns and three rows in the anchor's plane:
+**What goes there** in a hands session (H14): the on-device menu panel, the chip that opens it, the four space signs, the dial and mode chips of Curved Walk, the dial chip of Small Planet, and the Playground's prompt chip and caption chip. One anchor and one scale do not say where each of them goes, so every target has a named slot about the anchor (`World/Hands/ReachSlots.cs`). The slots are a grid of three columns and three rows in the anchor's plane:
 
 | | Left | Middle | Right |
 |---|---|---|---|
 | Top | Menu chip | (free) | Mode chip |
 | Middle | Dial, down | Home beacon | Dial, up |
 | Bottom | Previous sign | Exhibit sign | Next sign |
+| Above the grid | | Prompt chip, at (0, 2 · pitch); caption chip, at (0, 3 · pitch) | |
 
 Each view lays itself out as before and then asks `ReachSlots.TryGetNear`; on true it stands at its slot with its own layout multiplied by the scale. The scale is 0.75. The grid's pitch is then 14 cm, and the eight small targets, spheres 9 to 10.5 cm across, stand at least 3.7 cm apart. The menu's 0.70 × 0.50 m panel becomes 0.53 × 0.38 m and its rows 3 cm tall on a 3.15 cm pitch. At 0.48 m that is a larger angle than the same panel at 1.2 m, which is what a fingertip needs. No target within reach is smaller than 3 cm across. The open menu panel is centred on the anchor and covers the grid, so everything else hides while it is open; in Curved Walk and Small Planet the chips hide while any menu holds the input. Within reach a sign is a live target only while the signs are drawn, which is while the head looks down past 10° or a sign is being dwelt on: a hidden sign would be an invisible touch target that switches space.
 
-The Playground's prompt chips and captions were not brought within reach. They stay where they were.
+The Playground's prompt chip and caption chip are about 1 m wide and do not fit the grid, so they stand above it: `ReachSlot.PromptChip` at (0, 2 · pitch) and `ReachSlot.CaptionChip` at (0, 3 · pitch), which makes eleven slots (`ReachSlots.Count`). `HudPanel.PlaceWithin` places them. While near they stand on the world layer and their text uses `Atlas/NearText` (now `Rendering/NearText.cs`); they hide while a menu holds the input.
 
 In near mode the menu and the signs are drawn on the world layer with depth testing, not on the always-on-top HUD layer, so a finger in front of a panel covers it and a finger pushed through it disappears behind it. Their text is legacy 3D text, whose built-in shader passes the depth test always; within reach it uses `Atlas/NearText`, the same shader with the depth test on (R7; `Rendering/Shaders/Resources/AtlasNearText.shader`, `App/Menu/NearText.cs`). Things that stay far (the telemetry HUD, the Bump Guard cue) stay on the HUD layer and still draw over everything, hands included. For the cue that is the right way round.
 
@@ -867,13 +868,13 @@ any     --(hand not valid or below confidence 0.6, hands not active, context cha
 | The press plane is 1 cm behind the face | A finger that stops on the face, and a fingertip that overshoots a little, do not fire |
 | A press must be armed from the front | A hand passing through a panel from behind fires nothing. "Seen in front" reaches back 20 cm and half a second, so a quick jab that a 15 Hz detector samples once on the way in is armed all the same |
 | A press must come more in than across | A crossing that went more than twice as far across the face as into it is a sweep, not a press |
-| A press is taken where the fingertip met the press plane | A fingertip that a slow detector next sees right through the panel has pressed what it went through |
-| One target per fingertip: one whose outline it is inside before one it is only beside, then the one whose centre is nearest sideways. The target it is already with keeps it within 5 mm | Adjacent rows cannot both fire, and the ring does not flicker on the line between two rows |
+| A press is taken where the fingertip met the press plane, and goes to the target at that point, not the one it was hovering over | A fingertip that a slow detector next sees right through the panel has pressed what it went through |
+| One target per fingertip: one whose outline it is inside before one it is only beside, then the one whose centre is nearest sideways. The target it is already with keeps it within 5 mm while hovering. A press goes to the target whose outline holds the point where the fingertip met the press plane (no keeping), however steep its way in | Adjacent rows cannot both fire, and the ring does not flicker on the line between two rows |
 | A pressed target cannot be pressed by the other fingertip | Two fingers on one row fire it once |
 | `Once` targets fire once per press. `Repeat` targets fire on the press and then, once they have stayed pressed for 1 s or their own interval if that is longer, at their own interval. `Hold` targets are held, or drive their axis, while pressed | The three modes a gaze target already has (`GazeMode`) keep their meaning. The delay is there because a tap stays in for longer than the usual 0.4 s interval and must step once |
 | Firing goes through the same `Fire` as dwell and lever, with `InputSource.Gaze`, the target's action, tag and callback (R1) | This is what makes touch a twin of dwell. Consumers read `Gaze` as "a target with its tag fired" |
 | A touch that fires resets that target's dwell and repeat timers, as the lever does (R6) | No second firing from the gaze that was resting on it |
-| While a trusted fingertip is within 0.20 m of a target, the dwell on that target does not advance (R6) | The finger is about to do the dwell's job |
+| While a trusted fingertip within 0.20 m of a target is still coming nearer it (by 1 cm within the last 1 s), or is pressing it, the dwell on that target does not advance (R6). A fingertip that has come no nearer for 1 s is resting, and the dwell runs on | The finger is about to do the dwell's job; a finger that is only resting there must not hold the dwell for ever |
 | A touch on a target that dwell, lever or pinch fired less than 0.5 s ago presses without firing | A dwell that completes while the hand is still on its way must not be followed by a second firing |
 | `LookDown` targets, targets farther than 0.75 m from the head, and targets beyond their own `MaxDistance` are never met | They cannot be touched |
 
@@ -912,9 +913,9 @@ A ring that grows as a fingertip nears a surface, and a contact mark where it la
 |---|---|
 | Every space that is registered to the real room, while it is up: Home, Glued, Aligned Cells, Impossible Rooms, the Slicer | The room model's walls (cut at their openings as the room is drawn), the floor inside the room's outline, and the furniture boxes. These are where the real things are, so the finger really stops there |
 | Curved Walk and Small Planet | None. Their walls are not real walls, and the content near the head is faded out by design |
-| Anything else | The interface `IHandsSurface` exists for a space's own touchable surfaces, and `RoomSurfaces` implements it. The runtime does not yet ask for one that a space publishes (H7) |
+| Anything else | The interface `IHandsSurface` is for a space's own touchable surfaces, and `RoomSurfaces` implements it. A space that is a module and implements it publishes its own (below) |
 
-The runtime decides by the space's own flag: surfaces are on while the entered space says it is registered and is running or fading in (`Hands/HandsRuntime.cs:458-473`).
+The runtime decides by the space's own flag: surfaces are on while the entered space says it is registered and is running or fading in (`Hands/HandsRuntime.cs:458-473`). `UpdateSurfaces` also caches the entered module as an `IHandsSurface` while it is running or fading in. World touch tests the room's surfaces and then the space's, and takes the nearer.
 
 **The test.** For each index fingertip that may act and whose hand is more than half visible: the closest point on those surfaces, analytically (flat wall pieces, the floor's outline, oriented boxes; a few dozen at most). The fingertip is the press point of §6.2.
 
@@ -937,7 +938,7 @@ Three short sounds made in code at boot, as the Bump Guard cue makes its own (`H
 | Situation | Result |
 |---|---|
 | Bump Guard level is not `Clear` | Hands fire nothing. Gaze, lever and gamepad work as always |
-| A fingertip presses a target while the gaze dwells on it | One firing, from the touch. The dwell has been waiting since the finger came within 0.20 m, and is reset |
+| A fingertip presses a target while the gaze dwells on it | One firing, from the touch. The dwell has been waiting while the finger came nearer within 0.20 m, and is reset |
 | The dwell fires a target and a fingertip presses it within 0.5 s | One firing, from the dwell. The touch presses without firing |
 | A pinch closes while the same hand's fingertip is over a target | Nothing. Touch has priority |
 | A pinch closes with the gaze on a target | The target fires, source `Gaze` |
@@ -952,7 +953,7 @@ The twin table (`InputTwins`) does not change and its test (`IsComplete`) keeps 
 Object interaction (H7) will build on what the first version publishes:
 
 - `IHands`: joints, palm, pinch, two-hand pinch, for any space to read in its tick.
-- `IHandsSurface`: a space's own touchable surfaces. The interface is there; the runtime must still be taught to ask for one.
+- `IHandsSurface`: a space's own touchable surfaces. The runtime asks the entered space for one (§6.5); no space publishes one yet.
 - `HideThisFrame`: a space's veto.
 
 The older spec's robustness rules for hand techniques (Spec §6.8, R1 to R7) are the starting point for that work: hands give clutches and short relative strokes, changes count only while a pinch is held so that lost frames pause and do not jump, and every technique keeps a twin.
@@ -985,7 +986,7 @@ The builder counts samples and not area because area fails in the normal posture
 1. **The limits, enforced again.** At most two regions are read. No sample deeper than 0.80 m is ever masked, whatever gate a region asks for. Before any sample is used, the kernel counts what the mask would take out of this image; if that is more than 35 % of the image's valid samples, those with a return, the mask is refused for that image and the image is read as if it had none.
 2. **A masked sample is no return.** It is left out of the seven sectors, the dynamic layer and the rescan check. This holds when the map is not trusted too.
 3. **The young-cell rule.** After every sample of the image has been stamped, each masked sample is followed to the cell it lands at. That cell is forgotten only if all three hold: it was first stamped less than 1 s ago; no sample outside the mask hit it in this image; and its stored height is within 0.15 m of the masked sample's own height. This removes the cells the hand itself stamped before it was detected. The age counts from the cell's first stamp, never from its last hit, which every image renews. The second and third conditions keep a post that masked and unmasked samples both touch, and something lower or taller standing in the same 5 cm of floor, such as a chair seat under the hand.
-4. **Pending cells (R13, H17).** In a hands session a dynamic cell made by a depth return nearer than 0.80 m does not count for Bump Guard until it is hit again 0.15 s or more after its first hit. A pending cell with no hit for 0.10 s starts again. Outside a session nothing changes, bit for bit. The constants are `BumpConstants.PendingNearMetres` (0.80), `PendingSeconds` (0.15) and `PendingRestartSeconds` (0.10). The reason is the mask's delay: it arrives 3 to 15 depth images after a hand enters the view, and in those images the hand is an obstacle like any other. The rule is there so that a hand entering the view is masked before it can raise the cue. Its price follows from its wording: in a hands session, whatever is first seen nearer than 0.80 m counts for the dynamic layer at least 0.15 s later than it would outside one. The measured results are in `Tests/Safety/BumpGuardPendingTests.cs`.
+4. **Pending cells (R13, H17).** In a hands session a dynamic cell made by a depth return nearer than 0.80 m does not count for Bump Guard until it is hit again 0.15 s or more after its first hit. A pending cell with no hit for 0.10 s starts again. Outside a session nothing changes, bit for bit. The constants are `BumpConstants.PendingNearMetres` (0.80), `PendingSeconds` (0.15) and `PendingRestartSeconds` (0.10). The reason is the mask's delay: it arrives 3 to 15 depth images after a hand enters the view, and in those images the hand is an obstacle like any other. The rule is there so that a hand entering the view is masked before it can raise the cue. Its price follows from its wording: in a hands session, whatever is first seen nearer than 0.80 m counts for the dynamic layer at least 0.15 s later than it would outside one. A return at 0.80 m or deeper in a pending cell makes it count at once, as built. The measured results are in `Tests/Safety/BumpGuardPendingTests.cs`: a hand entering the view raises no cue in a session with its mask 3 to 15 images late, standing or walking at up to 1 m/s; static obstacles are warned of as early as outside a session; someone stepping in 0.50 to 0.79 m ahead of a walker at 1 m/s is cued 0.167 s later. **Two results are below Bump Guard's own pass mark (0.6 s before contact, P1-C09) and are for the lead:** someone stepping in 0.40 to 0.45 m ahead at 1 m/s is not cued before contact in a session; and behind an unmasked hand (confidence below 0.6) a chair is cued 0.28 to 0.58 s before contact in a session, against 2.2 to 4.4 s outside one.
 
 The static room map is not involved at any point. An empty mask outside a hands session leaves every result bit for bit as it was before the feature.
 
@@ -1007,7 +1008,7 @@ The builder writes its regions in sample indices, with the centre of sample (u, 
 **Two accepted costs.** Both are measured in the real kernel and pinned by a test, so that they are known and not hoped away.
 
 1. **A masked hand held on the walking line hides what is behind it (H18).** A hand held in front of the face for a whole approach stands between LiDAR and whatever is straight ahead. Unmasked, the hand itself is warned of from the first step, which is the false warning the mask removes. Masked, Bump Guard knows only what it can see round the hand. `BumpGuard_Replay_WithHands_Characterisation_AHandOnTheWalkingLineHidesWhatIsBehindIt` holds: a figure is still warned of within one frame of where it is with no hand; a chair is warned of at least 0.2 s later; a stool or a post that the hand covers all the way is not warned of at all. The lead was asked whether to warn that the view is blocked and chose to accept this. No view-blocked rule is built.
-2. **A walking forearm's trail.** A walking walker's forearm crosses the lower border of the picture. In the images before its mask exists it stamps cells there. When the mask arrives the arm has moved on with the walker, so no masked sample points at those cells, and they lie under the lowest ray of the camera, so no ray sees them empty. They stay until their 30 s run out, and the walker walks through them. Reaching them would need a wider forgetting rule than R4 allows. `BumpGuard_Mask_ForgetsTheHandsOwnCells_ButNotAForearmsTrailBelowTheView` measures it and holds that the arm stamps nothing more once its mask exists. R13 was decided after this was measured. Whether pending cells shorten the trail is for `Tests/Safety/BumpGuardPendingTests.cs` to say; this document does not assume it.
+2. **A walking forearm's trail.** A walking walker's forearm crosses the lower border of the picture. In the images before its mask exists it stamps cells there. When the mask arrives the arm has moved on with the walker, so no masked sample points at those cells, and they lie under the lowest ray of the camera, so no ray sees them empty. They stay until their 30 s run out, and the walker walks through them. Reaching them would need a wider forgetting rule than R4 allows. `BumpGuard_Mask_ForgetsTheHandsOwnCells_ButNotAForearmsTrailBelowTheView` measures it and holds that the arm stamps nothing more once its mask exists. R13 was decided after this was measured. In a hands session pending cells remove the trail: with the mask 6 or 15 images late, at 0.5 and 1.0 m/s and the hand 0.35 to 0.60 m ahead, no cell is left (`BumpGuardPendingTests.cs`). One case (0.5 m/s, hand 0.45 m, mask 15 images late) still gave a WARN of 0.37 s.
 
 | How hands can still raise a false warning | What happens |
 |---|---|
@@ -1051,7 +1052,7 @@ Rule 2 stands: 60 frames a second in stereo, and quality drops in steps before f
 
 How the ladder is honoured without touching it: the sense step reads `FrameContext.Tier` every frame and the gate sets the detector's rate from the table in §3.5. The ladder's own code, rows and tests do not change. Two more guards sit inside the gate (`Hands/Core/HandsGate.cs:229-269`):
 
-- **Self-governor.** If the newest result's age stays above 60 ms for 2 s, or the hands' own main-thread time stays over 0.6 ms for 2 s, the rate falls to 15 Hz and stays there until the gate next goes inactive. The two causes keep their own clocks. The governor watches only the full rate in automatic mode: not at Fair, not while idle, not under `hands.rate`. A `hands.rate` event says `governor`.
+- **Self-governor.** If the Vision request's own time (`GateInputs.RequestSeconds`) stays above 1/30 s for 2 s, or the hands' own main-thread time stays over 0.6 ms for 2 s, the rate falls from 30 to 15 Hz and stays there until the gate next goes inactive. The two causes keep their own clocks. It no longer governs on the age of a result: 70 to 110 ms is normal latency (§4.4). The governor watches only the full rate in automatic mode: not at Fair, not while idle, not under `hands.rate`. A `hands.rate` event says `governor`.
 - **Idle stop.** If no hand has been tracked for 20 s the detector drops to 5 Hz, and returns to its rate with the first tracked hand. A walker who never raises a hand pays almost nothing.
 
 `hands.rate` set to `30` or `15` fixes the rate for the bench and beats both guards.
@@ -1064,10 +1065,10 @@ What must be measured before any of this is believed is in §9.3: the detector's
 |---|---|---|
 | Phone in the hand: onboarding, scan, object photos | Inactive. No frame is read by the detector. The menu goes back to its head-locked layer | H1. The scan and the photo capture are untouched |
 | A gamepad connects during a hands session | Once it has stayed connected for 1 s the detector stops and the hands fade out. Near panels return to their usual distance a second later | H3 |
-| A space switch (the world fades to black and back) | Hands stay visible | Their material has fade weight 0, like head-locked content. Seeing your hands while the world changes is steadying |
+| A space switch (the world fades to black and back) | Hands stay visible | Their material has fade weight 0, like head-locked content. Seeing your hands while the world changes is steadying. The hexagon transition's two stills leave the hands and their marks out (`HandsView.SetHiddenForStill`, called around the six renders of each still), so the dome never shows a frozen hand; the eyes keep drawing the live ones |
 | Curved Walk, Small Planet (the warp is on) | Drawn as everywhere: room coordinates, no warp. No world touch | The warp is centred on the head, so real-space things near the head are already where the picture puts them. Content there fades within 0.3 m of the eye; hands do not |
 | Aligned Cells | Drawn as everywhere; never clipped by the sight-line gates | A pooled material has its gates off by default |
-| Impossible Rooms (doorways) | Drawn in the walker's own room. The part of a hand that passes a doorway's plane inside its outline is expected to be hidden; it is not drawn on the far side | Showing a hand through a doorway was offered ("the geometry responds") and not chosen. Expected flaw, not yet looked at in the Editor: while an eye is within 10 cm of a doorway plane the doorway's box mask covers that eye, so a hand can be missing in one eye for the few frames of walking through. §11 lists the fix |
+| Impossible Rooms (doorways) | Drawn in the walker's own room. The part of a hand that passes a doorway's plane inside its outline is expected to be hidden; it is not drawn on the far side. While either eye is within 10 cm of a doorway plane inside its outline (10 cm of slack), `PortalSpace.Tick` calls `IHands.HideThisFrame`, so the hands vanish in both eyes for those frames | Showing a hand through a doorway was offered ("the geometry responds") and not chosen. The doorway's box mask covers an eye near the plane, which would have hidden a hand in that eye only; hiding it in both is the fix (O1). Not yet looked at in the Editor |
 | Glued rooms | The walker's own hands as everywhere; the copies carry the hands (§5.6) | H6 |
 | Slicer | As everywhere. Its handles and chips are gaze targets in room coordinates, so walking up to one and touching it works with no change to the Slicer | §6.2 |
 | FieldFit (eye targets overridden) | Hands are drawn into whatever the eye cameras draw into, so they pass through FieldFit's remap with the rest of the picture | No special case |
@@ -1101,11 +1102,11 @@ Hands log edges only, through `IEventLog`, on the main thread. Nothing is logged
 
 `hands.enter` is limited, so that a hand hovering at the edge of the camera's view cannot flood the Console's list: an enter less than 1 s after that hand's last logged enter is not logged, and is counted in `quietEvents`. An exit is always logged. World-touch marks are not logged.
 
-Two things in the events are not as intended at `515d14c`. The `cause` of `hands.exit` is read after the filter has cleared the hand, so it always says `edge` (`HandsRuntime.cs:627-630`). And because exits are not limited, a hand hovering at the edge of the camera's view can log exits whose enters were held back. §12 lists both.
+`EnterExit` keeps the edge margin of the hand's last tracked frame: the `cause` of `hands.exit` is `edge` only when the hand left at the border, and `lost` otherwise. An exit whose enter was held back is held back too, and counted as suppressed.
 
 When input fires an action for a touch or a pinch, the action carries `InputSource.Gaze` (R1), so the consumers that log or react to the source of an action see a target fired by the gaze. The hands' own two events say that a hand did it.
 
-**Console status.** With the events alone the operator reads the state from the list: `hands.on`, `hands.enter L`, `hands.exit L`, `hands.off heat`. A dedicated tile (two dots, left and right, and the rate) is a small optional edit to `station/hub/wwwroot/js/app.js` that folds those four events into a status; it changes no message, is listed as optional in §3.7 and is not built.
+**Console status.** The Console's Operator page has a Hands switch and a status line: active or off with the reason, the rate, and left and right tracked, folded from the `hands.*` events. It changes no message. The switch sends the operator command `hands` `{on}`: `LinkPump` sets `hands.enabled` through the registry as `ParamSource.Remote`, so it works under the demo lock. `lane-d-link.md` names the command.
 
 ### 8.2 Parameters
 
@@ -1126,13 +1127,13 @@ Declared by `HandsSystem.DeclareParams` (`Hands/HandsInstaller.cs:71-85`) in the
 
 The first design had a `hands.debug` parameter that drew the raw joints and the mask's outline. It was not built; `hands.bench` and `hands.draw` cover what the bench needs.
 
-Under the demo lock the Station cannot change a parameter, so in a locked demo `hands.enabled` is changed from the on-device menu, or not at all. An operator command would get past the lock, at the price of edits in six files on both sides of the link; it is not part of this feature.
+Under the demo lock the Station cannot change a parameter, but the operator command `hands` `{on}` gets past it (§8.1): it sets `hands.enabled` as `ParamSource.Remote`. The on-device menu works too.
 
 Every tuning constant of the lift, the filter, touch and the mask is a constant in code (Appendix B), as Bump Guard's are. They become parameters only if the bench shows one needs tuning live.
 
 ### 8.3 What the link and the Station do not get
 
-`State` stays 202 bytes and unchanged. The 1 Hz telemetry row keeps its 34 columns. No new message, no new command. Recorded sessions therefore replay on the Hub and the Spectator exactly as before, and `tools/ReplayPhone` needs no change.
+`State` stays 202 bytes and unchanged. The 1 Hz telemetry row keeps its 34 columns. No new message. One operator command, `hands`, switches the hands on and off. Recorded sessions therefore replay on the Hub and the Spectator exactly as before, and `tools/ReplayPhone` needs no change.
 
 What the operator does get for free is the View page: it shows the phone's left-eye picture, so the hands, the near panels and the contact marks are all on it whenever the page is open.
 
@@ -1185,7 +1186,7 @@ At `515d14c` the assembly rules pass, the three build configurations (iOS, Windo
 | `Runtime_*` (9 tests) | `Hands/HandsRuntimeTests.cs` | The runtime as a whole on a scripted source: off until enabled; a hand is tracked, drawn and handed to input; a gamepad switches hands off; a warning hides the hands and suspends touch while the mask is still offered; the mask belongs to its depth image and carries the session; a fault leaves nothing behind; edges only |
 | `Hands_Lift_AllocatesNothing`, `Hands_Filter_AllocatesNothing`, `Hands_Gate_UpdateAllocatesNothing`, `Hands_Gestures_UpdateAllocatesNothing`, `Hands_Visibility_UpdateAllocatesNothing`, `Hands_Mask_AllocatesNothing`, `Hands_Skin_AllocatesNothing`, `Hands_Reach_Anchor_AllocatesNothing`, `Hands_Surfaces_Closest_AllocatesNothing`, `Input_Hands_AllocatesNothing`, `BumpGuard_Mask_AllocatesNothing`, `Runtime_SteadyStateAllocatesNothing` | beside the tests of each piece | Rule 8's budget: no managed allocation over a run of steady frames, for each per-frame piece and for the runtime as a whole |
 | `MenuReachTests`, `ReachSlotsTests`, and the near-panel tests of `SpaceSignsTests`, `CurvedWalkTwinsTests` and `SmallPlanetSpaceTests` | `App/Menu/`, `App/SpaceSignsTests.cs`, `CurvedWalk/`, `SmallPlanet/` | §6.1: each panel stands at its slot times the scale; no target lands on another; dwell still works on what is drawn; with `Near` false everything is exactly where it was |
-| `GluedAvatarHandsTests`, `GluedBudgetTests.AvatarWithBothHands_IsAtMost600Triangles_AndTheDrawCallsAreUnchanged`, `GluedKitTests` | `Spaces/Glued/` | §5.6: the copies' hands run from joint to joint in the avatar's frame; a mirrored copy shows the other hand; the avatar stays within 600 triangles and the draw calls do not change |
+| `GluedAvatarHandsTests`, `GluedBudgetTests.AvatarWithBothHands_IsAtMost600Triangles_AndTheDrawCallsAreUnchanged`, `GluedKitTests` | `Spaces/Glued/` | §5.6: the copies' hands run from joint to joint in the avatar's frame; a mirrored copy shows the other hand; the avatar stays within 600 triangles (the built-in body with both reduced hands is 384) and the draw calls do not change |
 | Assembly rules | `Architecture/AssemblyGraphTests.cs`; `verify.py rules` | §3.2: the two new rows; no cycle; `Atlas.Safety` names no hands type |
 
 **Being added in the second wave.** They are named here so that a reader knows where the measured results are; this document quotes no number from them.
@@ -1226,7 +1227,7 @@ With `hands.enabled` and `hands.editor` on, the mouse-and-keys source and the sa
 | `SmallPlanet/SmallPlanetSpaceTests.cs` | 1: `Module_Near_ThePlateStandsAtTheDialsSlot_TimesTheScale_OnTheWorldLayer` |
 | `Rendering/Look/ShaderCompileTests.cs` | Compiles every shader under `Assets/Atlas`, so also the new `Atlas/NearText` |
 
-`Tests/App/BootstrapUnityTests.cs` does not yet look for the `IHands` service (E14).
+`Tests/App/BootstrapUnityTests.cs` looks for the `IHands` service (E14).
 
 ### 9.3 The bench: what is measured on the phone before anything is built on it
 
@@ -1369,7 +1370,7 @@ Risks 1 to 14 are those of the first design, kept under their numbers; 15 to 22 
 | 6 | The mask hides a real hazard | Safety | L / H | `BumpGuard_Mask_Limits_*`; HG3 | §7.1's limits, enforced inside `Atlas.Safety` (R4); the static map is never masked; standing still until HG3 | `hands.enabled` off: no mask and no session, and hands trip the warning as before |
 | 7 | Hands still raise false warnings | The warning loses meaning | M / M | HG3's lap | The young-cell rule; pending cells (R13); the forearm strip's own gate (R14); mask grown for motion | Accept. The forearm's trail is an accepted cost (§7.1) |
 | 8 | Left and right flip | A hand drawn inside out or mirrored | M / L | `Hands_Sides_NeverShare`; bench B10 | Majority vote; two-sided drawing; one colour | None needed |
-| 10 | A hand vanishes in one eye at a doorway (Impossible Rooms) | Discomfort for a moment | H in that space / L | Seen in the Editor | None yet. O1 in §3.7 is not done | Leave hands off in that space |
+| 10 | A hand vanishes in one eye at a doorway (Impossible Rooms) | Discomfort for a moment | H in that space / L | Seen in the Editor | `PortalSpace` hides the hands in both eyes near a doorway (O1) | Leave hands off in that space |
 | 11 | Tired arms | Hands held up are a tiring posture | M / M | People lowering their hands in HG2 | Pinch with gaze needs no reach; panels are low and close | None needed: gaze and lever remain |
 | 12 | Someone else's hands are tracked | A spotter's hand is drawn as the walker's | L / L | HG3 | Ignored beyond 0.9 m | None needed |
 | 14 | The phones run a newer iOS than the build target | An API behaves differently, as the camera background did | M / M | Bench B2; BENCH 1, 2, 5 | Orientation and alignment are measured, not assumed; the plugin logs what its first frame looks like | Constants per OS version |
@@ -1387,7 +1388,7 @@ Risks 1 to 14 are those of the first design, kept under their numbers; 15 to 22 
 | # | Risk | How it was settled |
 |---|---|---|
 | 9 | Near panels drawn on the world layer do not sort with their text | R7: the panels' text uses `Atlas/NearText`, the font shader with the depth test on. In code and tested headless; not yet seen in the Editor (risk 21) |
-| 13 | Edits collide with fast-moving files (`AtlasApp.cs`, input core, the menu) | The branch was merged with `main` at `515d14c` with the edits in place |
+| 13 | Edits collide with fast-moving files (`AtlasApp.cs`, input core, the menu) | The branch was merged with `main` at `515d14c` with the edits in place, and again at `1ba2838` |
 
 Kill switch: `hands.enabled`, one registry parameter, off by default, reachable from the on-device menu with the Station off, as the plan asks of every addition.
 
@@ -1403,16 +1404,16 @@ For the lead. The right-hand column is what is in force until told otherwise.
 | 2 | Video format in hands sessions: the low-resolution 16:9 format or a 4:3 one | About 44° against 57° of height for hands; against heat | The format the app selects today. Decided by bench B6 |
 | 3 | The fallback detector, if fingertip depth is not good enough | A native framework and its build steps | Apple Vision only |
 | 4 | Colour of the copies' hands in the Glued rooms | The avatar's left and right colours show the mirror; neutral matches the walker's own hands | The avatar's colours |
-| 5 | An operator command for hands on and off | Under the demo lock the Console cannot change a parameter | Parameter only; on-device menu under the lock |
-| 6 | A Console tile for hand status | Nicer than reading the event list | Events only |
+| 5 | An operator command for hands on and off | Under the demo lock the Console cannot change a parameter | Done. The command `hands` `{on}` sets `hands.enabled` as `ParamSource.Remote` and works under the lock (§8.1) |
+| 6 | A Console tile for hand status | Nicer than reading the event list | Done. The Operator page has a Hands switch and a status line (§8.1) |
 | 7 | The idle rate (5 Hz after 20 s with no hand) | Saves heat; adds up to 0.2 s before a first hand appears | On. Bench B5 says whether it earns its place |
-| 8 | Applying §0.5 to the Master Plan and the contract pages | The plan still says hands are not built and run only where used | The reference table is applied. The Master Plan is not. The contract pages and `recordings/README.md` are not in `515d14c`; the second wave's contracts package brings them up to date |
-| 9 | Hands in Impossible Rooms | The one-eye flaw at doorways | On, with the flaw; O1 would remove it and is not done |
+| 8 | Applying §0.5 to the Master Plan and the contract pages | The plan still says hands are not built and run only where used | The reference table is applied. The Master Plan is applied too (rule 5, §8.6 lever 7, Appendix C.3 and D.1). The contract pages and `recordings/README.md` are not in `515d14c`; the second wave's contracts package brings them up to date |
+| 9 | Hands in Impossible Rooms | The one-eye flaw at doorways | Done. O1 hides the hands in both eyes near a doorway (§3.7). Not seen in the Editor |
 | 10 | Whether a hands-on soak becomes a line of an existing gate | Heat is the plan's first worry about hands | Measured at HG3 only |
-| 11 | The `cause` of `hands.exit`, and exits that are not limited | The cause always reads `edge`, and an exit can be logged without its enter (§8.1) | As built. The fix is in `HandsRuntime.EnterExit`: keep the edge margin of the hand's last tracked frame, and hold back the exit of an enter that was held back |
+| 11 | The `cause` of `hands.exit`, and exits that are not limited | The cause always read `edge`, and an exit could be logged without its enter (§8.1) | Done. `HandsRuntime.EnterExit` keeps the edge margin of the hand's last tracked frame and holds back the exit of an enter that was held back (§8.1) |
 | 12 | One pixel convention for the mask | The builder writes sample indices; the kernel tests pixel centres. Half a depth pixel apart (§7.1) | As built: inside the region's growth |
-| 13 | A space's own touchable surfaces | `IHandsSurface` exists and its summary says a space may publish one, but the runtime asks for none | The room's surfaces only |
-| 14 | The Playground's prompt chips and captions within reach | H14 named them; E10 did not reach them | Where they were |
+| 13 | A space's own touchable surfaces | `IHandsSurface` exists and a space may publish one | Done. The runtime asks the entered space and takes the nearer of its surfaces and the room's (§6.5). No space publishes one yet |
+| 14 | The Playground's prompt chips and captions within reach | H14 named them; E10 did not reach them | Done. Slots above the grid (§6.1); on the world layer with `Atlas/NearText` while near; hidden while a menu holds the input |
 | 15 | The prediction limit | With results about 80 ms old the 50 ms cap binds on every frame, so the drawn palm steps at the detector's rate. A longer cap is smoother and overshoots more at a stop | 50 ms. Decided on the phone |
 | 16 | The open menu's place at the anchor | With the anchor 25° down, the menu's footer chips are about 43° below the horizontal. The signs' reveal pitch of 10° lies on the grid's top row, so the signs can flicker while the walker looks at the menu chip | As built. One number in `ReachSlots`, one in `SpaceSigns` |
 | 17 | The template hand against the detector's points | The review found the detector's spacing up to 39 % from the template's | Learnt per walker (R11); the template is unchanged |
@@ -1455,7 +1456,7 @@ The fine-grained layer under the five areas of §10. One row is one piece an age
 | `HD-C1` | **Input seam** | `HD-A7` | E8, E9 (E7 was not made: R1); `Input/IHandsInput.cs`, `Input/Core/HandsTypes.cs`, `HandsTouch.cs`, `ReticleDepth.cs` | `Input_HandsTouch_StateMachine_*`, `Input_Hands_AreATwinOfDwell`; every earlier input test still green; `IAtlasInput` unchanged | Headless | Done |
 | `HD-C2` | **Pinch and two-hand** | `HD-A5` | `Hands/Core/HandsGestures.cs` | `Hands_Pinch_Hysteresis`, `Hands_TwoHand_AngleUnwraps` | Headless | Done |
 | `HD-C3` | **Reach anchor** | `HD-A7` | `Hands/Core/ReachAnchor.cs` behind `IReachLayout` | `Hands_Reach_Anchor_*`: placed as §6.1 says; moves only past 0.25 m or 40° for 0.5 s; never while a fingertip is within 0.26 m | Headless | Done |
-| `HD-C4` | **Near panels** | `HD-C3` | E10; `World/Hands/ReachSlots.cs`; `App/Menu/NearText.cs` and its shader | The Editor list of §9.2; with a gamepad connected every existing menu and sign test is green and nothing has moved | Editor | Done headless for the menu, the signs, Curved Walk and Small Planet. Not done for the Playground's chips. The Editor list has not been run |
+| `HD-C4` | **Near panels** | `HD-C3` | E10; `World/Hands/ReachSlots.cs`; `Rendering/NearText.cs` and its shader | The Editor list of §9.2; with a gamepad connected every existing menu and sign test is green and nothing has moved | Editor | Done headless for the menu, the signs, Curved Walk and Small Planet. The Playground's chips have slots (§6.1), without near text and without hiding under the menu. The Editor list has not been run |
 | `HD-C5` | **Marks and sounds** | `HD-B2` | The two marks inside `Hands/View/HandsView.cs`; `Hands/View/HandsSounds.cs` | The ring follows the fingertip on a target's face; one click per press; two marks exist | Editor | Written. Never run |
 
 **D. Staying safe and cool**
@@ -1472,10 +1473,10 @@ The fine-grained layer under the five areas of §10. One row is one piece an age
 
 | ID | Work package | Depends on | Output | Acceptance test | Needs | State |
 |---|---|---|---|---|---|---|
-| `HD-E1` | **World touch** | `HD-C5` | `IHandsSurface` in `World/Hands/IHands.cs`; `Hands/Core/RoomSurfaces.cs` | `Hands_Surfaces_Closest_*`: walls with openings, floor, boxes; none in an unregistered space | Headless, Editor | Done headless. Marks never seen |
-| `HD-E2` | **Glued copies** | `HD-A7` | E12; `Spaces/Glued/GluedAvatarHands.cs` | The Glued budget test with hands: avatar at most 600 triangles, draw calls unchanged; mirrored rows in the Editor | Headless, Editor | Done headless for the built-in avatar. R15 adds the kit avatar's reduced hands. Not seen in the Editor |
-| `HD-E3` | **Events and statistics** | `HD-A7` | `HandsRuntime.AfterFrame`; `HandsAfterFrameStep` in `HandsInstaller.cs` | Edges only, the limit on enters, `hands.stats` on `hands.off` | Headless | Built; `Runtime_LogsEdgesOnly`. Two faults known (§8.1, §12 item 11) |
-| `HD-E4` | **Documents** | all | E13, E15; §0.5 if the lead accepts it | The contract pages name what the code has | none | E13 done. This document brought up to the code. E15 is the second wave's contracts package. §0.5 is not applied to the Master Plan |
+| `HD-E1` | **World touch** | `HD-C5` | `IHandsSurface` in `World/Hands/IHands.cs`; `Hands/Core/RoomSurfaces.cs` | `Hands_Surfaces_Closest_*`: walls with openings, floor, boxes; none in an unregistered space | Headless, Editor | Done headless; spaces' own surfaces are asked for too (§6.5). Marks never seen |
+| `HD-E2` | **Glued copies** | `HD-A7` | E12; `Spaces/Glued/GluedAvatarHands.cs` | The Glued budget test with hands: avatar at most 600 triangles, draw calls unchanged; mirrored rows in the Editor | Headless, Editor | Done headless. The reduced hands (R15) serve the built-in body and the kit avatar. Not seen in the Editor |
+| `HD-E3` | **Events and statistics** | `HD-A7` | `HandsRuntime.AfterFrame`; `HandsAfterFrameStep` in `HandsInstaller.cs` | Edges only, the limit on enters, `hands.stats` on `hands.off` | Headless | Built; `Runtime_LogsEdgesOnly`. The exit's cause and its limit are fixed (§8.1, §12 item 11) |
+| `HD-E4` | **Documents** | all | E13, E15; §0.5 if the lead accepts it | The contract pages name what the code has | none | E13 done. This document brought up to the code. E15 is the second wave's contracts package. §0.5 is applied to the Master Plan |
 
 **The second wave.** Started from `515d14c`, each on its own branch. The packages that change what this document describes:
 
@@ -1503,7 +1504,7 @@ Where they came from: the pinch thresholds and LiDAR's 0.32 m are the older spec
 | `IdleAfterSeconds` | 20 | With no hand tracked for this long the rate goes idle |
 | `MaxResultAgeSeconds` | 0.2 | A result older than this when polled is not used |
 | `GamepadHoldSeconds` | 1 | A gamepad change counts once it has held this long |
-| `GovernorAgeSeconds`, `GovernorMainThreadMs`, `GovernorSeconds` | 0.060, 0.6 ms, 2 | Self-governor: result age, main-thread cap, for how long |
+| `GovernorRequestSeconds`, `GovernorMainThreadMs`, `GovernorSeconds` | 1/30, 0.6 ms, 2 | Self-governor: the Vision request's time, main-thread cap, for how long |
 | `RestartAfterFaultSeconds` | 5 | A faulted source is started again no more often than this |
 | `JointConfidenceFloor` | 0.3 | A joint below this is not used |
 | `MinUsableJoints` | 12 | Fewer usable joints: no hand |
@@ -1628,7 +1629,8 @@ Where they came from: the pinch thresholds and LiDAR's 0.32 m are the older spec
 |---|---|---|
 | `ReachMetres` | 0.75 | A target farther than this from the head is never touched |
 | `MinConfidence` | 0.6 | Below this a hand is not trusted |
-| `NearMetres` | 0.20 | The dwell waits while a fingertip is this close to its target (R6) |
+| `NearMetres` | 0.20 | The dwell waits while a fingertip this close to its target is coming nearer or pressing (R6) |
+| `NearProgressMetres`, `NearHoldSeconds` | 0.010, 1.0 | R6: a fingertip counts as coming nearer if it came nearer by this much within this long |
 | `HoverDepth`, `ArmDepth` | 0.08, 0.025 | The ring shows from the first; a press counts after the fingertip was seen the second in front |
 | `ApproachDepth`, `ApproachSlope`, `ApproachSeconds` | 0.20, 1, 0.5 | "Seen in front" counts out to this depth, this much beside the outline per metre in front, and this long ago |
 | `PressDepth`, `ReleaseDepth`, `ThroughDepth` | −0.010, 0.010, −0.08 | The press plane; where a press ends coming back; where it ends going through |
@@ -1688,7 +1690,7 @@ R14's gate is not a constant of `BumpConstants`: the region carries it in `Depth
 | `Hands/View/HandsView.cs` | The touch ring's diameter far and near; the press flash | 0.04, 0.016; 0.12 |
 | `Hands/Sources/HandsLog.cs` | `HeaderLength`, `HeadLength`, `RecordLength` | 16, 36, 2,748 bytes |
 | `Hands/Sources/HandsLogRecorder.cs` | `RingSize` | 256 records |
-| `Spaces/Glued/GluedAvatarHands.cs` | `BoxesPerHand`, `TrianglesPerHand`, `MaxTriangles` | 17, 204, 408 |
+| `Spaces/Glued/GluedAvatarHands.cs` | `BoxesPerHand`, `TrianglesPerHand`, `MaxTriangles` | 17, 204, 408. Full hands need a body of at most 192 triangles; the reduced hands are 84 a hand |
 
 ---
 

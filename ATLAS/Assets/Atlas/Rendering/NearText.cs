@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace Atlas.App.Menu
+namespace Atlas.Rendering
 {
     /// <summary>
     /// The material a panel within reach of the hands draws its text with (documents/ATLAS_Hands_Design.md
@@ -11,7 +11,7 @@ namespace Atlas.App.Menu
     /// per font, made once, carrying the font's own texture; a view gives it to its text renderers while it is
     /// within reach and gives the font's material back when it is not.
     /// </summary>
-    static class NearText
+    public static class NearText
     {
         /// <summary>The shader's name under Resources, where a player build finds it with nothing referencing it.</summary>
         public const string ShaderResource = "AtlasNearText";

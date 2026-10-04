@@ -110,9 +110,9 @@ namespace Atlas.Input.Tests
             Assert.That(progress, Is.InRange(0.3f, 0.5f));
             Assert.That(rig.Input.HandsTouch.AnyNear, Is.False);
 
-            // A fingertip 11 cm from the chip, beside it and over nothing: for three seconds the dwell stands still.
+            // A fingertip 11 cm from the chip, beside it and over nothing: for most of a second the dwell stands still.
             float3 beside = face.At(0.15f, 0f, 0.05f);
-            rig.Rest(beside, 3f);
+            rig.Rest(beside, 0.8f);
             Assert.That(rig.Events, Is.Empty);
             Assert.That(rig.Input.GazeProgress, Is.EqualTo(progress), "it does not advance, and it is not lost");
             Assert.That(rig.Input.HandsTouch.AnyNear, Is.True);
@@ -126,24 +126,45 @@ namespace Atlas.Input.Tests
 
             // 25 cm away is not near: the dwell fires on time.
             Assert.That(SecondsToDwell(face.At(0.30f, 0f, 0.05f), 1f), Is.EqualTo(0.7f).Within(2f * Dt));
-            // 19 cm away is.
-            Assert.That(SecondsToDwell(face.At(0.24f, 0f, 0.02f), 1f), Is.EqualTo(float.PositiveInfinity));
+            // 19 cm away is, for a second (NearHoldSeconds) and then the dwell runs on.
+            Assert.That(SecondsToDwell(face.At(0.24f, 0f, 0.02f), 1f), Is.EqualTo(HandsTouch.NearHoldSeconds + 0.7f).Within(3f * Dt));
             // A hand that is not trusted holds nothing up.
             Assert.That(SecondsToDwell(beside, 0.5f), Is.EqualTo(0.7f).Within(2f * Dt));
         }
 
-        /// <summary>Looks at a chip on the panel with a fingertip held at a point; returns when the dwell fired, or infinity if it did not in two seconds.</summary>
+        /// <summary>Looks at a chip on the panel with a fingertip held at a point; returns when the dwell fired, or infinity if it did not in four seconds.</summary>
         private static float SecondsToDwell(float3 fingertip, float confidence)
         {
             var rig = new HandsRig();
             rig.Add(HandsRig.Chip(AtlasAction.Primary, HandsRig.Panel));
             rig.LookAt(HandsRig.Panel);
-            while (rig.Time < 2f)
+            while (rig.Time < 4f)
             {
                 rig.Right(fingertip, confidence);
                 if (rig.Events.Count > 0) return rig.Time;
             }
             return float.PositiveInfinity;
+        }
+
+        [Test]
+        public void Input_Hands_DwellResumesUnderAFingerThatRests()
+        {
+            // A hand resting 10 cm from the chip while the walker gazes at it: the dwell completes after the pause.
+            var rig = new HandsRig();
+            GazeTargetId chip = rig.Add(HandsRig.Chip(AtlasAction.Primary, HandsRig.Panel));
+            HandsRig.Face face = rig.FaceOf(chip);
+            rig.LookAt(HandsRig.Panel);
+            float3 resting = face.At(0.10f, 0f, 0.06f);
+            rig.Rest(resting, 5f);
+            Assert.That(rig.Events.Count, Is.EqualTo(1), "the dwell fires once");
+
+            // A finger that keeps coming nearer keeps holding the dwell off: 4 s of slow approach, 20 cm to 3 cm in front of the chip, fires nothing.
+            var coming = new HandsRig();
+            GazeTargetId target = coming.Add(HandsRig.Chip(AtlasAction.Primary, HandsRig.Panel));
+            HandsRig.Face cface = coming.FaceOf(target);
+            coming.LookAt(HandsRig.Panel);
+            coming.Glide(cface.At(0f, 0f, 0.20f), cface.At(0f, 0f, 0.03f), 4f);
+            Assert.That(coming.Events, Is.Empty, "a finger on its way to press does the dwell's job");
         }
 
         [Test]
@@ -167,7 +188,7 @@ namespace Atlas.Input.Tests
             stepping.LookAt(HandsRig.Panel);
             stepping.NoHands(1.2f);                                   // 0.7, 1.1
             Assert.That(stepping.Events.Count, Is.EqualTo(2));
-            stepping.Rest(plusFace.At(0.15f, 0f, 0.05f), 2f);
+            stepping.Rest(plusFace.At(0.15f, 0f, 0.05f), 0.8f);
             Assert.That(stepping.Events.Count, Is.EqualTo(2));
             stepping.NoHands(0.5f);
             Assert.That(stepping.Events.Count, Is.EqualTo(3));

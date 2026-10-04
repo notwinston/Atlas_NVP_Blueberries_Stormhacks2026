@@ -94,7 +94,7 @@ Breaking any of these is a defect.
 2. **60 frames per second in stereo**, on both phones. Quality drops in steps before frame rate does. Never below 30.
 3. **One metre walked is one metre moved**, in every space. No translation or rotation gains. The single exception is the airway's valve chamber (§10.2.3), where the world is re-aimed while the walker stands inside a closed, opaque chamber.
 4. **Curvature changes only while the walker stands still.**
-5. **Every action has a twin.** Each action works with the gamepad alone and with gaze dwell alone. The marker cube and any later hand input are optional extras: hand tracking is not in the Core build and no task depends on it; if the optional HoloKit spike (Appendix C.3) is ever merged, hand tracking runs only in a space that uses it (BP §0.5: it adds heat).
+5. **Every action has a twin.** Each action works with the gamepad alone and with gaze dwell alone. The marker cube and any later hand input are optional extras: hands are an extra route to actions and never the only one. Hand tracking runs in every headset session that has no gamepad, and gives way first on heat (it adds heat; see §8.6 lever 7). Its design is `documents/ATLAS_Hands_Design.md`.
 6. **Every curved view has a flat twin**: a map, a list or a chart of the same thing.
 7. **Positions are a tile id plus local coordinates.** Never a global floating-point coordinate.
 8. **One shader, one palette, fixed budgets**, checked at every gate.
@@ -501,7 +501,7 @@ Height is untouched: the floor stays level and at the real floor's height. Ordin
 - Virtual furniture is no longer where the real furniture is. Bump Guard, which works in real coordinates, is what warns the walker (§4.10).
 - "Return to Home" (one button) fades out, resets U and curvature, and fades in with the room registered again.
 
-**How the room enters curved space.** The Home meshes are already stored relative to the room centre, in metres. Those coordinates are used directly as tile-local coordinates of tile zero, so the same shader places them with the exp map about the room centre: distances from the centre are exact, and at zero curvature the result is identical to Home. Each furniture mesh gets its own anchor at its scanned position so that it stays rigid instead of stretching (the exp map widens things by 11 % at 1.5 m from the centre when L = 1.88 m). Tiles that lie under the room's footprint are flagged Home and receive no generated props.
+**How the room enters curved space.** The Home meshes are already stored relative to the room centre, in metres. Those coordinates are used directly as tile-local coordinates of tile zero, so the same shader places them with the exp map about the room centre: distances from the centre are exact, and at zero curvature the result is identical to Home. Each furniture mesh gets its own anchor at its scanned position so that it stays rigid instead of stretching (the exp map widens things by 11 % at 1.5 m from the centre when L = 1.88 m). Tiles that lie under the room's footprint are flagged Home and receive no generated props. On the Small Planet (decided 4 October 2026) the furniture is laid out about the floor point under the head at entry instead of the room centre, `Boost(entry / R) · Boost((base − entry) / R) · Rot(−yaw)`: from where the walker stands every object is at its real distance and bearing until the first step, wherever in the room they entered. The kerbs and the planet stay about the centre.
 
 **Turning curvature on.** The walker stands on the mark at the room centre. Curvature ramps from zero to the dial value while they stand still, and never changes while the head moves faster than 0.1 m/s.
 
@@ -1241,7 +1241,7 @@ The plan is never to reach thermal state Serious during a session. Levers, in or
 4. No charging while running; case off; phone out of the headset and in front of a fan between sessions.
 5. The quality ladder below.
 6. Two phones: swap between sessions at Fair, during a session at Serious.
-7. Hand tracking, if it is ever added, is on only in a space that uses it (BP §0.5).
+7. Hand tracking drops to 15 Hz at Fair and stops at Serious (BP §0.5 rule 5; `documents/ATLAS_Hands_Design.md`).
 
 | Trigger | Eye-texture set (render scale) | MSAA | Fog radius ρ | Glued copies | Note |
 |---|---|---|---|---|---|
@@ -4287,7 +4287,7 @@ Free Personal Team rules (Spec App. E):
 | MessagePack-CSharp | Drop | Hand-packed binary plus JSON (R4 §4) |
 | LiveKit, UniVRM, uLipSync, Steam Audio | Drop | Voice is Stretch (§10.3.1) and would not use LiveKit; lip-synced VRM avatars are not in the plan (its avatars are plain meshes); simple panning is enough |
 | UXF, Sentry | Drop | Own CSV telemetry and `Log` messages |
-| HoloKit Unity SDK (BP §0.5) | Not in the manifest | Optional hand-tracking spike on a branch; needs iOS 18+ |
+| HoloKit Unity SDK (BP §0.5) | Not in the manifest | Not used. Hands use Apple Vision through our own plugin (`documents/ATLAS_Hands_Design.md` §4) |
 
 ### C.4 Project and Player settings
 
@@ -4480,7 +4480,7 @@ Order of authority: the team lead's decisions (§2 of this plan) > Build Pipelin
 | Medical data | One real patient throughout; segmented airway with distal completion (old D13, old D17, old D18) | 4D-Lung patient 101 beside a labelled illustrative twin; procedural airway, optional AeroPath proximal tree | BP §0.5, D25 |
 | Play area | Taped 3×3 m square, centre X, stanchions (old D8, Spec §6.4) | Free walk on the scanned free floor. The product marks nothing on the real floor; the lap square marked for the spotter at gate G2 is a test aid | D2 |
 | Comfort | Vignette during world motion (Spec §6.8) | No vignette while walking; gains at identity; gate G2 on Mode 1 | BP §0.5, R1 |
-| Hand input | Vision hand pose, pinch, the gesture set and the hand "hero" techniques (old D7; Spec §4.5, §7.1; Brief §3.5) | Not built. Inputs are the gamepad, gaze dwell and the headset lever (`P1-C10`); the marker cube is Extended (open item 11); hand tracking exists only as an optional HoloKit spike (Appendix C.3) | BP §0.5, this plan |
+| Hand input | Vision hand pose, pinch, the gesture set and the hand "hero" techniques (old D7; Spec §4.5, §7.1; Brief §3.5) | Designed in `documents/ATLAS_Hands_Design.md` and built on the `tracked-hands` branch on Apple Vision through our own plugin (HoloKit is not used); not yet run in the Editor or on a phone. Inputs are otherwise the gamepad, gaze dwell and the headset lever (`P1-C10`); the marker cube is Extended (open item 11) | BP §0.5, `documents/ATLAS_Hands_Design.md` |
 | Use cases | Shared House and FieldFit late and first to be cut (Spec §15.2, §15.6) | All carried: P2 Playground + Lung Mission; P3 Shared House + FieldFit | D3 |
 | Tier B and C blades | "Station Zero", Small Planet, Wormhole Quest, the 4D Toybox and the other Tier B and C blades; "Station Zero" as the swap for Shared House (Brief §2.3, §4.6; Spec §17 Q7) | Not built as use cases. The geometry of Small Planet is space S4 and the 4D Toybox is the toybox of the Slicer (S6); the rest stay as documented ideas in the Brief | D1, D3 |
 | House Call partner | Galaxy S24 Android client, LiveKit voice, avatar (old D3; Spec §11.4) | No Android client and no LiveKit (Appendix C.3). Core is Post Circling, solo, with a recorded visitor. A live House Call is Extended, on phone B (`P3-C04`, `P3-D07`), in a second headset if there is one (open item 14); voice is Stretch (§10.3.1) | D3, this plan |
@@ -4502,7 +4502,7 @@ Order of authority: the team lead's decisions (§2 of this plan) > Build Pipelin
 | 0.1–0.25 m subdivision, undifferentiated (§3a) | Tile levels by grid count: n = 16 per side on the walker's current tile and the 12 tiles that touch it, n = 8 on every other drawn tile. The 0.25 m longest-edge rule stays for the Home shell, furniture and authored props | A fine grid on every tile is too dense when up to 57 tiles are drawn. A count per side holds the triangle caps for any L and lets tiles of different level share their edge vertices exactly (R3, R5) |
 | MSAA 2× as the start (§4) | 4× at scale 0.8; 2× on the thermal ladder | Fill rate is not the constraint (R5) |
 | Half-screen viewports for the two eye cameras; render scale 0.75–0.8 set in the URP asset (§0, §4) | One render texture per eye, 1118 × 1032 (0.8 × the half-screen), each eye camera with a full viewport. URP Render Scale stays 1.0 and the texture size carries the 0.8. One final blit samples both textures | Two eye cameras are two render passes. Drawn into one multisampled target, the second pass would have to load what the first stored, so the multisampled colour could not be memoryless or resolved on-tile (R5) |
-| HoloKit SDK spike first (§0.5) | Own rig is the baseline; HoloKit an optional hand-tracking spike | HoloKit is built for optical see-through, needs iOS 18+ (the target is iOS 17.0) and still needs our own barrel pre-distortion blit. For a lens headset it adds only hand tracking, which is optional (rule 5). BP §0.5 itself names the own rig as the fallback, and the rig is on the path to G1, so it is built first (D7) |
+| HoloKit SDK spike first (§0.5) | Own rig is the baseline; HoloKit an optional hand-tracking spike | HoloKit is built for optical see-through, needs iOS 18+ (the target is iOS 17.0) and still needs our own barrel pre-distortion blit. For a lens headset it adds only hand tracking, which we now build ourselves on Apple Vision (rule 5; `documents/ATLAS_Hands_Design.md`). BP §0.5 itself names the own rig as the fallback, and the rig is on the path to G1, so it is built first (D7) |
 | LiteNetLib with no PC peer named (§0.5) | The .NET Hub terminates it | Own wire protocol: both ends must be .NET (R4) |
 | Warped tiles and rooms rebuilt in Blender, with the Blender MCP (§0, §3a) | Tile shells and the Home shell generated in C# at run time (`P1-B05`, §3.4); Blender only for landmarks and props | L and the tile size come from the scanned room and q from the dial, so a tile cannot be authored for one fixed L with a 0.25 m grid; the Home shell comes from the walker's own scan. The MCP was available only to the session that wrote BP |
 | Timed order-of-work list (§6) | Gates | D4 |
@@ -4555,7 +4555,7 @@ Spec §16 lists 21 engineering risks, and Brief §11 carries the same list. Each
 | Spec risk | Now |
 |---|---|
 | 1 Thermal throttling | Risk 11; risk 12 for the heat of live depth |
-| 2 Hands not seen | Retired: hand input is not built (D.1, row Hand input) |
+| 2 Hands not seen | Retired: hand input is now designed in `documents/ATLAS_Hands_Design.md` (D.1, row Hand input) |
 | 3 Drift or tracking loss | Risk 16 |
 | 4 Cybersickness | Risk 5 for Mode 1; risk 30 for the other spaces |
 | 5 Read as "just portals" | §13.1 and §13.3: the equation cards and the 3-4-5 walk |

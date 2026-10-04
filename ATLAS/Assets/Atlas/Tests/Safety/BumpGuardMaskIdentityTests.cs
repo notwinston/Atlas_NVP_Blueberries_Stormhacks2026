@@ -23,7 +23,7 @@ namespace Atlas.Safety.Tests
         /// saw and an unmasked hand in front of the camera, and two approaches of BumpGuard_Replay.</summary>
         public enum Scene { Lap, LapFurnished, WallApproach, WallApproachFurnished, ChairAtOneMetrePerSecond, StoolAtHalfAMetrePerSecond }
 
-        struct Pose
+        internal struct Pose
         {
             public float3 Position;
             public quaternion Rotation;
@@ -31,7 +31,7 @@ namespace Atlas.Safety.Tests
         }
 
         // Every bit that goes in changes the value: 64-bit FNV-1a over 32-bit words.
-        struct Fingerprint
+        internal struct Fingerprint
         {
             ulong _hash;
             bool _started;
@@ -59,12 +59,12 @@ namespace Atlas.Safety.Tests
             }
         }
 
-        static float RoomHalfOf(Scene scene)
+        internal static float RoomHalfOf(Scene scene)
         {
             return scene == Scene.ChairAtOneMetrePerSecond || scene == Scene.StoolAtHalfAMetrePerSecond ? 3.5f : BumpRecordings.RoomHalf;
         }
 
-        static List<Pose> PosesOf(Scene scene)
+        internal static List<Pose> PosesOf(Scene scene)
         {
             var poses = new List<Pose>(1024);
             if (scene == Scene.ChairAtOneMetrePerSecond || scene == Scene.StoolAtHalfAMetrePerSecond)
@@ -91,7 +91,7 @@ namespace Atlas.Safety.Tests
         // What the scan never saw, by frame. The furnished walks keep the dynamic layer busy: a figure and a post
         // that are stamped and remembered, the figure taken away so that its cells are seen empty, and a hand
         // nobody has masked that stamps a trail in front of the walker and is lowered again.
-        static void Stage(Scene scene, BumpScenario sim, int frame, int frames)
+        internal static void Stage(Scene scene, BumpScenario sim, int frame, int frames)
         {
             switch (scene)
             {
@@ -115,7 +115,7 @@ namespace Atlas.Safety.Tests
             }
         }
 
-        static void AddFrame(ref Fingerprint f, BumpGuardCore core)
+        internal static void AddFrame(ref Fingerprint f, BumpGuardCore core)
         {
             DepthFrameResult r = core.LastDepth;
             for (int k = 0; k < BumpConstants.SectorCount; k++) f.Add(r.Sector(k));
@@ -139,7 +139,7 @@ namespace Atlas.Safety.Tests
             f.Add(core.Diagnostics.RisingEdges);
         }
 
-        static void AddLayer(ref Fingerprint f, BumpGuardCore core)
+        internal static void AddLayer(ref Fingerprint f, BumpGuardCore core)
         {
             DynamicGrid g = core.Dynamic;
             int cells = g.Spec.Width * g.Spec.Height;
@@ -203,7 +203,7 @@ namespace Atlas.Safety.Tests
         }
 
         // Recorded on commit d69e186, before Atlas.Safety knew of any mask, by this same code on .NET 8 (arm64).
-        static ulong Recorded(Scene scene)
+        internal static ulong Recorded(Scene scene)
         {
             switch (scene)
             {

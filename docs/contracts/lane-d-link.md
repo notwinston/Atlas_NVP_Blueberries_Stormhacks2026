@@ -397,7 +397,7 @@ Notes:
   different until it is switched on, from the Console or from the on-device menu. Under the demo lock the Station
   cannot change it, so in a locked demo it is changed from the menu (1.5). `hands.editor`, `hands.bench` and
   `hands.record` are developer parameters and no kill switch.
-- The hands add nothing to `State`, no message and no operator command: their parameters travel in the manifest and
+- The hands add nothing to `State` and no message, only the `hands` operator command (§2.9), which works under the demo lock: their parameters travel in the manifest and
   `ParamSet` like any other, and their events (§2.6) are ordinary `Event` messages (§2.3 here; §8.3 of the hands
   design).
 
@@ -1437,7 +1437,7 @@ Events in this build. A lane adds a name by adding a row.
 | `param` | `{id, name, value, source: "local" \| "remote" \| "restore"}` (`LinkEvents.ParamChanged`) | D (`LinkPump`) | One event per applied change: this is the echo of §7.3.2. A `remote` or `restore` change is reported at once. A `local` change only marks the entry and is reported at step 8b at most once per second, with the value of that moment. A `local` change of `slicer.w`, `slicer.xw`, `slicer.yw`, `slicer.zw` is not reported. A change made while the Station is away goes to the phone's file only; the manifest of the next handshake carries the values |
 | `param.set` | `{name, value, src: "menu"}` | D (`MenuModel`) | The on-device menu applied a value (§5.7); the `param` event follows |
 | `param.ignored` | `{reason: "lock" \| "degraded", count, ids: [wire ids]}` | D (`LinkPump`) | A `ParamSet` was dropped. The Hub puts its record of those parameters back to what the phone holds |
-| `cmd` | `{cmd: "space" \| "home" \| "recentre" \| "quality" \| "cue" \| "lock"}` plus `space` and `variant`, `tier`, or `on` (`OperatorCommand.ToEvent`) | D (`LinkPump`) | An operator command was handed to `IOperatorCommands` (§2.9) |
+| `cmd` | `{cmd: "space" \| "home" \| "recentre" \| "quality" \| "cue" \| "lock" \| "hands"}` plus `space` and `variant`, `tier`, or `on` (`OperatorCommand.ToEvent`) | D (`LinkPump`) | An operator command was handed to `IOperatorCommands` (§2.9) |
 | `space.entered` | `{from, to}` | D (`LinkPump`), from `State.spaceId` at step 8a | A space was entered |
 | `space.refused` | `{space, reason}` | A (SpaceLab) | `RequestSwitch` refused (lane A §4.1) |
 | `space.loadFailed`, `space.error` | `{space}`, `{<where>: message}` | A (SpaceLab) | A module could not be created; a module threw |
@@ -1709,7 +1709,7 @@ is the handler of §6.2 that turns `cue` into `BumpCue.Fire`, so `Atlas.Safety` 
 // File: ATLAS/Assets/Atlas/Link/OperatorCommand.cs
 namespace Atlas.Link
 {
-    public enum OperatorCommandKind : byte { None = 0, SwitchSpace = 1, Home = 2, Recentre = 3, Quality = 4, Cue = 5, Lock = 6 }
+    public enum OperatorCommandKind : byte { None = 0, SwitchSpace = 1, Home = 2, Recentre = 3, Quality = 4, Cue = 5, Lock = 6, Walk = 7, View = 8, Hands = 9 }
 
     /// <summary>One operator command as the app consumes it.</summary>
     public struct OperatorCommand
@@ -1756,7 +1756,9 @@ in the Spectator, where commands wait and are never applied) and does this:
 | `quality` | `SetQuality(Tier)` | Sets `thermal.pinTier` |
 | `cue` | `Cue()` | `BumpCue.Fire(BumpLevel.Strong, float2.zero, CueSource.Operator)` (lane C §8.8): the same local entry point Bump Guard uses (`P1-C14`). Indicator, tone and continuous haptic; the world keeps rendering; nothing freezes |
 | `lock` | `SetLock(On)` | `registry.Set("demoLock", on ? 1f : 0f, ParamSource.Remote)` |
+| `hands` | `LinkPump` itself: `registry.Set("hands.enabled", On ? 1f : 0f, ParamSource.Remote)` (not on `IOperatorCommands`), so it works under the demo lock | none |
 
+- `OperatorCmd hands` (args `{on}`, `OperatorCommand.Hands(bool)`, `CmdHands = "hands"`) is a seventh operator command, added by the tracked hands (design 8.1, 8.2). The Console's Operator page has a Hands switch and status line; the status folds `hands.on`, `hands.off`, `hands.rate`, `hands.enter`, `hands.exit` and `hands.stats` events (active or off with the reason, rate, hands tracked).
 - After each command `LinkPump` logs one `cmd` event (§2.6). A handler that throws is logged as an error line
   and does not stop the commands behind it. Test L10 compares the event's `t_us` (clock-corrected) with the
   time the Hub noted in `hub.log`: 250 ms at most.

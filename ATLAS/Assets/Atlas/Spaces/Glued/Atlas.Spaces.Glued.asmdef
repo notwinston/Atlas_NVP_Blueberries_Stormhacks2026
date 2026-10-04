@@ -10,7 +10,9 @@
         "Atlas.Telemetry",
         "Unity.Mathematics",
         "Unity.Burst",
-        "Unity.Collections"
+        "Unity.Collections",
+        "Unity.TextMeshPro",
+        "UnityEngine.UI"
     ],
     "allowUnsafeCode": true,
     "_tests": "Atlas.Spaces.Tests"

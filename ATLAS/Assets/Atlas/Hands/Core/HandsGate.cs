@@ -46,8 +46,8 @@ namespace Atlas.Hands
         public QualityTier Tier;
         /// <summary>The hands.rate parameter: 0 is auto, else 30 or 15.</summary>
         public int RateOverride;
-        /// <summary>How old the newest detector result was when it was polled, seconds.</summary>
-        public float ResultAgeSeconds;
+        /// <summary>How long the newest detector result's Vision request took, seconds (HandsDetection.RequestMs / 1000).</summary>
+        public float RequestSeconds;
         /// <summary>The hands' own time on the main thread, milliseconds per frame.</summary>
         public float MainThreadMs;
         /// <summary>A hand is tracked this frame, on either side.</summary>
@@ -94,7 +94,7 @@ namespace Atlas.Hands
     ///
     /// The rate is the override when there is one; otherwise <see cref="HandsConstants.RateFull"/> at Nominal and
     /// High and <see cref="HandsConstants.RateReduced"/> at Fair. Two guards sit under it. The self-governor drops
-    /// a full rate to the reduced one when results stay older than <see cref="HandsConstants.GovernorAgeSeconds"/>
+    /// a full rate to the reduced one when the detector's requests stay longer than <see cref="HandsConstants.GovernorRequestSeconds"/>
     /// or the hands' main-thread time stays over <see cref="HandsConstants.GovernorMainThreadMs"/>, each for
     /// <see cref="HandsConstants.GovernorSeconds"/> (the two causes keep their own clocks), and stays down until
     /// the gate next goes inactive. The idle stop drops to <see cref="HandsConstants.RateIdle"/> after
@@ -238,7 +238,7 @@ namespace Atlas.Hands
             // The self-governor watches the full rate, the one it can drop, and only when nothing else sets it.
             if (overrideRate == 0 && tierRate == HandsConstants.RateFull && !idle)
             {
-                _slowResults = inputs.ResultAgeSeconds > HandsConstants.GovernorAgeSeconds ? _slowResults + dt : 0.0;
+                _slowResults = inputs.RequestSeconds > HandsConstants.GovernorRequestSeconds ? _slowResults + dt : 0.0;
                 _slowMainThread = inputs.MainThreadMs > HandsConstants.GovernorMainThreadMs ? _slowMainThread + dt : 0.0;
                 if (_slowResults >= HandsConstants.GovernorSeconds || _slowMainThread >= HandsConstants.GovernorSeconds)
                     _governed = true;

@@ -262,6 +262,7 @@ namespace Atlas.Hands
             float3 normal, point;   // unit normal towards the camera, and a point on the plane
             float pictureNoise = PictureNoisePixels / math.min(fx, fy);
             _pictureNoise = pictureNoise;
+            bool sizeSeen = fromDepth;   // the size branch's spans are ones LiDAR showed on this hand within the memory window
             float easeLeft = 0f;   // how much of the palm's place is still the size's, while LiDAR takes over
             if (fromDepth)
             {
@@ -272,7 +273,7 @@ namespace Atlas.Hands
                 // the palm starts where its size had it and glides to where LiDAR has it (decision R3).
                 float3 sizeNormal, sizePoint;
                 if (recent && !memory.FromDepth
-                    && SizePlane(in memory, remembered, recent, time, cameraFromSession, centreRay, pictureNoise, out sizeNormal, out sizePoint))
+                    && SizePlane(in memory, remembered, recent, time, cameraFromSession, centreRay, pictureNoise, out sizeNormal, out sizePoint, out _))
                 {
                     memory.Easing = true;
                     memory.EaseTime = time;
@@ -296,7 +297,9 @@ namespace Atlas.Hands
             else
             {
                 memory.Easing = false;
-                if (!SizePlane(in memory, remembered, recent, time, cameraFromSession, centreRay, pictureNoise, out normal, out point)) return false;
+                float carriedShare;
+                if (!SizePlane(in memory, remembered, recent, time, cameraFromSession, centreRay, pictureNoise, out normal, out point, out carriedShare)) return false;
+                sizeSeen = carriedShare > 0f;
             }
 
             // ---- 4. Place the palm ----
@@ -446,8 +449,11 @@ namespace Atlas.Hands
 
             // ---- Confidence (section 4.4, item 6, with decision R3) ----
             // The lowest of four terms. The palm's: 1 from a LiDAR plane; from the hand's size 0.5, or 0.7 once
-            // that size is this walker's own; and between the two while the palm glides from one to the other.
-            float sizeTerm = _measured ? HandsConstants.ConfidenceFromMeasuredSize : HandsConstants.ConfidenceWithoutDepth;
+            // that size is this walker's own, or is one LiDAR showed on this hand within the last
+            // PlaneMemorySeconds (a palm that came out through LiDAR's range to press: its size is known from
+            // depth even before the walker's scale has converged); and between the two while the palm glides
+            // from one to the other.
+            float sizeTerm = _measured || sizeSeen ? HandsConstants.ConfidenceFromMeasuredSize : HandsConstants.ConfidenceWithoutDepth;
             float planeTerm = fromDepth ? math.lerp(1f, sizeTerm, easeLeft) : sizeTerm;
             float stretchTerm = 1f - math.saturate((stretch - StretchFree) / StretchRange);
             float edgeTerm = math.saturate(edgeMargin / HandsConstants.EdgeFadeBand);
@@ -700,16 +706,18 @@ namespace Atlas.Hands
         /// give on a plane of that tilt: tilt that was not allowed for can only shorten a span in the picture,
         /// which makes its estimate too far. The spans are the ones LiDAR last showed on this hand, fading into
         /// the walker's measured ones, so nothing jumps where LiDAR ends. False when neither span is seen.
+        /// carried is how much of the answer rests on spans LiDAR showed on this hand: 1 just after LiDAR, 0 once
+        /// the memory has faded or for a hand LiDAR never saw.
         /// </summary>
         bool SizePlane(in Memory memory, bool remembered, bool recent, double time, float3x3 cameraFromSession,
-                       float3 centreRay, float pictureNoise, out float3 normal, out float3 point)
+                       float3 centreRay, float pictureNoise, out float3 normal, out float3 point, out float carried)
         {
             normal = point = float3.zero;
+            carried = 0f;
             float width = HandModel.PalmWidth * _widthScale, length = HandModel.PalmLength * _lengthScale;
             float3 facing = -math.normalize(centreRay);
 
             // What is carried over from the last valid plane, and how much of it.
-            float carried = 0f;
             float3 carriedNormal = facing;
             if (remembered && memory.HasPlane)
             {

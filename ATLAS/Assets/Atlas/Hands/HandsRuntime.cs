@@ -100,6 +100,11 @@ namespace Atlas.Hands
 
         // Edges and statistics (section 8.1).
         bool _wasLeft, _wasRight;
+        // The edge margin of each hand's last tracked frame, for the cause of its exit (section 8.1), and whether its enter was held back.
+        float _edgeLeft, _edgeRight;
+        bool _heldLeft, _heldRight;
+        // The entered space's own surfaces, when it publishes them by implementing IHandsSurface (section 6.5).
+        IHandsSurface _spaceSurface;
         double _enterLeft, _enterRight, _lastEventLeft = double.NegativeInfinity, _lastEventRight = double.NegativeInfinity;
         int _suppressedEvents;
         double _activeSince, _lastBench = double.NegativeInfinity;
@@ -267,7 +272,7 @@ namespace Atlas.Hands
             gate.HeadFromCamera = _deps.HeadFromCamera == null || _deps.HeadFromCamera();
             gate.Tier = frame.Tier;
             gate.RateOverride = RateOverride;
-            gate.ResultAgeSeconds = _lastAge;
+            gate.RequestSeconds = _lastRequestMs * 0.001f;
             gate.MainThreadMs = _mainThreadMs;
             gate.AnyHandSeen = _left.Tracked || _right.Tracked;
             _gateState = _gate.Update(now, dt, in gate);
@@ -469,6 +474,8 @@ namespace Atlas.Hands
             ISpaceModule module = host != null && host.HasSpace ? host.Module : null;
             _surfaces.Enabled = room != null && module != null && module.Registered &&
                                 (host.State == SpaceHostState.Running || host.State == SpaceHostState.FadingIn);
+            bool up = module != null && (host.State == SpaceHostState.Running || host.State == SpaceHostState.FadingIn);
+            _spaceSurface = up ? module as IHandsSurface : null;
             return changed;
         }
 
@@ -476,7 +483,22 @@ namespace Atlas.Hands
         {
             bool was = touch.Contact;
             float3 point, normal;
-            if (valid && _surfaces.TryClosest(tip, HandsConstants.GlowMetres, out point, out normal))
+            bool hit = false;
+            point = float3.zero;
+            normal = float3.zero;
+            if (valid)
+            {
+                hit = _surfaces.TryClosest(tip, HandsConstants.GlowMetres, out point, out normal);
+                float3 sp, sn;
+                if (_spaceSurface != null && _spaceSurface.TryClosest(tip, HandsConstants.GlowMetres, out sp, out sn) &&
+                    (!hit || math.distancesq(tip, sp) < math.distancesq(tip, point)))
+                {
+                    hit = true;
+                    point = sp;
+                    normal = sn;
+                }
+            }
+            if (hit)
             {
                 touch.Near = true;
                 touch.Point = point;
@@ -570,8 +592,8 @@ namespace Atlas.Hands
                 }
             }
 
-            EnterExit(events, now, HandSide.Left, _left.Tracked, ref _wasLeft, ref _enterLeft, ref _lastEventLeft);
-            EnterExit(events, now, HandSide.Right, _right.Tracked, ref _wasRight, ref _enterRight, ref _lastEventRight);
+            EnterExit(events, now, HandSide.Left, _left.Tracked, ref _wasLeft, ref _enterLeft, ref _lastEventLeft, ref _edgeLeft, ref _heldLeft);
+            EnterExit(events, now, HandSide.Right, _right.Tracked, ref _wasRight, ref _enterRight, ref _lastEventRight, ref _edgeRight, ref _heldRight);
 
             HandsTouchState touch = InputTouch;
             if (touch.Left.Fired) LogTouch(events, "L", touch.Left.Target);
@@ -605,8 +627,9 @@ namespace Atlas.Hands
         }
 
         void EnterExit(IEventLog events, double now, HandSide side, bool tracked, ref bool was, ref double entered,
-                       ref double lastEvent)
+                       ref double lastEvent, ref float edge, ref bool held)
         {
+            if (tracked) edge = _filter.Hand(side).EdgeMargin;
             if (tracked == was) return;
             was = tracked;
             if (tracked) entered = now;
@@ -614,8 +637,17 @@ namespace Atlas.Hands
             if (tracked && now - lastEvent < HandsConstants.EnterExitEventSeconds)
             {
                 _suppressedEvents++;
+                held = true;
                 return;
             }
+            // The exit of an enter that was held back is held back too, so no exit is logged without its enter.
+            if (!tracked && held)
+            {
+                held = false;
+                _suppressedEvents++;
+                return;
+            }
+            if (tracked) held = false;
             if (tracked) lastEvent = now;
             if (events == null) return;
             string hand = side == HandSide.Left ? "L" : "R";
@@ -624,10 +656,9 @@ namespace Atlas.Hands
                 events.Log("hands.enter", "hand", hand);
                 return;
             }
-            ref readonly TrackedHand lost = ref _filter.Hand(side);
             _json.Length = 0;
             _json.Append("{\"hand\":\"").Append(hand).Append("\",\"cause\":\"")
-                 .Append(lost.EdgeMargin < HandsConstants.EdgeFadeBand ? "edge" : "lost")
+                 .Append(edge < HandsConstants.EdgeFadeBand ? "edge" : "lost")
                  .Append("\",\"visibleMs\":").Append((long)math.round((now - entered) * 1000.0)).Append('}');
             events.LogJson("hands.exit", _json.ToString());
         }

@@ -74,6 +74,7 @@
   <a href="#map" data-tab="map">Map</a>
   <a href="#view" data-tab="view">View</a>
   <a href="#assets" data-tab="assets">Assets</a>
+  <a href="#network" data-tab="network">Network</a>
   <a href="#pairing" data-tab="pairing">Pairing</a>
 </nav>
 
@@ -142,6 +143,16 @@
             <span class="track"></span>
             <span>Demo lock: the phone ignores parameter changes. Commands still work.</span>
           </label>
+        </div>
+
+        <div class="panel" id="hands-panel">
+          <h2>Hands <span class="ack" id="ack-hands"></span></h2>
+          <label class="switch">
+            <input type="checkbox" id="cmd-hands">
+            <span class="track"></span>
+            <span>Hands on. This works under the demo lock.</span>
+          </label>
+          <p class="hint" id="hands-status">Hands: no events yet.</p>
         </div>
 
         <div class="panel">
@@ -296,6 +307,36 @@
         <thead><tr><th>Box</th><th>Object</th><th>State</th><th>Source</th><th>Queue</th><th>Triangles</th><th>Load</th><th>Job</th><th>Detail</th></tr></thead>
         <tbody id="job-rows"><tr><td colspan="9" class="empty">No objects yet. Rows appear when the phone sends its room and the Forge reports jobs.</td></tr></tbody>
       </table>
+    </div>
+  </section>
+
+  <!-- Network: the hyperbolic network atlas (V1) -->
+  <section class="page" id="page-network" data-page="network" hidden>
+    <div class="page-grid map-grid">
+      <div class="panel map-panel">
+        <canvas id="net-canvas"></canvas>
+      </div>
+      <aside class="panel">
+        <h1>Network</h1>
+        <label class="field">
+          <span>Network file</span>
+          <select id="net-file"></select>
+        </label>
+        <p class="hint" id="net-facts">–</p>
+        <div class="row">
+          <label class="field"><span>From node</span><input type="number" id="net-src" min="0" value="0"></label>
+          <label class="field"><span>To node</span><input type="number" id="net-dst" min="0" value="1"></label>
+        </div>
+        <div class="row">
+          <button type="button" id="net-send">Send packet</button>
+          <button type="button" id="net-reset" class="quiet">Reset</button>
+        </div>
+        <p class="status" id="net-packet" role="status">Press Send packet.</p>
+        <h2>Study</h2>
+        <pre class="mono" id="net-study">–</pre>
+        <p class="hint">Click a node to re-centre the disc on it. Draw time: <span id="net-draw-ms">–</span></p>
+        <p class="status" id="net-status" role="status"></p>
+      </aside>
     </div>
   </section>
 

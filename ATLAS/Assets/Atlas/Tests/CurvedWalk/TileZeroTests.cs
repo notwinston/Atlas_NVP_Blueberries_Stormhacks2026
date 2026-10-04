@@ -54,6 +54,30 @@ namespace Atlas.Spaces.CurvedWalk.Tests
         static double MaxDiff(in Iso2 a, in Iso2 b)
             => math.max(math.cmax(math.abs(a.M.c0 - b.M.c0)), math.max(math.cmax(math.abs(a.M.c1 - b.M.c1)), math.cmax(math.abs(a.M.c2 - b.M.c2))));
 
+        // The Small Planet lays the furniture out about the walker's entry point: seen from the walker registered there, every
+        // object is at its real offset and turn, wherever in the room the walker stood, on the kit's planet and on the smallest
+        // one. About the room centre that holds only for the walker at the centre, and flat both are the same placement.
+        [TestCase(2.291831)]
+        [TestCase(1.2)]
+        public void ObjectAbout_TheEntryPoint_IsWhereTheRealObjectIs(double r)
+        {
+            double2 head = new double2(0.9, -0.6);
+            Iso2 walker = TileZeroPlacement.Registered(head, Curvature.Spherical, r).Inverse();
+            double worstAboutCentre = 0;
+            foreach (double2 b in new[] { new double2(-1.2, 1.5), new double2(1.8, 0.4), new double2(0.9, -0.6), new double2(-2.0, -1.1) })
+            {
+                foreach (double yaw in new[] { 0.0, 0.7, -2.4 })
+                {
+                    Iso2 real = TileZeroPlacement.Object(b - head, yaw, Curvature.Spherical, r);
+                    Iso2 about = walker * TileZeroPlacement.ObjectAbout(head, b, yaw, Curvature.Spherical, r);
+                    Assert.Less(MaxDiff(about, real), 1e-9, "object " + b + " yaw " + yaw);
+                    worstAboutCentre = math.max(worstAboutCentre, MaxDiff(walker * TileZeroPlacement.Object(b, yaw, Curvature.Spherical, r), real));
+                    Assert.Less(MaxDiff(TileZeroPlacement.ObjectAbout(head, b, yaw, Curvature.Flat, 1), TileZeroPlacement.Object(b, yaw, Curvature.Flat, 1)), 1e-12);
+                }
+            }
+            Assert.Greater(worstAboutCentre, 0.01, "about the room centre the walker off the centre sees the objects moved");
+        }
+
         // ReturnHome_Reregisters: return-to-Home re-registers (MP §4.6). The return is the app's: SpaceLab.ReturnHome fades
         // out, calls the space's Exit and puts the shared kernel back, with the real frame loop as the walker reset. After
         // it: K = 0, tile zero, the frame an unturned translation by the head's floor point. (The room's materials and

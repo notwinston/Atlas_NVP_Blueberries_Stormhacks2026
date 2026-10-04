@@ -293,8 +293,8 @@ namespace Atlas.Spaces.Glued
     /// the body in one call; nothing is allocated, because the builder was given room for both hands at the start.
     ///
     /// The hands come at the level the body leaves room for (decision R15, <see cref="LevelFor"/>): the full hands
-    /// when body and both of them fit inside <see cref="AtlasMeshBudget.SelfAvatar"/>, as with the built-in body; the
-    /// reduced hands when only those fit, as with the kit avatar; none when not even those do. The level is fixed
+    /// when body and both of them fit inside <see cref="AtlasMeshBudget.SelfAvatar"/> (a body of 192 triangles or fewer); the
+    /// reduced hands when only those fit, as with the built-in body (216) and the kit avatar (356); none when not even those do. The level is fixed
     /// by the body, so the avatar never draws more than the budget allows whatever the kit ships.
     /// </remarks>
     public sealed class GluedAvatarRig

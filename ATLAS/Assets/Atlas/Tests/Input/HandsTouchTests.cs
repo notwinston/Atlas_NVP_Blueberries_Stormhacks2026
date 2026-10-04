@@ -865,6 +865,40 @@ namespace Atlas.Input.Tests
             Assert.That(_rig.Events, Is.EqualTo(new[] { (AtlasAction.NavDown, InputSource.Gaze, 1), (AtlasAction.NavDown, InputSource.Gaze, 2) }));
         }
 
+        [TestCase(45f, false)]
+        [TestCase(60f, false)]
+        [TestCase(60f, true)]
+        public void Input_HandsTouch_StateMachine_ASlantedPushPressesTheRowItCameThrough(float degrees, bool rising)
+        {
+            // Real menu geometry: rows 3 cm tall on a 3.15 cm pitch. The fingertip comes in on a slant, from below
+            // (rising) or from above, so that in front of the panel it is over another row than the one it meets
+            // the press plane in. Exactly the row it came through fires.
+            float slope = math.tan(math.radians(degrees)) * (rising ? -1f : 1f);
+            for (int row = 1; row <= 4; row++)
+            {
+                foreach (float offset in new[] { -0.0147f, -0.0135f, -0.0125f, -0.006f, 0f, 0.006f, 0.0125f, 0.0135f, 0.0147f })
+                {
+                    var rig = new HandsRig();
+                    GazeTargetId first = default;
+                    for (int i = 0; i < 6; i++)
+                    {
+                        GazeTargetId id = rig.Add(HandsRig.Row(AtlasAction.Primary, HandsRig.Panel - new float3(0f, HandsRig.RowPitch * i, 0f), tag: i + 1));
+                        if (i == 0) first = id;
+                    }
+                    HandsRig.Face face = rig.FaceOf(first);
+                    float v = -HandsRig.RowPitch * row + offset;
+                    // One straight line, in at a slant, that meets the press plane at (v, -1 cm) between two frames.
+                    float3 start = face.At(0f, v + slope * 0.151f, 0.141f);
+                    float3 end = face.At(0f, v - slope * 0.0293f, -0.0393f);
+                    rig.Glide(start, end, 0.3f);
+                    rig.Glide(end, face.At(0f, v - slope * 0.0293f, 0.12f), 0.3f);
+                    string where = degrees + " deg, rising " + rising + ", row " + row + ", offset " + offset;
+                    Assert.That(rig.Events.Count, Is.EqualTo(1), where);
+                    Assert.That(rig.Events[0].tag, Is.EqualTo(row + 1), where);
+                }
+            }
+        }
+
         [Test]
         public void Input_HandsTouch_StateMachine_AFingerArmedOnOneRowPressesItsNeighbour()
         {

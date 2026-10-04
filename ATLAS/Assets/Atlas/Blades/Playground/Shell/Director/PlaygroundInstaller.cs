@@ -21,9 +21,10 @@ namespace Atlas.Blades.Playground.Shell
     public sealed class PlaygroundInstaller : MonoBehaviour, IAfterFrameStep
     {
         [SerializeField] PlaygroundBeatTable m_Beats;
-        [SerializeField] GluedExhibit m_Glued;
         [SerializeField] RoomsExhibit m_Rooms;
-        // Lane A's Slicer toybox (P2-A01) is engine-free and needs no scene object: it follows the S6 space once entered.
+        // The Glued exhibit and lane A's Slicer toybox (P2-A01) are engine-free and need no scene object: each follows its
+        // space once entered, where the steps, the card and the buttons live.
+        readonly GluedExhibit m_Glued = new GluedExhibit();
         readonly ToyboxExhibit m_Toybox = new ToyboxExhibit();
 
         PlaygroundShell m_Shell;
@@ -61,10 +62,11 @@ namespace Atlas.Blades.Playground.Shell
             m_Pool = pool;
             m_RoomRoot = parts.Content.Root;
 
-            if (m_Glued != null) m_Shell.Exhibits.Register(ExhibitId.Glued, new GluedExhibitLink(m_Glued));
+            m_Shell.Exhibits.Register(ExhibitId.Glued, new GluedExhibitLink(m_Glued));
             if (m_Rooms != null) m_Shell.Exhibits.Register(ExhibitId.ImpossibleRooms, new RoomsExhibitLink(m_Rooms));
             m_Shell.Exhibits.Register(ExhibitId.Slicer, new ToyboxExhibitLink(m_Toybox));
             EquationSources.Register(new SlicerEquationSource(m_Toybox));
+            EquationSources.Register(new GluedEquationSource(m_Glued));
 
             if (parts.Input != null)
             {
@@ -73,9 +75,9 @@ namespace Atlas.Blades.Playground.Shell
             }
             if (hud != null)
             {
-                m_CaptionView = CaptionChipView.Create(m_Shell.Caption, hud, pool);
+                m_CaptionView = CaptionChipView.Create(m_Shell.Caption, hud, pool, parts.Input);
                 m_CardView = EquationCardView.Create(m_Shell.Card, hud, pool);
-                m_PromptView = PromptChipView.Create(m_Shell.Chip, hud, pool);
+                m_PromptView = PromptChipView.Create(m_Shell.Chip, hud, pool, parts.Input);
             }
 
             m_Host.SpaceEntered += OnSpaceEntered;
@@ -100,7 +102,6 @@ namespace Atlas.Blades.Playground.Shell
                 Tracking = frame.Tracking,
                 Walker = frame.Walker
             });
-            if (m_Host.HasSpace && m_Host.Current == SpaceId.Glued && m_Glued != null) m_Glued.Tick(in frame);
             if (m_Host.HasSpace && m_Host.Current == SpaceId.Portal && m_Rooms != null) m_Rooms.Tick();
             if (m_CaptionView != null) m_CaptionView.Update(frame.DeltaTime);
             if (m_CardView != null) m_CardView.Update(frame.DeltaTime);
@@ -112,10 +113,10 @@ namespace Atlas.Blades.Playground.Shell
         // shell is told, so the exhibit's first line reaches the prompt chip.
         void OnSpaceEntered(SpaceId id)
         {
-            if (id == SpaceId.Glued && m_Glued != null && m_Host.Room != null)
+            if (id == SpaceId.Glued)
             {
                 GluedSpace space = m_Host.Module as GluedSpace;
-                if (space != null) m_Glued.Bind(space, m_Host.Room, m_Params);
+                if (space != null) m_Glued.Bind(space);
                 m_Shell.OnExhibitReady();
             }
             else if (id == SpaceId.Portal && m_Rooms != null && m_Host.Room != null)
@@ -134,7 +135,7 @@ namespace Atlas.Blades.Playground.Shell
 
         void OnSpaceExited(SpaceId id)
         {
-            if (id == SpaceId.Glued && m_Glued != null) m_Glued.Unbind();
+            if (id == SpaceId.Glued) m_Glued.Unbind();
             else if (id == SpaceId.Portal && m_Rooms != null) m_Rooms.Unbind();
             else if (id == SpaceId.Slicer) m_Toybox.Unbind();
         }

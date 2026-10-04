@@ -6,7 +6,7 @@ using UnityEngine;
 namespace Atlas.Blades.Playground
 {
     /// <summary>
-    /// Draws the signs of an <see cref="ExhibitMenu"/> in Home: one board while the menu is closed, four signs while
+    /// Draws the signs of an <see cref="ExhibitMenu"/> in Home: one board while the menu is closed, five signs while
     /// it is open, the selected one lit. Built in code under the room's root so the signs stand where the
     /// layout puts them in the room frame. Redraws only when the menu's revision moved.
     /// </summary>
@@ -57,7 +57,8 @@ namespace Atlas.Blades.Playground
             for (int k = 0; k < _signs.Length; k++)
             {
                 bool ready = _menu.IsReady((ExhibitId)k);
-                _signs[k].SetText(ready ? ExhibitMenu.Label(k) : ExhibitMenu.Label(k) + "\n(not ready)");
+                bool on = k == (int)ExhibitId.Network && AtlasServices.TryGet(out IHomeExhibit net) && net.Active;
+                _signs[k].SetText(!ready ? ExhibitMenu.Label(k) + "\n(not ready)" : on ? ExhibitMenu.Label(k) + "\n(on)" : ExhibitMenu.Label(k));
                 _signs[k].SetTint(k == _menu.Selected ? s_lit : ready ? s_plain : s_dim);
                 _signs[k].SetAlpha(open ? 1f : 0f);
             }

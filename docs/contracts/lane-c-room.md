@@ -17,7 +17,7 @@ types in `Atlas.World`.
 | Pose and sensor types, pose pipeline, pose log | Signatures final | `P1-C01`, `P1-C11` |
 | Bump Guard, `BumpCue`, haptics | Signatures and constants final; constants are starting values (§4.10) | `P1-C09`, `P1-C14` |
 | Room content (`IRoomContent`) | Signatures final; two meshes per generated object and a furniture level (§9.1) | `P1-C07` |
-| Scan session, routes 1 to 3 | Signatures final. Route 4 (wall bridge, `P1-C05`, Extended) is **written, tested headless and switched on by the parameter `scan.wallBridge`** (default on, a kill switch) where the bridge reports itself available. The Swift plugin is added to the Xcode project by a post-build step and has compiled and linked in Unity's export of this tree; it has never run on a device (§10.1) | `P1-C02` to `P1-C05`, `P1-C06` |
+| Scan session, routes 1 to 3 | Signatures final. Route 4 (wall bridge, `P1-C05`, Extended) is **written, tested headless and switched by the parameter `scan.wallBridge`** (default **off**) where the bridge reports itself available. The Swift plugin is added to the Xcode project by a post-build step. On the device (4 October 2026) the second `RoomCaptureSession` on Unity's ARSession crashed the scan (`SIGTRAP` 7 to 26 s into the sweep, ARKit reporting resource constraints) and degraded the floor; with the parameter off the same scan ran to the end (§10.1) | `P1-C02` to `P1-C05`, `P1-C06` |
 | Photo capture and its sink | Signatures final | `P1-C08` |
 | World map | Signatures final | `P1-C13` |
 | Input actions and twins | Signatures final | `P1-C10` |
@@ -2833,7 +2833,7 @@ other space, until the full copies are measured in those spaces (check M3 of the
 | S1 Glued | `Kerbs` | hidden (the cell's floor grid is drawn) | shown, once | Light | The room is not repeated |
 | S2 Curved Walk | `Full`, then `Kerbs` (kerb height 0.9 m) when curvature turns on | hidden once tile zero's shell is drawn | shown, each with its own anchor | Full | The room drifts off the real one. `CurvedRoomView` (`Rendering/Tiles/`) drives `IRoomContent`: kappa 0 = warp off, floor shown, walls `Full`; otherwise `FloorVisible = false`, `SetWallMode(Kerbs, 0)`, the shell material gets `_WarpMode` and the anchor inverse(U)·F[0], each object's material the anchor inverse(U)·F[0]·`TileZeroPlacement.Object(Base.xz, Yaw, κ, L)`, renderers 1000 m `localBounds`; it owns no mesh, material or object and `Dispose` only takes the warp off |
 | S3 Aligned Cells | `Full` | hidden | shown, once per eye, unclipped | Light | Registered. `AlignedCellsRoomView` (`Spaces/AlignedCells/`) |
-| S4 Small Planet | `Kerbs` | hidden | shown, each with its own anchor | Light | `CurvedRoomView` on the sphere |
+| S4 Small Planet | `Kerbs` | hidden | shown, each with its own anchor, laid out about the head's floor point at entry (`CurvedRoomView.ObjectOrigin`) | Light | `CurvedRoomView` on the sphere |
 | S5 Impossible Rooms | `Full` | shown | shown | Light | `PortalRenderer` treats `Root` as room 0 and listens to `ObjectChanged` |
 | S6 Slicer | `Full` | shown | shown | Light | The object floats in the room |
 
@@ -3000,7 +3000,7 @@ What onboarding drives (§4.2, tasks `P1-C02` to `P1-C06`). Phone in the hand.
 
 **Route 4 as written.** `AtlasRoomPlan.swift` runs a second `RoomCaptureSession` on Unity's ARSession (`RoomCaptureSession(arSession:)`), keeps the latest `CapturedRoom` as JSON and exports four C functions; `ArKitWallBridge` (`Scan/ARKit/RoomPlan/`) takes the ARSession pointer from `XRSessionSubsystem.nativePtr`. `WallBridgeCapture` (in `ScanSession`: `Begin` after the box capture starts, `End` in `StopCapture`, `Apply(room)` in `Finalise`) hands the text to `WallBridgeJson` (`World/Room/`, engine-free; schema `atlas.walls/1`, surfaces `{c, x, w, h}` in ARKit's frame with z flipped into Unity's) and `WallBridgeMerge`: a RoomPlan wall matches an outline wall when it is parallel within 10°, its centre is within 0.3 m of the wall's line and it overlaps by at least 0.05 m; the outline wall keeps its A and B (rule R14) and takes the RoomPlan height when that is between 2.0 and 6.0 m; doors, windows and openings are cut to the wall (at most 16 per wall); `Quality.Route` becomes `WallBridge` when at least one wall merged. A merged wall more than 3 cm from the outline is counted and logged (`OffLine`, `MaxOffset`), not rejected. The switch exists because a second RoomPlan session on the same ARSession (AR Foundation open point D7) is untested on a device and might take frames from the first: the device checks in Open for the lead (item 16) come before anyone relies on route 4.
 
-**The switch.** The parameter `scan.wallBridge` (Bool, group `scan`, default on, `AppParams.ScanWallBridge`) calls
+**The switch.** The parameter `scan.wallBridge` (Bool, group `scan`, default off since the device crash of 4 October 2026, `AppParams.ScanWallBridge`) calls
 `WallBridge.Apply(bool)`, which sets `Enabled = parameterOn && Current.Available`. With the parameter off the bridge
 is never asked. `Atlas.Scan` cannot reach the parameter registry, so `AppParams` is the only place the switch lives;
 `ScanSystems` is unchanged. A capture already running is not affected: the next scan reads `Enabled`. With the switch

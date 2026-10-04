@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "atlas.network/1",
+  "title": "ATLAS network file (Network Atlas design section 6.3; docs/contracts/network.md section 2)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "model", "nodes", "edges", "study"],
+  "properties": {
+    "schema": { "const": "atlas.network/1" },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["n", "kbar", "gamma", "T", "seed", "zeta", "R"],
+      "properties": {
+        "n": { "type": "integer", "minimum": 2 },
+        "kbar": { "type": "number", "exclusiveMinimum": 0 },
+        "gamma": { "type": "number", "exclusiveMinimum": 2 },
+        "T": { "type": "number", "minimum": 0, "exclusiveMaximum": 1 },
+        "seed": { "type": "integer", "minimum": 0 },
+        "zeta": { "const": 1 },
+        "R": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "r", "theta", "degree", "label"],
+        "properties": {
+          "id": { "type": "integer", "minimum": 0 },
+          "r": { "type": "number", "minimum": 0 },
+          "theta": { "type": "number", "minimum": 0, "exclusiveMaximum": 6.283185307179586 },
+          "degree": { "type": "integer", "minimum": 0 },
+          "label": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 2,
+        "items": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "study": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pairs", "hyperbolic", "flat_picture"],
+      "properties": {
+        "pairs": { "type": "integer", "minimum": 1 },
+        "hyperbolic": { "$ref": "#/$defs/rule" },
+        "flat_picture": { "$ref": "#/$defs/rule" }
+      }
+    }
+  },
+  "$defs": {
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["success", "stretch"],
+      "properties": {
+        "success": { "type": "number", "minimum": 0, "maximum": 1 },
+        "stretch": { "type": ["number", "null"], "minimum": 1 }
+      }
+    }
+  }
+}

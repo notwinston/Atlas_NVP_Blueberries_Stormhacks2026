@@ -41,7 +41,8 @@ namespace Atlas.Input
     ///              target removed, disabled or out of reach ------------------------------------------------> IDLE
     /// A fingertip belongs to one target: one whose outline it is inside before one it is only beside, then the one
     /// whose centre is nearest sideways. Which target a press goes to is judged the same way at the point where
-    /// the fingertip met the press plane. While it is PRESSED it stays with the target it pressed, and no other
+    /// the fingertip met the press plane, but without keeping: the target it was with does not hold the press when
+    /// the fingertip came through another's outline, however steep its way in. While it is PRESSED it stays with the target it pressed, and no other
     /// fingertip can take that target. A Once target fires on the press. A Repeat target fires on the press and,
     /// once it has stayed pressed for a second, at its own interval (a tap must step once, and a tap stays in
     /// for more than the 0.4 s of the usual interval). A Hold target is held, or drives its axis, for as long as
@@ -65,6 +66,13 @@ namespace Atlas.Input
         public const float MinConfidence = 0.6f;
         /// <summary>A dwell waits while a fingertip is this close to its target: the finger is about to do the dwell's job (decision R6).</summary>
         public const float NearMetres = 0.20f;
+        /// <summary>
+        /// ...but only while the fingertip is getting somewhere: once it has come no nearer than this (a centimetre) for
+        /// <see cref="NearHoldSeconds"/>, it is resting, not about to press, and the dwell runs on.
+        /// </summary>
+        public const float NearProgressMetres = 0.010f;
+        /// <summary>A fingertip that has come no nearer a target by <see cref="NearProgressMetres"/> for this long stops holding that target's dwell.</summary>
+        public const float NearHoldSeconds = 1.0f;
         /// <summary>The ring under the fingertip shows, and that hand's pinch gives way, from this far in front of a face.</summary>
         public const float HoverDepth = 0.08f;
         /// <summary>A press counts only after the fingertip was seen this far in front: more than jitter, so one push cannot fire twice.</summary>
@@ -177,6 +185,10 @@ namespace Atlas.Input
         private readonly int[] _firedTag = new int[HandCount + 1];
         private HandsTouchState _state;
         private ulong _near;
+        /// <summary>For each hand, the targets its fingertip was near last frame; and for each of those, the nearest it has come and for how long it has come no nearer.</summary>
+        private readonly ulong[] _wasNear = new ulong[HandCount];
+        private readonly float[] _bestAway = new float[HandCount * 64];
+        private readonly float[] _stalled = new float[HandCount * 64];
         private double _clock;
 
         public HandsTouch(GazeRegistry registry)
@@ -202,7 +214,11 @@ namespace Atlas.Input
         /// </summary>
         public void Reset()
         {
-            for (int hand = 0; hand < HandCount; hand++) Drop(ref _fingers[hand]);
+            for (int hand = 0; hand < HandCount; hand++)
+            {
+                Drop(ref _fingers[hand]);
+                _wasNear[hand] = 0UL;
+            }
             _near = 0UL;
         }
 
@@ -229,6 +245,7 @@ namespace Atlas.Input
                 if (!finger.Trusted)
                 {
                     Drop(ref finger);
+                    _wasNear[hand] = 0UL;
                     continue;
                 }
 
@@ -342,10 +359,11 @@ namespace Atlas.Input
             if (finger.Phase == HandsTouchPhase.Pressed) KeepPressing(ref finger, world, inHead, headPosition, rotation, dt);
 
             // Every target of this context within reach: is the fingertip near it, which one is it over, and which
-            // one has it just come through? For each of the last two, the best target and the one it is with already.
-            Pick over = Pick.None, overMine = Pick.None, through = Pick.None, throughMine = Pick.None;
+            // one has it just come through? The first is judged with the one it is with already kept; the second is not.
+            Pick over = Pick.None, overMine = Pick.None, through = Pick.None;
             int taken = _fingers[1 - hand].Phase == HandsTouchPhase.Pressed ? _fingers[1 - hand].Slot : -1;
             int limit = _registry.SlotLimit;
+            ulong nearNow = 0UL;
             for (int slot = 0; slot < limit; slot++)
             {
                 if (!_registry.IsLive(slot, context)) continue;
@@ -355,7 +373,24 @@ namespace Atlas.Input
                 float3 tip = d.Space == GazeSpace.Head ? inHead : world;
                 Face face = FaceOf(ref d, headPosition, rotation, mine, finger.Normal);
                 Measure(in face, tip, out float z, out float outside, out float sideways);
-                if (Away(in face, tip, z, outside) <= NearMetres) _near |= 1UL << slot;
+                float away = Away(in face, tip, z, outside);
+                if (away <= NearMetres)
+                {
+                    ulong bit = 1UL << slot;
+                    int n = hand * 64 + slot;
+                    nearNow |= bit;
+                    bool pressing = finger.Phase == HandsTouchPhase.Pressed && slot == finger.Slot;     // a held press holds its dwell off
+                    if (pressing || (_wasNear[hand] & bit) == 0UL || away < _bestAway[n] - NearProgressMetres)
+                    {
+                        _bestAway[n] = away;
+                        _stalled[n] = 0f;
+                    }
+                    else
+                    {
+                        _stalled[n] += dt;
+                    }
+                    if (_stalled[n] < NearHoldSeconds) _near |= bit;
+                }
 
                 if (finger.Phase == HandsTouchPhase.Pressed || slot == taken) continue;
                 // The target it is with still counts as "inside" a little way past its edge: rows lie edge to edge.
@@ -368,8 +403,8 @@ namespace Atlas.Input
                     Measure(in face, at, out _, out float outsideThere, out float sidewaysThere);
                     if (outsideThere <= PressMargin)
                     {
-                        var there = new Pick { Slot = slot, Inside = outsideThere <= edge, Sideways = sidewaysThere, Depth = z };
-                        if (mine) throughMine = there;
+                        // No keeping here: the press goes to the outline the fingertip met the plane in, however steep its way in.
+                        var there = new Pick { Slot = slot, Inside = outsideThere <= 0f, Sideways = sidewaysThere, Depth = z };
                         if (there.Beats(in through)) through = there;
                     }
                 }
@@ -379,11 +414,11 @@ namespace Atlas.Input
                 if (mine) overMine = here;
                 if (here.Beats(in over)) over = here;
             }
+            _wasNear[hand] = nearNow;
             if (finger.Phase == HandsTouchPhase.Pressed) return;
 
             // The target it is with keeps the fingertip unless another is clearly the one.
             over = Pick.Settle(in over, in overMine);
-            through = Pick.Settle(in through, in throughMine);
 
             // It came through a target's press plane: that target is pressed, if the fingertip was armed. A target
             // it only brushed past, beside its outline, gives way to one whose outline the fingertip is inside

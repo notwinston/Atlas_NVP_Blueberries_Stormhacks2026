@@ -21,7 +21,7 @@ namespace Atlas.Spaces.Tests
         const float Heading = 0.7f;
 
         // A stand-in for a body of a chosen size: closed boxes of 12 triangles each, below the head, with no hand in it.
-        static MeshData Body(int boxes)
+        internal static MeshData Body(int boxes)
         {
             var body = new MeshData(24 * boxes, 36 * boxes);
             float2 uv = AtlasPalette.Uv(AtlasPalette.AvatarBody);
@@ -86,7 +86,7 @@ namespace Atlas.Spaces.Tests
 
                 int stride = GluedAvatarHands.ReducedVerticesPerHand;
                 Assert.That(data.VertexCount, Is.EqualTo(rig.BodyVertexCount + 2 * stride), label);
-                Assert.That(data.TriangleCount, Is.EqualTo(body.TriangleCount + 2 * GluedAvatarHands.ReducedTrianglesPerHand), label);
+                Assert.That(data.TriangleCount, Is.EqualTo(GluedBudget.AvatarBodyTriangles(body) + 2 * GluedAvatarHands.ReducedTrianglesPerHand), label);
                 for (int side = 0; side < 2; side++)
                 {
                     float3[] p = side == 0 ? left : right;
@@ -120,8 +120,11 @@ namespace Atlas.Spaces.Tests
                 GluedBudgetTests.AssertFacesAgreeWithNormals(data, rig.BodyIndexCount);
 
                 // The body is the one the rig was given, unchanged, and the bounds hold all of it.
+                var bare = new AtlasMeshBuilder();
+                GluedAvatarMesh.Build(bare, body);
+                Assert.That(rig.BodyVertexCount, Is.EqualTo(bare.VertexCount), label);
                 for (int v = 0; v < rig.BodyVertexCount; v++)
-                    Assert.That(data.Vertices[v].Position, Is.EqualTo(body.Vertices[v].Position), label + " body vertex " + v);
+                    Assert.That(data.Vertices[v].Position, Is.EqualTo(bare.Vertices[v].Position), label + " body vertex " + v);
                 float3 min = new float3(float.MaxValue), max = new float3(float.MinValue);
                 for (int v = 0; v < data.VertexCount; v++)
                 {
@@ -173,9 +176,10 @@ namespace Atlas.Spaces.Tests
         {
             Assert.That(AtlasMeshBudget.SelfAvatar, Is.EqualTo(600));
             Assert.That(GluedAvatarRig.LevelFor(0), Is.EqualTo(GluedHandsLevel.Full));
-            Assert.That(GluedAvatarRig.LevelFor(182), Is.EqualTo(GluedHandsLevel.Full), "the built-in body: 182 + 408 = 590");
+            Assert.That(GluedAvatarRig.LevelFor(182), Is.EqualTo(GluedHandsLevel.Full), "182 + 408 = 590, the body of before the new look");
             Assert.That(GluedAvatarRig.LevelFor(192), Is.EqualTo(GluedHandsLevel.Full), "192 + 408 = 600 is the last body with both full hands");
             Assert.That(GluedAvatarRig.LevelFor(193), Is.EqualTo(GluedHandsLevel.Reduced));
+            Assert.That(GluedAvatarRig.LevelFor(216), Is.EqualTo(GluedHandsLevel.Reduced), "the built-in body: 216 + 408 = 624 is over 600, 216 + 168 = 384 is not");
             Assert.That(GluedAvatarRig.LevelFor(356), Is.EqualTo(GluedHandsLevel.Reduced), "the kit avatar: 356 + 168 = 524");
             Assert.That(GluedAvatarRig.LevelFor(432), Is.EqualTo(GluedHandsLevel.Reduced), "432 + 168 = 600 is the last body with both reduced hands");
             Assert.That(GluedAvatarRig.LevelFor(433), Is.EqualTo(GluedHandsLevel.None));
@@ -328,25 +332,52 @@ namespace Atlas.Spaces.Tests
         // ---- The full level, and a body that leaves no room, behave as they did ---------------------------------
 
         [Test]
-        public void WithTheBuiltInBody_TheFullLevelIsUnchanged_AndEveryCountHolds()
+        public void WithTheBuiltInBody_BothHandsAppearAtTheReducedLevel_AndEveryCountHolds()
         {
             var rig = new GluedAvatarRig();
-            Assert.That(rig.Level, Is.EqualTo(GluedHandsLevel.Full));
+            Assert.That(rig.Level, Is.EqualTo(GluedHandsLevel.Reduced), "216 + 408 = 624 is over 600, 216 + 168 = 384 is not");
             Assert.That(rig.CanShowHands, Is.True);
-            Assert.That(rig.BodyVertexCount, Is.EqualTo(241));
+            Assert.That(rig.BodyVertexCount, Is.EqualTo(432));
 
             GluedFakeHands hands = GluedAvatarHandsTests.BothHands(Head, Heading, 0.3f, out _, out _);
             Assert.That(rig.Update(hands, Head, Heading), Is.True);
             Assert.That(rig.HandCount, Is.EqualTo(2));
-            Assert.That(rig.Data.TriangleCount, Is.EqualTo(182 + 408));
-            Assert.That(rig.Data.TriangleCount, Is.EqualTo(590));
-            Assert.That(rig.Data.VertexCount, Is.EqualTo(241 + 816));
-            Assert.That(rig.Data.IndexCount, Is.EqualTo(3 * 590));
+            Assert.That(rig.Data.TriangleCount, Is.EqualTo(216 + 168));
+            Assert.That(rig.Data.TriangleCount, Is.EqualTo(384));
+            Assert.That(rig.Data.VertexCount, Is.EqualTo(432 + 336));
+            Assert.That(rig.Data.IndexCount, Is.EqualTo(3 * 384));
             Assert.That(rig.Data.TriangleCount, Is.EqualTo(GluedBudget.AvatarTriangles()));
-            Assert.That(GluedBudget.AvatarBodyTriangles(), Is.EqualTo(182));
-            Assert.That(GluedBudget.AvatarHandsTriangles(), Is.EqualTo(408));
-            Assert.That(GluedBudget.AvatarTriangles(), Is.EqualTo(590));
+            Assert.That(GluedBudget.AvatarBodyTriangles(), Is.EqualTo(216));
+            Assert.That(GluedBudget.AvatarHandsTriangles(), Is.EqualTo(168));
+            Assert.That(GluedBudget.AvatarTriangles(), Is.EqualTo(384));
             AssertRebuildsAllocateNothing(null, "built-in body");
+        }
+
+        [Test]
+        public void TheReducedHands_FollowTheJoints_OnTheBuiltInBody()
+        {
+            AssertReducedHandsFollowTheJoints(null, "built-in body");
+        }
+
+        [Test]
+        public void WithABodyThatLeavesRoomForThem_TheFullLevelIsUnchanged_AndEveryCountHolds()
+        {
+            // The full hands as they were before the body grew: a stand-in of 6 boxes, 72 triangles, then 72 + 408 = 480.
+            MeshData body = GluedAvatarHandsTests.FullHandsBody();
+            var rig = new GluedAvatarRig(body);
+            Assert.That(rig.Level, Is.EqualTo(GluedHandsLevel.Full));
+            Assert.That(rig.CanShowHands, Is.True);
+
+            GluedFakeHands hands = GluedAvatarHandsTests.BothHands(Head, Heading, 0.3f, out _, out _);
+            Assert.That(rig.Update(hands, Head, Heading), Is.True);
+            Assert.That(rig.HandCount, Is.EqualTo(2));
+            Assert.That(rig.Data.TriangleCount, Is.EqualTo(72 + 408));
+            Assert.That(rig.Data.VertexCount, Is.EqualTo(body.VertexCount + 816));
+            Assert.That(rig.Data.IndexCount, Is.EqualTo(3 * 480));
+            Assert.That(rig.Data.TriangleCount, Is.EqualTo(GluedBudget.AvatarTriangles(body)));
+            Assert.That(GluedBudget.AvatarBodyTriangles(body), Is.EqualTo(72));
+            Assert.That(GluedBudget.AvatarHandsTriangles(body), Is.EqualTo(408));
+            AssertRebuildsAllocateNothing(body, "body that leaves room for the full hands");
         }
 
         [Test]
@@ -407,7 +438,7 @@ namespace Atlas.Spaces.Tests
             var bodies = new[] { null, Body(16), Body(17), Body(30), Body(36), Body(37) };
             var levels = new[]
             {
-                GluedHandsLevel.Full, GluedHandsLevel.Full, GluedHandsLevel.Reduced, GluedHandsLevel.Reduced,
+                GluedHandsLevel.Reduced, GluedHandsLevel.Full, GluedHandsLevel.Reduced, GluedHandsLevel.Reduced,
                 GluedHandsLevel.Reduced, GluedHandsLevel.None,
             };
             for (int i = 0; i < bodies.Length; i++)

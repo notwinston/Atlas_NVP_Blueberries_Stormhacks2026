@@ -100,6 +100,16 @@ namespace Atlas.Safety.Tests
         /// mask, in place of the real one. Everything else is the real core.
         /// </summary>
         public bool KernelBeforeMask;
+        /// <summary>
+        /// Runs the depth step with <see cref="BumpDepthKernelBeforePending"/>, the kernel as it was before near
+        /// returns had to be seen twice, in place of the real one. It is given the same mask as the real one.
+        /// </summary>
+        public bool KernelBeforePending;
+        /// <summary>
+        /// A hands session is running: every depth image says so, whatever <see cref="Mask"/> holds, as the hands'
+        /// runtime does while its gate is active, with a hand in view or with none (decision R13).
+        /// </summary>
+        public bool HandsSession;
         public double Time;
         public int Frame;
 
@@ -154,8 +164,19 @@ namespace Atlas.Safety.Tests
                     }
                     else
                     {
-                        input.Mask = BumpGuard.KernelMask(Mask, Mask.DepthSequence);
-                        Core.ProcessDepth(d, input);
+                        DepthMask mask = Mask;
+                        if (HandsSession) mask.Session = 1;
+                        input.Mask = BumpGuard.KernelMask(mask, mask.DepthSequence);
+                        if (KernelBeforePending)
+                        {
+                            BumpDepthKernelBeforePending.Process(d, input, Core.StaticField, Core.Grid, Core.Dynamic,
+                                out DepthFrameResult result);
+                            Core.SubmitDepthResult(result);
+                        }
+                        else
+                        {
+                            Core.ProcessDepth(d, input);
+                        }
                     }
                 }
             }

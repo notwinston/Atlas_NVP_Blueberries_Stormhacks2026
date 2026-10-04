@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text.RegularExpressions;
 using Atlas.App.Menu;
+using Atlas.Rendering;
 using Atlas.World;
 using NUnit.Framework;
 using Unity.Mathematics;

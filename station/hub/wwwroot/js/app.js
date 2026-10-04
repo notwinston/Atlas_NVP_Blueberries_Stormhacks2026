@@ -14,6 +14,7 @@ import { TelemetryBuffer, parseCsv } from './telemetry.js';
 import { drawLines, drawTimeline } from './charts.js';
 import { Trail, cellLabel, dialLabel, nearestObstacle, relativeSide } from './mapmath.js';
 import { drawMap } from './mapview.js';
+import { mountNetworkPage } from './network.js';
 import { JobList, phaseOf } from './jobs.js';
 import { CommandTracker, comfortScore, fmsAlertText, requestFor, seqScore, statusText } from './commands.js';
 import { WalkKeys, WalkSender } from './walk.js';
@@ -96,7 +97,8 @@ function clockTime(date = new Date()) {
 
 // ---- tabs ------------------------------------------------------------------------------------------
 
-const PAGES = ['tuner', 'operator', 'dashboard', 'map', 'view', 'assets', 'pairing'];
+let networkPage = null;
+const PAGES = ['tuner', 'operator', 'dashboard', 'map', 'view', 'assets', 'network', 'pairing'];
 
 function showPage() {
   const wanted = location.hash.replace('#', '');
@@ -113,6 +115,7 @@ function showPage() {
   if (model.page === 'map') paintMap();
   else stopWalking();   // the walk keys work on the Map page only
   showView();
+  if (model.page === 'network') (networkPage || (networkPage = mountNetworkPage())).show();
   if (model.page === 'pairing') loadPairing('');
   if (model.page === 'tuner') refreshPresets();
 }
@@ -550,6 +553,7 @@ function buildOperator() {
   $('cmd-home').addEventListener('click', () => runCommand('home'));
   $('cmd-recentre').addEventListener('click', () => runCommand('recentre'));
   $('cmd-lock').addEventListener('change', (e) => runCommand('lock', { on: e.target.checked }));
+  $('cmd-hands').addEventListener('change', (e) => runCommand('hands', { on: e.target.checked }));
 
   const stop = $('stop');
   stop.addEventListener('click', fireStop);
@@ -622,7 +626,7 @@ async function runCommand(name, args = {}) {
   renderCommands();
 }
 
-const ACK_ELEMENTS = { space: 'ack-space', home: 'ack-home', recentre: 'ack-recentre', quality: 'ack-quality', lock: 'ack-lock', cue: 'stop-status' };
+const ACK_ELEMENTS = { space: 'ack-space', home: 'ack-home', recentre: 'ack-recentre', quality: 'ack-quality', lock: 'ack-lock', hands: 'ack-hands', cue: 'stop-status' };
 
 function toneOf(entry) {
   if (entry.hub === 'refused' || entry.phone === 'timeout') return 'bad';
@@ -673,8 +677,35 @@ function logEvent(event) {
   while (log.children.length > 80) log.lastElementChild.remove();
 }
 
+// The hands tile: the gate's state, its rate and the hands tracked, folded from the hands.* events (design 8.1).
+const handsState = { on: false, reason: '', hz: 0, L: false, R: false };
+
+function renderHands() {
+  const h = handsState;
+  const tracked = (h.L ? 'L' : '') + (h.R ? (h.L ? ' + ' : '') + 'R' : '') || 'none';
+  $('hands-status').textContent = h.on
+    ? 'Hands active · ' + Math.round(h.hz) + ' Hz · tracked: ' + tracked
+    : 'Hands off' + (h.reason ? ' (' + h.reason + ')' : '') + ' · tracked: ' + tracked;
+  $('cmd-hands').checked = h.on;
+}
+
+function onHandsEvent(event) {
+  const d = event.data || {};
+  switch (event.ev) {
+    case 'hands.on': handsState.on = true; handsState.reason = ''; if (typeof d.hz === 'number') handsState.hz = d.hz; break;
+    case 'hands.off': handsState.on = false; handsState.reason = d.reason || ''; handsState.L = handsState.R = false; break;
+    case 'hands.rate': if (typeof d.hz === 'number') handsState.hz = d.hz; break;
+    case 'hands.enter': if (d.hand === 'L' || d.hand === 'R') handsState[d.hand] = true; break;
+    case 'hands.exit': if (d.hand === 'L' || d.hand === 'R') handsState[d.hand] = false; break;
+    case 'hands.stats': if (typeof d.hz === 'number') handsState.hz = d.hz; break;
+    default: return;
+  }
+  renderHands();
+}
+
 function onEvent(event) {
   logEvent(event);
+  if (typeof event.ev === 'string' && event.ev.startsWith('hands.')) onHandsEvent(event);
   const now = performance.now();
   if (event.ev === 'cmd' || event.ev === 'op') {
     if (model.tracker.phoneEvent(event, now)) renderCommands();

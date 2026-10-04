@@ -43,6 +43,7 @@ namespace Atlas.Telemetry
         ushort[] _index16 = new ushort[8192];
         int _vertexCapacity, _indexCapacity;
         bool _visible = true;
+        NetworkDisc _network;
 
         /// <param name="parent">The panel's parent; the panel takes its layer. Null builds no objects.</param>
         /// <param name="name">The object's name.</param>
@@ -138,9 +139,16 @@ namespace Atlas.Telemetry
             }
         }
 
-        /// <summary>Writes the list into the mesh and the labels.</summary>
+        /// <summary>Shows a network disc (NET-04) in this panel; null goes back to the list the caller fills.</summary>
+        public void ShowNetwork(NetworkDisc disc) { _network = disc; }
+
+        /// <summary>The network disc this panel shows, or null.</summary>
+        public NetworkDisc Network { get { return _network; } }
+
+        /// <summary>Writes the list into the mesh and the labels. With a network disc shown, the list is its drawing.</summary>
         public void Apply()
         {
+            if (_network != null) _network.Draw(_twin);
             if (_mesh == null) return;
             FlatTwinMesher.Write(_twin, _data, _halfSize, _background);
             Upload();

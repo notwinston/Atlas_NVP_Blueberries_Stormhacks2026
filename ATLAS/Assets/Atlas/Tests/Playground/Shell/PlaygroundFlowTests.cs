@@ -52,14 +52,14 @@ namespace Atlas.Blades.Playground.Tests.ShellFlow
         // tasks; the test marks it done when the walk through a cell edge has been made.
         sealed class GluedCoreLink : IExhibitLink
         {
-            readonly GluedExhibitCore m_Core;
+            readonly GluedTour m_Core;
             public bool Finished;
-            public GluedCoreLink(GluedExhibitCore core)
+            public GluedCoreLink(GluedTour core)
             {
                 m_Core = core;
                 m_Core.PromptChanged += s => { if (PromptChanged != null) PromptChanged(s); };
             }
-            public GluedExhibitCore Core { get { return m_Core; } }
+            public GluedTour Core { get { return m_Core; } }
             public string Prompt { get { return m_Core.Prompt; } }
             public event Action<string> PromptChanged;
             public void Restart() { m_Core.Begin(); }
@@ -254,7 +254,7 @@ namespace Atlas.Blades.Playground.Tests.ShellFlow
             Assert.That(r.Shell.Menu.IsOpen, Is.True);
 
             // The walker picks Glued; its task lines reach the prompt chip.
-            var core = new GluedExhibitCore(r.Room, r.Log);
+            var core = new GluedTour(r.Room, r.Log);
             var link = new GluedCoreLink(core);
             r.Shell.Exhibits.Register(ExhibitId.Glued, link);
             r.Press(AtlasAction.Confirm);
@@ -431,7 +431,7 @@ namespace Atlas.Blades.Playground.Tests.ShellFlow
         {
             var r = new Rig();
             RunTo(r, 9);
-            r.Shell.Exhibits.Register(ExhibitId.Glued, new GluedCoreLink(new GluedExhibitCore(r.Room, null)));
+            r.Shell.Exhibits.Register(ExhibitId.Glued, new GluedCoreLink(new GluedTour(r.Room, null)));
             r.Press(AtlasAction.Confirm);
             r.Host.Enter(SpaceId.Glued);
             r.Frame();

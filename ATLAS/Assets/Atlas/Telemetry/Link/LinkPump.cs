@@ -442,6 +442,10 @@ namespace Atlas.Telemetry
                     case OperatorCommandKind.Quality: commands.SetQuality(command.Tier); break;
                     case OperatorCommandKind.Cue: commands.Cue(); break;
                     case OperatorCommandKind.Lock: commands.SetLock(command.On); break;
+                    // Hands on or off sets the parameter itself, as a SceneCmd's args do, so the demo lock does not stop it.
+                    case OperatorCommandKind.Hands:
+                        if (_registry != null) _registry.Set("hands.enabled", command.On ? 1f : 0f, ParamSource.Remote);
+                        break;
                     default: return;
                 }
             }

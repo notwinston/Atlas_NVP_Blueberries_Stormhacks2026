@@ -80,8 +80,10 @@ namespace Atlas.App
     /// nothing itself. Also writes Bump Guard's fields of the State, so the frame loop names no safety type.
     /// <para>With a mask source (the tracked hands), a frame that holds a new depth image is copied and the copy
     /// carries the source's mask for that image: where the walker's own hands are in it
-    /// (documents/ATLAS_Hands_Design.md section 7.1). Bump Guard learns nothing of where the mask came from and
-    /// holds it to its own limits. Without a source the step is what it always was.</para>
+    /// (documents/ATLAS_Hands_Design.md section 7.1), and whether a hands session is running, which the mask
+    /// says with a hand in view or with none (decision R13). Bump Guard learns nothing of where the mask came
+    /// from and holds it to its own limits. A source that answers false, or throws, gives a frame with no mask
+    /// and no session. Without a source the step is what it always was.</para>
     /// </summary>
     public sealed class BumpGuardStep : ISafetyStep, IStateWriter
     {

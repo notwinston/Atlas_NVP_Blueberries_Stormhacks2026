@@ -18,6 +18,7 @@
         "Atlas.Safety",
         "Atlas.Input",
         "Atlas.Telemetry",
+        "Atlas.Hands",
         "Unity.Mathematics",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"

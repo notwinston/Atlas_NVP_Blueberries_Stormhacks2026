@@ -124,6 +124,27 @@ namespace Atlas.App
         /// <summary>Where space.transition goes; null logs nothing.</summary>
         public IEventLog Events { get; set; }
 
+        /// <summary>
+        /// Called with true just before the six renders of a still and false right after (also if a render
+        /// throws). The tracked hands go through it: they stay live through a switch, so a still must not hold a
+        /// frozen copy of them under the dome. Null when there are no hands.
+        /// </summary>
+        public Action<bool> HideFromStill { get; set; }
+
+        // Runs render for each face with the hands hidden from the still, and always shows them again.
+        internal static void RenderFaces(Action<bool> hide, int faces, Action<int> render)
+        {
+            if (hide != null) hide(true);
+            try
+            {
+                for (int i = 0; i < faces; i++) render(i);
+            }
+            finally
+            {
+                if (hide != null) hide(false);
+            }
+        }
+
         public bool Cover()
         {
             Uncover();
@@ -252,14 +273,20 @@ namespace Atlas.App
             _camera.aspect = 1f;
             _camera.ResetProjectionMatrix();
             Transform t = _camera.transform;
-            for (int i = 0; i < s_Faces.Length; i++)
+            try
             {
-                t.SetPositionAndRotation(centre, s_Faces[i]);
-                _camera.Render();
-                Graphics.CopyTexture(face, 0, 0, target, i, 0);
+                RenderFaces(HideFromStill, s_Faces.Length, i =>
+                {
+                    t.SetPositionAndRotation(centre, s_Faces[i]);
+                    _camera.Render();
+                    Graphics.CopyTexture(face, 0, 0, target, i, 0);
+                });
             }
-            _camera.targetTexture = null;
-            RenderTexture.ReleaseTemporary(face);
+            finally
+            {
+                _camera.targetTexture = null;
+                RenderTexture.ReleaseTemporary(face);
+            }
         }
 
         static RenderTexture Still()

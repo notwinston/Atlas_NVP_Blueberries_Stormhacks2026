@@ -28,7 +28,11 @@ namespace Atlas.World
         /// <summary>The dial's upper detent: Curved Walk's, and the one detent of Small Planet.</summary>
         DialRight = 7,
         /// <summary>The mode chip of Curved Walk.</summary>
-        Mode = 8
+        Mode = 8,
+        /// <summary>The Playground's prompt chip: one wide line above the grid.</summary>
+        PromptChip = 9,
+        /// <summary>The Playground's caption chip: one wide line above the prompt chip.</summary>
+        CaptionChip = 10
     }
 
     /// <summary>
@@ -53,7 +57,7 @@ namespace Atlas.World
     public static class ReachSlots
     {
         /// <summary>Number of slots: the values of <see cref="ReachSlot"/> run from 0 to Count - 1.</summary>
-        public const int Count = 9;
+        public const int Count = 11;
         /// <summary>Distance between neighbouring columns, and between neighbouring rows, metres before scaling.</summary>
         public const float Pitch = 0.19f;
         /// <summary>No target within reach is smaller than this across after scaling, metres: a fingertip must find it.</summary>
@@ -77,6 +81,8 @@ namespace Atlas.World
             new float3(-Pitch, 0f, 0f),         // DialLeft
             new float3(Pitch, 0f, 0f),          // DialRight
             new float3(Pitch, Pitch, 0f),       // Mode
+            new float3(0f, 2f * Pitch, 0f),     // PromptChip
+            new float3(0f, 3f * Pitch, 0f),     // CaptionChip
         };
 
         /// <summary>

@@ -227,7 +227,7 @@ namespace Atlas.App
         {
             registry.DeclareInt(ScanRoute, "scan", 1, 4, 3, v => settings.Route = v);
             registry.DeclareBool(TeamPrescan, "scan", false, v => settings.TeamPrescan = v);
-            registry.DeclareBool(ScanWallBridge, "scan", true, Atlas.Scan.WallBridge.Apply);
+            registry.DeclareBool(ScanWallBridge, "scan", false, Atlas.Scan.WallBridge.Apply);
         }
 
         public static void DeclareInput(ParamRegistry registry, IAtlasInput input)

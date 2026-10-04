@@ -354,6 +354,11 @@ table.jobs { width: 100%; border-collapse: collapse; font-size: 14px; }
 .qr-panel { background: #fff; padding: 10px; line-height: 0; }
 .qr-panel img { display: block; width: min(320px, 70vw); height: auto; }
 
+/* ---- network ------------------------------------------------------------------------------------ */
+
+#net-canvas { display: block; width: min(100%, 72vh); aspect-ratio: 1; margin: 0 auto; }
+#net-study { white-space: pre-wrap; margin: 0 0 8px; }
+
 /* ---- narrow screens: a tablet held upright ------------------------------------------------------ */
 
 @media (max-width: 980px) {

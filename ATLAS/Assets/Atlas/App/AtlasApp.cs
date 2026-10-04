@@ -309,6 +309,9 @@ namespace Atlas.App
             LoopCore.Host = Spaces;
             Transition = HexTransition.Create(Display);
             Spaces.Transition = Transition;
+            // The hands stay live through a switch, so they are left out of the transition's stills.
+            if (Transition != null)
+                Transition.HideFromStill = hide => { HandsView view = Hands.View; if (view != null) view.SetHiddenForStill(hide); };
             AtlasServices.Register<ISpaceHost>(Spaces);
 
             // The parameters of the assemblies that may not name the registry, in the order of lane D's table.

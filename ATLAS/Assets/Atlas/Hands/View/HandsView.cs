@@ -27,6 +27,7 @@ namespace Atlas.Hands
             public Material Material;
             public NativeArray<AtlasVertex> Vertices;
             public NativeArray<int> Indices;
+            public bool WasEnabled;
         }
 
         sealed class Mark
@@ -37,6 +38,7 @@ namespace Atlas.Hands
             public Material Material;
             public float Opacity;       // what is drawn now
             public float Flash;         // seconds left of the press flash
+            public bool WasEnabled;
         }
 
         const int RingSegments = 24;
@@ -50,7 +52,7 @@ namespace Atlas.Hands
         readonly Mark[] _marks = new Mark[2];
         readonly float2 _paletteUv = AtlasPalette.Uv(AtlasPalette.AvatarBody);
         GameObject _root;
-        bool _disposed;
+        bool _disposed, _stillHidden;
 
         HandsView(HandsRuntime runtime, MaterialPool pool)
         {
@@ -229,6 +231,37 @@ namespace Atlas.Hands
             }
             MaterialPool.SetTint(mark.Material, new float3(1f, 1f, 1f), mark.Opacity);
             if (!mark.Renderer.enabled) mark.Renderer.enabled = true;
+        }
+
+        /// <summary>
+        /// True hides both hands and both marks from every camera until false, for the hexagon transition's
+        /// stills (section 7.4: the hands stay live through a space switch, so a still must not hold them). Each
+        /// renderer's own enabled state is kept and put back, so the per-frame upload is not disturbed.
+        /// </summary>
+        public void SetHiddenForStill(bool hidden)
+        {
+            if (_disposed) return;
+            if (hidden == _stillHidden) return;
+            _stillHidden = hidden;
+            for (int i = 0; i < 2; i++)
+            {
+                Hide(_hands[i].Renderer, ref _hands[i].WasEnabled, hidden);
+                Hide(_marks[i].Renderer, ref _marks[i].WasEnabled, hidden);
+            }
+        }
+
+        static void Hide(MeshRenderer renderer, ref bool was, bool hidden)
+        {
+            if (renderer == null) return;
+            if (hidden)
+            {
+                was = renderer.enabled;
+                renderer.enabled = false;
+            }
+            else
+            {
+                renderer.enabled = was;
+            }
         }
 
         /// <summary>Returns the materials to the pool and frees the native buffers. Safe to call twice.</summary>

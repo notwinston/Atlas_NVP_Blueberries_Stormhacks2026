@@ -20,8 +20,12 @@ namespace Atlas.Hands
         public const float MaxResultAgeSeconds = 0.2f;
         /// <summary>A gamepad must stay connected or absent this long before the gate follows it, seconds.</summary>
         public const float GamepadHoldSeconds = 1f;
-        /// <summary>Self-governor: results older than this for <see cref="GovernorSeconds"/> drop the rate, seconds.</summary>
-        public const float GovernorAgeSeconds = 0.060f;
+        /// <summary>
+        /// Self-governor: a Vision request that takes longer than this (one full-rate period) for
+        /// <see cref="GovernorSeconds"/> drops the rate, seconds. The age of a result is not used: it includes
+        /// ARKit's delivery and the waits for a tick and a poll, 70 to 110 ms on a healthy detector.
+        /// </summary>
+        public const float GovernorRequestSeconds = 1f / 30f;
         /// <summary>Self-governor: the hands' own main-thread time over this for <see cref="GovernorSeconds"/> drops the rate, milliseconds.</summary>
         public const float GovernorMainThreadMs = 0.6f;
         public const float GovernorSeconds = 2f;

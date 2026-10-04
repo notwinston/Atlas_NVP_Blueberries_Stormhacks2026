@@ -1,0 +1,27 @@
+{
+    "name": "Atlas.Blades.Network.Tests",
+    "rootNamespace": "Atlas.Blades.Network.Tests",
+    "references": [
+        "Atlas.Blades.Network",
+        "Atlas.Kernel",
+        "Atlas.Link",
+        "Atlas.World",
+        "Atlas.Rendering",
+        "Atlas.Input",
+        "Atlas.Telemetry",
+        "Unity.Mathematics",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ]
+}

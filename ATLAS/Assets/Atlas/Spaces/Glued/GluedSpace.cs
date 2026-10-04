@@ -1,3 +1,4 @@
+using Atlas.Input;
 using Atlas.Kernel;
 using Atlas.Link;
 using Atlas.Rendering;
@@ -20,18 +21,25 @@ namespace Atlas.Spaces.Glued
     /// <see cref="GluedCellMesh"/> and <see cref="GluedAvatarMesh"/>, the accounting in <see cref="GluedBudget"/>.
     /// Every copy is a child with its own transform that shares one mesh and one pooled material; a mirrored
     /// Klein row is a child with a scale of -1 along X, for which Unity itself flips the winding.
+    /// The guided steps are <see cref="GluedTour"/>, the info card and the gluing sign <see cref="GluedPanel"/>: both run
+    /// here, so S1 teaches the same way whether it is reached from the exhibit menu, the space menu or the Station.
     ///
     /// The walker's copies carry the walker's hands (documents/ATLAS_Hands_Design.md section 5.6): while
     /// <see cref="IHands"/> reports a hand as tracked, the shared avatar mesh also holds it, rebuilt in the upload
     /// step from <see cref="GluedAvatarRig"/>. No copy gains a draw call, and with no service or no tracked hand
     /// the mesh is the body alone, as it always was, and nothing is uploaded. The body is the kit avatar when the
     /// build ships one and the built-in body when it does not, and the rig gives it the hands it leaves room for
-    /// inside <see cref="AtlasMeshBudget.SelfAvatar"/> (decision R15): the full hands on the built-in body, the
-    /// reduced ones on the kit avatar, so a copy shows the walker's hands whichever body the kit ships.
+    /// inside <see cref="AtlasMeshBudget.SelfAvatar"/> (decision R15): the reduced hands on the built-in body (216
+    /// triangles) and on the kit avatar, the full ones on any body of 192 triangles or fewer, so a copy shows the walker's hands whichever body the kit ships.
     /// </remarks>
-    public sealed class GluedSpace : MonoBehaviour, ISpaceModule, ISpaceStateReader, IUploadStep
+    public sealed class GluedSpace : MonoBehaviour, ISpaceModule, ISpaceStateReader, IGluedReadings, IUploadStep
     {
         public const string ParamMode = "glued.mode", ParamCopies = "glued.copies", ParamAvatar = "glued.avatar";
+        /// <summary>
+        /// Draw the landmark and the avatar modelled in Blender (the kit pieces) in place of the built-in ones. Off by
+        /// default: the built-in pieces are the look of S1. Read when the space is configured.
+        /// </summary>
+        public const string ParamKit = "glued.kit";
 
         /// <summary>Strength of the floor grid and of the cell outline, 0..1.</summary>
         const float GridStrength = 0.4f, OutlineStrength = 0.9f;
@@ -41,7 +49,7 @@ namespace Atlas.Spaces.Glued
         bool _built;
         bool _entered;
 
-        ParamEntry _mode, _copies, _avatar;
+        ParamEntry _mode, _copies, _avatar, _kit;
         int _remoteMode = -1, _remoteCopies = -1;
         int _shownMode = -1, _shownCopies = -1;
         bool _shownAvatars;
@@ -57,6 +65,16 @@ namespace Atlas.Spaces.Glued
         MaterialPool _pool;
         IRoomContent _room;
         ISpaceHost _host;
+        IAtlasInput _input;
+        IEventLog _log;
+        RoomModel _roomModel;
+
+        // The guided steps, the info card and the gaze twins of the gluing sign (Master Plan section 10.1.3, task P2-C14).
+        GluedTour _tour;
+        GluedPanel _panel;
+        readonly GazeTargetId[] _gaze = new GazeTargetId[GluedPanel.ButtonCount];
+        bool _seenEnabled = true;
+        float3 _head;
         Material _cellMaterial, _plainMaterial;
         Mesh _cellMesh, _avatarMesh, _promptMesh;
         GluedAvatarRig _avatarRig;
@@ -83,6 +101,7 @@ namespace Atlas.Spaces.Glued
             registry.DeclareEnum(ParamMode, group, GluedRules.LayoutNames, 0, null, true);
             registry.DeclareInt(ParamCopies, group, GluedRules.MinCopies, GluedRules.MaxCopies, GluedRules.DefaultCopies, null, true);
             registry.DeclareBool(ParamAvatar, group, true);
+            registry.DeclareBool(ParamKit, group, false);
         }
 
         public SpaceId Id { get { return SpaceId.Glued; } }
@@ -98,6 +117,16 @@ namespace Atlas.Spaces.Glued
         public bool Standing { get { return _standing; } }
         /// <summary>Times the shared avatar mesh was rewritten since Configure: when a hand came, went or moved. Zero while no hand is tracked.</summary>
         internal int AvatarUploads { get { return _avatarUploads; } }
+        /// <summary>The gluing on screen.</summary>
+        public GluedLayout Layout { get { return _lattice.Layout; } }
+        /// <summary>The guided steps of S1; null before Enter.</summary>
+        public GluedTour Tour { get { return _tour; } }
+        /// <summary>The numbers of the S1 card for the head as last ticked: x mod a, z mod b, a, b, wraps and parity.</summary>
+        public GluedCardValues Card { get { return GluedCardValues.Of(in _lattice, _walker, _head, _crossings); } }
+        /// <summary>The info card's text, or null when the build has no TextMeshPro resources or no look.</summary>
+        public string PanelText { get { return _panel != null && _panel.HasText ? _panel.CardText : null; } }
+        /// <summary>The card, for the Unity tests: null when the space has no look.</summary>
+        internal GluedPanel Panel { get { return _panel; } }
 
         public void Configure(RoomModel room, ParamRegistry registry)
         {
@@ -106,11 +135,15 @@ namespace Atlas.Spaces.Glued
             _mode = registry.Find(ParamMode);
             _copies = registry.Find(ParamCopies);
             _avatar = registry.Find(ParamAvatar);
+            _kit = registry.Find(ParamKit);
 
             _standing = room.Standing;
+            _roomModel = room;
             _lattice = new GluedLattice(room, CurrentLayout());
             AtlasServices.TryGet(out _room);
             AtlasServices.TryGet(out _host);
+            AtlasServices.TryGet(out _input);
+            AtlasServices.TryGet(out _log);
             if (!AtlasServices.TryGet(out _pool)) return;     // no look in this build: nothing to draw with
 
             BuildContent();
@@ -134,9 +167,15 @@ namespace Atlas.Spaces.Glued
             }
             // Until the first Tick brings a head pose, the lattice is laid round the middle of the room.
             _walker = _lattice.CellOf(float3.zero);
+            _head = float3.zero;
             _shownMode = -1;
             Refresh(false);
             if (_content != null) _content.SetActive(true);
+
+            // The steps start in the gluing the walker arrives in, and log it.
+            _tour = new GluedTour(_roomModel, _log, CurrentLayout());
+            if (_panel != null) _panel.ResetPlace();
+            RegisterGaze();
         }
 
         public void ReadState(in StateMessage state)
@@ -150,11 +189,14 @@ namespace Atlas.Spaces.Glued
         public void Tick(in FrameContext frame)
         {
             if (!_entered) return;
+            // The Station draws the phone's state: it takes no input and runs no steps.
+            bool local = _remoteMode < 0;
             if (_remoteCopies < 0 && _copies != null)
             {
                 int wanted = _tier.Step(frame.Tier, _copies.Int);
                 if (wanted != _copies.Int) _copies.Set(wanted);
             }
+            if (local) TakeInput();
 
             bool changed = Refresh(true);
 
@@ -165,13 +207,16 @@ namespace Atlas.Spaces.Glued
                 if (_hasWalker && !changed && !cell.Equals(_walker)) _crossings++;
                 _walker = cell;
                 _hasWalker = true;
-                Layout();
+                LayOutCopies();
             }
 
             _heading = GluedAvatarPose.Heading(frame.HeadRotation, _heading);
+            _head = frame.HeadPosition;
+            if (local && _tour != null) _tour.Step(frame.HeadPosition, frame.HeadRotation, _lattice.Layout);
             if (!_built) return;
             if (_shownAvatars) PoseAvatars(frame.HeadPosition);
             PlacePrompt(frame.HeadPosition);
+            UpdatePanel(in frame, local);
         }
 
         /// <summary>
@@ -225,6 +270,9 @@ namespace Atlas.Spaces.Glued
         public void Exit()
         {
             _entered = false;
+            UnregisterGaze();
+            if (_panel != null) _panel.Dispose();
+            _panel = null;
             if (_content != null) _content.SetActive(false);
             if (_pool != null)
             {
@@ -281,7 +329,7 @@ namespace Atlas.Spaces.Glued
                 AtlasLook.SetFog(start, end);
                 if (announce && _host != null) _host.BumpWorldVersion();
             }
-            if (!announce || !changed) Layout();
+            if (!announce || !changed) LayOutCopies();
             return changed;
         }
 
@@ -290,9 +338,11 @@ namespace Atlas.Spaces.Glued
         void BuildContent()
         {
             float sizeX = (float)_lattice.SizeX, sizeZ = (float)_lattice.SizeZ;
-            // The pieces modelled in Blender; a piece that is missing or refused keeps the built-in mesh.
-            KitSet kit = KitSet.Load(ReadKitResource);
-            MeshData landmark = KitPiece(kit, "landmark"), avatar = KitPiece(kit, "avatar");
+            // The pieces modelled in Blender, when glued.kit asks for them; a piece that is missing or refused keeps the
+            // built-in mesh.
+            KitSet kit = _kit != null && _kit.Bool ? KitSet.Load(ReadKitResource) : null;
+            MeshData landmark = kit != null ? KitPiece(kit, "landmark") : null;
+            MeshData avatar = kit != null ? KitPiece(kit, "avatar") : null;
             var data = new AtlasMeshBuilder(1024, 4096);
             GluedCellMesh.Build(sizeX, sizeZ, data, landmark);
             _cellMesh = AtlasMesh.Create(data, "Glued Cell");
@@ -328,6 +378,7 @@ namespace Atlas.Spaces.Glued
                 _avatarObjects[i] = NewRenderer("Avatar", _avatarMesh, _plainMaterial, out _avatarTransforms[i]);
             }
             _prompt = NewRenderer("Prompt", _promptMesh, _plainMaterial, out _promptTransform);
+            _panel = new GluedPanel(_content.transform, _plainMaterial);
         }
 
         static MeshData KitPiece(KitSet kit, string name)
@@ -364,7 +415,7 @@ namespace Atlas.Spaces.Glued
         }
 
         // Puts every copy where the lattice says: only called when the walker's cell or a parameter changes.
-        void Layout()
+        void LayOutCopies()
         {
             _count = _lattice.FillCopies(_walker, _shownCopies, _cells);
             if (!_built) return;
@@ -411,6 +462,111 @@ namespace Atlas.Spaces.Glued
             if (!shown) return;
             _promptTransform.localPosition = new Vector3(position.x, 0f, position.y);
             _promptTransform.localRotation = quaternion.RotateY(turn);
+        }
+
+        // ---- The guided steps, the card and the gluing sign -------------------------------------------------------
+
+        // The bumpers step round the gluings, a button of the gluing sign picks its own, A (or "seen it") ends the wave
+        // step, and once the wave is over a lever click with nothing under the gaze steps the gluing (section 10.1.3).
+        void TakeInput()
+        {
+            if (_input == null || _mode == null || _tour == null) return;
+            bool leverSteps = _tour.Task >= GluedTask.Klein;
+            if (_input.Pressed(AtlasAction.Confirm))
+            {
+                if (_tour.Task == GluedTask.Wave)
+                {
+                    _tour.Acknowledge();
+                    if (_panel != null) _panel.Flash(GluedPanel.SeenIt);
+                }
+                Choose(AtlasAction.Confirm, leverSteps);
+            }
+            Choose(AtlasAction.VariantNext, leverSteps);
+            Choose(AtlasAction.VariantPrev, leverSteps);
+        }
+
+        void Choose(AtlasAction action, bool leverSteps)
+        {
+            if (action != AtlasAction.Confirm && !_input.Pressed(action)) return;
+            int next = GluedGluingSwitch.Next(action, _input.LastSource(action), _mode.Int, leverSteps, _input.LastTag(action));
+            if (next >= 0 && next != _mode.Int) _mode.Set(next);
+        }
+
+        // The gluing sign's three buttons fire the bumpers' actions with the tag of their gluing (T2 the left bumper's,
+        // so both bumpers keep a gaze twin); "seen it" fires Confirm and is live only in the wave step.
+        void RegisterGaze()
+        {
+            UnregisterGaze();
+            if (_input == null || _panel == null || _remoteMode >= 0) return;
+            for (int i = 0; i < GluedPanel.ButtonCount; i++)
+            {
+                GazeTarget target;
+                if (i == GluedPanel.SeenIt)
+                {
+                    target = GazeTarget.World(AtlasAction.Confirm, _panel.ButtonCentre(i), GluedPanel.GazeRadius);
+                    target.Label = "glued.seen";
+                }
+                else
+                {
+                    AtlasAction action = i == 0 ? AtlasAction.VariantPrev : AtlasAction.VariantNext;
+                    target = GazeTarget.World(action, _panel.ButtonCentre(i), GluedPanel.GazeRadius,
+                                              GluedGluingSwitch.SignTag((GluedLayout)i));
+                    target.Label = GluedGluingSwitch.SignLabel + "." + GluedRules.LayoutNames[i];
+                }
+                _gaze[i] = _input.RegisterGazeTarget(in target);
+            }
+            _seenEnabled = true;
+        }
+
+        void UnregisterGaze()
+        {
+            for (int i = 0; i < _gaze.Length; i++)
+            {
+                if (_input != null && _gaze[i].IsValid) _input.UnregisterGazeTarget(_gaze[i]);
+                _gaze[i] = default;
+            }
+        }
+
+        void UpdatePanel(in FrameContext frame, bool local)
+        {
+            if (_panel == null) return;
+            _panel.Place(frame.HeadPosition, _heading, frame.DeltaTime);
+
+            int focused = -1;
+            float progress = 0f;
+            if (_input != null && local)
+            {
+                bool seen = _tour != null && _tour.Task == GluedTask.Wave;
+                if (seen != _seenEnabled && _gaze[GluedPanel.SeenIt].IsValid)
+                {
+                    _seenEnabled = seen;
+                    _input.SetGazeTargetEnabled(_gaze[GluedPanel.SeenIt], seen);
+                }
+                GazeState gaze = _input.Gaze;
+                for (int i = 0; i < _gaze.Length; i++)
+                {
+                    if (!_gaze[i].IsValid) continue;
+                    _input.MoveGazeTarget(_gaze[i], _panel.ButtonCentre(i));
+                    if (_gaze[i].Equals(gaze.Focused))
+                    {
+                        focused = i;
+                        progress = gaze.Progress;
+                    }
+                }
+            }
+
+            bool steps = local && _tour != null;
+            var state = new GluedReadoutState
+            {
+                Layout = _lattice.Layout,
+                Copies = _shownCopies,
+                Cell = _walker,
+                Card = Card,
+                Task = steps ? _tour.Task : GluedTask.Done,
+                Step = steps ? _tour.CardStep : null,
+                ShowTour = steps,
+            };
+            _panel.Update(in state, in _lattice, _heading, focused, progress, frame.DeltaTime);
         }
 
         static void SetActive(GameObject go, bool active)

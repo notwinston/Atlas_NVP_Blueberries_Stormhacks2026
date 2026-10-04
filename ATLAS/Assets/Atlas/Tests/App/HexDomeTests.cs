@@ -164,5 +164,21 @@ namespace Atlas.App.Tests
             Assert.That(HexDome.Turn(0.3f, 0.3f + HexDome.FlipSeconds), Is.EqualTo(1f));
             Assert.That(HexDome.Turn(HexDome.Delay(8), HexDome.RevealSeconds(8)), Is.EqualTo(1f), "the last tile is over when the reveal ends");
         }
+
+        [Test]
+        public void Stills_HideTheHandsAroundTheRenders_AndShowThemAgainEvenIfOneThrows()
+        {
+            var log = new List<string>();
+            System.Action<bool> hide = on => log.Add(on ? "hide" : "show");
+            HexTransition.RenderFaces(hide, 3, i => log.Add("face" + i));
+            Assert.That(string.Join(",", log), Is.EqualTo("hide,face0,face1,face2,show"));
+
+            log.Clear();
+            Assert.Throws<System.InvalidOperationException>(() =>
+                HexTransition.RenderFaces(hide, 3, i => { if (i == 1) throw new System.InvalidOperationException(); log.Add("face" + i); }));
+            Assert.That(string.Join(",", log), Is.EqualTo("hide,face0,show"));
+
+            HexTransition.RenderFaces(null, 1, i => { });   // no hands: nothing to call
+        }
     }
 }

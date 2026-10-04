@@ -178,7 +178,13 @@ namespace Atlas.Hands
         public void Upload(in FrameContext frame)
         {
             HandsRuntime runtime = _system.Runtime;
-            if (runtime.Faulted) return;
+            if (runtime.Faulted)
+            {
+                // A fault in any step (sense, upload or after-frame) takes the view down with it, so the last
+                // drawn hands and marks never stay standing in the room for the rest of the session.
+                DropView();
+                return;
+            }
             long start = Stopwatch.GetTimestamp();
             try
             {
@@ -188,10 +194,17 @@ namespace Atlas.Hands
             catch (Exception e)
             {
                 runtime.ReportFault("upload", e);
-                try { if (_system.View != null) _system.View.Dispose(); } catch (Exception) { }
-                _system.View = null;
+                DropView();
             }
             runtime.AddUploadTicks(Stopwatch.GetTimestamp() - start);
+        }
+
+        void DropView()
+        {
+            HandsView view = _system.View;
+            if (view == null) return;
+            _system.View = null;
+            try { view.Dispose(); } catch (Exception) { }
         }
     }
 

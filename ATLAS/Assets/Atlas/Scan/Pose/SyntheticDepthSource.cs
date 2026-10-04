@@ -14,6 +14,8 @@ namespace Atlas.Scan
     /// Depth with no phone (contract README F9): rays cast from the camera against the active RoomModel's
     /// walls and object boxes, plus boxes added in code, into a small image at 15 Hz. It lets Bump Guard's
     /// live layer be exercised in the Editor. Engine-free.
+    /// <para>Besides the boxes that stand in the room there are boxes carried in front of the camera
+    /// (<see cref="AddCameraBox"/>): the walker's own raised hands, as LiDAR meets them.</para>
     /// </summary>
     public sealed class SyntheticDepthSource : IDepthSource, IPosedDepthSource
     {
@@ -24,6 +26,8 @@ namespace Atlas.Scan
         /// <summary>Radians: horizontal field of view, close to the phone's wide camera.</summary>
         public const float HorizontalFov = 1.2f;
         public const int MaxExtraBoxes = 16;
+        /// <summary>Boxes carried in front of the camera: two hands, each a palm, a thumb and a forearm, and two to spare.</summary>
+        public const int MaxCameraBoxes = 8;
 
         struct Box
         {
@@ -32,9 +36,17 @@ namespace Atlas.Scan
             public float Sin, Cos;
         }
 
+        /// <summary>A box with its edges along the camera's own axes, as its two opposite corners in the camera's space.</summary>
+        struct CameraBox
+        {
+            public float3 Low, High;
+        }
+
         readonly float[] _depth = new float[ImageWidth * ImageHeight];
         readonly Box[] _extra = new Box[MaxExtraBoxes];
         int _extraCount;
+        readonly CameraBox[] _carried = new CameraBox[MaxCameraBoxes];
+        int _carriedCount;
         Box[] _roomBoxes = new Box[0];
         RoomModel _room;
         float3 _position;
@@ -75,6 +87,30 @@ namespace Atlas.Scan
             _extraCount = 0;
         }
 
+        public int CameraBoxCount { get { return _carriedCount; } }
+
+        /// <summary>
+        /// Something the walker carries in front of the camera, a raised hand for one: a box with its edges along
+        /// the camera's own axes (+X right, +Y up, +Z forward), given by its centre and its full size in the
+        /// camera's space, metres. It moves and turns with the camera, so whoever moves it in the camera's view
+        /// clears the list and adds it again. A pixel whose ray meets it reads the depth of the point it meets,
+        /// along the optical axis, as LiDAR would: the near face for all but the few rays that slip past its edge
+        /// onto a side. Nearer than <see cref="DepthFrame.MinRange"/> it gives no return and hides what is behind
+        /// it. False when the list is full.
+        /// </summary>
+        public bool AddCameraBox(float3 centre, float3 size)
+        {
+            if (_carriedCount >= MaxCameraBoxes) return false;
+            float3 half = 0.5f * math.abs(size);
+            _carried[_carriedCount++] = new CameraBox { Low = centre - half, High = centre + half };
+            return true;
+        }
+
+        public void ClearCameraBoxes()
+        {
+            _carriedCount = 0;
+        }
+
         public void SetCameraPose(float3 position, quaternion rotation)
         {
             _position = position;
@@ -109,6 +145,7 @@ namespace Atlas.Scan
                         for (int w = 0; w < walls.Length; w++) HitWall(walls[w], dir, ref best);
                     for (int b = 0; b < _roomBoxes.Length; b++) HitBox(in _roomBoxes[b], dir, ref best);
                     for (int b = 0; b < _extraCount; b++) HitBox(in _extra[b], dir, ref best);
+                    for (int b = 0; b < _carriedCount; b++) HitCameraBox(in _carried[b], new float3(cu, cv, 1f), ref best);
                     _depth[v * ImageWidth + u] = DepthFrame.IsReturn(best) ? best : 0f;
                 }
             }
@@ -169,6 +206,30 @@ namespace Atlas.Scan
                     continue;
                 }
                 float t0 = (lo[axis] - oa) / da, t1 = (hi[axis] - oa) / da;
+                if (t0 > t1) { float swap = t0; t0 = t1; t1 = swap; }
+                if (t0 > tMin) tMin = t0;
+                if (t1 < tMax) tMax = t1;
+                if (tMin > tMax) return;
+            }
+            if (tMin > 0f && tMin < best) best = tMin;
+        }
+
+        /// <summary>
+        /// A box carried by the camera against one pixel's ray, both in the camera's own space: the ray starts at
+        /// the lens and has unit length along the optical axis, so its parameter is the depth, as for the room.
+        /// </summary>
+        static void HitCameraBox(in CameraBox box, float3 ray, ref float best)
+        {
+            float tMin = 0f, tMax = best;
+            for (int axis = 0; axis < 3; axis++)
+            {
+                float da = ray[axis];
+                if (math.abs(da) < 1e-9f)
+                {
+                    if (box.Low[axis] > 0f || box.High[axis] < 0f) return;
+                    continue;
+                }
+                float t0 = box.Low[axis] / da, t1 = box.High[axis] / da;
                 if (t0 > t1) { float swap = t0; t0 = t1; t1 = swap; }
                 if (t0 > tMin) tMin = t0;
                 if (t1 < tMax) tMax = t1;

@@ -1,0 +1,28 @@
+{
+  "params": {
+    "n": 200,
+    "kbar": 6,
+    "gamma": 2.5,
+    "T": 0.0,
+    "seed": 7
+  },
+  "R": 10.504,
+  "alpha": 0.75,
+  "mean_degree": 5.8,
+  "max_degree": 65,
+  "hub_radius": 3.287,
+  "giant_component": 179,
+  "edges": 580,
+  "route_hops": 4,
+  "route_distance": 20.935,
+  "greedy": {
+    "hyperbolic": {
+      "success": 1.0,
+      "mean_hop_stretch": 1.0
+    },
+    "euclidean_disk": {
+      "success": 0.741,
+      "mean_hop_stretch": 1.0256410256410255
+    }
+  }
+}

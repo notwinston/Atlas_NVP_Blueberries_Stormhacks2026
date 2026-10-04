@@ -49,7 +49,7 @@ namespace Atlas.Hands.Tests
                 HeadFromCamera = true,
                 Tier = QualityTier.Nominal,
                 RateOverride = 0,
-                ResultAgeSeconds = 0.040f,
+                RequestSeconds = 0.022f,
                 MainThreadMs = 0.30f,
                 AnyHandSeen = true
             };
@@ -250,10 +250,10 @@ namespace Atlas.Hands.Tests
         {
             float needed = HandsConstants.GovernorSeconds;
 
-            // Results too old for the whole time.
+            // Requests too long for the whole time.
             var rig = new Rig();
             rig.Run(1.0);
-            rig.In.ResultAgeSeconds = HandsConstants.GovernorAgeSeconds + 0.02f;
+            rig.In.RequestSeconds = HandsConstants.GovernorRequestSeconds + 0.02f;
             rig.Run(needed - 0.1);
             Assert.That(rig.Last.RateHz, Is.EqualTo(HandsConstants.RateFull), "not yet");
             int changes = rig.RateChanges;
@@ -263,7 +263,7 @@ namespace Atlas.Hands.Tests
             Assert.That(rig.RateChanges, Is.EqualTo(changes + 1), "one change, flagged once");
 
             // It stays there while the results recover, and across tiers, until the gate next goes inactive.
-            rig.In.ResultAgeSeconds = 0.030f;
+            rig.In.RequestSeconds = 0.022f;
             rig.Run(30.0);
             Assert.That(rig.Last.RateHz, Is.EqualTo(HandsConstants.RateReduced));
             rig.In.Tier = QualityTier.Fair;
@@ -291,9 +291,9 @@ namespace Atlas.Hands.Tests
             rig = new Rig();
             for (int i = 0; i < 4; i++)
             {
-                rig.In.ResultAgeSeconds = 0.1f;
+                rig.In.RequestSeconds = 0.1f;
                 rig.Run(needed - 0.3);
-                rig.In.ResultAgeSeconds = 0.01f;
+                rig.In.RequestSeconds = 0.01f;
                 rig.Step();
             }
             Assert.That(rig.Last.RateHz, Is.EqualTo(HandsConstants.RateFull), "broken runs of slow results do not add up");
@@ -309,9 +309,9 @@ namespace Atlas.Hands.Tests
 
             // The two causes keep separate clocks: one second of each is not two seconds of either.
             rig = new Rig();
-            rig.In.ResultAgeSeconds = 0.1f;
+            rig.In.RequestSeconds = 0.1f;
             rig.Run(needed * 0.6);
-            rig.In.ResultAgeSeconds = 0.01f;
+            rig.In.RequestSeconds = 0.01f;
             rig.In.MainThreadMs = 1.0f;
             rig.Run(needed * 0.6);
             Assert.That(rig.Last.RateHz, Is.EqualTo(HandsConstants.RateFull));
@@ -319,13 +319,36 @@ namespace Atlas.Hands.Tests
             // At Fair the rate is already the reduced one: the governor has nothing to say and does not engage.
             rig = new Rig();
             rig.In.Tier = QualityTier.Fair;
-            rig.In.ResultAgeSeconds = 0.2f;
+            rig.In.RequestSeconds = 0.2f;
             rig.Run(needed * 2.5);
             Assert.That(rig.Last.RateHz, Is.EqualTo(HandsConstants.RateReduced));
             Assert.That(rig.Last.RateWhy, Is.EqualTo(HandsRateWhy.Tier));
             rig.In.Tier = QualityTier.Nominal;
-            rig.In.ResultAgeSeconds = 0.01f;
+            rig.In.RequestSeconds = 0.01f;
             Assert.That(rig.Step().RateHz, Is.EqualTo(HandsConstants.RateFull), "so the full rate returns with the tier");
+        }
+
+        /// <summary>
+        /// The governor reacts to an overloaded detector, not to the pipeline's ordinary latency: a healthy one
+        /// (requests of 22 ms, the results about 90 ms old by the time they are polled) stays at 30 Hz, and one
+        /// whose requests take 40 ms (longer than a full-rate period) drops to 15 Hz after two seconds.
+        /// </summary>
+        [Test]
+        public void Hands_Gate_GovernorIgnoresPipelineLatency()
+        {
+            var rig = new Rig();
+            rig.In.RequestSeconds = 0.022f;
+            rig.Run(10.0);
+            Assert.That(rig.Last.Active, Is.True);
+            Assert.That(rig.Last.RateHz, Is.EqualTo(HandsConstants.RateFull), "a healthy detector stays at 30 Hz");
+            Assert.That(rig.Last.RateWhy, Is.EqualTo(HandsRateWhy.Tier));
+
+            rig.In.RequestSeconds = 0.040f;
+            rig.Run(HandsConstants.GovernorSeconds - 0.1);
+            Assert.That(rig.Last.RateHz, Is.EqualTo(HandsConstants.RateFull), "not yet");
+            rig.Run(0.2);
+            Assert.That(rig.Last.RateHz, Is.EqualTo(HandsConstants.RateReduced), "an overloaded detector drops to 15 Hz");
+            Assert.That(rig.Last.RateWhy, Is.EqualTo(HandsRateWhy.Governor));
         }
 
         static void IdleDropsTheRateAndAHandBringsItBack()
@@ -402,7 +425,7 @@ namespace Atlas.Hands.Tests
             // Over the governor and over idle.
             rig = new Rig();
             rig.In.RateOverride = 30;
-            rig.In.ResultAgeSeconds = 0.3f;
+            rig.In.RequestSeconds = 0.3f;
             rig.In.MainThreadMs = 3f;
             rig.In.AnyHandSeen = false;
             rig.Run(HandsConstants.IdleAfterSeconds + 5.0);
@@ -411,7 +434,7 @@ namespace Atlas.Hands.Tests
             // Back to auto: the rate is the automatic one again.
             rig.In.RateOverride = 0;
             rig.In.AnyHandSeen = true;
-            rig.In.ResultAgeSeconds = 0.01f;
+            rig.In.RequestSeconds = 0.01f;
             rig.In.MainThreadMs = 0.1f;
             s = rig.Step();
             Assert.That(s.RateHz, Is.EqualTo(HandsConstants.RateFull));
@@ -505,11 +528,11 @@ namespace Atlas.Hands.Tests
             Assert.That(s.RateChanged, Is.True);
 
             // A reset forgets the governor and the idle time too.
-            rig.In.ResultAgeSeconds = 0.3f;
+            rig.In.RequestSeconds = 0.3f;
             rig.Run(HandsConstants.GovernorSeconds + 0.5);
             Assert.That(rig.Last.RateHz, Is.EqualTo(HandsConstants.RateReduced));
             rig.Gate.Reset();
-            rig.In.ResultAgeSeconds = 0.01f;
+            rig.In.RequestSeconds = 0.01f;
             Assert.That(rig.Step().RateHz, Is.EqualTo(HandsConstants.RateFull));
         }
 
@@ -517,13 +540,13 @@ namespace Atlas.Hands.Tests
         public void Hands_Gate_SurvivesGarbageInput()
         {
             var rig = new Rig();
-            rig.In.ResultAgeSeconds = float.NaN;
+            rig.In.RequestSeconds = float.NaN;
             rig.In.MainThreadMs = float.NaN;
             rig.Run(HandsConstants.GovernorSeconds + 1.0);
             Assert.That(rig.Last.RateHz, Is.EqualTo(HandsConstants.RateFull), "numbers that are not numbers are not an overload");
 
             rig = new Rig();
-            rig.In.ResultAgeSeconds = 1f;
+            rig.In.RequestSeconds = 1f;
             for (int i = 0; i < 400; i++)
             {
                 rig.Now += Frame;
@@ -557,7 +580,7 @@ namespace Atlas.Hands.Tests
                 int phase = i % 1000;
                 inputs.GamepadPresent = phase > 300 && phase < 500;
                 inputs.Tier = phase < 700 ? QualityTier.Nominal : phase < 800 ? QualityTier.Fair : QualityTier.Serious;
-                inputs.ResultAgeSeconds = phase < 100 ? 0.1f : 0.03f;
+                inputs.RequestSeconds = phase < 100 ? 0.1f : 0.022f;
                 inputs.MainThreadMs = phase < 50 ? 0.9f : 0.2f;
                 inputs.AnyHandSeen = (phase & 64) == 0;
                 inputs.RateOverride = phase > 900 ? 15 : 0;
