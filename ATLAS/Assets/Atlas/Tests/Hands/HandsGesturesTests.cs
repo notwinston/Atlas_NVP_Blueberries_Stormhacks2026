@@ -349,15 +349,15 @@ namespace Atlas.Hands.Tests
         static void ALowConfidenceFiresNothing()
         {
             var rig = new Rig();
-            rig.L.Confidence = HandsConstants.InteractConfidence - 0.01f;
+            rig.L.Confidence = HandsConstants.PinchConfidence - 0.01f;
             rig.Detect(Under, Open, 5);
-            Assert.That(rig.DownL, Is.EqualTo(0), "below InteractConfidence fires nothing");
-            rig.L.Confidence = HandsConstants.InteractConfidence;
+            Assert.That(rig.DownL, Is.EqualTo(0), "below PinchConfidence fires nothing");
+            rig.L.Confidence = HandsConstants.PinchConfidence;
             rig.Detect(Under, Open, 10);
             Assert.That(rig.DownL, Is.EqualTo(0), "no late Down when the confidence recovers with the fingers still closed");
             rig.Detect(Open, Open);
             rig.Detect(Under, Open, 3);
-            Assert.That(rig.DownL, Is.EqualTo(1), "at InteractConfidence itself it fires: only below is held back");
+            Assert.That(rig.DownL, Is.EqualTo(1), "at PinchConfidence itself it fires: only below is held back");
         }
 
         // ---- Other behaviour of the pinch ----

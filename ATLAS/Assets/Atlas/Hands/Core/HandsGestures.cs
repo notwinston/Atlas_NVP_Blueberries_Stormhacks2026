@@ -223,7 +223,7 @@ namespace Atlas.Hands
                 || !(hand.TrackedSeconds >= HandsConstants.PinchQuietAfterEnterSeconds)
                 || !(math.lengthsq(hand.PalmVelocity) <= speedLimitSquared)
                 || now - _lastDown[side] < HandsConstants.PinchRefractorySeconds
-                || !(hand.Confidence >= HandsConstants.InteractConfidence);
+                || !(hand.Confidence >= HandsConstants.PinchConfidence);
         }
 
         /// <summary>Turns a closing or an opening into the frame's Down or Up, and remembers what fired.</summary>

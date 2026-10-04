@@ -356,8 +356,8 @@ namespace Atlas.Hands
             HandsInput input = default(HandsInput);
             input.Active = interact;
             float3 tipLeft = PressPoint(in left), tipRight = PressPoint(in right);
-            bool leftValid = interact && left.Tracked && left.Confidence >= HandsConstants.InteractConfidence;
-            bool rightValid = interact && right.Tracked && right.Confidence >= HandsConstants.InteractConfidence;
+            bool leftValid = interact && left.Tracked && left.Confidence >= HandsConstants.PinchConfidence;
+            bool rightValid = interact && right.Tracked && right.Confidence >= HandsConstants.PinchConfidence;
             input.Left.Valid = leftValid;
             input.Left.World = tipLeft;
             input.Left.VelocityWorld = left.PalmVelocity;

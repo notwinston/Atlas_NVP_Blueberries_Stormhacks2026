@@ -20,7 +20,15 @@ namespace Atlas.Input.Tests
         [SetUp]
         public void SetUp()
         {
+            // Touch is switched off in the build; these tests are of touch itself.
+            HandsTouch.TouchEnabled = true;
             _rig = new HandsRig();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            HandsTouch.TouchEnabled = false;
         }
 
         // ---- a scripted finger and the sensing between it and input ----

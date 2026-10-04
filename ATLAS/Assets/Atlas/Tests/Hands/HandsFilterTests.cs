@@ -820,7 +820,7 @@ namespace Atlas.Hands.Tests
         {
             var filter = new HandsFilter();
             double now = 0.0;
-            int[] confidences = { 90, 90, 90, 40, 90, 90 };      // percent
+            int[] confidences = { 90, 90, 90, 35, 90, 90 };      // percent
             int[] expected = { 1, 2, 3, 0, 1, 2 };
             ObservedHand none = default(ObservedHand);
             for (int i = 0; i < confidences.Length; i++)

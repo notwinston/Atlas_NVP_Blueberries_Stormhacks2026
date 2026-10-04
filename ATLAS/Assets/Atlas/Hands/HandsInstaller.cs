@@ -174,8 +174,38 @@ namespace Atlas.Hands
     public sealed class HandsSenseStep : ISenseStep
     {
         readonly HandsRuntime _runtime;
-        public HandsSenseStep(HandsRuntime runtime) { _runtime = runtime; }
-        public void Sense(ref FrameContext frame) { _runtime.Sense(ref frame); }
+        readonly Func<bool> _warning;
+        double _lastSaid = double.NegativeInfinity;
+        bool _wasActive, _said;
+        HandsOffReason _wasReason;
+
+        public HandsSenseStep(HandsRuntime runtime, Func<bool> warning = null) { _runtime = runtime; _warning = warning; }
+
+        public void Sense(ref FrameContext frame)
+        {
+            _runtime.Sense(ref frame);
+            Say(frame.Time);
+        }
+
+        // One line in the device's console whenever the gate changes, and every five seconds: enough to read off a
+        // phone why no hand shows (the gate's reason, the detector's fault, each hand's confidence and opacity).
+        void Say(double now)
+        {
+            GateState gate = _runtime.Gate;
+            bool changed = !_said || gate.Active != _wasActive || gate.Reason != _wasReason;
+            if (!changed && now - _lastSaid < 5.0) return;
+            _said = true;
+            _wasActive = gate.Active;
+            _wasReason = gate.Reason;
+            _lastSaid = now;
+            ref readonly HandPose left = ref _runtime.Pose(HandSide.Left);
+            ref readonly HandPose right = ref _runtime.Pose(HandSide.Right);
+            UnityEngine.Debug.Log("Atlas hands: " + (gate.Active ? "on at " + gate.RateHz + " Hz" : "OFF, reason " + gate.Reason) +
+                ", faulted " + _runtime.Faulted + ", source " + _runtime.Source.Name + " fault " + _runtime.Source.Fault +
+                ", bump warning " + (_warning != null && _warning()) + ", drawn " + !_runtime.Hidden +
+                ", left " + (left.Tracked ? left.Confidence.ToString("0.00") + " opacity " + left.Opacity.ToString("0.00") : "none") +
+                ", right " + (right.Tracked ? right.Confidence.ToString("0.00") + " opacity " + right.Opacity.ToString("0.00") : "none"));
+        }
     }
 
     /// <summary>
@@ -318,7 +348,7 @@ namespace Atlas.Hands
                 system.View = HandsView.Create(ports.Parent, ports.Pool, system.Runtime);
             if (ports.Head != null) system.Sounds = new HandsSounds(ports.Head);
 
-            system.Sense = new HandsSenseStep(system.Runtime);
+            system.Sense = new HandsSenseStep(system.Runtime, ports.Warning);
             system.Upload = new HandsUploadStep(system);
             system.AfterFrame = new HandsAfterFrameStep(system);
 

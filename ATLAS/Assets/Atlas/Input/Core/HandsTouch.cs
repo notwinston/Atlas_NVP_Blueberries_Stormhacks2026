@@ -62,8 +62,16 @@ namespace Atlas.Input
 
         /// <summary>A target farther than this from the head is beyond an arm's reach and is never touched.</summary>
         public const float ReachMetres = 0.75f;
-        /// <summary>Below this confidence a hand is not trusted (the hands module's InteractConfidence): its depth is a guess.</summary>
+        /// <summary>
+        /// Hardcoded off for the demo: a fingertip hovers, presses and holds nothing, and holds back no dwell.
+        /// The hands' one act is the pinch that opens and closes the menu; the gaze does the rest. Set to true to
+        /// have touch back (with hands.nearPanels, which brings the panels within reach).
+        /// </summary>
+        public static bool TouchEnabled = false;
+        /// <summary>Below this confidence a hand is not trusted to touch (the hands module's InteractConfidence): its depth is a guess.</summary>
         public const float MinConfidence = 0.6f;
+        /// <summary>With touch off a hand only pinches, and is trusted from here (the hands module's PinchConfidence).</summary>
+        public const float PinchConfidence = 0.4f;
         /// <summary>A dwell waits while a fingertip is this close to its target: the finger is about to do the dwell's job (decision R6).</summary>
         public const float NearMetres = 0.20f;
         /// <summary>
@@ -241,8 +249,9 @@ namespace Atlas.Input
                 ref Finger finger = ref _fingers[hand];
                 HandsFingertip tip = hand == 0 ? hands.Left : hands.Right;
                 finger.Fire = false;
-                finger.Trusted = active && tip.Valid && tip.Confidence >= MinConfidence && math.all(math.isfinite(tip.World));
-                if (!finger.Trusted)
+                finger.Trusted = active && tip.Valid && tip.Confidence >= (TouchEnabled ? MinConfidence : PinchConfidence) && math.all(math.isfinite(tip.World));
+                // With touch off a trusted hand stays idle over every target: it is free to pinch and nothing more.
+                if (!finger.Trusted || !TouchEnabled)
                 {
                     Drop(ref finger);
                     _wasNear[hand] = 0UL;

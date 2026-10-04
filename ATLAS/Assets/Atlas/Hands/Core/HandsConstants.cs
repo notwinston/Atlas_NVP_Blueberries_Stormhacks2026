@@ -7,6 +7,16 @@ namespace Atlas.Hands
     /// </summary>
     public static class HandsConstants
     {
+        // ---- Hardcoded for the demo: the hands are tracked and drawn, a pinch opens the menu, the gaze does the rest ----
+
+        // The fingertip's touch is switched off in Atlas.Input (HandsTouch.TouchEnabled), and the panels keep the
+        // gaze layout while hands.nearPanels is off.
+        /// <summary>
+        /// A pinch needs at least this confidence. Lower than <see cref="InteractConfidence"/>, which the depth
+        /// mask still uses: a hand held close is capped at <see cref="ConfidenceWithoutDepth"/> and must still pinch.
+        /// </summary>
+        public const float PinchConfidence = 0.4f;
+
         // ---- Detector (sections 3.5, 7.3) ----
 
         /// <summary>Detections per second at tier Nominal and High.</summary>
@@ -16,8 +26,11 @@ namespace Atlas.Hands
         /// <summary>After no hand has been seen for <see cref="IdleAfterSeconds"/>.</summary>
         public const int RateIdle = 5;
         public const float IdleAfterSeconds = 20f;
-        /// <summary>A result older than this when polled is not used, seconds.</summary>
-        public const float MaxResultAgeSeconds = 0.2f;
+        /// <summary>
+        /// A result older than this when polled is not used, seconds. The plugin's own limit for a frame
+        /// (staleFrameSeconds): at 0.2 a slow phone, whose frames and requests take longer, had every result dropped.
+        /// </summary>
+        public const float MaxResultAgeSeconds = 0.5f;
         /// <summary>A gamepad must stay connected or absent this long before the gate follows it, seconds.</summary>
         public const float GamepadHoldSeconds = 1f;
         /// <summary>
@@ -98,7 +111,7 @@ namespace Atlas.Hands
 
         /// <summary>Detections in a row, each at least this confident, before a hand is shown.</summary>
         public const int EnterDetections = 2;
-        public const float EnterConfidence = 0.5f;
+        public const float EnterConfidence = 0.4f;
         /// <summary>Below this confidence a hand fades out.</summary>
         public const float ExitConfidence = 0.3f;
         /// <summary>Opacity ramps, seconds: appearing, disappearing, hiding for a Bump Guard warning, returning after it, the gate going inactive.</summary>
@@ -119,7 +132,7 @@ namespace Atlas.Hands
         // ---- Pinch and two hands (sections 6.3, 6.4) ----
 
         /// <summary>Thumb-to-index gap over palm width: a pinch closes under the first and opens over the second.</summary>
-        public const float PinchClose = 0.25f, PinchOpen = 0.40f;
+        public const float PinchClose = 0.30f, PinchOpen = 0.45f;
         /// <summary>Detections in a row under <see cref="PinchClose"/> before a pinch closes.</summary>
         public const int PinchDetections = 3;
         /// <summary>No pinch this soon after a hand appears, seconds.</summary>

@@ -17,6 +17,13 @@ namespace Atlas.Input.Tests
         /// <summary>A hand held up in view, over no target.</summary>
         private static readonly float3 Aside = HandsRig.Eye + new float3(0.30f, -0.30f, 0.30f);
 
+        // Touch is switched off in the build; these tests are of touch and pinch together.
+        [SetUp]
+        public void SetUp() { HandsTouch.TouchEnabled = true; }
+
+        [TearDown]
+        public void TearDown() { HandsTouch.TouchEnabled = false; }
+
         [Test]
         public void Input_Hands_AreATwinOfDwell()
         {
