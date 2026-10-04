@@ -44,3 +44,4 @@ Add a line before you take the seat; fill in the result when you leave it. Newes
 
 | When | Who | Branch @ commit | What is tested | Phone | Result |
 |---|---|---|---|---|---|
+| 2026-10-04 03:46 | Lucas | ui/squircle-look @ e70df96 | Squircle menus, signs, cards and onboarding card (release build) | Batphone | Built and installed; not yet looked at on the phone |
