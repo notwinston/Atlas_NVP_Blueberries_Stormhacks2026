@@ -135,13 +135,16 @@ namespace Atlas.App.Menu
                 AddCapsule(MenuLayout.MinusX, y, GlyphZ, MenuLayout.StepHalfWidth, MenuLayout.StepHalfHeight, ChipCell);
                 AddRect(MenuLayout.MinusX, y, TextZ, 0.010f, 0.002f, GlyphCell);
             }
-            // "+" on a value, a plain mark on a row that runs something.
-            AddCapsule(MenuLayout.PlusX, y, GlyphZ, MenuLayout.StepHalfWidth, MenuLayout.StepHalfHeight, ChipCell);
-            AddRect(MenuLayout.PlusX, y, TextZ, 0.010f, 0.002f, GlyphCell);
-            if (steps) AddRect(MenuLayout.PlusX, y, TextZ, 0.002f, 0.010f, GlyphCell);
+            // "+" on a value, a plain mark on a row that runs something; none on a space, which Apply enters.
+            if (kind != MenuRowKind.Space)
+            {
+                AddCapsule(MenuLayout.PlusX, y, GlyphZ, MenuLayout.StepHalfWidth, MenuLayout.StepHalfHeight, ChipCell);
+                AddRect(MenuLayout.PlusX, y, TextZ, 0.010f, 0.002f, GlyphCell);
+                if (steps) AddRect(MenuLayout.PlusX, y, TextZ, 0.002f, 0.010f, GlyphCell);
+            }
             AddCapsule(MenuLayout.CloseX, MenuLayout.FooterY, MarkZ, MenuLayout.ChipHalfWidth, MenuLayout.ChipHalfHeight, ChipCell);
             AddCapsule(MenuLayout.ApplyX, MenuLayout.FooterY, MarkZ, MenuLayout.ChipHalfWidth, MenuLayout.ChipHalfHeight,
-                model.HasPending ? FocusCell : ChipCell);
+                model.ApplyReady ? FocusCell : ChipCell);
             AtlasMesh.Apply(_builder, _panelMesh);
 
             if (_title == null) return;

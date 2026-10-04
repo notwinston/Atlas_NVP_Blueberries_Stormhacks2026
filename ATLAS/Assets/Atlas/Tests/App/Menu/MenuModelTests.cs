@@ -252,6 +252,9 @@ namespace Atlas.App.Tests
             Assert.That(model.Row(2).Space, Is.EqualTo(SpaceId.Glued));
             model.Step(-1);
             Assert.That(host.Calls, Is.Empty, "minus does not run a row");
+            model.Step(1);
+            Assert.That(host.Calls, Is.Empty, "a space is selected, then entered with Apply");
+            Assert.That(model.ApplyReady, Is.True);
             model.Confirm();
             Assert.That(requested, Is.EqualTo(new[] { SpaceId.Glued }));
             Assert.That(host.Calls, Is.EqualTo(new[] { "switch S1" }));
@@ -259,6 +262,8 @@ namespace Atlas.App.Tests
 
             model.NoteOpened();
             Assert.That(model.CloseRequested, Is.False);
+            model.Select(1);
+            Assert.That(model.ApplyReady, Is.False, "Apply has nothing to do on the space the walker is in");
             model.Select(RowOf(model, MenuCommand.ReturnHome));
             model.Step(1);
             Assert.That(host.Calls[host.Calls.Count - 1], Is.EqualTo("home"));
@@ -415,6 +420,25 @@ namespace Atlas.App.Tests
             clock.AdvanceMs(1100.0);
             pump.Tick();
             Assert.That(logged.Exists(e => e.Ev == LinkEvents.Param && e.Data["name"].AsString() == "link.enabled"), Is.True);
+        }
+
+        [Test]
+        public void TheMenuFrame_OpensWhereTheChipStood_NotWhereTheChipIs()
+        {
+            var frame = new MenuFrame();
+            frame.Snap(0f);
+            // The walker looks down and left at the chip to open the menu: the panel stays ahead.
+            frame.Open(math.radians(-30f), true);
+            Assert.That(frame.Yaw, Is.EqualTo(0f));
+            // Opened again and again from the chip, it never walks off to the left.
+            for (int i = 0; i < 5; i++) frame.Open(frame.Yaw + math.radians(-30f), true);
+            Assert.That(frame.Yaw, Is.EqualTo(0f));
+            // Turned right round, or with no heading yet, it comes up where the walker looks.
+            frame.Open(math.radians(120f), true);
+            Assert.That(frame.Yaw, Is.EqualTo(math.radians(120f)).Within(1e-5f));
+            var fresh = new MenuFrame();
+            fresh.Open(math.radians(-30f), false);
+            Assert.That(fresh.Yaw, Is.EqualTo(math.radians(-30f)).Within(1e-5f));
         }
 
         [Test]
