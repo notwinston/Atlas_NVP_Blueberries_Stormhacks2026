@@ -68,6 +68,8 @@ namespace Atlas.Telemetry
             public bool LightPending;
             /// <summary>The light file is wrong for good (hash, validation, load, refusal): it is not asked for again.</summary>
             public bool LightCondemned;
+            /// <summary>The light copy is the full file itself (same hash): there is nothing separate to fetch or place.</summary>
+            public bool LightShared;
             /// <summary>A light download that could not be had is tried again from this time on, and how often it failed.</summary>
             public double LightRetryAt;
             public int LightFails;
@@ -243,7 +245,7 @@ namespace Atlas.Telemetry
                 // The views are new: whatever was shown is a placeholder box again, and the first shape is due.
                 FirstShapeDue(e);
                 // The views are new, so the light mesh is gone with them; it follows the full one again.
-                e.LightPending = e.LightSha.Length > 0 && !e.LightCondemned;
+                e.LightPending = e.LightSha.Length > 0 && !e.LightCondemned && !e.LightShared;
                 e.LightRetryAt = 0.0;
                 if (e.State == ObjectAssetState.Ready || (e.State == ObjectAssetState.Placeholder && e.Sha.Length > 0))
                 {
@@ -425,7 +427,12 @@ namespace Atlas.Telemetry
                 var e = new Entry { Id = o.Id, Category = o.Category, Size = o.Size, Yaw = o.Yaw, Profile = o.Profile, TriTarget = o.TriTarget };
                 // A saved room names the mesh it had; it comes back from the cache.
                 if (ForgeProtocol.IsSha256(o.AssetHash)) e.Sha = o.AssetHash;
-                if (e.Sha.Length > 0 && ForgeProtocol.IsSha256(o.AssetHashLight)) { e.LightSha = o.AssetHashLight; e.LightPending = true; }
+                if (e.Sha.Length > 0 && ForgeProtocol.IsSha256(o.AssetHashLight))
+                {
+                    e.LightSha = o.AssetHashLight;
+                    e.LightShared = e.LightSha == e.Sha;
+                    e.LightPending = !e.LightShared;
+                }
                 _entries[i] = e;
             }
             _extras = new Entry[rest];
@@ -839,7 +846,25 @@ namespace Atlas.Telemetry
             if (e.LightSha != lightSha) { e.LightCondemned = false; e.LightFails = 0; e.LightRetryAt = 0.0; }
             e.LightSha = lightSha;
             e.LightUrl = string.IsNullOrEmpty(lightUrl) ? ForgeProtocol.AssetPath(lightSha) : lightUrl;
+            e.LightShared = lightSha == e.Sha;
+            if (e.LightShared)
+            {
+                // The full copy already meets the light target and was published as both: the room content draws it at
+                // the Light level when it has no light mesh. Only the record of the hash is kept.
+                e.LightPending = false;
+                SetRecordedLightHash(e, lightSha);
+                LogStep("light_same", e, JsonValue.Object().Set("sha256", lightSha).Set("reason", "same_as_full"));
+                return;
+            }
             e.LightPending = !e.LightCondemned;
+        }
+
+        void SetRecordedLightHash(Entry e, string sha)
+        {
+            RoomObject[] objects = _room != null ? _room.Objects : null;
+            if (objects == null) return;
+            for (int i = 0; i < objects.Length; i++)
+                if (objects[i] != null && objects[i].Id == e.Id) { objects[i].AssetHashLight = sha; return; }
         }
 
         void BeginDownload(Entry e, string sha, string url)
