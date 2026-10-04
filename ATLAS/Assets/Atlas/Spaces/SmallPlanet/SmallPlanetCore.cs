@@ -8,7 +8,7 @@ namespace Atlas.Spaces.SmallPlanet
 {
     /// <summary>
     /// The logic of S4 Small Planet (Master Plan §3.2, §6.5, §10.1.3; tasks P1-B08 and P1-B09), engine-free:
-    /// the radius, the fog, the dial, the 3-corner walk and the anchors. The walker itself is the app's
+    /// the radius, the fog, the dial, the 3-corner walk and the tile anchors. The walker itself is the app's
     /// kernel, configured for q = 3 on Enter; this class only reads its pose.
     /// </summary>
     /// <remarks>
@@ -19,13 +19,19 @@ namespace Atlas.Spaces.SmallPlanet
     public sealed class SmallPlanetCore
     {
         public const string ParamFogRho = "planet.fogRho", ParamRadius = "planet.R";
+        /// <summary>The view: off (default) is the comfortable S2 x R planet under a sky (warp mode 2); on is the
+        /// "Hyperbolica look", the full round 3-space S3 (warp mode 3): the far ground rises overhead and there is no sky.</summary>
+        public const string ParamView3d = "planet.view3d";
         /// <summary>planet.R is a lower bound on the radius, metres; 0 leaves the radius to the room.</summary>
         public const float MaxRadiusM = 4f;
+        /// <summary>planet.R's default: the PlanetKit tiles' authored radius, so their props are not stretched.
+        /// A room whose loop-fit radius is smaller then walks a planet too big to close the 3-corner lap inside it.</summary>
+        public const float DefaultRadiusM = (float)SmallPlanetConstants.KitRadius;
 
         readonly LapWalk walk = new LapWalk();
         readonly CurvatureDial dial = new CurvatureDial(3);
         ParamRegistry registry;
-        ParamEntry qEntry, strongEntry, fogEntry, radiusEntry;
+        ParamEntry qEntry, strongEntry, fogEntry, radiusEntry, view3dEntry;
         RoomModel room;
         IDialKernel kernel;
         double sideM;
@@ -33,6 +39,7 @@ namespace Atlas.Spaces.SmallPlanet
         bool hasRemote;
         WalkerPose remotePose;
         double remoteRadius, remoteFog;
+        bool remoteView3d;
 
         public bool Configured { get; private set; }
         public bool Entered { get; private set; }
@@ -48,6 +55,10 @@ namespace Atlas.Spaces.SmallPlanet
         public int SelectedQ { get; private set; } = 3;
         /// <summary>The last Tick changed R: the tile mesh and the fog distances are stale.</summary>
         public bool RadiusChanged { get; private set; }
+        /// <summary>planet.view3d in force: the full S3 view (warp mode 3). Changes only while the walker stands, like R.</summary>
+        public bool View3d { get; private set; }
+        /// <summary>The last Tick changed <see cref="View3d"/>: the warp mode and the sky are stale.</summary>
+        public bool ViewChanged { get; private set; }
         /// <summary>The last Tick asks for Curved Walk: the dial left 3 while the walker stood. Raised once per entry,
         /// and again after <see cref="SwitchRefused"/>.</summary>
         public bool SwitchWanted { get; private set; }
@@ -55,11 +66,6 @@ namespace Atlas.Spaces.SmallPlanet
         // planet.fogRho (§12.2), clamped so that opaque < discard (deviation D8)
         public double FogOpaqueRad { get; private set; } = SmallPlanetConstants.FogOpaqueRad;
         public double FogStartRad => FogOpaqueRad - SmallPlanetConstants.FogBand;
-
-        // beacon chart -> frame of face 5: the corner of face 5 at angle pi/4 + corner*pi/2, at the circumradius (A.3)
-        public static Iso2 BeaconPlacement { get; } = Iso2.Boost(
-            CubeTiling.Circumradius * new double2(Math.Cos(Math.PI / 4 + SmallPlanetConstants.BeaconCorner * Math.PI / 2),
-                                                  Math.Sin(Math.PI / 4 + SmallPlanetConstants.BeaconCorner * Math.PI / 2)), 1);
 
         /// <summary>
         /// Group "planet": planet.fogRho (the opaque end of the fog, rad) and planet.R. The dial itself, curved.q and
@@ -70,7 +76,8 @@ namespace Atlas.Spaces.SmallPlanet
             string group = SpaceIds.ParamGroup(SpaceId.SmallPlanet);
             registry.DeclareFloat(ParamFogRho, group, (float)SmallPlanetConstants.FogStartRad, (float)SmallPlanetConstants.FogOpaqueRad,
                                   (float)SmallPlanetConstants.FogOpaqueRad);
-            registry.DeclareFloat(ParamRadius, group, 0f, MaxRadiusM, 0f, null, true);
+            registry.DeclareFloat(ParamRadius, group, 0f, MaxRadiusM, DefaultRadiusM, null, true);
+            registry.DeclareBool(ParamView3d, group, false);
             CurvedDialParams.RegisterQ(registry);
             CurvedDialParams.RegisterStrong(registry);
         }
@@ -100,10 +107,12 @@ namespace Atlas.Spaces.SmallPlanet
             strongEntry = registry.Find(CurvedDialParams.ParamStrong);
             fogEntry = registry.Find(ParamFogRho);
             radiusEntry = registry.Find(ParamRadius);
+            view3dEntry = registry.Find(ParamView3d);
             sideM = room.LapSide;
             standing = room.Standing || !(sideM > 0);
             R = WantedRadius();
             FogOpaqueRad = ClampFog(fogEntry.Float);
+            View3d = view3dEntry.Bool;
             Configured = true;
         }
 
@@ -118,6 +127,7 @@ namespace Atlas.Spaces.SmallPlanet
             hasRemote = false;
             Placed = false;
             RadiusChanged = false; SwitchWanted = false; requested = false; armed = false;
+            View3d = view3dEntry.Bool; ViewChanged = false;
             walk.Disarm();
             dial.Set(3); SelectedQ = 3;
             if (kernel != null)
@@ -142,6 +152,7 @@ namespace Atlas.Spaces.SmallPlanet
                                         state.Xform6, state.Xform7, state.Xform8, 1);
             remoteRadius = state.P0;
             remoteFog = state.P5;
+            remoteView3d = state.P6 > 0.5f;
             hasRemote = true;
         }
 
@@ -153,6 +164,7 @@ namespace Atlas.Spaces.SmallPlanet
         {
             if (!Entered) throw new InvalidOperationException("Tick before Enter");
             RadiusChanged = false;
+            ViewChanged = false;
             SwitchWanted = false;
             bool driving = kernel != null && !hasRemote;
             if (hasRemote) still = false;   // the Station cannot tell: its lap never advances
@@ -172,6 +184,10 @@ namespace Atlas.Spaces.SmallPlanet
                 walk.Disarm(); armed = false;
                 RadiusChanged = true;
             }
+
+            // planet.view3d is a change of picture, not of world: the walk goes on; it too waits for the walker to stand.
+            bool wantView = hasRemote ? remoteView3d : view3dEntry.Bool;
+            if (wantView != View3d && (still || !driving)) { View3d = wantView; ViewChanged = true; }
 
             if (!Take(now)) return LapEvent.None;
 
@@ -219,30 +235,30 @@ namespace Atlas.Spaces.SmallPlanet
 
         /// <summary>
         /// kernel.md §4.5: the frame loop has written the face, U and p[0] = R from the kernel. This adds p[3] = q
-        /// (always 3 here), p[4] = K = 1/R^2 in 1/m^2 and p[5] = the fog's opaque end in rad.
+        /// (always 3 here), p[4] = K = 1/R^2 in 1/m^2, p[5] = the fog's opaque end in rad and p[6] = planet.view3d
+        /// in force (1 or 0), so the Station draws the view the phone draws.
         /// </summary>
         public void WriteState(ref StateMessage state)
         {
             state.P3 = 3f;
             state.P4 = (float)(1.0 / (R * R));
             state.P5 = (float)FogOpaqueRad;
-            state.P6 = 0f;
+            state.P6 = View3d ? 1f : 0f;
             state.P7 = 0f;
         }
 
         // §6.3 step 6; §4.6 anchor[t] = inverse(U) * F[t], in double
-        public void ComputeAnchors(Iso2[] tileAnchors, out Iso2 beaconAnchor)
+        public void ComputeAnchors(Iso2[] tileAnchors)
         {
             if (tileAnchors == null || tileAnchors.Length != CubeTiling.FaceCount) throw new ArgumentException("need 6 anchors", nameof(tileAnchors));
-            Anchors(Face, U, tileAnchors, out beaconAnchor);
+            Anchors(Face, U, tileAnchors);
         }
 
         /// <summary>The same for any pose on the sphere.</summary>
-        public static void Anchors(int face, in Iso2 u, Iso2[] tileAnchors, out Iso2 beaconAnchor)
+        public static void Anchors(int face, in Iso2 u, Iso2[] tileAnchors)
         {
             Iso2 inv = u.Inverse();
             for (int t = 0; t < CubeTiling.FaceCount; t++) tileAnchors[t] = inv * CubeTiling.Chain(face, t);
-            beaconAnchor = inv * CubeTiling.Chain(face, SmallPlanetConstants.BeaconFace) * BeaconPlacement;
         }
 
         double WantedRadius()

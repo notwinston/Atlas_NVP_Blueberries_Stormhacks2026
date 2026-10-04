@@ -1,0 +1,45 @@
+{
+  "pieces": {
+    "tile0": {
+      "sha256": "1f3d7a4db8bb6253e6cede9b79ba34ab6b6f8c22dd2fea90947259155463a211",
+      "triangles": 648
+    },
+    "tile1": {
+      "sha256": "6eab5b7bec04d148885403c2ff4c75b480e629f9596f6ca918ecd1e6ccec537d",
+      "triangles": 2606
+    },
+    "tile2": {
+      "sha256": "ef96ccfdd2c2bccd5ba5baca556c874f8170fb85e5c41204a367f521bca47b91",
+      "triangles": 2679
+    },
+    "tile3": {
+      "sha256": "b70a0ca76da7fa1e46c0ca7159ae2134c31992414afc2317ea80b84b31e98ed9",
+      "triangles": 2537
+    },
+    "tile4": {
+      "sha256": "79efe4d0cc14aa6be6749a96799ebe2a9380de3c4dff5a92b6eb493bd4a689ab",
+      "triangles": 2479
+    },
+    "tile5": {
+      "sha256": "a6712a8bfa0f12d1ab9b7d85835445680745031c1975e8c04d8728f9afbef2a2",
+      "triangles": 1987
+    }
+  },
+  "planet": {
+    "R0": 2.291831,
+    "frame": "Unity tile chart of CubeTiling face i (warp mode 2: positionOS.xz = chart, y = height)",
+    "ground_grid": 18,
+    "half_width_R": 0.785398,
+    "source": "SmallPlanet_World.blend",
+    "tiles": [
+      "Home",
+      "East",
+      "North",
+      "West",
+      "South",
+      "Beacon"
+    ],
+    "xz_unit": "R0 (multiply x and z by the runtime radius R)",
+    "y_unit": "metres"
+  }
+}

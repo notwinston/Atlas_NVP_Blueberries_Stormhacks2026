@@ -37,11 +37,15 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             public readonly RoomModel Room;
             public double Time;
 
-            public Rig(string room, double2 head)
+            /// <param name="roomRadius">planet.R = 0, so R is the room's (the loop-fit radius after the comfort floor),
+            /// as these tests of the walk assume; false keeps planet.R's default, the PlanetKit tiles' R0.</param>
+            public Rig(string room, double2 head, bool roomRadius = true)
             {
                 Room = SmallPlanetTestUtil.Room(room);
                 Kernel.Configure(KernelConfig.Flat(Room.LapSide));
                 Kernel.ResetToFloor(head);
+                SmallPlanetCore.DeclareParams(Registry);
+                if (roomRadius) Registry.Find(SmallPlanetCore.ParamRadius).Set(0f);
                 Core.Configure(Room, Registry);
                 Core.Enter(Kernel, head);
             }
@@ -204,7 +208,8 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             Assert.AreEqual(0.5 * Math.PI, fog.Min, 1e-6);
             Assert.AreEqual(0.8 * Math.PI, fog.Max, 1e-6);
             Assert.AreEqual(0.8 * Math.PI, fog.Float, 1e-6);
-            Assert.AreEqual(0f, radius.Float, "0: the radius is the room's");
+            Assert.AreEqual(SmallPlanetConstants.KitRadius, radius.Float, 1e-6, "the PlanetKit tiles' R0: a lower bound, so the props are not stretched");
+            Assert.AreEqual(0.0, radius.Min, 0.0, "0 leaves the radius to the room");
             Assert.IsTrue(radius.OnRelease);
 
             // The dial is Curved Walk's too: one entry, in its group.
@@ -223,6 +228,7 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             var head = new double2(0.3, -0.2);
             var registry = new ParamRegistry();
             SmallPlanetCore.DeclareParams(registry);
+            registry.Find(SmallPlanetCore.ParamRadius).Set(0f);        // the room's radius
             registry.SetGroupActive(CurvedDialParams.Group, false);   // as SpaceLab leaves it outside Curved Walk
             registry.Find(CurvedDialParams.ParamQ).Set(5);
             var kernel = new HolonomyWalkerKernel();
@@ -313,6 +319,18 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             WalkEvents.Emit(null, rig.Core.Walk, LapEvent.Closed);   // no log published: nothing happens
         }
 
+        // planet.R's default is the PlanetKit tiles' R0 (2.29 m), a lower bound: a room with a smaller loop-fit radius
+        // walks the kit's planet, a room with a larger one keeps its own.
+        [Test]
+        public void Radius_DefaultsToTheKitRadius_AsALowerBound()
+        {
+            var rig = new Rig(RoomFixtures.Sample3x3, double2.zero, roomRadius: false);
+            Assert.Less(SmallPlanetCore.RadiusFor(rig.Room, false), SmallPlanetConstants.KitRadius, "the 3 x 3 room's own planet is smaller");
+            Assert.AreEqual(SmallPlanetConstants.KitRadius, rig.Core.R, 1e-6);
+            Assert.AreEqual(rig.Core.R, rig.Kernel.MetresPerUnit, 0.0);
+            Assert.AreEqual(3.0, SmallPlanetCore.RadiusFor(rig.Room, false, 3.0), 0.0, "still only a lower bound");
+        }
+
         [Test]
         public void Standing_NoWalkIsArmed()
         {
@@ -392,6 +410,27 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             Assert.AreEqual(rig.Core.R, rig.Kernel.MetresPerUnit, 0.0);
         }
 
+        // planet.view3d (the S3 "Hyperbolica look"): off by default, switched only while the walker stands, sent in p[6].
+        [Test]
+        public void View3d_ChangesOnlyWhileStanding_AndRidesTheState()
+        {
+            var rig = new Rig(RoomFixtures.SampleL3x4, double2.zero);
+            Assert.IsFalse(rig.Core.View3d, "the comfortable view by default");
+            double x = 0;
+            for (int i = 0; i < 40; i++) { x += 0.01; rig.Frame(new double2(x, 0.3 * x)); }
+            rig.Registry.Find(SmallPlanetCore.ParamView3d).Set(true);
+            x += 0.01; rig.Frame(new double2(x, 0.3 * x));
+            Assert.IsFalse(rig.Core.View3d, "not while walking");
+            rig.Frame(new double2(x, 0.3 * x));
+            Assert.IsTrue(rig.Core.View3d);
+            Assert.IsTrue(rig.Core.ViewChanged);
+            rig.Frame(new double2(x, 0.3 * x));
+            Assert.IsFalse(rig.Core.ViewChanged, "once");
+            StateMessage state = StateMessage.Identity;
+            rig.Core.WriteState(ref state);
+            Assert.AreEqual(1f, state.P6);
+        }
+
         // ---- State -----------------------------------------------------------------------------------------
 
         // kernel.md §4.5 and lane D's table: the loop writes the face, U and p[0] = R from the kernel; the module adds p[3..5].
@@ -447,13 +486,12 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             Assert.AreEqual(5, registry.Find(CurvedDialParams.ParamQ).Int, "and writes no parameter");
 
             Iso2[] a = new Iso2[6], b = new Iso2[6];
-            rig.Core.ComputeAnchors(a, out Iso2 beaconA);
-            station.ComputeAnchors(b, out Iso2 beaconB);
+            rig.Core.ComputeAnchors(a);
+            station.ComputeAnchors(b);
             for (int f = 0; f < 6; f++) Assert.IsTrue(ExactEq(a[f], b[f]));
-            Assert.IsTrue(ExactEq(beaconA, beaconB));
             // §4.6: anchor[t] = inverse(U) * F[t]; the walker's own tile is anchored by inverse(U)
             Assert.Less(MaxAbsDiff(a[rig.Core.Face].M, rig.Core.U.Inverse().M), 1e-15);
-            Assert.Throws<ArgumentException>(() => rig.Core.ComputeAnchors(new Iso2[5], out _));
+            Assert.Throws<ArgumentException>(() => rig.Core.ComputeAnchors(new Iso2[5]));
         }
 
 #if !ATLAS_HEADLESS
@@ -481,7 +519,15 @@ namespace Atlas.Spaces.SmallPlanet.Tests
                 module.Configure(room, registry);
                 module.Enter(kernel.Pose);
                 Assert.AreEqual(3, kernel.Q);
-                Assert.AreEqual(9, pool.Rented, "six tiles, the beacon, the two lap markers");
+                // The PlanetKit tiles from Resources, under the sky: one material for its sun and clouds.
+                Assert.IsTrue(space.View.Built, "the PlanetKit tiles load from Resources");
+                Assert.IsNotNull(space.Sky);
+                Assert.AreSame(space.Sky.Material, space.Sky.CloudRenderer.sharedMaterial);
+                Assert.AreSame(space.Sky.Material, space.Sky.SunRenderer.sharedMaterial);
+                Assert.AreEqual(0f, space.Sky.Material.GetFloat(Atlas.Rendering.AtlasShaderIDs.WarpMode), "not warped");
+                Assert.AreEqual(9, pool.Rented, "six tiles, the two lap markers, the sky");
+                Assert.IsTrue(Unity.Mathematics.math.all(Atlas.Rendering.AtlasLook.State.FogColorTarget == SmallPlanetSkyMesh.HorizonLinear),
+                              "the fog is the sky's horizon");
                 double R = space.Core.R;
                 Assert.AreEqual((float)(0.5 * Math.PI * R), Atlas.Rendering.AtlasLook.State.FogStart, 1e-5f);
                 Assert.AreEqual((float)(0.8 * Math.PI * R), Atlas.Rendering.AtlasLook.State.FogEnd, 1e-5f);
@@ -492,6 +538,8 @@ namespace Atlas.Spaces.SmallPlanet.Tests
                 module.Tick(in frame);
                 ((IUploadStep)module).Upload(in frame);
                 Assert.IsTrue(space.View.Shown);
+                Assert.AreEqual(Vector3.zero, space.Sky.Root.position, "the sky is centred on the head");
+                Assert.AreEqual(Quaternion.identity, space.Sky.Root.rotation, "and keeps the world's axes");
                 Assert.AreEqual(Atlas.Rendering.WarpAnchor.ToMatrix(space.Core.U.Inverse()),
                                 space.View.TileRenderers[0].sharedMaterial.GetMatrix(Atlas.Rendering.AtlasShaderIDs.Anchor));
                 Assert.IsTrue(space.Markers.FlagRenderer.enabled, "the lap flag of the 3-corner walk");
@@ -502,6 +550,7 @@ namespace Atlas.Spaces.SmallPlanet.Tests
 
                 module.Exit();
                 Assert.AreEqual(0, pool.Rented);
+                Assert.IsNull(space.Sky);
                 Assert.IsFalse(registry.IsGroupActive(CurvedDialParams.Group));
             }
             finally
@@ -537,7 +586,7 @@ namespace Atlas.Spaces.SmallPlanet.Tests
                 module.Enter(kernel.Pose);
                 Assert.IsNotNull(space.Dial);
                 Assert.IsTrue(space.Dial.Target.IsValid);
-                Assert.AreEqual(10, pool.Rented, "six tiles, the beacon, the two lap markers, the dial chip");
+                Assert.AreEqual(10, pool.Rented, "six tiles, the two lap markers, the sky, the dial chip");
                 Assert.IsFalse(space.DialChip.activeSelf);
 
                 var missing = new List<AtlasAction>();

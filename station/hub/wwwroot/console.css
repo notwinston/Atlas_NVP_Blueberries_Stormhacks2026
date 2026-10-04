@@ -25,11 +25,23 @@
   --s3: #e5484d;
   --s4: #b392f0;
   --s5: #4cc38a;
-  --radius: 8px;
+  /* Concentric corners: a control's radius is its container's less the padding between them. */
+  --radius: 18px;
+  --r-control: 12px;
+  --r-small: 6px;
+  /* The lit top edge of a pane of glass: no blur, so scrolling and the live charts stay cheap. */
+  --rim: inset 0 1px 0 rgba(255, 255, 255, 0.06);
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
 
 * { box-sizing: border-box; }
+
+/* Continuous ("squircle") corners where the browser has them; plain rounded corners elsewhere. Capsules stay
+   round-ended. */
+@supports (corner-shape: squircle) {
+  .panel, .group, .tile, .chart, .stop, .tag, kbd,
+  button, select, input[type="text"], input[type="number"] { corner-shape: squircle; }
+}
 
 html { color-scheme: dark; }
 
@@ -107,7 +119,7 @@ a { color: var(--accent); }
   min-height: 60px;
   padding: 6px 22px;
   border: 2px solid #ff8f93;
-  border-radius: 10px;
+  border-radius: 16px;
   background: var(--danger);
   color: #fff;
   font: 800 24px/1 system-ui, sans-serif;
@@ -129,23 +141,24 @@ a { color: var(--accent); }
 
 .tabs {
   display: flex;
-  gap: 2px;
-  padding: 0 12px;
+  gap: 4px;
+  padding: 6px 12px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
   overflow-x: auto;
 }
 .tabs a {
-  padding: 11px 16px;
+  padding: 8px 16px;
+  border-radius: 999px;
   color: var(--muted);
   text-decoration: none;
   font-weight: 600;
   font-size: 14px;
-  border-bottom: 2px solid transparent;
   white-space: nowrap;
+  transition: background-color 80ms ease-out, color 80ms ease-out;
 }
-.tabs a:hover { color: var(--text); }
-.tabs a.active { color: var(--text); border-bottom-color: var(--accent); }
+.tabs a:hover { color: var(--text); background: var(--panel-2); }
+.tabs a.active { color: var(--text); background: var(--panel-3); box-shadow: var(--rim); }
 
 main { padding: 16px; max-width: 1500px; margin: 0 auto; }
 .page-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -161,6 +174,7 @@ main { padding: 16px; max-width: 1500px; margin: 0 auto; }
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  box-shadow: var(--rim);
   padding: 14px;
   margin-bottom: 14px;
 }
@@ -172,7 +186,7 @@ button, select, input[type="text"], input[type="number"] {
   color: var(--text);
   background: var(--panel-2);
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: var(--r-control);
   min-height: 38px;
   padding: 6px 12px;
 }
@@ -185,7 +199,7 @@ button.current { border-color: var(--accent); background: #17304a; color: #fff; 
 input[type="text"], input[type="number"] { min-width: 0; }
 input::placeholder { color: #6d7785; }
 select[size] { padding: 4px; width: 100%; }
-select[size] option { padding: 5px 8px; border-radius: 4px; }
+select[size] option { padding: 5px 8px; border-radius: var(--r-small); }
 
 .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
 .row input[type="text"] { flex: 1; }
@@ -216,7 +230,7 @@ select[size] option { padding: 5px 8px; border-radius: 4px; }
 
 /* ---- tuner -------------------------------------------------------------------------------------- */
 
-.group { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 10px; }
+.group { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--rim); margin-bottom: 10px; }
 .group > summary {
   display: flex; align-items: center; gap: 10px;
   padding: 11px 14px; cursor: pointer; font-weight: 650; list-style: none;
@@ -229,7 +243,7 @@ select[size] option { padding: 5px 8px; border-radius: 4px; }
 .group.inactive > summary, .group.inactive .param { opacity: 0.55; }
 .group-body { padding: 0 14px 6px; }
 
-.tag { font-size: 11px; font-weight: 600; color: var(--muted); border: 1px solid var(--border-strong); border-radius: 4px; padding: 1px 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+.tag { font-size: 11px; font-weight: 600; color: var(--muted); border: 1px solid var(--border-strong); border-radius: var(--r-small); padding: 1px 6px; text-transform: uppercase; letter-spacing: 0.05em; }
 
 .param {
   display: grid;
@@ -270,7 +284,7 @@ select[size] option { padding: 5px 8px; border-radius: 4px; }
 /* ---- dashboard ---------------------------------------------------------------------------------- */
 
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; margin-bottom: 14px; }
-.tile { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 9px 11px; }
+.tile { background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-control); box-shadow: var(--rim); padding: 9px 11px; }
 .tile .name { font-size: 12px; color: var(--muted); }
 .tile .value { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.25; }
 .tile .value small { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 3px; }
@@ -278,7 +292,7 @@ select[size] option { padding: 5px 8px; border-radius: 4px; }
 .tile.bad { border-color: var(--danger); }
 
 .charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.chart { margin: 0; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px 8px; min-width: 0; }
+.chart { margin: 0; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--rim); padding: 10px 12px 8px; min-width: 0; }
 .chart.wide { grid-column: 1 / -1; }
 .chart figcaption { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-weight: 600; font-size: 14px; margin-bottom: 4px; }
 .chart .unit { color: var(--muted); font-weight: 500; font-size: 12px; }
@@ -308,7 +322,7 @@ select[size] option { padding: 5px 8px; border-radius: 4px; }
 .drive .hint.good { color: var(--ok); }
 .drive .hint.bad { color: var(--danger); }
 .drive-keys { margin: 8px 0 0; font-size: 12px; color: var(--muted); line-height: 2; }
-.drive-keys kbd { display: inline-block; min-width: 20px; padding: 0 5px; margin-right: 3px; border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: 4px; background: var(--panel-3); color: var(--text); font: 600 11px/18px system-ui, sans-serif; text-align: center; }
+.drive-keys kbd { display: inline-block; min-width: 20px; padding: 0 5px; margin-right: 3px; border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: var(--r-small); background: var(--panel-3); color: var(--text); font: 600 11px/18px system-ui, sans-serif; text-align: center; }
 .drive-keys kbd.down { background: var(--accent); border-color: var(--accent); color: var(--bg); }
 #drive.on .drive-keys { color: var(--text); }
 

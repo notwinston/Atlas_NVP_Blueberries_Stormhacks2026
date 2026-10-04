@@ -44,3 +44,10 @@ Add a line before you take the seat; fill in the result when you leave it. Newes
 
 | When | Who | Branch @ commit | What is tested | Phone | Result |
 |---|---|---|---|---|---|
+| 2026-10-04 03:46 | Lucas | ui/squircle-look @ e70df96 | Squircle menus, signs, cards and onboarding card (release build) | Batphone | Built and installed; not yet looked at on the phone |
+| 2026-10-04 04:16 | Lucas | ui/polish @ ea710d0 | Hexagon flip transition between spaces, Apply step on the Spaces menu (release build) | Batphone | Built and installed; not yet looked at on the phone |
+| 2026-10-04 04:30 | Lucas | ui/polish @ 550db23 | Hexagon ripple from the gaze tile, dome over bump warnings, menu opens in place (release build) | Batphone | Built and installed; not yet looked at on the phone |
+| 2026-10-04 04:39 | Lucas | ui/polish @ c03cbfa | Slower hexagon ripple, outlines only at each tile's turn, flat-top front hexagon on a vertical pole (release build) | Batphone | Built and installed; not yet looked at on the phone |
+| 2026-10-04 04:43 | Lucas | ui/polish @ f8c622e | Faster hexagon ripple, black outlines (release build) | Batphone | Built and installed; not yet looked at on the phone |
+| 2026-10-04 04:50 | Lucas | ui/polish @ 0a2dd18 | Hexagon rings turn over outwards as one wave (release build) | Batphone | Built and installed; not yet looked at on the phone |
+| 2026-10-04 04:58 | Lucas | ui/polish @ 6ce9e84 | Hexagons spin on vertical poles, left and right mirrored (release build) | Batphone | Built and installed; not yet looked at on the phone |

@@ -40,6 +40,28 @@ namespace Atlas.Telemetry.Tests
 
         public static FallbackSet LoadFallback() { return FallbackSet.Load(ReadFallback); }
 
+        /// <summary>The kit fixture tools/kit/make_test_fixture.py writes.</summary>
+        public static string KitFixtureDirectory()
+        {
+            return Path.Combine(FixtureDirectory(), "Kit");
+        }
+
+        /// <summary>The kit pieces the build ships, which tools/kit/export_kit.py writes from the Blender file.</summary>
+        public static string ShippedKitDirectory()
+        {
+            return Path.Combine(Project(), "Assets", "Atlas", "Spaces", "Glued", "Resources", KitSet.ResourceFolder);
+        }
+
+        /// <summary>The reader GluedSpace uses, with a folder on disk in place of Resources.</summary>
+        public static Func<string, byte[]> KitReader(string directory)
+        {
+            return name =>
+            {
+                string path = Path.Combine(directory, name == KitSet.ManifestName ? "manifest.json" : name + ".bytes");
+                return File.Exists(path) ? File.ReadAllBytes(path) : null;
+            };
+        }
+
         public static float3 Dims(JsonValue entry)
         {
             JsonValue d = entry["dims"];

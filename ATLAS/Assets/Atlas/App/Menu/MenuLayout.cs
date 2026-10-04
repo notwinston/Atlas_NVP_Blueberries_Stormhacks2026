@@ -56,6 +56,16 @@ namespace Atlas.App.Menu
         }
 
         /// <summary>
+        /// The menu opens. A heading the closed menu already trails with is kept: the walker opened it by
+        /// looking at the chip, down and to the left, and snapping to that would move the panel left on every
+        /// opening. With no heading yet, or one the walker has turned away from, it snaps to theirs.
+        /// </summary>
+        public void Open(float headYaw, bool hasHeading)
+        {
+            if (!hasHeading || math.abs(Delta(Yaw, headYaw)) > PanelLeash) Yaw = headYaw;
+        }
+
+        /// <summary>
         /// The closed menu: the heading catches up with the walker's unless they look down or
         /// <paramref name="hold"/> is set (the gaze is on the chip), and never trails by more than the leash.
         /// </summary>

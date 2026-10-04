@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System;
 using Atlas.Kernel;
+using Atlas.World;
 using NUnit.Framework;
 using Unity.Mathematics;
 
@@ -61,6 +62,44 @@ namespace Atlas.Rendering.Tests.Look
             Assert.That((int)Marshal.OffsetOf<AtlasVertex>("Color"), Is.EqualTo(24));
             Assert.That((int)Marshal.OffsetOf<AtlasVertex>("Uv0"), Is.EqualTo(28));
             Assert.That((int)Marshal.OffsetOf<AtlasVertex>("Uv1"), Is.EqualTo(36));
+        }
+
+        [Test]
+        public void Squircle_FillsItsBoxAndFacesTheWalker()
+        {
+            var b = new AtlasMeshBuilder();
+            b.AddSquircle(new float3(1f, 2f, 3f), 0.35f, 0.25f, 0.045f, new float2(0.5f, 0.5f));
+            Assert.That(b.VertexCount, Is.EqualTo(1 + 4 * (AtlasMeshBuilder.SquircleSegments + 1)));
+            Assert.That(math.distance(b.BoundsMin, new float3(0.65f, 1.75f, 3f)), Is.LessThan(1e-5f));
+            Assert.That(math.distance(b.BoundsMax, new float3(1.35f, 2.25f, 3f)), Is.LessThan(1e-5f));
+            // Every triangle turns clockwise as seen from -z (Unity's front face), as AddQuad's do.
+            float area = 0f;
+            for (int i = 0; i < b.IndexCount; i += 3)
+            {
+                float3 p0 = b.Vertices[b.Indices[i]].Position;
+                float z = math.cross(b.Vertices[b.Indices[i + 1]].Position - p0, b.Vertices[b.Indices[i + 2]].Position - p0).z;
+                Assert.That(z, Is.LessThanOrEqualTo(1e-9f));
+                area -= 0.5f * z;
+            }
+            // Smaller than the box, but fuller at the corners than circular corners of that radius would be.
+            float circular = 0.7f * 0.5f - 4f * (1f - math.PI / 4f) * 0.045f * 0.045f;
+            Assert.That(area, Is.LessThan(0.7f * 0.5f).And.GreaterThan(circular));
+        }
+
+        [Test]
+        public void Squircle_ARadiusThatReachesTheShortSideMakesACapsule()
+        {
+            var b = new AtlasMeshBuilder();
+            b.AddSquircle(float3.zero, 0.1f, 0.02f, 0.02f, float2.zero);
+            float area = 0f;
+            for (int i = 0; i < b.IndexCount; i += 3)
+            {
+                float3 p0 = b.Vertices[b.Indices[i]].Position;
+                area -= 0.5f * math.cross(b.Vertices[b.Indices[i + 1]].Position - p0, b.Vertices[b.Indices[i + 2]].Position - p0).z;
+            }
+            // A stadium: the middle rectangle and one whole circle, less what the chords cut off.
+            float stadium = 0.16f * 0.04f + math.PI * 0.02f * 0.02f;
+            Assert.That(area, Is.EqualTo(stadium).Within(0.02f * stadium));
         }
 
         [Test]
@@ -576,6 +615,40 @@ namespace Atlas.Rendering.Tests.Look
             Assert.That(a.BoundsMax.x, Is.EqualTo(6f));
             AssertWindingAgreesWithNormals(a);
             AssertUnitNormalsAndBounds(a);
+        }
+
+        [Test]
+        public void Append_MeshData_MovesItByTheOffset()
+        {
+            var source = new MeshData(8, 8);
+            source.AddQuadGrid(float3.zero, new float3(1f, 0f, 0f), new float3(0f, 0f, 1f), new float2(0.25f, 0.5f),
+                               new float2(3f, 4f), new float2(1f, 0f), new float2(0f, 1f));
+            var a = new AtlasMeshBuilder();
+            a.AddQuad(float3.zero, new float3(1f, 0f, 0f), new float3(0f, 0f, 1f), float2.zero);
+            var offset = new float3(2f, 0.5f, -1f);
+            a.Append(source, offset);
+
+            Assert.That(a.VertexCount, Is.EqualTo(4 + source.VertexCount));
+            Assert.That(a.TriangleCount, Is.EqualTo(2 + source.TriangleCount));
+            Assert.That(a.Indices[6], Is.EqualTo(4 + source.Indices[0]));
+            for (int v = 0; v < source.VertexCount; v++)
+            {
+                AtlasVertex copied = a.Vertices[4 + v], original = source.Vertices[v];
+                Assert.That(copied.Position, Is.EqualTo(original.Position + offset));
+                Assert.That(copied.Normal, Is.EqualTo(original.Normal));
+                Assert.That(copied.Color, Is.EqualTo(original.Color));
+                Assert.That(copied.Uv0, Is.EqualTo(original.Uv0));
+                Assert.That(copied.Uv1, Is.EqualTo(original.Uv1), "the line coordinates do not move with the piece");
+            }
+            Assert.That(a.BoundsMin, Is.EqualTo(new float3(0f, 0f, -1f)));
+            Assert.That(a.BoundsMax, Is.EqualTo(new float3(3f, 0.5f, 1f)));
+            AssertWindingAgreesWithNormals(a);
+
+            // An empty source adds nothing and leaves the bounds alone.
+            var empty = new MeshData(4, 6);
+            a.Append(empty, new float3(100f, 100f, 100f));
+            Assert.That(a.VertexCount, Is.EqualTo(4 + source.VertexCount));
+            Assert.That(a.BoundsMax, Is.EqualTo(new float3(3f, 0.5f, 1f)));
         }
 
         [Test]

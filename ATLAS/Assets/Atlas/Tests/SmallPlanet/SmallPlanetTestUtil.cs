@@ -53,10 +53,10 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             return k;
         }
 
-        public static void Anchors(IWalkerKernel k, Iso2[] tiles, out Iso2 beacon)
+        public static void Anchors(IWalkerKernel k, Iso2[] tiles)
         {
             WalkerPose p = k.Pose;
-            SmallPlanetCore.Anchors(CubeTiling.FaceOf(p.Tile), p.Local, tiles, out beacon);
+            SmallPlanetCore.Anchors(CubeTiling.FaceOf(p.Tile), p.Local, tiles);
         }
 
         public static RoomModel Room(string name) => RoomFixtures.LoadFromProject(name);
@@ -83,23 +83,14 @@ namespace Atlas.Spaces.SmallPlanet.Tests
         /// <summary>One mesh as the tests read it: positions and triangles, engine-free.</summary>
         public sealed class TileData
         {
-            public float3[] V; public int[] T; public TileMeshLayout Lay; public double R;
+            public float3[] V; public int[] T; public double R;
         }
 
-        public static TileData BuildTile(double R)
+        /// <summary>The PlanetKit tile of a face, scaled for a planet of radius R as SmallPlanetView scales it.</summary>
+        public static TileData BuildKitTile(PlanetKitTiles kit, int face, double R)
         {
-            var gen = new TileMeshGenerator(TilePalette.Default);
-            var lay = gen.Build(TileMeshSpec.Spherical(R, TileLod.Near, 0, 0xF));
-            var d = new TileData { V = new float3[lay.VertexCount], T = new int[lay.IndexCount], Lay = lay, R = R };
-            for (int i = 0; i < d.V.Length; i++) d.V[i] = gen.Vertices[i].Position;
-            for (int i = 0; i < d.T.Length; i++) d.T[i] = gen.Indices[i];
-            return d;
-        }
-
-        public static TileData BuildBeacon(double R)
-        {
-            var data = new AtlasMeshBuilder(32, 96);
-            PoleBeaconMesh.Build(data);
+            var data = new AtlasMeshBuilder(kit.MaxVertices, kit.MaxIndices);
+            kit.Scale(face, R, data);
             var d = new TileData { V = new float3[data.VertexCount], T = new int[data.IndexCount], R = R };
             for (int i = 0; i < d.V.Length; i++) d.V[i] = data.Vertices[i].Position;
             Array.Copy(data.Indices, d.T, d.T.Length);

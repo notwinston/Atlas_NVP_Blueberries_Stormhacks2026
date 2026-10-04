@@ -426,6 +426,9 @@ namespace Atlas.E2E.Tests
                 // ---- S4 Small Planet: the same kernel on the sphere, and the three-corner walk.
                 s.WalkTo(wallStart);
                 s.WalkTo(lapCorner);
+                // The lap closes on the room's own planet (R = 2s/pi): planet.R's default, the PlanetKit tiles' R0, is
+                // larger than this room's, so the operator sets it to 0 for the three-corner walk.
+                rig.Registry.Set(SmallPlanetCore.ParamRadius, 0f);
                 s.Switch(SpaceId.SmallPlanet);
                 var s4 = rig.Module<SmallPlanetModule>();
                 Assert.That(s4, Is.Not.Null);

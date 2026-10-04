@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System;
 using Atlas.Kernel;
+using Atlas.World;
 using Unity.Mathematics;
 
 namespace Atlas.Rendering
@@ -120,6 +121,28 @@ namespace Atlas.Rendering
             }
         }
 
+        /// <summary>
+        /// Appends a mesh read from a file (a kit piece) moved by offset. Normals, shade, palette and line
+        /// coordinates are copied unchanged. Allocates nothing once the arrays are large enough.
+        /// </summary>
+        public void Append(MeshData source, float3 offset)
+        {
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            if (source.VertexCount == 0) return;
+            Reserve(source.VertexCount, source.IndexCount);
+            int first = VertexCount;
+            for (int v = 0; v < source.VertexCount; v++)
+            {
+                AtlasVertex vertex = source.Vertices[v];
+                vertex.Position += offset;
+                Vertices[VertexCount++] = vertex;
+            }
+            for (int i = 0; i < source.IndexCount; i++) Indices[IndexCount + i] = source.Indices[i] + first;
+            IndexCount += source.IndexCount;
+            BoundsMin = math.min(BoundsMin, source.BoundsMin + offset);
+            BoundsMax = math.max(BoundsMax, source.BoundsMax + offset);
+        }
+
         // ---- Quads -------------------------------------------------------------------------------------------
 
         /// <summary>
@@ -143,6 +166,53 @@ namespace Atlas.Rendering
         {
             AddQuadCells(origin, u, v, uv0, float2.zero, float2.zero, float2.zero,
                          ambientOcclusion, ambientOcclusion, lineWeight, 1, 1);
+        }
+
+        /// <summary>Segments in each corner of <see cref="AddSquircle"/>: smooth at HUD sizes, 37 vertices a shape.</summary>
+        public const int SquircleSegments = 8;
+
+        /// <summary>
+        /// A rounded rectangle in the plane z = centre.z facing -z (towards a walker looking down +z), as one
+        /// fan: for HUD panels and chips, which are never warped. The corners are continuous ("squircle")
+        /// curves: each spans 1.5 radius along its edges as a quarter superellipse of exponent 4, so the edge
+        /// flows into the bend. A radius that reaches the short side makes a capsule with round ends.
+        /// </summary>
+        public void AddSquircle(float3 centre, float halfWidth, float halfHeight, float radius, float2 uv0,
+                                float ambientOcclusion = 1f, byte lineWeight = 0)
+        {
+            const int n = SquircleSegments;
+            float shortest = math.min(halfWidth, halfHeight);
+            float extent = math.min(1.5f * radius, shortest);
+            // A capsule's ends are half circles; smaller corners take the squircle's exponent.
+            float power = extent >= shortest ? 1f : 0.5f;   // 2 / exponent
+            var normal = new float3(0f, 0f, -1f);
+            uint color = AtlasVertex.PackColor(AtlasShading.ToByte(AtlasShading.FaceShade(normal), ambientOcclusion), lineWeight);
+
+            Reserve(1 + 4 * (n + 1), 3 * 4 * (n + 1));
+            AtlasVertex vertex = default;
+            vertex.Normal = normal;
+            vertex.Uv0 = uv0;
+            vertex.Color = color;
+            vertex.Position = centre;
+            int hub = AddVertex(vertex);
+            float2 inner = new float2(halfWidth - extent, halfHeight - extent);
+            // Anticlockwise from the right edge, one quarter turn per corner.
+            for (int corner = 0; corner < 4; corner++)
+            {
+                float2 sign = new float2(corner == 0 || corner == 3 ? 1f : -1f, corner < 2 ? 1f : -1f);
+                for (int i = 0; i <= n; i++)
+                {
+                    float angle = (corner + (float)i / n) * (0.5f * math.PI);
+                    math.sincos(angle, out float sin, out float cos);
+                    float2 bend = new float2(math.pow(math.abs(cos), power), math.pow(math.abs(sin), power));
+                    float2 p = sign * (inner + extent * bend);
+                    vertex.Position = centre + new float3(p.x, p.y, 0f);
+                    AddVertex(vertex);
+                }
+            }
+            // Seen from -z the ring runs anticlockwise, so each fan triangle takes its two rim points reversed.
+            int ring = 4 * (n + 1);
+            for (int i = 0; i < ring; i++) AddTriangle(hub, hub + 1 + (i + 1) % ring, hub + 1 + i);
         }
 
         /// <summary>

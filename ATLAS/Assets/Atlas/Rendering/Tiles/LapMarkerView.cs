@@ -46,6 +46,9 @@ namespace Atlas.Rendering
             return m;
         }
 
+        /// <summary>The warp mode at kappa > 0: spherical (2), or S3 (3) for the Small Planet's planet.view3d.</summary>
+        public float SphericalMode { get; set; } = AtlasWarpCpu.ModeSpherical;
+
         public bool Visible
         {
             get => visible;
@@ -60,13 +63,13 @@ namespace Atlas.Rendering
         public void Upload(LapWalk walk, in Iso2 tileZeroInCurrent, in Iso2 walker, double kappa, double lengthScaleM, Vector3 headPosWS)
         {
             if (!visible || walk == null || !walk.Armed) { flag.Renderer.enabled = false; next.Renderer.enabled = false; return; }
-            Place(flag, walk, 0, tileZeroInCurrent, walker, kappa, headPosWS);
+            Place(flag, walk, 0, tileZeroInCurrent, walker, kappa, headPosWS, SphericalMode);
             int nb = walk.NextBeacon;
-            if (nb > 0) Place(next, walk, nb, tileZeroInCurrent, walker, kappa, headPosWS);
+            if (nb > 0) Place(next, walk, nb, tileZeroInCurrent, walker, kappa, headPosWS, SphericalMode);
             else next.Renderer.enabled = false;
         }
 
-        static void Place(Marker m, LapWalk walk, int k, in Iso2 f0, in Iso2 walker, double kappa, Vector3 head)
+        static void Place(Marker m, LapWalk walk, int k, in Iso2 f0, in Iso2 walker, double kappa, Vector3 head, float sphericalMode)
         {
             Iso2 a = walker.Inverse() * f0 * walk.Beacon(k);   // anchor in double, MP §4.6
             if (kappa == 0)
@@ -77,7 +80,7 @@ namespace Atlas.Rendering
             }
             else
             {
-                m.Material.SetFloat(AtlasShaderIDs.WarpMode, kappa < 0 ? AtlasWarpCpu.ModeHyperbolic : AtlasWarpCpu.ModeSpherical);
+                m.Material.SetFloat(AtlasShaderIDs.WarpMode, kappa < 0 ? AtlasWarpCpu.ModeHyperbolic : sphericalMode);
                 m.Material.SetMatrix(AtlasShaderIDs.Anchor, WarpAnchor.ToMatrix(a));
                 m.Go.transform.position = Vector3.zero;
             }

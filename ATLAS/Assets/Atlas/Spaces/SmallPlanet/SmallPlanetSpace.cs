@@ -10,8 +10,9 @@ namespace Atlas.Spaces.SmallPlanet
 {
     /// <summary>
     /// S4 Small Planet (Master Plan §3.2, §6.5, §10.1.3; tasks P1-B08 and P1-B09): the {4,3} tiling, six tiles
-    /// that are the faces of a cube blown onto a sphere of radius R, all always drawn, with a pole beacon and the
-    /// 3-corner walk. The room is tile zero: its kerbs and furniture are the shared room content, warped through
+    /// that are the faces of a cube blown onto a sphere of radius R, all always drawn, and the 3-corner walk. The
+    /// tiles are the PlanetKit ones modelled in Blender (SmallPlanetView; the cairn on face 5 is the landmark), under
+    /// a daytime sky (SmallPlanetSky). The room is tile zero: its kerbs and furniture are the shared room content, warped through
     /// their own materials. Registered only until the first step (§4.9), so the module reports false.
     /// </summary>
     /// <remarks>
@@ -31,6 +32,7 @@ namespace Atlas.Spaces.SmallPlanet
         IEventLog log;
         IDialKernel kernel;
         SmallPlanetView view;
+        SmallPlanetSky sky;
         LapMarkerView markers;
         CurvedRoomView roomView;
         SmallPlanetDial dial;
@@ -56,6 +58,8 @@ namespace Atlas.Spaces.SmallPlanet
         /// <summary>The logic behind this component.</summary>
         public SmallPlanetCore Core => core;
         public SmallPlanetView View => view;
+        /// <summary>The sun and clouds while the space is entered with a look, or null.</summary>
+        public SmallPlanetSky Sky => sky;
         public LapMarkerView Markers => markers;
         /// <summary>The gaze twin of the dial while the space is entered with an input service, or null.</summary>
         internal SmallPlanetDial Dial => dial;
@@ -90,15 +94,20 @@ namespace Atlas.Spaces.SmallPlanet
             }
             core.Enter(kernel, head);
 
+            ReleaseSky();
             if (pool != null)
             {
                 view = gameObject.AddComponent<SmallPlanetView>();
-                view.Build(core.R, pool);
+                view.Build(core.R, pool);   // without the kit (one error logged) nothing is drawn; the walk goes on
                 view.Shown = core.Placed;
+                AtlasServices.TryGet(out IStereoRig rig);
+                sky = new SmallPlanetSky(transform, pool, rig, core.View3d);
                 markers = new LapMarkerView(transform, pool);
                 markers.Visible = false;
             }
+            else SmallPlanetSky.ApplyLook(core.View3d);
             if (room != null && room.IsBuilt) roomView = new CurvedRoomView(room);
+            ApplyView();
             // Rule 5: the dial is read in Tick, so its gaze twin lives as long as the space is entered.
             ReleaseDial();
             if (input != null)
@@ -130,6 +139,7 @@ namespace Atlas.Spaces.SmallPlanet
                 // A planet of another size is another world: the hash and the Station follow.
                 if (host != null) host.BumpWorldVersion();
             }
+            if (core.ViewChanged) ApplyView();
             if (core.SwitchWanted && (host == null || !host.RequestSwitch(SpaceId.CurvedWalk))) core.SwitchRefused();
         }
 
@@ -137,6 +147,7 @@ namespace Atlas.Spaces.SmallPlanet
         {
             if (!core.Entered) return;
             UploadFog();
+            if (sky != null) sky.Upload(frame.HeadPosition, frame.Time);
             if (dial != null)
             {
                 dial.Place(frame.HeadPosition, frame.HeadRotation);
@@ -154,8 +165,8 @@ namespace Atlas.Spaces.SmallPlanet
                 view.Shown = placed;
                 if (placed)
                 {
-                    core.ComputeAnchors(anchors, out Iso2 beacon);
-                    view.Upload(anchors, beacon);
+                    core.ComputeAnchors(anchors);
+                    view.Upload(anchors);
                 }
                 markers.Visible = placed && core.Walk.Armed;
                 markers.Upload(core.Walk, core.TileZero, core.U, Curvature.Spherical, core.R, frame.HeadPosition);
@@ -168,6 +179,7 @@ namespace Atlas.Spaces.SmallPlanet
         {
             core.Exit();
             ReleaseDial();
+            ReleaseSky();
             if (roomView != null) roomView.Dispose();
             roomView = null;
             if (markers != null) markers.Dispose();
@@ -183,6 +195,7 @@ namespace Atlas.Spaces.SmallPlanet
         void OnDestroy()
         {
             ReleaseDial();   // Exit has done this already; this only covers a root destroyed without Exit
+            ReleaseSky();
         }
 
         // A small plate where the twin is, facing the walker, in the room frame: not warped, not fogged.
@@ -206,6 +219,19 @@ namespace Atlas.Spaces.SmallPlanet
             dialChip.SetActive(false);
         }
 
+        // planet.view3d: warp mode 3 (S3) or 2 for everything of the planet that is warped (tiles, room, lap markers),
+        // and the sky to match. Off is exactly the comfortable view: mode 2 and the daytime sky.
+        void ApplyView()
+        {
+            bool on = core.View3d;
+            float mode = on ? AtlasWarpCpu.ModeS3 : AtlasWarpCpu.ModeSpherical;
+            if (view != null) view.SetWarpMode(mode);
+            if (markers != null) markers.SphericalMode = mode;
+            if (roomView != null) roomView.SphericalMode = mode;
+            if (sky != null) sky.View3d = on;
+            else if (pool == null) SmallPlanetSky.ApplyLook(on);
+        }
+
         void ReleaseDial()
         {
             if (dial != null) dial.Dispose();
@@ -214,6 +240,12 @@ namespace Atlas.Spaces.SmallPlanet
             dialChip = null; dialChipMesh = null;
             if (dialChipMaterial != null && pool != null && pool.Owns(dialChipMaterial)) pool.Return(dialChipMaterial);
             dialChipMaterial = null;
+        }
+
+        void ReleaseSky()
+        {
+            if (sky != null) sky.Dispose();
+            sky = null;
         }
 
         static void Kill(UnityEngine.Object o)

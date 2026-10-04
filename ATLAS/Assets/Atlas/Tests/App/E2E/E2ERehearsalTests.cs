@@ -387,7 +387,8 @@ namespace Atlas.E2E.Tests
                 Switch(rig, SpaceId.SmallPlanet);
                 var s4 = rig.Module<SmallPlanetModule>();
                 Assert.That(s4, Is.Not.Null);
-                double r = SmallPlanetCore.RadiusFor(room, false);
+                // The room's R, or planet.R when that is larger (its default is the PlanetKit tiles' R0).
+                double r = SmallPlanetCore.RadiusFor(room, false, rig.Registry.GetFloat(SmallPlanetCore.ParamRadius));
                 Assert.That(rig.Kernel.Q, Is.EqualTo(3));
                 Assert.That(rig.Kernel.Kappa, Is.EqualTo(Curvature.Spherical));
                 Assert.That(rig.Kernel.MetresPerUnit, Is.EqualTo(r).Within(1e-12));

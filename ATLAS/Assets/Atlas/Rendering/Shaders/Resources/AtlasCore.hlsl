@@ -18,7 +18,7 @@ CBUFFER_START(UnityPerMaterial)
     float4   _Gate2;
     float4   _Gate3;
     float4   _SurfaceParams;  // x emissive gain; y fog weight 0..1; z near-fade distance in metres (0 = off); w fade weight
-    float    _WarpMode;       // 0 none, 1 hyperbolic, 2 spherical
+    float    _WarpMode;       // 0 none, 1 hyperbolic, 2 spherical, 3 spherical 3-space (Small Planet only)
 CBUFFER_END
 
 // Camera-wide values, set by AtlasLook and AtlasPalette. One value for both eyes.
@@ -84,9 +84,10 @@ half AtlasLineMask(float2 lineCoord, half lineWeight)
 
 // Fog amount 0..1 from the horizontal distance between positionWS and _HeadPosWS, scaled by _SurfaceParams.y.
 // Height does not count, so a copy of the room above the walker stays visible (Master Plan section 8.5).
+// Warp mode 3 (S3, AtlasWarp.hlsl) is the exception: there the far ground rises overhead, so the distance is 3D.
 half AtlasFogFactor(float3 positionWS)
 {
-    float floorDistance = length(positionWS.xz - _HeadPosWS.xz);
+    float floorDistance = _WarpMode > 2.5 ? length(positionWS - _HeadPosWS.xyz) : length(positionWS.xz - _HeadPosWS.xz);
     return half(saturate((floorDistance - _AtlasFogParams.x) * _AtlasFogParams.y) * _SurfaceParams.y);
 }
 
