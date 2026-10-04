@@ -24,6 +24,24 @@ namespace Atlas.Safety.Tests
         public bool ContainsFloorPoint(float2 p) => p.x >= Min.x && p.x <= Max.x && p.y >= Min.z && p.y <= Max.z;
     }
 
+    /// <summary>
+    /// A flat rectangle that travels with the camera, square to its optical axis: the walker's own hand, or a
+    /// piece of forearm. In camera space (+x right, +y up, +z ahead), metres. Seen only by the synthetic depth.
+    /// </summary>
+    public struct SimPlate
+    {
+        /// <summary>Centre of the rectangle; z is its depth.</summary>
+        public float3 Centre;
+        /// <summary>Half its width (x) and half its height (y).</summary>
+        public float2 Half;
+
+        public SimPlate(float3 centre, float width, float height)
+        {
+            Centre = centre;
+            Half = new float2(0.5f * width, 0.5f * height);
+        }
+    }
+
     /// <summary>One frame of a scripted walk.</summary>
     public struct SimPose
     {
@@ -58,6 +76,8 @@ namespace Atlas.Safety.Tests
 
         public readonly BumpGuardCore Core = new BumpGuardCore();
         public readonly List<SimBox> Boxes = new List<SimBox>();
+        /// <summary>What the walker carries in front of the camera: it moves and turns with the head.</summary>
+        public readonly List<SimPlate> Body = new List<SimPlate>();
         public readonly List<LevelChange> Changes = new List<LevelChange>(16);
 
         /// <summary>Half extents of the mapped room (walls at +/- these).</summary>
@@ -69,6 +89,11 @@ namespace Atlas.Safety.Tests
         public bool DepthEnabled = true;
         public bool TrackingNormal = true;
         public bool AnchorTracked = true;
+        /// <summary>
+        /// Runs the depth step with <see cref="BumpDepthKernelBeforeMask"/>, the kernel as it was before the depth
+        /// mask, in place of the real one. Everything else is the real core.
+        /// </summary>
+        public bool KernelBeforeMask;
         public double Time;
         public int Frame;
 
@@ -112,7 +137,20 @@ namespace Atlas.Safety.Tests
             {
                 Render(head, rotation);
                 fixed (float* d = Depth)
-                    Core.ProcessDepth(d, DepthW, DepthH, Intrinsics, head, rotation, Time, TrackingNormal, AnchorTracked);
+                {
+                    if (KernelBeforeMask)
+                    {
+                        DepthKernelInput input = Core.MakeDepthInput(DepthW, DepthH, Intrinsics, head, rotation, Time,
+                            TrackingNormal, AnchorTracked);
+                        BumpDepthKernelBeforeMask.Process(d, input, Core.StaticField, Core.Grid, Core.Dynamic,
+                            out DepthFrameResult result);
+                        Core.SubmitDepthResult(result);
+                    }
+                    else
+                    {
+                        Core.ProcessDepth(d, DepthW, DepthH, Intrinsics, head, rotation, Time, TrackingNormal, AnchorTracked);
+                    }
+                }
             }
             BumpLevel before = Core.Level;
             Core.Step(Time, head, rotation, TrackingNormal, AnchorTracked);
@@ -176,7 +214,8 @@ namespace Atlas.Safety.Tests
             for (int v = first; v < DepthH; v += stride)
                 for (int u = first; u < DepthW; u += stride)
                 {
-                    float3 dir = math.mul(rot, new float3((u + 0.5f - Intrinsics.Cx) / Intrinsics.Fx, -(v + 0.5f - Intrinsics.Cy) / Intrinsics.Fy, 1f));
+                    float nx = (u + 0.5f - Intrinsics.Cx) / Intrinsics.Fx, ny = -(v + 0.5f - Intrinsics.Cy) / Intrinsics.Fy;
+                    float3 dir = math.mul(rot, new float3(nx, ny, 1f));
                     // Inside the room: the first wall, floor or ceiling the ray leaves through.
                     float t = float.PositiveInfinity;
                     for (int a = 0; a < 3; a++)
@@ -188,6 +227,14 @@ namespace Atlas.Safety.Tests
                     {
                         float tb = EnterBox(Boxes[b], origin, dir);
                         if (tb < t) t = tb;
+                    }
+                    // The ray is (nx, ny, 1) in camera space, so its parameter is the depth along the optical axis.
+                    for (int b = 0; b < Body.Count; b++)
+                    {
+                        SimPlate plate = Body[b];
+                        float z = plate.Centre.z;
+                        if (z < t && math.abs(nx * z - plate.Centre.x) <= plate.Half.x && math.abs(ny * z - plate.Centre.y) <= plate.Half.y)
+                            t = z;
                     }
                     Depth[v * DepthW + u] = t >= BumpConstants.DepthMin && t <= BumpConstants.DepthMax ? t : 0f;
                 }
