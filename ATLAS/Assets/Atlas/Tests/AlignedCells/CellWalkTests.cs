@@ -119,7 +119,7 @@ namespace Atlas.Spaces.AlignedCells.Tests
                 Assert.AreEqual(expect[i], CellWalker.TurnFromCurvedWalk(pose.Local), $"theta {th[i]}");
                 var head = new double2(0.3, -0.2);
                 var space = new AlignedCellsCore();
-                space.Configure(Fixtures.Room(RoomFixtures.Sample3x3), new ParamRegistry());
+                space.Configure(Fixtures.Room(RoomFixtures.Sample3x3), Fixtures.ClassicRegistry());
                 space.Enter(pose, head);
                 Assert.IsTrue(space.EnteredFromCurvedWalk);
                 Assert.AreEqual(tile, space.Walker.Frame.Tile);
@@ -141,7 +141,7 @@ namespace Atlas.Spaces.AlignedCells.Tests
             flat.Configure(KernelConfig.Flat(2.0));
             flat.ResetToFloor(new double2(0.9, -0.9));
             var core = new AlignedCellsCore();
-            core.Configure(Fixtures.Room(RoomFixtures.Sample3x3), new ParamRegistry());
+            core.Configure(Fixtures.Room(RoomFixtures.Sample3x3), Fixtures.ClassicRegistry());
             Assert.Throws<InvalidOperationException>(() => new AlignedCellsCore().Enter(flat.Pose, double2.zero));
             core.Enter(flat.Pose, new double2(0.9, -0.9));
             Assert.IsFalse(core.EnteredFromCurvedWalk);
@@ -163,7 +163,7 @@ namespace Atlas.Spaces.AlignedCells.Tests
             PoseLog log = Fixtures.Walk("walk_lap_sample_3x3");
             Assert.Greater(log.Samples.Length, 900);
             var core = new AlignedCellsCore();
-            core.Configure(Fixtures.Room(RoomFixtures.Sample3x3), new ParamRegistry());
+            core.Configure(Fixtures.Room(RoomFixtures.Sample3x3), Fixtures.ClassicRegistry());
             float3 p0 = log.Samples[0].Position;
             core.Enter(WalkerPose.Start, new double2(p0.x, p0.z));
             Assert.AreEqual(new int2(0, 0), core.Walker.Cell);
@@ -180,7 +180,7 @@ namespace Atlas.Spaces.AlignedCells.Tests
 
             // The same walk at a sixth of the rate crosses the same edges in the same order.
             var coarse = new AlignedCellsCore();
-            coarse.Configure(Fixtures.Room(RoomFixtures.Sample3x3), new ParamRegistry());
+            coarse.Configure(Fixtures.Room(RoomFixtures.Sample3x3), Fixtures.ClassicRegistry());
             coarse.Enter(WalkerPose.Start, new double2(p0.x, p0.z));
             for (int i = 0; i < log.Samples.Length; i += 6) coarse.Tick(new double2(log.Samples[i].Position.x, log.Samples[i].Position.z), false);
             float3 last = log.Samples[log.Samples.Length - 1].Position;
@@ -194,7 +194,7 @@ namespace Atlas.Spaces.AlignedCells.Tests
         public void Mode2_RejectedStepKeepsTheTile()
         {
             var core = new AlignedCellsCore();
-            core.Configure(Fixtures.Room(RoomFixtures.Sample3x3), new ParamRegistry());
+            core.Configure(Fixtures.Room(RoomFixtures.Sample3x3), Fixtures.ClassicRegistry());
             CellGrid grid = core.Grid;
             core.Enter(WalkerPose.Start, grid.CellCentre(new int2(0, 0)));
             core.Tick(grid.CellCentre(new int2(1, 0)), false);

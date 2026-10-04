@@ -17,7 +17,7 @@ namespace Atlas.Spaces.AlignedCells.Tests
         public readonly GameObject RoomRoot = new GameObject("Atlas Room (test)");
         public readonly MaterialPool Pool = MaterialPool.CreateDefault(128);
         public readonly RoomContent Content;
-        public readonly ParamRegistry Registry = new ParamRegistry();
+        public readonly ParamRegistry Registry;
         public readonly AlignedCellsSpace Space;
         public readonly RoomModel Room;
         public double X, Z;
@@ -26,10 +26,12 @@ namespace Atlas.Spaces.AlignedCells.Tests
         public Transform Root => Space.transform;
         public CellGrid Grid => Space.Core.Grid;
 
-        public UnityStage(RoomModel room, bool buildRoom = true)
+        // Classic S3 (cells.maze off) unless a registry is given.
+        public UnityStage(RoomModel room, bool buildRoom = true, ParamRegistry registry = null)
         {
             AtlasServices.Clear();
             Room = room;
+            Registry = registry ?? Fixtures.ClassicRegistry();
             Content = new RoomContent(RoomRoot.transform, Pool) { Instant = true };
             if (buildRoom) Content.Build(room);
             AtlasServices.Register(Pool);
