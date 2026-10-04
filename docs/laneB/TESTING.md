@@ -132,6 +132,7 @@ Same scene and preconditions as above.
   Expected: curvature changes only while standing; ramp 3-5 s of standing (4.0 s set); S6 loads; no frame > 33 ms from end-chamber entry to S6 + 2 s (Frame Timing Stats max). Record max, p95, ramp time.
 - Deviations: DV-B09-1 route is a constructor value (AirwayParams/Mode 2 from P2-B04/B05 not on this branch; Mode 2 path S6-at-entry not built); DV-B09-2 AirwayBeat wraps AirwayWing + LesionHandOver (AirwayWingModule is B05).
 
+
 # Lane B phone and headset checklists
 
 Each section: scene, steps, expected numbers. Status DEFERRED means built and ready but not yet run on the phone.
@@ -173,3 +174,21 @@ Graphics sign-off (Editor with a graphics device, not -nographics): run `B10_Sha
 - Scene: `Blade_FieldFit.unity` over `Space_Home`; badge font assigned in `FieldFitSettings.asset`.
 - Editor GPU tests to run once with a graphics device: `LensGuardTests.Badge_VisibleWhileActive`, `Badge_FromFont`.
 - Headset: checklist items 4-6. Expected: "LENS ON" readable in both eyes (None, Morph, Tanh), none when off; 10 of 10 auto-off trials (cause `displacement`, dPrev_m <= 0.5 < d_m, first frame over 0.5 m); tap-off in the tap frame; Console stop within 250 ms.
+
+## P3-B06 Blind-Spot Finder (DEFERRED)
+
+Scene: `Assets/Atlas/Blades/FieldFit/Scenes/FieldFit_BlindSpotTest.unity` (component `BlindSpotTestScene`). Phone A in the headset, Release build, note the thermal state at the start.
+
+Preconditions: real P1-A04/P1-A05 rig with per-eye blank, P1-A06 shared look, P1-C10 confirm action and lane D event sink, all merged (`BlindSpotPlaceholderSeams.TryResolve` must return true; today it reports the look and tap seams as missing).
+
+Build: in the on-request build slot set Build Profiles to [FieldFit_BlindSpotTest.unity (index 0), Atlas_Boot]. Build and install. Do not commit ProjectSettings: run `git checkout ATLAS/ProjectSettings` afterwards.
+
+Steps:
+1. The tester stands at least 1.5 m from walls and furniture, facing open floor, Bump Guard on. Standing or seated.
+2. The tester presses A or clicks the lever.
+3. The tester keeps the eye on the cross and taps when a dot is seen. A run takes about 2.5 min.
+4. Read `blindspot_found.t_find_s` and the `blindspot_done` fields from the Hub's `logs/<session>/events.jsonl`. If the Station is down, the tester reads the result screen aloud.
+5. 5 testers, one run each; the first run counts.
+
+Pass: `t_find_s <= 30` for at least 4 of 5 testers. Record per tester: t_find_s, centre, radius, catch_fp / catch_trials, duration_s, thermal state.
+Also check (G13): no string makes a clinical claim. If the shared shader draws grid lines or fog on the backdrop or cross, report it as a lane-A contract issue.
