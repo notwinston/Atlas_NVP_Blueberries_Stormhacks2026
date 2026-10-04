@@ -130,6 +130,7 @@ namespace Atlas.E2E.Tests
         {
             CurvedWalkCore.DeclareParams(Registry);
             AlignedCellsCore.DeclareParams(Registry);
+            Registry.Find(AlignedCellsCore.ParamMaze).Set(false);      // classic S3, as the rehearsal phone runs it
             SmallPlanetCore.DeclareParams(Registry);
             Host = new SpectatorHost(Registry, Kernel) { Create = id => new StationModule(id) };
             Core = new SpectatorCore(Host, Registry, Kernel, Rooms);

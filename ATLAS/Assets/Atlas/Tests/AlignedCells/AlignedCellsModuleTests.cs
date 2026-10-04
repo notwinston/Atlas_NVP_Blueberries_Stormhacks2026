@@ -42,7 +42,7 @@ namespace Atlas.Spaces.AlignedCells.Tests
         [Test]
         public void Mode2_Configure_DeclaresAgainAndKeepsTheValue()
         {
-            var registry = new ParamRegistry();
+            var registry = Fixtures.ClassicRegistry();
             AlignedCellsCore.DeclareParams(registry);
             int declared = registry.Count;
             registry.Find(AlignedCellsCore.ParamViewDepth).Set(1);
@@ -85,7 +85,7 @@ namespace Atlas.Spaces.AlignedCells.Tests
         [Test]
         public void Mode2_Module_CurvedModeParameter()
         {
-            var registry = new ParamRegistry();
+            var registry = Fixtures.ClassicRegistry();
             ParamEntry mode = DeclareMode(registry);
             var core = new AlignedCellsCore();
             core.Configure(Fixtures.Room(RoomFixtures.Sample3x3), registry);
@@ -116,7 +116,7 @@ namespace Atlas.Spaces.AlignedCells.Tests
 
             // No such parameter (the Station before the manifest arrives): nothing to poll.
             var bare = new AlignedCellsCore();
-            bare.Configure(Fixtures.Room(RoomFixtures.Sample3x3), new ParamRegistry());
+            bare.Configure(Fixtures.Room(RoomFixtures.Sample3x3), Fixtures.ClassicRegistry());
             bare.Enter(WalkerPose.Start, double2.zero);
             Assert.IsFalse(bare.PollModeSwitch());
         }
@@ -138,7 +138,7 @@ namespace Atlas.Spaces.AlignedCells.Tests
 
             // Not entered: nothing is written.
             var idle = new AlignedCellsCore();
-            idle.Configure(Fixtures.Room(RoomFixtures.BudgetRoom), new ParamRegistry());
+            idle.Configure(Fixtures.Room(RoomFixtures.BudgetRoom), Fixtures.ClassicRegistry());
             var blank = StateMessage.Identity;
             idle.WriteState(ref blank);
             Assert.AreEqual(0, blank.Tile4); Assert.AreEqual(0, blank.Sheet);
@@ -152,7 +152,7 @@ namespace Atlas.Spaces.AlignedCells.Tests
             RoomModel room = Fixtures.Room(RoomFixtures.BudgetRoom);
             var phone = new Rig(room, new int2(1, 1));
             var station = new AlignedCellsCore();
-            station.Configure(room, new ParamRegistry());
+            station.Configure(room, Fixtures.ClassicRegistry());
             station.Enter(WalkerPose.Start, double2.zero);
             var wire = new byte[StateMessage.Size];
             int turnsSeen = 0;

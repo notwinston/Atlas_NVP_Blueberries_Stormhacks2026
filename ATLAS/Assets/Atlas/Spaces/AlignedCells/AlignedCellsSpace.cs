@@ -29,6 +29,8 @@ namespace Atlas.Spaces.AlignedCells
         IRoomContent _room;
         ISpaceHost _host;
         IEventLog _events;
+        RoomModel _roomModel;                                  // kept for the reconfigure when cells.maze changes while entered
+        ParamRegistry _registry;
 
         WalkerPose _start;
         bool _entered, _pendingEnter, _dirty;
@@ -58,6 +60,8 @@ namespace Atlas.Spaces.AlignedCells
         public void Configure(RoomModel room, ParamRegistry registry)
         {
             ReleaseViews();
+            _roomModel = room;
+            _registry = registry;
             _core.Configure(room, registry);
             AtlasServices.TryGet(out _room);
             AtlasServices.TryGet(out _host);
@@ -96,7 +100,8 @@ namespace Atlas.Spaces.AlignedCells
             if (!_entered) return;
             var head = new double2(frame.HeadPosition.x, frame.HeadPosition.z);
             if (_pendingEnter) Place(frame.HeadPosition);
-            if (_core.Tick(head, frame.Kernel.Rejected)) _dirty = true;
+            if (_core.Tick(head, frame.Kernel.Rejected, frame.Time)) _dirty = true;
+            if (_core.NeedsReconfigure) Reconfigure(frame.HeadPosition);
             if (_roomView == null) TakeRoom();                // the room content was built after Enter
             if (_core.PollModeSwitch() && (_host == null || !_host.RequestSwitch(SpaceId.CurvedWalk))) _core.RefuseModeSwitch();
         }
@@ -143,6 +148,17 @@ namespace Atlas.Spaces.AlignedCells
             _dirty = true;
             if (_events != null)
                 _events.Log("cells.enter", "cells", _core.Grid.CountX * _core.Grid.CountZ, "fromMode1", _core.EnteredFromCurvedWalk ? 1 : 0);
+        }
+
+        // cells.maze changed while entered (duck maze design §2): the grid changes, so the space is configured again and
+        // re-entered with the head of this frame, as a fresh entry is (cells.enter is logged again).
+        void Reconfigure(float3 head)
+        {
+            if (_roomView != null) _roomView.Exit();
+            _roomView = null;
+            Configure(_roomModel, _registry);
+            Enter(in _start);
+            if (_pendingEnter) Place(head);
         }
 
         void TakeRoom()

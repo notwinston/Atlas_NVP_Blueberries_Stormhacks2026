@@ -134,7 +134,7 @@ namespace Atlas.Spaces.AlignedCells.Tests
             RoomModel room = Fixtures.Room(RoomFixtures.Sample3x3);
             var phone = new Rig(room, RoundPost11[0]);
             var station = new AlignedCellsCore();
-            station.Configure(room, new ParamRegistry());
+            station.Configure(room, Fixtures.ClassicRegistry());
             var log = new RecordingLog();
             station.Events = log;
             station.Enter(WalkerPose.Start, double2.zero);

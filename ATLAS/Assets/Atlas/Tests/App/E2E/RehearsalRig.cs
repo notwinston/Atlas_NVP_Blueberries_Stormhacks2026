@@ -134,6 +134,7 @@ namespace Atlas.E2E.Tests
             SlicerParams.Declare(Registry);
             CurvedWalkCore.DeclareParams(Registry);
             AlignedCellsCore.DeclareParams(Registry);
+            Registry.Find(AlignedCellsCore.ParamMaze).Set(false);      // classic S3: these walks are not duck-maze runs
             SmallPlanetCore.DeclareParams(Registry);
 
             // 17  Operator commands as local calls.

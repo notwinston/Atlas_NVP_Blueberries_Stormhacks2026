@@ -37,6 +37,15 @@ namespace Atlas.Spaces.AlignedCells.Tests
             return room;
         }
 
+        // Today's S3 without the duck maze (cells.maze off): the tests of the classic grid, the Mode-1 hand-over and the sight lines.
+        public static ParamRegistry ClassicRegistry()
+        {
+            var r = new ParamRegistry();
+            AlignedCellsCore.DeclareParams(r);
+            r.Find(AlignedCellsCore.ParamMaze).Set(false);
+            return r;
+        }
+
         public static RoomObject Obj(int id, float px, float pz, float sx, float sy, float sz, float yaw, int triangles = 12) => new RoomObject
         { Id = id, Category = ObjectCategory.Other, Base = new float3(px, 0, pz), Size = new float3(sx, sy, sz), Yaw = yaw, Mesh = MeshState.Placeholder, TriTarget = triangles };
     }
@@ -124,20 +133,21 @@ namespace Atlas.Spaces.AlignedCells.Tests
     }
 
     // Test rig: the engine-free core on a room, with the room driver on a recording room content, walked as the frame loop
-    // walks it (one head sample per frame, step 5 then step 6).
+    // walks it (one head sample per frame, step 5 then step 6). Classic S3 (cells.maze off) unless a registry is given.
     sealed class Rig
     {
         public readonly RoomModel Room;
-        public readonly ParamRegistry Registry = new ParamRegistry();
+        public readonly ParamRegistry Registry;
         public readonly AlignedCellsCore Core = new AlignedCellsCore();
         public readonly FakeRoomContent Content;
         public readonly AlignedCellsRoomView RoomView;
         public double X, Z;
         public CellGrid Grid => Core.Grid;
 
-        public Rig(RoomModel room, int2? startCell = null, WalkerPose? start = null)
+        public Rig(RoomModel room, int2? startCell = null, WalkerPose? start = null, ParamRegistry registry = null)
         {
             Room = room;
+            Registry = registry ?? Fixtures.ClassicRegistry();
             Core.Configure(room, Registry);
             Content = new FakeRoomContent(room);
             RoomView = new AlignedCellsRoomView(Content, Core.Grid);
