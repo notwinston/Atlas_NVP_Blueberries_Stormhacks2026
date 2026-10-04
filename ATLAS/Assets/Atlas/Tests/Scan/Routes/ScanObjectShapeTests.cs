@@ -302,35 +302,78 @@ namespace Atlas.Scan.Tests.Routes
             }
         }
 
-        [Test]
-        public void AScanThroughTheFlow_EndsWithItsObjectsFaced()
+        // The flow as the scan session drives it, with the sensors' snapshot in place of the AR session: from
+        // Begin through the sweep and the confirmation to the final room.
+        static RoomModel ScanThroughTheFlow(FloorGridInput input, in ScanOptions options, bool background, out RoomModel proposed)
         {
-            // The flow as the scan session drives it, with the sensors' snapshot in place of the AR session.
-            FloorGridInput input = RoomWithChair(3).Build();
-            var flow = new ScanFlow(() => ScanTestRooms.Snapshot(input), false);
+            var flow = new ScanFlow(() => ScanTestRooms.Snapshot(input), background);
             var clock = new DateTime(2026, 10, 4, 9, 30, 15, DateTimeKind.Utc);
             var head = new float3(2.4f, 1.4f, 1.6f);
-            flow.Begin(ScanOptions.Default, clock);
+            flow.Begin(in options, clock);
             flow.Tick(1f / 60f, TrackingState.Normal, head);        // Starting -> Sweeping
             flow.EndSweep();
-            flow.Tick(1f / 60f, TrackingState.Normal, head);        // Processing -> AwaitingConfirm
+            // Processing -> AwaitingConfirm: at once when the solver runs inside Tick, soon when it has its own thread.
+            for (int i = 0; i < 5000 && flow.State != ScanState.AwaitingConfirm; i++)
+            {
+                flow.Tick(1f / 60f, TrackingState.Normal, head);
+                if (background) System.Threading.Thread.Sleep(1);
+            }
             Assert.That(flow.State, Is.EqualTo(ScanState.AwaitingConfirm));
-
-            // The room the walker is asked to confirm already has the chair turned.
-            RoomObject proposed = flow.Proposal.Preview.Objects[0];
-            Assert.That(proposed.Facing, Is.EqualTo(ObjectFacingRule.Profile));
-            AssertChairProfile(proposed.Profile, "proposed");
-
+            proposed = flow.Proposal.Preview;
             flow.Confirm();
             flow.CompleteFinalise("anchor", clock.AddSeconds(30));
             Assert.That(flow.State, Is.EqualTo(ScanState.Done));
-            RoomModel room = flow.Result;
+            return flow.Result;
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void AScanThroughTheFlow_EndsWithItsObjectsFaced(bool background)
+        {
+            // The options as the app makes them: facing is on.
+            Assert.That(ScanOptions.Default.DecideFacing, Is.True);
+            RoomModel proposed;
+            RoomModel room = ScanThroughTheFlow(RoomWithChair(3).Build(), ScanOptions.Default, background, out proposed);
+
+            // The room the walker is asked to confirm already has the chair turned.
+            Assert.That(proposed.Objects[0].Facing, Is.EqualTo(ObjectFacingRule.Profile));
+            AssertChairProfile(proposed.Objects[0].Profile, "proposed");
+
             RoomObject chair = room.Objects[0];
             Assert.That(chair.Category, Is.EqualTo(ObjectCategory.Chair));
             Assert.That(chair.Facing, Is.EqualTo(ObjectFacingRule.Profile));
             AssertChairProfile(chair.Profile, "final");
             Assert.That(math.dot(Front(chair.Yaw + room.Anchor.Yaw), Front(ChairYaw)), Is.GreaterThan(0.99999f));
+            Assert.That(chair.Size.x, Is.EqualTo(s_chair.x).Within(1e-5f));
+            Assert.That(chair.Size.z, Is.EqualTo(s_chair.z).Within(1e-5f));
             AssertValid(room);
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void AScanThroughTheFlow_WithFacingSwitchedOff_LeavesTheObjectUnturned(bool background)
+        {
+            ScanOptions options = ScanOptions.Default;
+            options.DecideFacing = false;
+            RoomModel proposed;
+            RoomModel room = ScanThroughTheFlow(RoomWithChair(3).Build(), in options, background, out proposed);
+
+            foreach (RoomModel built in new[] { proposed, room })
+            {
+                // The box is as the scan reported it, three quarter turns off the chair's front, w and d the other way round.
+                RoomObject chair = built.Objects[0];
+                Assert.That(chair.Facing, Is.EqualTo(ObjectFacingRule.Box));
+                Assert.That(math.dot(Front(chair.Yaw + built.Anchor.Yaw), Front(ChairYaw - 3f * Quarter)), Is.GreaterThan(0.99999f));
+                Assert.That(chair.Size.x, Is.EqualTo(s_chair.z).Within(1e-5f));
+                Assert.That(chair.Size.z, Is.EqualTo(s_chair.x).Within(1e-5f));
+                // The profile is still made, and is not turned either: the back fills the three columns on +X.
+                Assert.That(chair.Profile, Is.Not.Null);
+                for (int j = 0; j < N; j++)
+                    for (int i = 0; i < N; i++)
+                        Assert.That(chair.Profile[ObjectProfile.Index(i, j)], Is.EqualTo(i >= 13 ? 255 : SeatByte), "cell (" + i + ", " + j + ")");
+                Assert.That(RoomModelJson.Write(built), Does.Not.Contain("\"facing\""));
+                AssertValid(built);
+            }
         }
 
         [Test]
