@@ -24,6 +24,7 @@ namespace Atlas.Input
     {
         /// <summary>Hands may act this frame. False (the default) while there is no hands session, and while Bump Guard warns: hands do nothing.</summary>
         public bool Active;
+        /// <summary>The index fingertip of each hand. A hand that is not in view has <see cref="HandsFingertip.Valid"/> false.</summary>
         public HandsFingertip Left, Right;
         /// <summary>True in the one frame in which that hand's pinch closed, after the hands module's own checks.</summary>
         public bool PinchDownLeft, PinchDownRight;
@@ -49,6 +50,7 @@ namespace Atlas.Input
     /// <summary>What touch and pinch did in the last input tick.</summary>
     public struct HandsTouchState
     {
+        /// <summary>What each hand's index fingertip did. All default while that fingertip is over no target.</summary>
         public HandsTouchHand Left, Right;
         /// <summary>A pinch fired the target under the gaze in this tick.</summary>
         public bool PinchFired;
