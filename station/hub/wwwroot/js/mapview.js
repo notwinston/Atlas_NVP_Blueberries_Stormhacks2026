@@ -1,6 +1,7 @@
 // The Station's flat twin of the room (Master Plan section 7.3.1, lane D contract 5.9): the outline, the free
-// rectangle, the object boxes, the walker with its trail, and the Bump Guard level. Flat floor plan only: no
-// curved space can be entered in this build.
+// rectangle, the object boxes, the walker with its trail, and the Bump Guard level. A floor plan in every
+// space: the head is always somewhere in the real room. The tiling of a curved space is the Spectator's map
+// (the Poincare disc of S2 and S3, the cube net of S4); here a curved space shows as its tile and its dial.
 
 import { prepare } from './charts.js';
 import { corners, fitView, boundsOf, headingVector, rectCorners, toScreen } from './mapmath.js';

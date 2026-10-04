@@ -1,3 +1,5 @@
+> Written on the branch `laneB/integration`, against the placeholders of lanes A, C and D. Where this log names a placeholder (`PLACEHOLDER`, `IActionSource`, `HomeRebuild`, `EventLog.Emit`, `AtlasSurface`, `_Gates`, `room_*.json`, `SpaceLab.Home`), the real code has replaced it, except the Phase 2 and 3 stand-ins in [placeholders.md](placeholders.md): see [INTEGRATION_NOTES.md](INTEGRATION_NOTES.md). The numbers of the contract sections it cites ("kernel.md §n") are the numbers of [../contracts/lane-b-kernel.md](../contracts/lane-b-kernel.md).
+
 # Lane B G5: airway geometry and views (P2-B02, P2-B07)
 
 Authority: Master Plan (MP) > Build Pipeline > Engineering Spec > the G5 brief. Code lives in `Atlas.Blades.Lung`
@@ -7,7 +9,7 @@ Authority: Master Plan (MP) > Build Pipeline > Engineering Spec > the G5 brief. 
 ## P2-B02 corridor and chamber kit (namespace `Atlas.Blades.Lung.AirwayKit`)
 
 ### Frames and kinds
-Edge k of a tile is at angle k*90 deg from the chart +x axis toward +z (kernel.md 5.3). Every kit mesh is built with the entry
+Edge k of a tile is at angle k*90 deg from the chart +x axis toward +z (lane-b-kernel.md 5.3). Every kit mesh is built with the entry
 edge as kit edge 0 and placed by the anchor `inverse(U) * F[t] * KitGeometry.KitToTile(k)` (`KitToTile(k) = Iso2.Rot(k*pi/2)`, k = canonical entry edge).
 
 | KitKind | kit open mask | occurs |

@@ -6,7 +6,7 @@ Unity 6000.3.25f1 managed assemblies and the package assemblies Unity already bu
 so a wrong Unity or package API is a compile error here exactly as it is in the Editor.
 
   verify.py build [Assembly ...] [--config ios|win|editor|all] [--tag T] [--warn]
-  verify.py test  [Assembly.Tests ...] [--filter EXPR] [--tag T]
+  verify.py test  [Assembly.Tests ...] [--filter EXPR] [--tag T] [--results DIR]
   verify.py rules
   verify.py all   [--tag T]
   verify.py wait  Assembly ... [--timeout SECONDS] [--tag T]
@@ -22,6 +22,8 @@ test    builds each test assembly twice: once exactly as Unity compiles it (Unit
         current directory, which is the project folder inside Unity).
 rules   checks the assembly reference table and source rules of docs/contracts/README.md (F1, F7, rule 1).
 all     rules + build (all configurations) + test (all test assemblies).
+        --results DIR also writes one <Assembly>.trx per test assembly there: every test that ran, by name, with
+        its outcome (tools/e2e/gates.py reads them).
 wait    blocks until the named assemblies compile in the editor configuration (someone else is still writing
         them), polling every 20 s; exits 1 after --timeout (default 1500 s) and prints the remaining errors.
 
@@ -369,7 +371,7 @@ def cmd_build(asms, projects, names, configs, show_warnings):
     return ok
 
 
-def cmd_test(asms, projects, names, test_filter):
+def cmd_test(asms, projects, names, test_filter, results_dir=None):
     ok = True
     tests = [n for n in (names or sorted(asms)) if (("editor", n, "run") in projects)]
     for n in names or []:
@@ -394,9 +396,11 @@ def cmd_test(asms, projects, names, test_filter):
         flt = "TestCategory!=Unity"
         if test_filter:
             flt = "(%s)&(%s)" % (flt, test_filter)
-        p = subprocess.run([dotnet(), "test", projects[("editor", n, "run")], "-nologo", "--no-build",
-                            "--filter", flt, "--logger", "console;verbosity=normal"],
-                           capture_output=True, text=True, env=env())
+        cmd = [dotnet(), "test", projects[("editor", n, "run")], "-nologo", "--no-build",
+               "--filter", flt, "--logger", "console;verbosity=normal"]
+        if results_dir:
+            cmd += ["--logger", "trx;LogFileName=%s.trx" % n, "--results-directory", results_dir]
+        p = subprocess.run(cmd, capture_output=True, text=True, env=env())
         out = p.stdout + p.stderr
         failed = []
         block = None
@@ -522,6 +526,7 @@ def main():
     ap.add_argument("--filter", default="")
     ap.add_argument("--warn", action="store_true", help="print compiler warnings")
     ap.add_argument("--timeout", type=int, default=1500)
+    ap.add_argument("--results", default="", help="folder for one .trx per test assembly (test, all)")
     args = ap.parse_args()
 
     if not os.path.isdir(os.path.join(MANAGED, "UnityEngine")):
@@ -549,7 +554,8 @@ def main():
     if args.command in ("build", "all"):
         ok = cmd_build(asms, projects, args.assemblies if args.command == "build" else [], configs, args.warn) and ok
     if args.command in ("test", "all"):
-        ok = cmd_test(asms, projects, args.assemblies if args.command == "test" else [], args.filter) and ok
+        results = os.path.abspath(args.results) if args.results else None
+        ok = cmd_test(asms, projects, args.assemblies if args.command == "test" else [], args.filter, results) and ok
     sys.exit(0 if ok else 1)
 
 

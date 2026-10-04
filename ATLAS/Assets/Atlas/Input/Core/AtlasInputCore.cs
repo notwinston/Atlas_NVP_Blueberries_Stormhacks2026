@@ -92,6 +92,13 @@ namespace Atlas.Input
         /// <summary>The gaze targets. Spaces and menus add and remove theirs here.</summary>
         public GazeRegistry Targets => _targets;
 
+        /// <summary>
+        /// True for a screen point (pixels) where a press belongs to something other than the headset lever, for
+        /// example the Editor's development overlay under a mouse click. A press that begins there fires no
+        /// gaze target and no Confirm. Null: no point is blocked. Called once per press, with no allocation.
+        /// </summary>
+        public Func<float2, bool> PointerBlocked { get; set; }
+
         /// <summary>The dwell state: focus, progress, hold.</summary>
         public GazeDwell Dwell => _dwell;
 
@@ -235,6 +242,9 @@ namespace Atlas.Input
             for (int i = 0; i < _axes.Length; i++) _axes[i] = 0f;
 
             bool pointerBegan = raw.PointerDown && !_prevPointer;
+            // The lever is a press that begins off whatever else owns the screen. A press held on from the
+            // overlay onto the view is not a new press, so it never becomes the lever.
+            bool lever = pointerBegan && !IsBlocked(raw.PointerPosition);
 
             if (context == InputContext.InHand)
             {
@@ -254,7 +264,7 @@ namespace Atlas.Input
                 Buttons(in raw, live, context, dt);
                 Axes(in raw, context);
 
-                if (_dwell.Tick(headPosition, headRotation, dt, context, pointerBegan, out GazeFiring g))
+                if (_dwell.Tick(headPosition, headRotation, dt, context, lever, out GazeFiring g))
                     Fire(g.Action, g.Source, g.Tag, g.Id, g.Callback);
 
                 if (_dwell.TryGetHold(out AtlasAction holdAction, out AtlasAxis holdAxis, out float holdValue))
@@ -269,6 +279,12 @@ namespace Atlas.Input
             _prevPointer = raw.PointerDown;
 
             Dispatch();
+        }
+
+        private bool IsBlocked(float2 point)
+        {
+            Func<float2, bool> blocked = PointerBlocked;
+            return blocked != null && blocked(point);
         }
 
         private void Buttons(in RawInput raw, uint live, InputContext context, float dt)

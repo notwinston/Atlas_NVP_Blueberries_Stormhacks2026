@@ -3,22 +3,30 @@
 One section per task: scene, steps, expected numbers. A human fills in the measured values. The master list is
 `docs/laneB/checklists/P3-B03-B05-B08_phone.md`.
 
+How to reach the curved spaces. They are ordinary spaces of the app: open `Atlas_Boot`, or start with
+`-atlasRoom <fixture> -atlasSpace S2` (S3, S4), or switch from the Console's Operator tab or the on-device menu
+(`docs/verification/UNITY_SIDE_BRIEF.md` step 3e). Their scenes are the generated `Assets/Atlas/Scenes/Space_CurvedWalk.unity`,
+`Space_AlignedCells.unity` and `Space_SmallPlanet.unity`; SpaceLab loads them additively and gives them the live room content,
+the dial from the real input and the parameters of the registry, so no host wiring has to be done by hand. Rooms are lane C's fixtures
+(`sample_3x3`, `sample_L_3x4`, `sample_4x5_table`, `budget_room`, `tiny_standing`) or a scan; walks for the Editor are `recordings/*.poselog`.
+Bump Guard is lane C's real one, running in every frame.
+
 ## P1-B06 Tile renderer (deferred: phone A in the headset)
 
-- Scene: `Assets/Atlas/Spaces/CurvedWalk/Scenes/CurvedWalk_TileProbe.unity` loaded additively over `Atlas_Boot`; L = 1.885 (room_3x3 L5) or the room's loop-fit L5; ρ (`cullRho`) = 3.
-- Build: Release, Frame Timing Stats on, debugger detached, phone A in the closed headset, thermal Nominal at start. Safety as for G2 (MP §11.3): team walker only, cleared floor, spotter within arm's reach (Bump Guard is still a placeholder).
-- Steps and table: items 1-6 of `docs/laneB/checklists/P1-B06_phone.md`.
-- Expected (MP §9.5.6 P1-B06, §8.5, §11.2): tile-shell draws (2 × drawn) ≤ 150 per frame at every pitch; total draw calls ≤ 300; 60 fps (frame time p50 ≤ 16.7 ms, p95 ≤ 20 ms); 0 B GC on every crossing frame; crossing frame ≤ 2 ms (`Atlas.Tiles.Select` + `Atlas.Tiles.Upload`); screenshot: the edge of the drawn world cannot be told from the background (blocked until lane A's P1-A06 background gradient whose horizon colour equals `_FogColor`).
+- Scene: `Atlas_Boot` with the room `sample_3x3` (or the room's own loop-fit), S2 entered, `curved.q` = 5, the walker standing until the ramp has ended (about 4 s, `walk.*` events), `curved.cullRho` = 3. The old probe scene `CurvedWalk_TileProbe` and its `TileRendererProbe` are gone: the tile renderer runs inside S2 (`Space_CurvedWalk`).
+- Build: Release, Frame Timing Stats on, debugger detached, phone A in the closed headset, thermal Nominal at start. Safety as for G2 (MP §11.3): team walker only, cleared floor, spotter within arm's reach, Bump Guard armed.
+- Steps and table: items 1-6 of `docs/laneB/checklists/P1-B06_phone.md`. Read draw calls, set-pass calls and triangles from the Hub dashboard (`perf.csv`) and from Xcode, and `visibleTiles` from the telemetry row (tiles drawn this frame). The performance tour (`-atlasPerf tour`) has a row "S2 Curved Walk q5" that stands for 5 s so the ramp is over before a frame is measured.
+- Expected (MP §9.5.6 P1-B06, §8.5, §11.2): tile-shell draws (2 × drawn) ≤ 150 per frame at every pitch; total draw calls ≤ 300; 60 fps (frame time p50 ≤ 16.7 ms, p95 ≤ 20 ms); 0 B GC on every crossing frame; crossing frame ≤ 2 ms (`Atlas.Tiles.Select` + `Atlas.Tiles.Upload`); screenshot: the edge of the drawn world cannot be told from the background (the background shader's horizon colour equals `_AtlasFogColor`, so this is judgeable now).
 - A missed number is reported with its measured value and not relaxed (MP §9.9 rule 7).
+- Editor-proved here: `Atlas.Tiles.Tests` (`TileDrawRuleTests`, `TileLapTests`) headless; `TileRendererTests` in the Editor.
 
 ## P1-B09 Curvature dial and the 3-4-5 walk (deferred: phone A in the headset, G7 integrated build)
 
-- Scenes: `Assets/Atlas/Spaces/CurvedWalk/Scenes/Space_CurvedWalk.unity` and `Assets/Atlas/Spaces/SmallPlanet/Scenes/Space_SmallPlanet.unity`, loaded by `Atlas_Boot` (lane A) with the live RoomModel (lane C). Each scene holds one component (`CurvedWalkSpaceScene`, `SmallPlanetSpaceScene`) whose `Module` lane A registers with `SpaceLab`.
-- Host wiring (lane A): `SpaceRequested` to `SpaceLab.Request`; `Home` = `SpaceLab.Home`; `Actions` = lane C's action map. Without `Actions` the dial still follows `curved.q` (Console / registry).
+- Scenes: `Assets/Atlas/Scenes/Space_CurvedWalk.unity` and `Space_SmallPlanet.unity` (generated), loaded by SpaceLab from `Atlas_Boot` with the live RoomModel. Each holds one root object with the module component (`CurvedWalkSpace`, `SmallPlanetSpace`). The dial is D-pad left and right (`AtlasAction.DialLeft`, `DialRight`, live only in the Space input context) or `curved.q` from the Console; the dial has gaze targets (`CurvedWalkHud`) so it works by gaze alone.
 - Safety as for G2 (MP §11.3): team walker, cleared floor, spotter within arm's reach.
 - Steps:
   1. Stand at the room centre, dial to 5 (D-pad), wait about 4 s for the ramp, walk to the flag, follow the beacons round one lap and on to the fifth corner.
-  2. Return to the centre, dial to 3 (S4 loads once K has reached 0), walk 3 corners.
+  2. Return to the centre, dial to 3 (S2 asks SpaceLab for S4 once K has reached 0), walk 3 corners.
   3. Dial to 4 and walk 4 corners.
   4. Repeat step 1 pressing D-pad left/right while walking.
   5. Load a standing RoomModel (min(Wf, Df) < 1.5 m) and cycle the dial 3 to 6.
@@ -28,12 +36,12 @@ One section per task: scene, steps, expected numbers. A human fills in the measu
   - Zero frames in `state.bin` plus the head-pose log where `p[0]` changes while head speed exceeds 0.1 m/s.
   - D-pad presses while walking change nothing; the same presses on a still frame do.
   - Standing room: the dial snaps 3..6, q = 5 reaches K = -1/1.4^2, no flag or beacon is visible, at q = 3 S4 is still requested.
-- The read-outs are not drawn as text (no text package, same open lead item as P3-B01; deviation D7): read `walk.corner` / `walk.lap` / `walk.closed` on the Console or in the event log.
-- Editor-proved here: `Atlas.Spaces.CurvedWalk.Tests` (closure q = 3, 4, 5, 6 on replayed walks, curvature frozen while head speed > 0.1 m/s, ramp duration, S4 request, standing room, logged events) and `Atlas.Kernel.Tests` (`CurvatureDialTests`, `LapWalkTests`, `HolonomyRigGraphTests`).
+- Read `walk.corner` / `walk.lap` / `walk.closed` (`{q, corner or laps or corners, flag_m or closure_m, turn_deg}`) on the Console or in the event log; a walk event keeps the scene of the entered space ("S2", "S4").
+- Editor-proved here: `Atlas.Spaces.CurvedWalk.Tests` (closure q = 3, 4, 5, 6 on replayed walks, curvature frozen while head speed > 0.1 m/s, ramp duration, S4 request, standing room, logged events), `Atlas.Kernel.Tests` (`CurvatureDialTests`, `LapWalkTests`, `HolonomyRigGraphTests`, `HolonomyWalkerKernelTests`) and, through the real frame loop and SpaceLab, `Atlas.E2E.Tests` (`E2E_CurvedWalk_TheFiveCornerLap…`: the recorded five-sided lap `walk_lap5_3x3.poselog` leaves tile zero and closes under 0.25 m; `E2E_CurvedSpaces_HomeToS2ToS3ToS4ToHome_…`).
 
 ## P1-B11 The room becomes tile zero (deferred: phone A in the headset)
 
-- Scene: `Assets/Atlas/Spaces/CurvedWalk/Scenes/Space_CurvedWalk.unity` with the live Home rebuild (P1-C07) as `Home` (`SpaceLab.Home`) and the live RoomModel.
+- Scene: `Space_CurvedWalk` (generated) with the live room content (`IRoomContent`, P1-C07) and the live RoomModel; `CurvedRoomView` warps the room's own renderers.
 - Steps:
   1. q = 4 (flat): touch three points on a wall and one table edge with the controller or a finger; note them.
   2. Dial 5, wait about 4 s, dial 4, wait about 4 s, touch the same points.
@@ -53,8 +61,8 @@ One section per task: scene, steps, expected numbers. A human fills in the measu
 
 ## P1-B12 Room content in Aligned Cells (DEFERRED: phone A in the headset)
 
-- **Scene:** `Assets/Atlas/Spaces/AlignedCells/Scenes/Space_AlignedCells.unity`, loaded additively by the boot scene.
-- **Preconditions:** real P1-A04 (stereo rig), P1-A06 (AtlasCore declares `_Gates` and calls `AtlasGatesClip`), P1-A08 (AtlasFrameLoop; boot calls `AlignedCellsSpaceHost.Register(spaceLab)`), P1-C06 (RoomModel from a scan) and P1-C07 (`SpaceLab.Home` set). Release build; note the thermal state at the start.
+- **Scene:** `Assets/Atlas/Scenes/Space_AlignedCells.unity` (generated), loaded additively by SpaceLab.
+- **Preconditions:** the shader with the real gates compiled in the Editor (`AtlasCore.hlsl` declares `_Gate0` to `_Gate3` and `Atlas/Surface` calls `AtlasGatesClip`), P1-C06 (RoomModel from a scan). Release build; note the thermal state at the start. The registration is automatic (`AlignedCellsRegistration`).
 
 ### Test 1, table edge (G7 item; criterion "within 5 cm at three touch points after ten cell crossings")
 
@@ -66,7 +74,7 @@ One section per task: scene, steps, expected numbers. A human fills in the measu
 
 ### Test 2, budget (G4; criterion "S3 on budget_room <= 170 draw calls and <= 200k triangles per frame at 60 fps")
 
-- Load `budget_room.json` through lane A's replay or A14 tour path. Walk all 12 cells.
+- Start with `-atlasRoom budget_room` (or the performance tour, which stands in `budget_room`) and enter S3. Walk all 12 cells.
 - Read ProfilerRecorder "Draw Calls Count" and "Triangles Count", and FrameTimingManager.
 - **Expected:** <= 170 and <= 200,000 (Editor proxy worst: 76 draw calls, about 128k triangles); 60 fps; frame time p50/p95/p99 <= 16.7 / 20 / 33.3 ms (Master Plan §11.2 Must).
 - Overrun: report the measured value, change no number (§9.9 rule 7).
@@ -106,7 +114,7 @@ Same scene and preconditions as above.
 - Deviations: DV-B09-1 route is a constructor value (AirwayParams/Mode 2 from P2-B04/B05 not on this branch; Mode 2 path S6-at-entry not built); DV-B09-2 AirwayBeat wraps AirwayWing + LesionHandOver (AirwayWingModule is B05).
 
 ## P2-B07 Endoluminal window (deferred: phone in hand)
-- **Scene:** `Assets/Atlas/Blades/Lung/Endoluminal/TestScene/Lung_EndoluminalTest.unity`. It contains a Main Camera and `EndoluminalTestDriver`, whose fields reference the Atlas/AtlasSurface shader, the URP/Unlit shader and LiberationSans SDF.
+- **Scene:** `Assets/Atlas/Blades/Lung/Endoluminal/TestScene/Lung_EndoluminalTest.unity`. It contains a Main Camera and `EndoluminalTestDriver`, whose fields reference the shader `Atlas/Surface`, the URP/Unlit shader and LiberationSans SDF (open the scene in the Editor first and check that each field resolves).
 - **Build:** use the on-request slot with Build Profiles = [Lung_EndoluminalTest.unity]. Release build, phone A in hand, thermal Nominal at the start. Afterwards run `git checkout ATLAS/ProjectSettings`.
 - **Driver:**
   1. 120 baseline frames.
@@ -121,7 +129,7 @@ Same scene and preconditions as above.
 
 ## P2-B08 Two Compasses (DEFERRED; needs G6 walking: P2-B03/B05)
 - **Scene:** `Assets/Atlas/Blades/Lung/Scenes/Lung_Airway.unity` (beat b use-case scene, lane B, MP §9.3; created by G6, hand-over H-3). Illustrative package. Route = the `tree.json` route (PH-39: the fixture route has 6 forks, not 4; fork 1, address "", is the designed fork). Phone A in the headset, Release build, thermal state noted, Bump Guard on, spotter present.
-- **Preconditions:** P2-B02, P2-B03, P2-B05, P2-B07 merged; lane D event sink live (or EventLog placeholder plus Hub).
+- **Preconditions:** P2-B02, P2-B03, P2-B05, P2-B07 merged; lane D's event log live (the phone's `EventLog` and the Hub).
 - **Steps:**
   1. Start beat b at the trachea chamber.
   2. Without waiting, the tester reports which corridor each arrow points into (solid = beacon, other cell = Euclidean compass) and which branch the endoluminal window labels.
@@ -151,13 +159,13 @@ Build: in the on-request build slot set Build Profiles to [Lung_NeedleSkyTest.un
 
 Steps:
 1. Clearance sweep (P2-B10 acceptance). Stand still. For 20 s the scene steps through the 20 sky.json check directions, one per second; the panel shows "Clearance X mm" and the line under it shows "Sweep k/20: sky.json Y mm". Note 3 pairs X/Y by eye. Pass: the scene ends with "Sweep: 20/20 within 0.1 mm", and the 3 noted pairs differ by <= 0.1 mm.
-2. Orientation (fixture field 12 + 10·sin 2az·cos el mm). Face the anchor frame's +z (on the placeholder rig: the direction the phone faced when the AR session started). At eye level, 45° to the LEFT (az -45°) and 135° to the right (az +135°): dark red (clearance about 0.6-3.4 mm, blocked). 45° to the RIGHT (az +45°) and 135° to the left: green. Straight up and straight down: green.
+2. Orientation (fixture field 12 + 10·sin 2az·cos el mm). Face the anchor frame's +z (the direction the phone faced when the AR session started). At eye level, 45° to the LEFT (az -45°) and 135° to the right (az +135°): dark red (clearance about 0.6-3.4 mm, blocked). 45° to the RIGHT (az +45°) and 135° to the left: green. Straight up and straight down: green.
 3. Layers and share. The panel shows "Robust windows 78.4 % of the sky" (fixture value 78.39 %). Operator, if the Console is available: lung.skyRobust = 0 removes the green; lung.skyPhase 0→7 visibly grows the red lobes (phase 7 is the minimum).
 4. Gaze-dwell pick (beat g twin "look + dwell"). Hold the cursor ring on a green area: after 0.7 s a white marker appears, the debug line shows `sky_pick` with robust true, and its clear_mm equals the panel value. Holding still does not pick again; a second pick needs a look-away and another 0.7 s hold.
 5. Great-circle check (P2-B11 on the device). Pick (az 0°, el 0°), (az 90°, el 0°) and straight up. Pass: three white arcs join the markers along great circles; the panel shows "Triangle angle sum" within 270 ± 5° (head-aimed picks), the debug line shows `gc_check`, and the value is > 180°.
 6. Budget (MP §10.2.5, §8.5). With the sky visible, look around for 60 s. Pass: no frame over 33.8 ms; 60 fps; GC allocation 0 B per frame in steady state (Profiler or telemetry gcAllocB); the sky adds <= 4 draw calls per frame (sphere + text, both eyes); an Xcode GPU capture shows no compute encoder.
-7. BLOCKED until lane C P1-C10 (live IActionSource): stick + A twin; move the cursor with the stick and press A; the pick lands at the cursor, not at the gaze.
-8. BLOCKED until lane D P1-D03/P2-D10: Console twin; set lung.skyPickAz/El and bump lung.skyPick; a pick appears at that direction within 250 ms.
+7. Needs the real `IAtlasInput`, which `NeedleSkyBeat` now takes from `AtlasServices` (not yet exercised on a device): stick + A twin; move the cursor with the stick and press A; the pick lands at the cursor, not at the gaze.
+8. The Console has no Lung panel (P2-D10 is not in the repository); the generic Tuner tab lists the `lung.*` parameters once the sky is entered: Console twin; set lung.skyPickAz/El and bump lung.skyPick; a pick appears at that direction within 250 ms.
 
 Record: sweep count, the 3 noted pairs, the share shown, the angle sum, frame p95 and max, thermal state.
 
@@ -185,7 +193,7 @@ Graphics sign-off (Editor with a graphics device, not -nographics): run `B10_Sha
 
 Scene: `Assets/Atlas/Blades/FieldFit/Scenes/FieldFit_BlindSpotTest.unity` (component `BlindSpotTestScene`). Phone A in the headset, Release build, note the thermal state at the start.
 
-Preconditions: real P1-A04/P1-A05 rig with per-eye blank, P1-A06 shared look, P1-C10 confirm action and lane D event sink, all merged (`BlindSpotPlaceholderSeams.TryResolve` must return true; today it reports the look and tap seams as missing).
+Preconditions: the real rig with per-eye blank (P1-A04/P1-A05), the shared look (P1-A06), the confirm action (P1-C10) and lane D's event log. `BlindSpotServices` binds the four seams to `AtlasServices` (the rig's eye blank, a pooled `Atlas/Surface` material, `IAtlasInput`, `IEventLog` under the scene "fieldfit"); none of it has run on a device.
 
 Build: in the on-request build slot set Build Profiles to [FieldFit_BlindSpotTest.unity (index 0), Atlas_Boot]. Build and install. Do not commit ProjectSettings: run `git checkout ATLAS/ProjectSettings` afterwards.
 
@@ -210,7 +218,7 @@ Also record (qualitative): whether the text visibly parts around an empty region
 
 ## P3-B08 Phone performance pass (deferred: phone in the headset, Station, Xcode)
 
-- Scene: `Assets/Atlas/Blades/FieldFit/Scenes/Blade_FieldFit_Soak.unity` (FieldFit + `FieldFitSettings.asset`), loaded additively over `Space_Home` with `budget_room`; lane A adds it to the build list.
+- Scene: `Assets/Atlas/Blades/FieldFit/Scenes/Blade_FieldFit_Soak.unity` (FieldFit + `FieldFitSettings.asset`), loaded additively over `Space_Home` with `budget_room`. It is not in the build list (`EditorBuildSettings.asset` lists the boot scene and the seven spaces): add it for this build.
 - Build: Release, Frame Timing Stats on, debugger detached, Metal API Validation off, brightness about 40 %, phone A closed headset, thermal Nominal at start.
 - Steps and the table to fill: checklist items 7-10 in `docs/laneB/checklists/P3-B03-B05-B08_phone.md`.
 - Expected numbers (Master Plan §10.4.8, §11.2 Must): FieldFitBlit < 1 ms (Xcode, mean of 3 frames); GPU p95 <= 9 ms cold; frame time p50/p95/p99 <= 16.7/20/33.3 ms; over 17.2/33.8 ms <= 5 %/0.5 %; CPU main/render p95 <= 8/6 ms; draw calls <= 300, set-pass <= 60, triangles <= 500k; memory <= 1.5 GB; GC <= 1 kB per frame; soak 15 min: no Critical, Serious not before 10 min, hot fps mean >= 45 and never < 30. Reported only: `Atlas.FieldFit.LutRebuild` p95 while `lens.t` is dragged.

@@ -45,5 +45,5 @@ Added by the team outside the plan's table: MCP for Unity (`com.coplaydev.unity-
 - apple/unityplugins Core + CoreHaptics: not added yet (built from source, C.3).
 - Station PC: .NET SDK 8, Python 3.11, PyTorch ≥ 2.7 cu128, TripoSG commit, Forge lock file.
 - Unity Editor at the same patch on the other three machines.
-- The Phase 1 code of lanes A, C and D in the Unity Editor: it compiles against the 6000.3.25f1 assemblies and its engine-free tests pass under `tools/headless/verify.py`, but it has not been imported, rendered or run in Unity or on a phone. `docs/verification/UNITY_SIDE_BRIEF.md` is the check list.
+- The Phase 1 code of all four lanes (A, B, C and D) in the Unity Editor: it compiles against the 6000.3.25f1 assemblies and its engine-free tests pass under `tools/headless/verify.py`, but it has not been imported, rendered or run in Unity or on a phone. `docs/verification/UNITY_SIDE_BRIEF.md` is the check list.
 - TripoSG on the RTX 5070: the Forge's adapter is written from the public repository's inference API and has never run; the tests use the procedural generator.

@@ -59,8 +59,13 @@ namespace Atlas.Telemetry
                     Glued(twin, room, outline, in state);
                     break;
                 case (byte)SpaceId.CurvedWalk:
+                    // Until the curvature is on, Curved Walk is the room as it is.
+                    if (kernel != null && FlatTwinDisc.Supports(kernel.Graph) && !(state.P4 < 0f))
+                        FloorPlan(twin, room, outline, in state, trail, 0.08f);
+                    else Tiles(twin, room, kernel, in state, trail);
+                    break;
                 case (byte)SpaceId.AlignedCells:
-                    Tiles(twin, room, kernel, in state, trail);
+                    Cells(twin, in state, trail);
                     break;
                 case (byte)SpaceId.SmallPlanet:
                     CubeNet(twin, in state, trail);
@@ -378,16 +383,49 @@ namespace Atlas.Telemetry
 
         // ---- S2, S3: the tile graph ----------------------------------------------------------------------
 
-        // While lane B's graph is the flat stub (q = 4) this is a square-grid plan in metres. No projection and
-        // no curved formula is involved; the {4,5} disc is drawn from the same call when that graph lands.
+        // S3 keeps the frame loop's kernel flat and walks a {4,5} graph of its own, so the map holds one too:
+        // the tile ids of two graphs of the same tiling are the same ids. Made on the first S3 map.
+        static TileGraph s_cellGraph;
+
+        // Aligned Cells: the disc round the tile of the walker's cell. The State's transform is that tile's
+        // quarter-turn, so the marker stands on the tile's centre. The room is not drawn: in S3 it is the real
+        // room round every cell, not the content of tile zero.
+        static void Cells(FlatTwin twin, in StateMessage state, FlatTwinTrail trail)
+        {
+            if (s_cellGraph == null) s_cellGraph = new TileGraph(5);
+            WalkerPose pose;
+            pose.Tile = new TileId(state.Tile0, state.Tile1, state.Tile2, state.Tile3, state.Tile4, state.Tile5);
+            pose.Local = new Iso2(state.Xform0, state.Xform1, state.Xform2, state.Xform3, state.Xform4, state.Xform5,
+                                  state.Xform6, state.Xform7, state.Xform8, Curvature.Hyperbolic);
+            if (!FlatTwinDisc.Draw(twin, s_cellGraph, in pose, null, 0.0, null, trail, Heading(in state))) NoGraph(twin);
+        }
+
+        static void NoGraph(FlatTwin twin)
+        {
+            twin.Rect(-1f, -1f, 1f, 1f, FlatTwinInk.Grid);
+            twin.Label(0f, 0f, LabelNoGraph);
+            twin.SetView(0f, 0f, 1.1f, false);
+        }
+
+        // Curved Walk on the kernel's own tiling: the Poincare disc for {4,5} and {4,6}, a square-grid plan in
+        // metres for a kernel that stands on the flat tiling.
         static void Tiles(FlatTwin twin, RoomModel room, IWalkerKernel kernel, in StateMessage state, FlatTwinTrail trail)
         {
             ITileGraph graph = kernel != null ? kernel.Graph : null;
+            if (FlatTwinDisc.Supports(graph))
+            {
+                WalkerPose pose;
+                pose.Tile = new TileId(state.Tile0, state.Tile1, state.Tile2, state.Tile3, state.Tile4, state.Tile5);
+                pose.Local = new Iso2(state.Xform0, state.Xform1, state.Xform2, state.Xform3, state.Xform4, state.Xform5,
+                                      state.Xform6, state.Xform7, state.Xform8, Curvature.Hyperbolic);
+                // The scale the phone drew with, which moves through a ramp; the kernel's when the State has none.
+                double metres = state.P0 > 0f && !float.IsInfinity(state.P0) ? state.P0 : kernel.MetresPerUnit;
+                if (!FlatTwinDisc.Draw(twin, graph, in pose, kernel.Candidates, metres, room, trail, Heading(in state))) NoGraph(twin);
+                return;
+            }
             if (graph == null || graph.Q != 4)
             {
-                twin.Rect(-1f, -1f, 1f, 1f, FlatTwinInk.Grid);
-                twin.Label(0f, 0f, LabelNoGraph);
-                twin.SetView(0f, 0f, 1.1f, false);
+                NoGraph(twin);
                 return;
             }
 

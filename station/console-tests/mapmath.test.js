@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  Trail, boundsOf, cellLabel, corners, fitView, headingVector, nearestObstacle, parseTile, rectCorners, relativeSide,
+  Trail, boundsOf, cellLabel, corners, dialLabel, fitView, headingVector, nearestObstacle, parseTile, rectCorners, relativeSide,
   toRoom, toScreen
 } from '../hub/wwwroot/js/mapmath.js';
 
@@ -109,4 +109,25 @@ test('tile ids stay text, and each space names its cell', () => {
   assert.equal(cellLabel(4, '3,0,0,0,0,0', 0), 'face 3');
   assert.equal(cellLabel(5, '2,0,0,0,0,0', 1), 'room 2 · sheet 1');
   assert.equal(cellLabel(2, '-1,0,0,0,0,1', 3), 'tile -1,0,0,0,0,1 · sheet 3');
+});
+
+test('curved spaces are named by their tiling, their cell and their dial', () => {
+  // S2 Curved Walk: p[0] = metres per unit of the frame, p[3] = the dial, p[4] = the signed curvature.
+  const walk5 = [1.885, 2, 3, 5, -0.2814, 0, 0, 0];
+  assert.equal(cellLabel(2, '1,0,-1,0,1,0', 0, walk5), '{4,5} · tile 1,0,-1,0,1,0');
+  assert.equal(cellLabel(2, '0,0,0,0,1,0', 0, [1, 2, 3, 6, 0, 0, 0, 0]), '{4,6} · tile 0,0,0,0,1,0');
+  assert.equal(dialLabel(2, walk5), 'q = 5 · L = 1.89 m');
+  assert.equal(dialLabel(2, [1, 2, 3, 6, 0, 0, 0, 0]), 'q = 6 · flat');
+  assert.equal(dialLabel(2, undefined), '');
+  assert.equal(dialLabel(2, [1, 2, 3, 0, 0]), '');
+  // S3 Aligned Cells: the sheet is the cell index, p[4] the columns of the grid.
+  assert.equal(cellLabel(3, '2,0,0,0,0,0', 7, [1, 2, 3, 2, 3, 4, 0.9, 0]), 'cell (1, 2) · tile 2,0,0,0,0,0');
+  assert.equal(cellLabel(3, '2,0,0,0,0,0', 7), 'cell 7 · tile 2,0,0,0,0,0');
+  assert.equal(dialLabel(3, [1, 2, 3, 2, 3, 4, 0.9, 0]), '');
+  // S4 Small Planet: the face, and the radius in p[0].
+  assert.equal(cellLabel(4, '5,0,0,0,0,0', 0, [1.2, 0, 0, 3, 0.69, 2.2, 0, 0]), 'face 5');
+  assert.equal(dialLabel(4, [1.2, 0, 0, 3, 0.69, 2.2, 0, 0]), 'q = 3 · R = 1.20 m');
+  // A flat space has no dial, whatever its p[] holds.
+  assert.equal(dialLabel(0, [1, 2, 3, 5, -1, 0, 0, 0]), '');
+  assert.equal(dialLabel(1, [1, 2, 3, 1, 5, 1.5, 1.5, 0]), '');
 });

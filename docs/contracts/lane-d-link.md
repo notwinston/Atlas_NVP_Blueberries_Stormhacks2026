@@ -74,8 +74,8 @@ Link/           LinkClient.cs  LinkHost.cs  OperatorCommand.cs
 The same sources compile into `Atlas.Link` (C# 9, .NET Standard 2.1), into the Hub and into ReplayPhone
 (`<Compile Include="../../ATLAS/Assets/Atlas/Link/**/*.cs" />`), so every byte layout exists once.
 
-**In this build.** Lanes A, C and D are built end to end. Lane B's spaces (S2, S3, S4) are not: their `State`
-rows are fixed here so that nothing changes when they arrive, and their parameters are named in 1.5.
+**In this build.** All four lanes' Phase 1 spaces and systems are built end to end, S2, S3 and S4 included. Their `State`
+rows are in the table of §3 and their parameters in 1.5; lane B's page (§7.3) says what each writes.
 
 ---
 
@@ -317,7 +317,12 @@ lane A's rows are those of lane A §9.6 and §14.
 | `render.headOffsetX`, `…Y`, `…Z` | Float | −0.10 … 0.10 | 0 | m | | `render` | `AppParams` · `StereoRig.HeadOffset` |
 | `curved.cullRho` | Float | 2 … 3.5 | 3 | kernel units | K | `curved` | `AppParams` · `IWalkerKernel.CullRho`; written by the ladder |
 | `glued.copies` | Int | 3 … 7 | 5 | per side | K R | `glued` | `AppParams`, then S1 · S1; written by the ladder |
-| `curved.mode` | Enum | `Mode 1 Curved Walk`, `Mode 2 Aligned Cells` | 0 | – | K R | `curved` | `AppParams.DeclareUnownedKillSwitches` · no consumer in this build |
+| `curved.mode` | Enum | `Mode 1 Curved Walk`, `Mode 2 Aligned Cells` | 0 | – | K R | `curved` | `AppParams.DeclareUnownedKillSwitches` · read by S2 (which asks SpaceLab for S3 when it becomes Mode 2) and S3 |
+| `curved.q` | Int | 3 … 6 | 5 | tiles per corner | | `curved` | `CurvedDialParams.RegisterQ`, from S2 and S4 · the dial; S2 takes 4 to 6, 3 hands over to S4 |
+| `curved.strong` | Bool | | false | – | R | `curved` | `CurvedDialParams.RegisterStrong` · the dial uses the loop-fit radius below the comfort floor |
+| `cells.viewDepth` | Int | 0 … 2 | 2 | cells | K | `cells` | S3 (`AlignedCellsCore.DeclareParams`) · neighbour cells drawn |
+| `planet.R` | Float | 0 … 4 | 0 (the loop-fit R) | m | K R | `planet` | S4 (`SmallPlanetCore.DeclareParams`) · the sphere's radius |
+| `planet.fogRho` | Float | 0.5π … 0.8π | 0.8π | rad | K | `planet` | S4 · the opaque end of the fog |
 | `portal.depth` | Int | 0 … 1 | 1 | – | K | `portal` | `AppParams` (unowned), then S5 |
 | `slicer.source` | Enum | `live`, `stepped`, `tesseract` | 0 | – | K R | `slicer` | `AppParams` (unowned), then S6 |
 | `forge.backend` | Enum | `local`, `hosted`, `cache`, `off` | 0 | – | K | `forge` | `AppParams` (unowned); read by `AssetClientInstaller` · asset client (§4.3) |
@@ -361,7 +366,7 @@ Notes:
   the owner maps them to what it can do.
 - Build-dependent start values are set by `TelemetryInstaller`, not by the declaration: `demoLock` to 1 in a
   build with `ATLAS_DEMO_LOCK`, `hud.visible` to 1 when `Debug.isDebugBuild`.
-- `space.id` set to a space that is not available (S2, S3, S4 in this build) is refused by SpaceLab
+- `space.id` set to a space that is not available (neither a scene in the build nor a registered factory) is refused by SpaceLab
   (`space.refused`), which writes the parameter back to the entered space.
 - `telemetry.mode`: `live` sends `Telemetry` and writes the phone CSV; `phoneCsv` writes the CSV only; `hud`
   writes nothing and forces the HUD on (§12.2, the "Station: telemetry" row).
@@ -382,9 +387,11 @@ The union of the "Switch" column of §12.2 and the list of §12.4. It is a list 
 `slicer.source`, `pose.gyroPredict`, `scan.route`, `link.enabled`, `link.stateHz`, `telemetry.mode`,
 `forge.backend`.
 
-`cells.viewDepth`, `planet.R` and `planet.fogRho` are lane B's and are not declared in this build; the menu
-lists the 18 that are. When lane B lands they are declared as Int 0 … 3 (default 3, proposed), Float 0 … 4 m
-(0 = the loop-fit value) and Float 0.5 … 3.2 (default 1.6, proposed), and appear with no change here.
+`cells.viewDepth`, `planet.R` and `planet.fogRho` are lane B's, declared by `AlignedCellsCore.DeclareParams` and `SmallPlanetCore.DeclareParams`
+through `SpaceRegistry.DeclareAllParams` at boot, so the menu lists all 21 from the first frame. `cells.viewDepth` is Int 0 … 2 (default 2, the
+view range of `SightLines`), `planet.R` Float 0 … 4 m (0 = the loop-fit value, on release) and `planet.fogRho` Float 0.5π … 0.8π rad
+(default 0.8π, the opaque end of the fog; the start is 0.3π below it). The dial's own `curved.q` (Int 3 … 6, default 5) and
+`curved.strong` (Bool, on release) are declared once by `CurvedDialParams` for S2 and S4 and are not kill switches.
 
 Rules (§12.4):
 
@@ -906,15 +913,16 @@ frame was drawn with. With no space entered the defaults are sent, with `spaceId
 |---|---|---|---|---|---|
 | S0 Home | six zeros | 0 | identity | zeros | B.1 |
 | S1 Glued | `(ci, cj, 0, 0, 0, 0)`: the lattice cell the head is in | 0 | identity | mode, copies per side, cell size x, cell size z, 0 | lane A §14.1 |
-| S2 Curved Walk | `Pose.Tile` | 0 | `Pose.Local` | lane B, when it lands | lane B §8.3 |
-| S3 Aligned Cells | `Pose.Tile` | Mode 2 cell index | `Pose.Local` | lane B | lane B §8.3 |
-| S4 Small Planet | `Pose.Tile` (the face) | 0 | `Pose.Local` | lane B | B.1 |
+| S2 Curved Walk | `Pose.Tile` (the kernel's, written by `FillState`) | 0 | `Pose.Local` | `p[3]` the dial's q, `p[4]` the signed curvature of the frame (1/m²), the rest 0 | lane B §7.3 |
+| S3 Aligned Cells | the cell frame's tile id, kept from Mode 1 | Mode 2 cell index `y · countX + x` | the cell's quarter-turn | `p[3]` shown depth, `p[4]`, `p[5]` cell counts, `p[6]` cell side in metres, `p[7]` 0 | lane B §7.3 |
+| S4 Small Planet | `Pose.Tile` (the face in word 0) | 0 | `Pose.Local` (κ = +1) | `p[3]` = 3, `p[4]` = 1/R², `p[5]` the opaque end of the fog in radians, `p[6]`, `p[7]` = 0 | lane B §7.3 |
 | S5 Impossible Rooms | `(room id, 0, 0, 0, 0, 0)` | current room id | identity | layout, room count, portal depth, 0, 0 | lane A §14.2 |
 | S6 Slicer | six zeros | 0 | identity | w₀; the XW, YW, ZW angles in radians; object + 16 · view | lane A §14.3 |
 
-A curved space writes `state.SetTile(t.Xu, t.Xv, t.Yu, t.Yv, t.Tu, t.Tv)` and the nine `Xform0` … `Xform8`
-fields from `u.M00` … `u.M22`, row by row, with `t = kernel.Pose.Tile` and `u = kernel.Pose.Local` (lane B
-§2.4, §2.2).
+While the kernel is curved (q 3, 5 or 6) `FillState` writes `state.SetTile(t.Xu, …, t.Tv)` and the nine `Xform0` … `Xform8`
+fields from `u.M00` … `u.M22`, row by row, with `t = kernel.Pose.Tile` and `u = kernel.Pose.Local` (lane B §4.5, §2.5), so a
+space whose walker is the kernel (S2, S4) writes only its own `p[3..7]`; S3, whose walker is its own, overwrites tile, `sheet` and
+`xform`. κ is not on the wire: the receiver takes it from `spaceId` (S2, S3 → −1, S4 → +1).
 
 What reaches the Spectator, and how:
 
@@ -928,7 +936,7 @@ What reaches the Spectator, and how:
 
 ### The 202-byte example
 
-A `State` as S3 Aligned Cells would send it once lane B has landed. `Link_RoundTrip` checks the same layout
+A `State` as S3 Aligned Cells sends it. `Link_RoundTrip` checks the same layout
 field by field against a sample of its own.
 
 | Offset | Size | Field | Type | Bytes (hex) | Value |
@@ -1234,11 +1242,13 @@ mismatch in `LastByeReason`.
 text      = "<spaceId>|4,<q>|<seed>|<generatorVersion>|<geometryHash>|<lMillimetres>"     decimal integers, UTF-8
 worldHash = the first 16 hexadecimal digits (lower case) of SHA-256(text)
 
-spaceId          State.spaceId                                     q        IWalkerKernel.Graph.Q (4 in this build)
-seed             the world generator's seed; 0 in this build       genVer   1 in Phase 1
+spaceId          State.spaceId                                     q        IWalkerKernel.Graph.Q (4 in a flat space)
+seed             ISpaceWorld.WorldSeed of the entered module;      genVer   ISpaceWorld.GeneratorVersion; 1 without one
+                 0 for a space with no generator (every one but S2)
 geometryHash     lane C's RoomModelJson.GeometryHash(room): 64 lower-case hexadecimal digits (lane C §2.6);
                  64 zeros (WorldHash.NoGeometry) when no RoomModel is active or the room has no hash yet
-lMillimetres     WorldHash.Millimetres(IWalkerKernel.MetresPerUnit): × 1000, rounded half away from zero
+lMillimetres     WorldHash.Millimetres(L): × 1000, rounded half away from zero. L is IDialKernel.ConfiguredMetresPerUnit (the dial's
+                 target, constant through a curvature ramp) when the kernel is one, else IWalkerKernel.MetresPerUnit
 ```
 
 `LinkPump` computes it at step 8a whenever `State.worldVer` or `spaceId` changes, and when the room changes;
@@ -1390,6 +1400,10 @@ Events in this build. A lane adds a name by adding a row.
 | `perf.runBegin`, `perf.runEnd`, `perf.summary`, `perf.note` | the perf tour's | A (`App/PerfTour`) | The scripted performance tour |
 | `fms`, `note`, `asset_ack` | `{score}`, `{text}`, the `AssetAck` body | Hub | Console entries (§3.5) and acknowledgements; written by the Hub with the Hub clock and `"scene": "hub"`, never sent to the phone |
 
+Lane B's spaces log `walk.corner`, `walk.lap` and `walk.closed` (S2 and S4: `{q, corner or laps or corners, flag_m or closure_m, turn_deg}`), `cells.enter` (S3) and `curved.objectScale` (S2); the Lung and FieldFit blades log their own (`fork`, `compass_choice`, `blindspot_*`, `ff.*` and others) under their own scene through `EventLog.LogJson(scene, …)`.
+
+**Open: how the phone learns the FMS score.** Lane B's `AirwayModeSwitch` and `AirwayRunReport` read an `fms` event from the phone's own event log for the automatic Mode 2 rule (FMS above 3 of 20, plan §10.2.3). The row above says `fms` is written by the Hub with scene `"hub"` and never sent to the phone, so on a real link the phone's log never holds one. No channel exists yet: lane C or D, or the lead, must choose one (a parameter written through `ParamSet`, a new operator command, or a new message). Nothing in this contract invents it.
+
 `LinkEvents` in `Atlas.Link` holds the names the link itself reads: `Param` (`"param"`), `Command` (`"cmd"`),
 `Link` (`"link"`), `World` (`"world"`), `ParamIgnoredEvent` (`"param.ignored"`), the two reasons, and
 `ParamChanged(…)`, `ParamIgnored(…)`, `TryReadParam(EventMessage, out ushort id, out string name, out float value)`.
@@ -1433,7 +1447,11 @@ namespace Atlas.Telemetry
         public string Scene { get; set; }                     // "S0".."S6" or "none"; set by LinkPump at step 8a
         public int Count { get; }
         public int Queued { get; }
-        public event System.Action<Atlas.Link.EventMessage> Logged;
+        public event System.Action<Atlas.Link.EventMessage> Logged;       // raised after the line is written
+
+        /// <summary>For an event that belongs to a scene other than the entered space: a use case names itself
+        /// ("lung", "fieldfit"). Null or empty keeps the current scene.</summary>
+        public void LogJson(string scene, string ev, string dataJson);
 
         // IEventLog members, and for code that references Atlas.Link:
         public void Log(string ev, Atlas.Link.JsonValue data);
@@ -1447,6 +1465,11 @@ namespace Atlas.Telemetry
 ```
 
 - `AtlasServices.TryGet<IEventLog>(out log)`; a caller that finds none skips the event.
+- **Scene.** `EventLog.Scene` is set by `LinkPump` to the code of the entered space ("S0" … "S6") on every change, so an event logged
+  with `Log` or `LogJson(ev, data)` carries the space's code. An event of a use case that must carry its own scene (lane B's Lung and
+  FieldFit blades log under "lung" and "fieldfit") uses `EventLog.LogJson(scene, ev, dataJson)`, or
+  `EventLogExtensions.LogJson(this IEventLog, scene, ev, dataJson)` (`using Atlas.Telemetry;`) for a caller that holds the interface. A test
+  double that implements only `IEventLog` receives the two-argument call and no scene: a test of a scene tag needs a real `EventLog`.
 - `IEventLog.Log` writes a whole-valued `double` as an integer. `LogJson` with text that is not a JSON object
   logs `{"text": "<the text>"}`.
 - Calls are main thread only, and allowed at step 8 and outside the frame path. Logging is for edges and
@@ -2954,7 +2977,7 @@ row from `IQualityState`. `Atlas.Telemetry` and `Atlas.Rendering` never referenc
 | RTT, loss, `State` rate | `LinkClient`, through `LinkPump.TakeSecond` |
 | Scene, space, highest bump level, cue count, Glued copies | The `State` of each frame, through `LinkPump`. The cue count rises with every rise of `bumpLevel` and with every rising edge of the cue flag that comes without one (an operator cue) |
 | Assets placed and pending | `AssetClient.PlacedCount`, `PendingCount`, written to the probe once per frame |
-| Visible tiles | 0 until lane B's tile renderer reports it |
+| Visible tiles | The tiles the generated world's renderer drew (`ITileDrawStats`, S2 at q = 5), copied at step 6 by `TileStatsUploadStep`; 0 elsewhere |
 
 - Percentiles of the row (`p50`, `p95`, `p99`, `over17_2`, `over33_8`, the three `…P95`) are over the whole ring.
   `fps`, `max`, the three counters and `gcAllocB` are over the last second.
@@ -3313,12 +3336,22 @@ linkUp)`, and `Banner`, `State`, `Room`, `Outline`, `Trail`, `WorldVerified`, `S
 3. World check: the fetched room must agree with everything the phone has said about its world: the geometry
    hash and the world hash (`WorldHash.Compute(…)` with its own kernel) of the last `world` event or
    `Welcome`, and the floor of the `RoomOutline` to 2 mm. **On a mismatch it shows "world mismatch", enters
-   no space, and fetches the room again every 2 s** (§7.3.1, test L8).
+   no space, and fetches the room again every 2 s** (§7.3.1, test L8). The entered module's own generator is
+   checked too: when it is an `ISpaceWorld`, its seed, its version and its `ContentHash` must be the `seed`,
+   `genVer` and `genHash` of the phone's `world` event. A difference that lasts 0.5 s leaves the space, shows
+   "world mismatch" and is tried again every 2 s or on the next `world` event.
 4. Space: when `State.spaceId` differs from `ISpaceHost.Current`, `RequestSwitch`. With `spaceId` 255 it shows
    "no space" and the room only; a space that is not in the build shows "space not in this build".
-5. Module: if the entered module implements `ISpaceStateReader`, `ReadState(in state)` (lane A §2). The walker
-   is placed from the `State` on every frame (`tileId` and `xform`) and the kernel is never stepped, so
-   nothing is integrated.
+5. Kernel and module: the kernel is a `HolonomyWalkerKernel`, as on the phone, and `SpectatorLoop` sets it from
+   each new `State` without ever stepping it, so nothing is integrated. In S2 it is put on the tiling of the
+   `world` event's `q` (without one, `p[3]`); with `p[4]` = 0 the walker stands flat on tile zero
+   (`ResetToFloorFlat` at the translation of `xform`), otherwise the scale is `p[0]`
+   (`SetCurvatureTarget(-1, p[0])`) and the pose is `Reset({tileId, Iso2.FromRowMajor(xform, -1)})`, which
+   follows a ramp frame by frame. In S4 it is `Curved(3, p[0])` and `Reset` with κ = +1. In every other
+   space, S3 included, it is the flat kernel of the room with the walker on the floor point under the head.
+   `CullRho` is `p[2]`. A `State` that cannot be placed leaves the last good pose. Then, if the entered
+   module implements `ISpaceStateReader`, `ReadState(in state)` (lane A §2): S2, S3 and S4 all do, and
+   from the first `State` on they read the kernel or the `State` and drive nothing.
 6. The frame then runs as on the phone: `Tick`, upload, render. `SpectatorView` puts its camera at the
    frame's raw head pose in `LateUpdate`, and polls the link after the frame is rendered.
 
@@ -3429,19 +3462,18 @@ namespace Atlas.Telemetry
 |---|---|---|
 | S0 Home | Floor plan: outline, free rectangle, lap square, object boxes, the walker as an arrow, the trail | RoomModel; `State` head pose |
 | S1 Glued | Lattice plan: n × n cells round the walker's cell, the fundamental cell highlighted, mirrored rows marked for the Klein bottle, the walker and its copies as dots | RoomModel `cells.glued`; `State.tileId`, `p[3]` (mode), `p[4]` (copies) |
-| S2, S3 | Poincaré disc of the tile graph centred on the walker: the tiles of `IWalkerKernel.Candidates` within ρ, the walked tile sequence, the room outline in tile zero | Kernel (lane B) |
+| S2 Curved Walk | While `p[4]` = 0 (no curvature yet) the floor plan of S0. Then the Poincaré disc (`FlatTwinDisc`) centred on the walker's tile: the tiles within 3 units, the walked tile sequence, the room outline in tile zero at the scale `p[0]`, the walker at `xform` | Kernel graph and `Candidates` (lane B); `State.tileId`, `xform`, `p[0]`, `p[4]` |
+| S3 Aligned Cells | The same disc round the tile of the walker's cell, the walker on its centre, no room. The kernel is flat in S3, so the builder keeps a {4,5} graph of its own | `State.tileId`, `xform` |
 | S4 Small Planet | Unfolded cube net: six faces, the walker's face highlighted, the trail | `State.tileId` |
 | S5 Impossible Rooms | Floor plan with "room k of n"; the room graph (rooms as nodes, portals as edges, the current room highlighted) when the space implements `IFlatTwinSource` | `State.tileId`, `p[4]`; the space |
 | S6 Slicer | Floor plan, plus a strip that shows the cut w₀ on its range and the three angles | `State.p[3..6]` |
 | Any space that implements `IFlatTwinSource` | Whatever it draws | The space |
 
-**While lane B's tile graph is the flat stub.** A graph with `Q == 4` (`FlatTileGraph`, κ = 0) has no disc. The
-builder then draws a **square-grid plan** in metres: the cells of `Candidates`, each a square of side
-`Graph.CentreSpacing · MetresPerUnit`, the walker's cell (`FlatTileGraph.TryGetCell(Pose.Tile, …)`) highlighted,
-the walker at `Pose.Local`'s translation inside it, the trail of visited cells, and the room outline over tile
-zero. No projection and no hyperbolic formula is involved. When lane B's {4,5} graph lands, the same call draws
-the Poincaré disc from `VisibleTile.Chain`; nothing else changes. In this build no curved space can be entered,
-so the grid plan is seen only in lane B's sandbox and in the test below.
+**A kernel on the flat tiling in S2.** A graph with `Q == 4` (`FlatTileGraph`, κ = 0) has no disc. Should the
+builder be handed one for S2 (a Station that could not place the `State`), it draws a **square-grid plan** in
+metres: the cells of `Candidates`, the walker's cell highlighted, the trail of visited cells, and the room
+outline over tile zero. The phone's own map fills `tileId`, `xform` and `p[0]` from the kernel, as the frame
+loop does for the `State` it sends.
 
 Rules: at most 0.3 ms on the phone (`P1-D07`); rebuilt at 10 Hz, not every frame; in replay the map shows the
 same tile-id sequence as the log; the in-headset map is off by default, because a mini-map distracts (F.2: show
@@ -3466,7 +3498,7 @@ this one is corrected.
 | `AtlasVertex`, `AtlasShading`, `MeshData` (`Atlas.Kernel`) | A §10.2 | Built-in and generated meshes (§4.3, §4.4); the Forge's shade (§4.1); the map's mesh |
 | Palette layout: the cell-centre formula, object colours 64 … 127 | A §10.7 | §4.1, §4.4 |
 | Layers `AtlasHud` (through `boot.Hud`) and `AtlasSpectator` | A §12.1 | §5.4, §5.7, §5.8 |
-| `IWalkerKernel`, `WalkerPose`, `TileId`, `FlatWalkerKernel`, `FlatTileGraph.TryGetCell` | B §2, §3, §4 | World hash, Spectator, mini-map |
+| `IWalkerKernel`, `IDialKernel`, `WalkerPose`, `TileId`, `FlatWalkerKernel`, `HolonomyWalkerKernel`, `FlatTileGraph.TryGetCell`, `ISpaceWorld` | B §4.4, §4.5, §4.9 to §4.11; A §2 | World hash, Spectator, mini-map |
 | `RoomModel` (`Id`, `Outline`, `Walls`, `FreeRect`, `Objects`, `DefaultWallHeight`), `RoomObject`, `MeshState` (`StandIn` among them), `ObjectCategory`, `ObjectCategories.Name`, `ObjectMeshRules` (`MaxMeshedObjects`, `TriTarget`), `RoomModelJson` (`TryRead`, `GeometryHash`), `RoomFixtures` | C §2, §6 | `RoomOutline`, world hash, asset client, Spectator |
 | `IRoomContent` (`Built`, `IsBuilt`, `Room`, `SetObjectState`, `SetGeneratedMesh`, `SetBuiltInMesh`) | C §9.1 | §4.3, §4.4 |
 | `IObjectPhotoSink`, `ObjectPhotoSet`, `ObjectView` | C §11.4 | §4.3 |
@@ -3504,8 +3536,9 @@ are the rows of §11.1. Each row names the test class (the file of the same name
 | `PairingTests` | `Atlas.Telemetry.Tests` | The three accepted forms; refusals: a host name, a port of 0 or 70000, an empty string, `atlas:192.168.0.10`; the phases |
 | `ParamBinderTests` | `Atlas.Telemetry.Tests` | Field kinds, existing names followed, wrong forms refused, `Dispose` |
 | `LinkPumpTests`, `TelemetryWiringTests` | `Atlas.Telemetry.Tests` | Step 8: edge events, the `param` echo and its once-per-second rule, the world hash and `world` event, commands to `IOperatorCommands`, the row backlog, the manifest re-sent on a version change |
-| `FlatTwinTests` | `Atlas.Telemetry.Tests` | With a `FlatWalkerKernel` walked round a square, the trail's tile-id sequence equals the kernel's; the S0 plan contains every outline segment of `sample_3x3`; each space's twin |
-| `SpectatorCoreTests`, `SpectatorAssetsTests` | `Atlas.Telemetry.Tests` | Room fetch, world check and mismatch, space following, banners; furniture from events and job lists |
+| `FlatTwinTests`, `FlatTwinDiscTests` | `Atlas.Telemetry.Tests` | With a `FlatWalkerKernel` walked round a square, the trail's tile-id sequence equals the kernel's; the S0 plan contains every outline segment of `sample_3x3`; each space's twin; the disc of {4,5} and {4,6}, and what the builder draws for S2 and S3 |
+| `SpectatorCoreTests`, `SpectatorAssetsTests` | `Atlas.Telemetry.Tests` | Room fetch, world check and mismatch, space following, banners; the bytes of the `State`s of a lap in S2 and of a walk round S4 give the phone's tile and pose; a world generated differently is not shown; furniture from events and job lists |
+| `StationReplayTests` | `Atlas.Spaces.CurvedWalk.Tests` | The recorded 5-corner lap through the real Spectator core, host and loop into `CurvedWalkCore.ReadState`: the same tile, pose, tile zero and content hash on every frame; the dial to 6 |
 | `MenuModelTests` | `Atlas.App.Tests` (`Tests/App/Menu/`) | The pages; the kill switches in the order of 1.5; stepping per kind; an `OnRelease` row changes only on `Confirm`; every change goes through the registry with `ParamSource.Local` and logs `param.set` |
 | Forge | `python -m pytest station/forge/tests` | With the `procedural` generator: a crop becomes a GLB that passes `validator.py`; the same input gives the same hash; a corrupt JPEG ends as `failed`; a second identical upload is a cache hit with no job; a 21st box is answered `placeholder`; `backend` `cache` with a miss fails at once; the hosted fallback is off by default and has no vendor; a restart keeps rooms, finished jobs and assets |
 | Hub | `dotnet test station/hub.tests` | Relay of `State` unchanged; `perf.csv` equal to `TelemetryCsv`; presets saved, loaded as one `ParamSet`, baked; `/internal/job` relayed; session adoption and continuation; watchdogs; ReplayPhone against the Hub |

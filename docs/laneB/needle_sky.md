@@ -1,3 +1,5 @@
+> Written on the branch `laneB/integration`, against the placeholders of lanes A, C and D. Where this log names a placeholder (`PLACEHOLDER`, `IActionSource`, `HomeRebuild`, `EventLog.Emit`, `AtlasSurface`, `_Gates`, `room_*.json`, `SpaceLab.Home`), the real code has replaced it, except the Phase 2 and 3 stand-ins in [placeholders.md](placeholders.md): see [INTEGRATION_NOTES.md](INTEGRATION_NOTES.md). The numbers of the contract sections it cites ("kernel.md §n") are the numbers of [../contracts/lane-b-kernel.md](../contracts/lane-b-kernel.md).
+
 # Needle sky (P2-B10, P2-B11): deviations, assumptions, evidence
 
 Code: `ATLAS/Assets/Atlas/Blades/Lung/Sky/` (assembly `Atlas.Blades.Lung`, namespace `Atlas.Blades.Lung.Sky`). Tests: `ATLAS/Assets/Atlas/Tests/LungSky/` (assembly `Atlas.Blades.Lung.Sky.Tests`). Source: G7 brief; Master Plan §10.2.

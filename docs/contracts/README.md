@@ -6,7 +6,7 @@ folder is announced to all four lanes before it is committed.
 | Page | Owner | Fixes |
 |---|---|---|
 | [lane-a-platform.md](lane-a-platform.md) | A | `ISpaceModule`, `FrameContext`, SpaceLab, services, the frame loop, shader include contract, `AtlasShaderIDs`, layer and stencil table |
-| [lane-b-kernel.md](lane-b-kernel.md) | B | `Iso2`, `TileId`, `WalkerPose`, `ITileGraph`, metric and unit conventions, the `AtlasWarp` entry point |
+| [lane-b-kernel.md](lane-b-kernel.md) | B | The one lane B page: `Iso2`, `Geometry2`, `TileId`, `WalkerPose`, `ITileGraph`, `IWalkerKernel` and `IDialKernel` (the walker the frame loop steps, flat, hyperbolic and spherical), exact tile ids and seeds, `TileFrame` and `RuleS`, metric and unit conventions, `AtlasWarp` and `AtlasGates` with `_Gate0` to `_Gate3`, what S2 to S4 write into `State`. [kernel.md](kernel.md) only points to it |
 | [lane-c-room.md](lane-c-room.md) | C | RoomModel schema, coordinate frame and units, sample rooms and `budget_room`, pose and sensor types, `IBumpGuard`, `IRoomContent` |
 | [lane-d-link.md](lane-d-link.md) | D | Parameter registry, link message ids and the `State` layout, event format, Hub and Forge HTTP routes, GLB asset contract |
 | [unity-api/](unity-api/) | all | Unity and package API facts verified against the installed sources, with file references |
@@ -27,7 +27,7 @@ Master Plan §6.2, with six clarifications marked ◆.
 | `Atlas.Kernel` | B (Mesh4D: A) | none | Mathematics, Burst, Collections only. No scene types |
 | `Atlas.Link` | D | none | Engine-free (`noEngineReferences`). The same sources compile into the Hub. ◆ Also holds `AtlasJson`, the small engine-free JSON reader and writer used for events, parameter snapshots and RoomModel files |
 | `Atlas.World` | A, B, C | Kernel, Link | From Link: message types, parameter types and `AtlasJson` only. Core types here use no `UnityEngine` type, so they run in headless tests |
-| `Atlas.Rendering` | A | Kernel, World | ◆ Also holds the room shell and room content (`Rendering/Room/`, lane C files) so that every space and the Spectator can draw the scanned room. §6.2 lists "Home rebuild" under `Atlas.Scan`, which no space may reference |
+| `Atlas.Rendering` | A | Kernel, World | ◆ Also holds the room shell and room content (`Rendering/Room/`, lane C files) so that every space and the Spectator can draw the scanned room. §6.2 lists "Home rebuild" under `Atlas.Scan`, which no space may reference. Lane B's tile meshes, tile renderer, draw rule and warp reference (`Rendering/Tiles/`, `Rendering/Warp/`) live here too, because they need the shared material pool and look |
 | `Atlas.Scan` | C | Kernel, World | AR session, pose pipeline, scan routes, FloorScan core, RoomModel builder, photo capture. Uses AR Foundation only, so it compiles on every platform |
 | `Atlas.Scan.ARKit` | C | Kernel, World, Scan | ◆ Editor and iOS only, because `Unity.XR.ARKit` exists only there. Holds everything that needs an ARKit type (world map save and relocalise, mesh face classification, ARKit session configuration) behind interfaces declared in `Atlas.Scan`, and registers itself at start-up. Nothing references it |
 | `Atlas.Safety` | C | World | RoomModel types only. **Never Link or Telemetry**, and no source file uses a type from either |
@@ -39,6 +39,8 @@ Master Plan §6.2, with six clarifications marked ◆.
 | `Atlas.World.Lint.Editor` | B | Kernel, World, Rendering | Editor only. WorldLint (`World/Lint/`): the generator checked against the real tile meshes. Nothing references it but its tests |
 | `Atlas.Blades.*` | per use case | Kernel, Link, World, Rendering, Scan, Safety, Input, Telemetry, Spaces.* | The use cases, Phase 2 onwards (§6.2). Never App, never another use case. From Safety only `IClearanceQuery`, read-only: a use case never switches Bump Guard |
 | `Atlas.Editor` | A | any | Editor only |
+
+`tools/headless/verify.py rules` checks this table (its `ALLOWED` dictionary: one entry per row, `Atlas.Spaces.*` and `Atlas.Blades.*` as patterns, Editor and test assemblies unrestricted) and `Tests/Architecture/AssemblyGraphTests.cs` repeats it as a test. A change to a row is made in all three.
 
 `Safety_Independence` (§11.1) checks the **direct** references of `Atlas.Safety` and its source files. The closure
 through `Atlas.World` reaches `Atlas.Link` by design.
@@ -116,10 +118,10 @@ or bloom (D23).
 
 | What | Where |
 |---|---|
-| RoomModel fixtures (three sample rooms, `budget_room`) | `ATLAS/Assets/Atlas/World/Resources/AtlasRooms/*.json`, loaded with `Resources.Load<TextAsset>` on device and read from disk by headless tests |
+| RoomModel fixtures (`sample_3x3`, `sample_L_3x4`, `sample_4x5_table`, `budget_room`, `tiny_standing`) | `ATLAS/Assets/Atlas/World/Resources/AtlasRooms/*.json`, loaded with `Resources.Load<TextAsset>` on device and read from disk by headless tests (`RoomFixtures.LoadFromProject`). They are the only room fixtures: lane B's tests use them too |
 | RoomModel JSON schema | `docs/contracts/roommodel.schema.json` |
 | Saved scans on the phone | `Application.persistentDataPath/rooms/room_<id>.json` and `room_<id>.worldmap` |
-| Recorded scans and walks for replay | `recordings/room_*.json`, `recordings/walk_*.poselog` |
+| Recorded walks for replay (`ATLAS-POSELOG 1`, in the frame of `sample_3x3`) | `recordings/walk_*.poselog`: three of lane C's and two of lane B's kernel and curved-space tests (`recordings/README.md`) |
 | Perf CSV and event log on the phone | `Application.persistentDataPath/logs/` |
 
 No camera frame is written to disk (rule 10).

@@ -1,13 +1,15 @@
+> Written on the branch `laneB/integration`, against the placeholders of lanes A, C and D. Where this log names a placeholder (`PLACEHOLDER`, `IActionSource`, `HomeRebuild`, `EventLog.Emit`, `AtlasSurface`, `_Gates`, `room_*.json`, `SpaceLab.Home`), the real code has replaced it, except the Phase 2 and 3 stand-ins in [placeholders.md](placeholders.md): see [INTEGRATION_NOTES.md](INTEGRATION_NOTES.md). The numbers of the contract sections it cites ("kernel.md §n") are the numbers of [../contracts/lane-b-kernel.md](../contracts/lane-b-kernel.md).
+
 # Lane B: airway graph and navigation (G4)
 
-Tasks: P2-B01 AirwayTree, P2-B06 beacon and route cost (P2-B08 Two Compasses follows after G5). Code: `Atlas.Kernel` (`TileFrame`, `RuleS`, kernel.md §4.8) and `Atlas.Blades.Lung` (`Assets/Atlas/Blades/Lung/Airway/`).
+Tasks: P2-B01 AirwayTree, P2-B06 beacon and route cost (P2-B08 Two Compasses follows after G5). Code: `Atlas.Kernel` (`TileFrame`, `RuleS`, lane-b-kernel.md §4.8) and `Atlas.Blades.Lung` (`Assets/Atlas/Blades/Lung/Airway/`).
 Tags: [plan] fixed by the Master Plan; [min] smallest choice where the plan is silent.
 
 ## Deviations
 
 | Id | Deviation | Tag |
 |---|---|---|
-| D-G4-1 | Kernel gains the public `TileFrame` and `RuleS` (kernel.md §4.8). The plan names `FrameOf`; the types are new. Additive contract change, to be announced (§6.4). | [min] |
+| D-G4-1 | Kernel gains the public `TileFrame` and `RuleS` (lane-b-kernel.md §4.8). The plan names `FrameOf`; the types are new. Additive contract change, to be announced (§6.4). | [min] |
 | D-G4-2 | The trachea frame is `TileFrame.Zero`: the carina fork is at tile zero and edge 0 faces the mouth. The trachea segment itself has no tile. | [min] |
 | D-G4-3 | Window = current, parent and grandparent, each with data descendants to relative depth 3. Maximum 31 nodes and 62 tiles (plan: 60/120). Rejected: the literal reading (current + 2 ancestors + 14 descendants = 17), which classifies sibling corridor tiles 2.12 units away as tissue. The chosen window misses only the third ancestor's tiles (at least 3.862 units from the current centre, in the fog band). | [min] |
 | D-G4-4 | Node data covers only nodes in `tree.json`; `FrameOf` works to 23 letters without data. | [min] |
@@ -22,13 +24,13 @@ Tags: [plan] fixed by the Master Plan; [min] smallest choice where the plan is s
 | D-G4-15 | The route-cost read-out uses the built-in `TextMesh` (TextMeshPro absent); text needs a font shader (rule 8): flagged for lane A. | [min] |
 | D-G4-17 | Not built (superseded or Extended): Spec §11.3.1 virtual-length clamp, Roll a Lung, Pareto threads, rehearse mode, QA, pointing probe, H5/H6/H9 (MP §10.2.7, App. D.4); "1-3 straight tiles per generation" (Extended). | plan |
 | D-T-2 | P2-B06 tests: N1 forces every tenth pair to an arrived case (58 of 1,000), otherwise random tile/target pairs almost never arrive. N9 searches the depth-0..5 tiles for one whose exit is canonical edge 0, because the tree-frame/canonical mapping decides which tile that is. The arrow direction uses exact (0,+-1) for p_k, not rounded cos/sin. | [min] |
-| D-T-1 | Tests: `RuleS_ForkSpacing_2_1226` uses 1e-6, not 1e-9: absolute double positions at depth 7 have 8e-9 error (kernel.md §3 rule 6). `TileFrame_MatchesTileGraph` restarts its random walk from tile zero every 50 steps, because a 2,000-step walk leaves the 64-bit range (A.5). The brief's "every open edge's neighbour is locatable" cannot hold on the window boundary (the grandparent's bend leads to the fourth ancestor): the test checks every open edge against the independent tile set and requires the current tile's neighbours to be located. | [min] |
+| D-T-1 | Tests: `RuleS_ForkSpacing_2_1226` uses 1e-6, not 1e-9: absolute double positions at depth 7 have 8e-9 error (lane-b-kernel.md §3 rule 6). `TileFrame_MatchesTileGraph` restarts its random walk from tile zero every 50 steps, because a 2,000-step walk leaves the 64-bit range (A.5). The brief's "every open edge's neighbour is locatable" cannot hold on the window boundary (the grandparent's bend leads to the fourth ancestor): the test checks every open edge against the independent tile set and requires the current tile's neighbours to be located. | [min] |
 
 ## Hand-overs
 
 - **H-1 (renderer, G5/G1).** Classify tiles with `AirwayTree.Window.TryLocate`; orient the kit with `FrameOf(tile)` and `OpenEdgesCanonical`; tiles outside the window are tissue.
 - **H-2 (G6).** Each frame inside `ISpaceModule.Tick`: `tree.SetCurrent(tile)`, then `beacon.Tick`, then the views' `Apply`. Call `beacon.Reset(route)` when the route or beat changes. The B09 end tile is `FrameOf(route.TargetAddress)`. Mode 2 uses `Step.TreeEdge` and `ExitCanonicalEdge`, not `ArrowDirection`.
-- **H-4 (lanes A, C, D).** Announce: `Atlas.Blades.Lung.asmdef` gains `Unity.Mathematics` (R7); new test assembly `Atlas.Blades.Lung.Tests`; kernel.md §4.8.
+- **H-4 (lanes A, C, D).** Announce: `Atlas.Blades.Lung.asmdef` gains `Unity.Mathematics` (R7); new test assembly `Atlas.Blades.Lung.Tests`; lane-b-kernel.md §4.8.
 
 ## PH-39 status
 

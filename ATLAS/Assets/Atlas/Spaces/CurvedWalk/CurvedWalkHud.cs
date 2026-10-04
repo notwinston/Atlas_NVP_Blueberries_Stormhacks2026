@@ -9,7 +9,8 @@ namespace Atlas.Spaces.CurvedWalk
 {
     // P1-B09: what S2 shows of its controls and of the walk (Master Plan §10.1.3). The read-out is one TextMeshPro object
     // under the head-locked HUD root (the path of the telemetry HUD: both eyes draw it at its real depth); the three chips
-    // are the gaze twins of the dial and of the mode switch (§0.5 rule 5), registered with the real input while S2 runs.
+    // are the gaze twins of the dial and of the mode switch (§0.5 rule 5), registered with the real input while S2 runs
+    // (CurvedWalkTwins holds them and decides which are live).
     // The read-out's text is rebuilt only when the walk changed, into one cached builder, and handed over without a string.
     sealed class CurvedWalkHud
     {
@@ -21,24 +22,19 @@ namespace Atlas.Spaces.CurvedWalk
         const float PointsPerLineMetre = 10f / 1.15f;
         static readonly Color s_text = new Color(0.92f, 0.95f, 0.92f, 1f);
 
-        readonly IAtlasInput input;
+        readonly CurvedWalkTwins twins;
         readonly StringBuilder text = new StringBuilder(96);
         readonly GameObject readoutObject;
         readonly TextMeshPro readout;
         readonly GameObject[] chipObjects = new GameObject[3];
         readonly TextMeshPro[] chipTexts = new TextMeshPro[3];
-        readonly GazeTargetId[] gaze = new GazeTargetId[3];
-        static readonly float3[] s_chips = { CurvedWalkChips.DialLeft, CurvedWalkChips.DialRight, CurvedWalkChips.Mode };
-        static readonly AtlasAction[] s_actions = { AtlasAction.DialLeft, AtlasAction.DialRight, AtlasAction.Primary };
-        static readonly string[] s_labels = { "curved.dial-", "curved.dial+", "curved.mode2" };
-        CurvedWalkChips frame;
         int shownCorners = -1, shownQ = -1, shownTurn = int.MinValue, shownFlag = int.MinValue;
         bool shown, shownStarted, shownClosed;
 
         /// <summary>hud: the head-locked root (IStereoRig.Hud), or null. world: the space's root. input may be null.</summary>
         public CurvedWalkHud(Transform hud, Transform world, IAtlasInput input)
         {
-            this.input = input;
+            twins = new CurvedWalkTwins(input);
             // The default font asset of the project's TextMeshPro resources. A build without them has no text and runs on.
             TMP_FontAsset font = TMP_Settings.instance != null ? TMP_Settings.defaultFontAsset : null;
             if (font != null && hud != null)
@@ -56,13 +52,10 @@ namespace Atlas.Spaces.CurvedWalk
                     chipTexts[i] = MakeText(world, "CurvedWalkChip" + i, font, LineHeight * 2f,
                         new Vector2(CurvedWalkChips.Radius * 4f, CurvedWalkChips.Radius * 2f), out chipObjects[i]);
                 }
-                if (input == null) continue;
-                GazeTarget target = GazeTarget.World(s_actions[i], Vector3.zero, CurvedWalkChips.Radius);
-                target.Label = s_labels[i];
-                gaze[i] = input.RegisterGazeTarget(in target);
             }
         }
 
+        public CurvedWalkTwins Twins { get { return twins; } }
         public StringBuilder Text { get { return text; } }
         public TextMeshPro Readout { get { return readout; } }
 
@@ -93,23 +86,27 @@ namespace Atlas.Spaces.CurvedWalk
 
         /// <summary>
         /// MP §6.3 step 6. The chips follow the head's place and, lazily, its heading; their labels say what a dwell does
-        /// from the dial snap q. The read-out follows the walk.
+        /// from the dial snap q, and they show only while the walker stands still, as the dial and the mode switch act only
+        /// then (§10.1.4). The read-out follows the walk.
         /// </summary>
-        public void Upload(float3 head, quaternion headRotation, int q, LapWalk walk)
+        public void Upload(float3 head, quaternion headRotation, int q, LapWalk walk, bool still = true)
         {
-            frame.Follow(headRotation);
-            for (int i = 0; i < 3; i++)
+            twins.Place(head, headRotation);
+            for (int i = 0; i < CurvedWalkTwins.Count; i++)
             {
-                Vector3 centre = frame.Centre(head, s_chips[i]);
-                if (input != null && gaze[i].IsValid) input.MoveGazeTarget(gaze[i], centre);
+                Vector3 centre = (Vector3)twins.Centre(i);
                 if (chipObjects[i] != null) chipObjects[i].transform.SetPositionAndRotation(centre, Quaternion.LookRotation(centre - (Vector3)head));
             }
-            if (q != shownQ)
+            if (twins.Update(q, still) || q != shownQ)
             {
                 shownQ = q;
-                SetChip(0, q > CurvatureDial.MinQ, "q ", q - 1);
-                SetChip(1, q < CurvatureDial.MaxQ, "q ", q + 1);
-                if (chipTexts[2] != null) chipTexts[2].SetText("cells");
+                SetChip(CurvedWalkTwins.DialLeft, "q ", q - 1);
+                SetChip(CurvedWalkTwins.DialRight, "q ", q + 1);
+                if (chipTexts[CurvedWalkTwins.Mode] != null)
+                {
+                    chipObjects[CurvedWalkTwins.Mode].SetActive(twins.IsLive(CurvedWalkTwins.Mode));
+                    chipTexts[CurvedWalkTwins.Mode].SetText("cells");
+                }
             }
 
             if (readout == null) return;
@@ -126,20 +123,19 @@ namespace Atlas.Spaces.CurvedWalk
             if (show) readout.SetText(text);
         }
 
-        void SetChip(int i, bool live, string prefix, int value)
+        void SetChip(int i, string prefix, int value)
         {
-            if (input != null && gaze[i].IsValid) input.SetGazeTargetEnabled(gaze[i], live);
             if (chipTexts[i] == null) return;
+            bool live = twins.IsLive(i);
             chipObjects[i].SetActive(live);
             if (live) chipTexts[i].SetText(prefix + "{0}", value);
         }
 
         public void Dispose()
         {
+            twins.Dispose();
             for (int i = 0; i < 3; i++)
             {
-                if (input != null && gaze[i].IsValid) input.UnregisterGazeTarget(gaze[i]);
-                gaze[i] = default;
                 Kill(chipObjects[i]); chipObjects[i] = null; chipTexts[i] = null;
             }
             Kill(readoutObject);

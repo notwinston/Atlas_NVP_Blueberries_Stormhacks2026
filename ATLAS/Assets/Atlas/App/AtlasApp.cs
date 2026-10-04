@@ -118,6 +118,8 @@ namespace Atlas.App
         public CommandRouter Commands { get; private set; }
         /// <summary>Return home, next and previous space and the space menu, from the gamepad or the gaze.</summary>
         public SpaceActions SpaceActions { get; private set; }
+        /// <summary>The gaze twins of the four SpaceLab actions: home beacon, previous, next and exhibit sign.</summary>
+        public SpaceSigns Signs { get; private set; }
         public AtlasTelemetry TelemetrySystems { get; private set; }
         public AssetClient Assets { get; private set; }
         public RoomHandOver HandOver { get; private set; }
@@ -309,6 +311,10 @@ namespace Atlas.App
             SourceSwitch.ReplayStarted += OnReplayStarted;
             HandOver.Activated += OnRoomActivated;
             Overlay = DevOverlay.Create(boot.Systems, this);
+            // A click on the overlay's buttons is not the headset lever (the mouse stands in for it in the Editor).
+            DevOverlay overlay = Overlay;
+            var pointerInput = InputService as AtlasInput;
+            if (pointerInput != null) pointerInput.PointerBlocked = p => overlay.Covers(p.x, p.y);
             Rig.ModeChanged += mode => Overlay.Refresh();
             DeclareDevParams();
 
@@ -333,6 +339,11 @@ namespace Atlas.App
             var menu = Menu as Atlas.App.Menu.OnDeviceMenu;
             if (menu != null) SpaceActions.OpenSpaceMenu = menu.OpenOnSpaces;
             Loop.AddAfterFrame(new SpaceActionStep(InputService, SpaceActions));
+            // Their gaze twins, so that every one of them also works with the head alone (rule 5).
+            SpaceSignsView signsView = boot.Hud != null && Pool != null ? SpaceSignsView.Create(boot.Hud, Pool) : null;
+            Signs = new SpaceSigns(InputService, SpaceActions, Spaces, signsView);
+            Loop.AddUpload(Signs);
+            Loop.AddAfterFrame(Signs);
             Loop.AddAfterFrame(Spaces);
 
             // Every property starts from the registry's value; then the app is live.
@@ -449,6 +460,7 @@ namespace Atlas.App
             Safely(() => { if (PerfTour != null) PerfTour.Shutdown(); });
             Safely(() => { if (Onboarding != null) Onboarding.Shutdown(); });
             Safely(() => { if (Menu != null) Menu.Shutdown(); });
+            Safely(() => { if (Signs != null) Signs.Shutdown(); });
             Safely(() => { if (Flow != null) Flow.LeaveHeadset(); });
             Safely(() => { if (Spaces != null) Spaces.Shutdown(); });
             Safely(() => { if (TelemetrySystems != null) TelemetrySystems.Shutdown(); });

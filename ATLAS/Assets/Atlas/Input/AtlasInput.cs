@@ -18,6 +18,7 @@ namespace Atlas.Input
         private readonly GazeReticle _reticle;
         private RawInput _raw;
         private WalkerInput _walker;
+        private Func<Vector2, bool> _pointerBlocked;
         private bool _disposed;
 
         private AtlasInput(Transform hud, Material reticleMaterial)
@@ -45,6 +46,21 @@ namespace Atlas.Input
 
         /// <summary>The gaze target registry, for callers that work in Unity.Mathematics types.</summary>
         public GazeRegistry Targets => _core.Targets;
+
+        /// <summary>
+        /// A press that begins on a screen point (pixels from the bottom left) this returns true for is not the
+        /// headset lever: the Editor's development overlay sits there, and a click on its buttons must not fire
+        /// the gaze target under the reticle. Null: nothing is blocked. Set once; called once per press.
+        /// </summary>
+        public Func<Vector2, bool> PointerBlocked
+        {
+            get => _pointerBlocked;
+            set
+            {
+                _pointerBlocked = value;
+                _core.PointerBlocked = value == null ? (Func<float2, bool>)null : p => _pointerBlocked(new Vector2(p.x, p.y));
+            }
+        }
 
         /// <summary>The action map, for inspection.</summary>
         public AtlasActionMap Actions => _actions;

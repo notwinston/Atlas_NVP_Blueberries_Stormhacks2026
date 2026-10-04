@@ -20,7 +20,7 @@ namespace Atlas.Spaces.CurvedWalk
     /// content's own renderers warped through their pooled materials (CurvedRoomView), never a copy. SpaceLab puts the
     /// kernel back to flat and resets the room's presentation after Exit.
     /// </remarks>
-    public sealed class CurvedWalkSpace : MonoBehaviour, ISpaceModule, IUploadStep, ISpaceWorld
+    public sealed class CurvedWalkSpace : MonoBehaviour, ISpaceModule, IUploadStep, ISpaceWorld, ISpaceStateReader
     {
         readonly CurvedWalkCore core = new CurvedWalkCore();
         MaterialPool pool;
@@ -75,7 +75,7 @@ namespace Atlas.Spaces.CurvedWalk
             AtlasServices.TryGet(out host);
             AtlasServices.TryGet(out input);
             AtlasServices.TryGet(out pool);     // no look in this build: nothing to draw with
-            AtlasServices.TryGet(out kernel);   // none on the Station: its kernel cannot follow a curved walker yet
+            AtlasServices.TryGet(out kernel);   // on the Station the same kernel, set from the State by the Spectator's loop
             if (host != null)
             {
                 core.RequestSwitch = host.RequestSwitch;
@@ -191,7 +191,7 @@ namespace Atlas.Spaces.CurvedWalk
                 markers.Visible = core.Walk.Armed;
                 markers.Upload(core.Walk, core.TileZeroInCurrent, u, kappa, l, (Vector3)frame.HeadPosition);
             }
-            if (hud != null) hud.Upload(frame.HeadPosition, frame.HeadRotation, core.SelectedQ, core.Walk);
+            if (hud != null) hud.Upload(frame.HeadPosition, frame.HeadRotation, core.SelectedQ, core.Walk, core.LastStill);
         }
 
         // The fog takes the hue of the region the walker stands in (MP §8.5); at K = 0 it is the look's own again.
@@ -252,6 +252,12 @@ namespace Atlas.Spaces.CurvedWalk
         public void WriteState(ref StateMessage state)
         {
             core.WriteState(ref state);
+        }
+
+        /// <summary>The Station's side: from the first State on, this copy follows the kernel and drives nothing.</summary>
+        public void ReadState(in StateMessage state)
+        {
+            core.ReadState(in state);
         }
     }
 }

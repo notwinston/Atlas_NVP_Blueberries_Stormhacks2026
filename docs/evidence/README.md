@@ -7,15 +7,12 @@ The app measures itself. Four scripted runs are built in (`ATLAS/Assets/Atlas/Ap
 
 | Run | `perf.run` | What it does | Lasts |
 |---|---|---|---|
-| Per-space run | `tour` (1) | Loads `budget_room`, pins the Nominal tier, enters every built space in turn (S0, S1 5 × 5, S1 3 × 3 × 3, S5, S6), waits 3 s, measures 30 s each | about 3 min |
-| Soak | `soak` (2) | 15 minutes alternating S1 Glued 5 × 5 and S0 Home every 60 s, ladder automatic, LiDAR depth on | 15 min |
+| Per-space run | `tour` (1) | Loads `budget_room`, pins the Nominal tier, enters every built space in turn (S0, S1 5 × 5, S1 3 × 3 × 3, S2 at q = 5, S3, S4, S5, S6), waits 3 s, measures 30 s each (in S2 the head stands for 5 s first, so the curvature ramp is over before a frame is measured) | about 35 s per row |
+| Soak | `soak` (2) | 15 minutes alternating S1 Glued 5 × 5 and S2 Curved Walk (q = 5) every 60 s, ladder automatic, LiDAR depth on | 15 min |
 | Soak, depth off | `soakNoDepth` (3) | The same with the depth image neither requested nor read, the head from a recorded walk; nobody wears the headset | 15 min |
 | Ladder check | `ladder` (4) | In Home, forces Fair, Serious, Critical, High, Nominal the way the Console does and times each until it is in force | about 20 s |
 
-S2 Curved Walk, S3 Aligned Cells and S4 Small Planet are not in this build (lane B). The tour leaves them
-out and says so in its file. §11.4.1 names S2 Curved Walk and S1 Glued 5 × 5 for the soak: until Curved Walk
-exists the soak alternates S1 Glued 5 × 5 and S0 Home, and writes that as a note. The schedule takes Curved
-Walk back by itself once the space is registered.
+S2 Curved Walk (the {4,5} tiling at ρ = 3, the room as tile zero), S3 Aligned Cells and S4 Small Planet are in the tour; a build that lacks one leaves it out and says so in its file. §11.4.1 names S2 Curved Walk and S1 Glued 5 × 5 for the soak, and the soak alternates those two (Home stands in for a space the build lacks, and the file says so). In Curved Walk the soak also stands for 5 s after entering.
 
 ## Before a run that counts
 
@@ -133,18 +130,18 @@ The measured values replace the planning figures of §8.5.
 
 | Metric | Must | S0 Home | S1 Glued 5x5 | S1 Glued 3x3x3 | S2 Curved Walk | S3 Aligned Cells | S4 Small Planet | S5 Impossible Rooms | S6 Slicer |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Frame time p50 / p95 / p99 (ms) | ≤ 16.7 / 20 / 33.3 |  |  |  | not built | not built | not built |  |  |
-| Frames over 17.2 / 33.8 ms (%) | ≤ 5 / 0.5 |  |  |  | not built | not built | not built |  |  |
-| Draw calls, both eyes | ≤ 300 |  |  |  | not built | not built | not built |  |  |
-| Set-pass calls | ≤ 60 |  |  |  | not built | not built | not built |  |  |
-| Triangles, both eyes | ≤ 500k |  |  |  | not built | not built | not built |  |  |
-| CPU main / render p95 (ms) | ≤ 8 / 6 |  |  |  | not built | not built | not built |  |  |
-| GPU p95, cold (ms) | ≤ 9 |  |  |  | not built | not built | not built |  |  |
-| Resident memory (MB) | ≤ 1536 (1.5 GB) |  |  |  | not built | not built | not built |  |  |
-| Managed allocation per frame (B) | ≤ 1024 |  |  |  | not built | not built | not built |  |  |
-| Thermal state, highest | Nominal (cold) |  |  |  | not built | not built | not built |  |  |
-| Frames measured |  |  |  |  | not built | not built | not built |  |  |
-| Must column |  |  |  |  | not built | not built | not built |  |  |
+| Frame time p50 / p95 / p99 (ms) | ≤ 16.7 / 20 / 33.3 |  |  |  |  |  |  |  |  |
+| Frames over 17.2 / 33.8 ms (%) | ≤ 5 / 0.5 |  |  |  |  |  |  |  |  |
+| Draw calls, both eyes | ≤ 300 |  |  |  |  |  |  |  |  |
+| Set-pass calls | ≤ 60 |  |  |  |  |  |  |  |  |
+| Triangles, both eyes | ≤ 500k |  |  |  |  |  |  |  |  |
+| CPU main / render p95 (ms) | ≤ 8 / 6 |  |  |  |  |  |  |  |  |
+| GPU p95, cold (ms) | ≤ 9 |  |  |  |  |  |  |  |  |
+| Resident memory (MB) | ≤ 1536 (1.5 GB) |  |  |  |  |  |  |  |  |
+| Managed allocation per frame (B) | ≤ 1024 |  |  |  |  |  |  |  |  |
+| Thermal state, highest | Nominal (cold) |  |  |  |  |  |  |  |  |
+| Frames measured |  |  |  |  |  |  |  |  |  |
+| Must column |  |  |  |  |  |  |  |  |  |
 
 The soak (§11.4.1), phone A, `budget_room`:
 

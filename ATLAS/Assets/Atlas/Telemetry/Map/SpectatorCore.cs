@@ -37,6 +37,9 @@ namespace Atlas.Telemetry
         public const double StaleSeconds = 2.0;
         /// <summary>A room that could not be fetched, or did not match, is asked for again this often.</summary>
         public const double RefetchSeconds = 2.0;
+        /// <summary>A generated world that differs from the phone's for this long is not shown. Shorter than that
+        /// it is the phone's world event and its State arriving a frame apart.</summary>
+        public const double DisagreeSeconds = 0.5;
         /// <summary>The world generator's seed and version in this build, as the phone hashes them (lane D contract, section 2.5).</summary>
         public const int WorldSeed = 0, GeneratorVersion = 1;
 
@@ -62,6 +65,10 @@ namespace Atlas.Telemetry
         bool _wantWorld;
         int _wantQ, _wantLMm, _wantGenVer;
         long _wantSeed;
+        string _wantContent = string.Empty;
+        // The generated world of the entered module against the phone's.
+        double _disagreeSince = double.NegativeInfinity, _refusedAt = double.NegativeInfinity;
+        bool _disagrees, _worldRefused;
         bool _hasOutline;
         bool _wantDirty;
 
@@ -114,6 +121,17 @@ namespace Atlas.Telemetry
         public int ParamsApplied { get; private set; }
         /// <summary>Room searches begun.</summary>
         public int RoomRequests { get; private set; }
+
+        /// <summary>
+        /// The tiling and the length scale the phone named for its world in a space: q and the dial's target L
+        /// (or R) in metres. False when its last world event was for another space or named neither.
+        /// </summary>
+        public bool TryGetWorld(SpaceId space, out int q, out double metresPerUnit)
+        {
+            q = _wantQ;
+            metresPerUnit = _wantLMm / 1000.0;
+            return _wantWorld && _wantSpace == (int)space;
+        }
 
         // ---- the link ------------------------------------------------------------------------------------------
 
@@ -216,6 +234,9 @@ namespace Atlas.Telemetry
                 _wantGenVer = data.GetInt("genVer", GeneratorVersion);
                 _wantLMm = data.GetInt("lMm", 0);
             }
+            // What the phone's generator made (WorldGenerator.WorldHash); the same module makes it again here.
+            _wantContent = data.GetString("genHash", null) ?? string.Empty;
+            _worldRefused = false;
         }
 
         /// <summary>The phone's room outline. The message object is the link's own: it is copied.</summary>
@@ -280,7 +301,7 @@ namespace Atlas.Telemetry
 
             StepRoom(now);
             bool live = _hasState && now - _lastStateAt <= StaleSeconds;
-            SpectatorBanner space = StepSpace();
+            SpectatorBanner space = StepSpace(now);
 
             // The first thing that is wrong is the one worth reading.
             if (!linkUp) Banner = SpectatorBanner.NoHub;
@@ -383,7 +404,7 @@ namespace Atlas.Telemetry
             return string.Equals(own, _wantHash, StringComparison.Ordinal);
         }
 
-        SpectatorBanner StepSpace()
+        SpectatorBanner StepSpace(double now)
         {
             if (!_roomOk)
             {
@@ -399,9 +420,45 @@ namespace Atlas.Telemetry
                 return SpectatorBanner.NoSpace;
             }
             var target = (SpaceId)id;
-            if (_host.HasSpace && _host.Current == target) return SpectatorBanner.None;
-            if (_host.RequestSwitch(target)) return SpectatorBanner.None;
-            return _host.HasSpace && _host.Current == target ? SpectatorBanner.None : SpectatorBanner.SpaceMissing;
+            // A world that was generated differently here is tried again as a room is: every two seconds.
+            if (_worldRefused && now - _refusedAt < RefetchSeconds) return SpectatorBanner.WorldMismatch;
+            _worldRefused = false;
+            if (!_host.HasSpace || _host.Current != target)
+            {
+                _disagrees = false;
+                if (!_host.RequestSwitch(target))
+                    return _host.HasSpace && _host.Current == target ? SpectatorBanner.None : SpectatorBanner.SpaceMissing;
+            }
+            if (GeneratorAgrees())
+            {
+                _disagrees = false;
+                return SpectatorBanner.None;
+            }
+            if (!_disagrees)
+            {
+                _disagrees = true;
+                _disagreeSince = now;
+            }
+            if (now - _disagreeSince < DisagreeSeconds) return SpectatorBanner.None;
+            // The same room and another generated world: not the walker's world, so it is not shown.
+            _disagrees = false;
+            _worldRefused = true;
+            _refusedAt = now;
+            _host.Leave();
+            return SpectatorBanner.WorldMismatch;
+        }
+
+        // The second half of the world check (section 7.3.1): the entered module generates its world itself, from
+        // the room held here and the parameters it was sent, and what it made must be what the phone named: the
+        // seed, the generator's version and, where both report one, the hash of the generated content.
+        bool GeneratorAgrees()
+        {
+            var own = _host.Module as ISpaceWorld;
+            if (own == null || !_wantWorld || !_host.HasSpace || _wantSpace != (int)_host.Current) return true;
+            if (own.WorldSeed != _wantSeed || own.GeneratorVersion != _wantGenVer) return false;
+            string content = own.ContentHash;
+            return string.IsNullOrEmpty(content) || _wantContent.Length == 0
+                || string.Equals(content, _wantContent, StringComparison.Ordinal);
         }
 
         /// <summary>The words of a banner, for the Station's panel.</summary>

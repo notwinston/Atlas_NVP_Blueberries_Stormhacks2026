@@ -41,6 +41,10 @@ namespace Atlas.Spaces.CurvedWalk
         readonly List<VisibleTile> visible = new List<VisibleTile>(2048);
         LapEvent lastEvent;
         Iso2 f0 = Iso2.Identity;
+        // The Station's copy (ISpaceStateReader): the phone's State sets the kernel and the dial; nothing is driven here.
+        bool remote;
+        int remoteQ;
+        TileId remoteTile;
 
         /// <summary>ISpaceHost.RequestSwitch, set by the module. Null: requests go nowhere.</summary>
         public Func<SpaceId, bool> RequestSwitch { get; set; }
@@ -65,6 +69,7 @@ namespace Atlas.Spaces.CurvedWalk
         public double RoomRadiusM { get; private set; }
         public double SideM => s;
         public bool Entered => entered;
+        public bool Remote => remote;
         public bool RegistrationPending => pending;
         public RoomModel Room => room;
         public ParamRegistry Registry => registry;
@@ -143,6 +148,7 @@ namespace Atlas.Spaces.CurvedWalk
             LastRegistrationErrorM = 0; Reregistrations = 0; lastEvent = LapEvent.None;
             modeAtEnter = modeEntry != null ? modeEntry.Int : 0;
             Walk.Disarm();
+            remote = false;
             entered = true;
         }
 
@@ -159,7 +165,7 @@ namespace Atlas.Spaces.CurvedWalk
 
         public void Exit()
         {
-            entered = false; pending = false; hadCurvature = false;
+            entered = false; pending = false; hadCurvature = false; remote = false;
             Walk.Disarm();
             TileZeroFound = false; lastEvent = LapEvent.None;
             kernel = null;   // SpaceLab puts it back to flat
@@ -180,6 +186,7 @@ namespace Atlas.Spaces.CurvedWalk
         public void Tick(in FrameContext f, in CurvedWalkInput input)
         {
             if (!entered) return;
+            if (remote) { Follow(); return; }
             double2 head = new double2(f.HeadPosition.x, f.HeadPosition.z);
             if (pending) Register(head);
             LastStill = kernel.Still;
@@ -198,6 +205,37 @@ namespace Atlas.Spaces.CurvedWalk
             SelectedQ = dial.Q;
             ModeSwitch(input.ModeToggle);
             WalkReadout.Emit(log, Walk, lastEvent);
+            lastEvent = LapEvent.None;
+        }
+
+        /// <summary>The Station's side of WriteState. The Spectator's loop has put the kernel on the State's tiling, curvature
+        /// and pose before this; from here on this copy reads the kernel and drives nothing. A State of another space is ignored.</summary>
+        public void ReadState(in StateMessage st)
+        {
+            if (!entered || st.SpaceId != (byte)SpaceId.CurvedWalk) return;
+            float q = st.GetParam(StateQ);
+            remoteQ = q >= CurvatureDial.MinQ && q <= CurvatureDial.MaxQ ? (int)q : SelectedQ;
+            remote = true;
+            pending = false;
+        }
+
+        // Step 5 on the Station: no curvature control, no dial input, no mode switch and no walk.* events. The world follows
+        // the kernel's tiling as Control would have swapped it, at K = 0 for a comfort-floor change; the walker never stands
+        // as far as the Station can tell, so its lap does not advance.
+        void Follow()
+        {
+            dial.Set(remoteQ); SelectedQ = remoteQ;
+            LastStill = false;
+            WalkerPose pose = kernel.Pose;
+            if (!pose.Tile.Equals(remoteTile)) { remoteTile = pose.Tile; f0Valid = false; }
+            if (kernel.CurvatureNow == 0) strong = CurvedDialParams.Strong(strongEntry);
+            if (kernel.Q == 6)
+            {
+                if (World != null) { World = null; ContentHash = ""; WorldRevision++; }
+            }
+            else if (kernel.Q == 5 && (World == null || Footprint.L != LengthScale(5))) BuildWorld();
+            UpdateTileZero();
+            ArmAndUpdateWalk();
             lastEvent = LapEvent.None;
         }
 

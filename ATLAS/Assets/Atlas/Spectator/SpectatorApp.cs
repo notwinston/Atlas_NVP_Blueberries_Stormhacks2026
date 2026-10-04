@@ -73,9 +73,12 @@ namespace Atlas.Spectator
             Pool = MaterialPool.CreateDefault(PoolCapacity);
             AtlasServices.Register(Pool);
 
-            // The kernel (the flat stub in this build). It is placed from the State and never stepped.
-            WalkerKernel = new FlatWalkerKernel();
-            AtlasServices.Register(WalkerKernel);
+            // The kernel, the same as the phone's: flat, the two hyperbolic tilings and the sphere. The loop sets
+            // its tiling, curvature and pose from each State; it is never stepped.
+            var kernel = new HolonomyWalkerKernel();
+            WalkerKernel = kernel;
+            AtlasServices.Register<IWalkerKernel>(kernel);
+            AtlasServices.Register<IDialKernel>(kernel);
 
             // The space host, the room source, the mapping from the link, and the frame.
             Host = new SpectatorHost(Registry, WalkerKernel)

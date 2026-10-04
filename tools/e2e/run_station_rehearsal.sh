@@ -118,15 +118,15 @@ PHONE_PID=$!
 sleep 2.2        # two more Telemetry rows, so perf.csv has something to check
 stop "$PHONE_PID" "ReplayPhone"; PHONE_PID=""
 received="$(grep -c '^command: \|command: ' "$WORK/phone-live.out" || true)"
-[ "${received:-0}" -ge 8 ] && echo "  ok    ReplayPhone walked until it was stopped and answered $received commands" \
-    || { tail -5 "$WORK/phone-live.out"; fail "ReplayPhone answered ${received:-0} commands, 8 were sent"; }
+[ "${received:-0}" -ge 11 ] && echo "  ok    ReplayPhone walked until it was stopped and answered $received commands" \
+    || { tail -5 "$WORK/phone-live.out"; fail "ReplayPhone answered ${received:-0} commands, 11 were sent"; }
 LIVE_SESSION="$(cat "$WORK/live.session" 2>/dev/null || true)"
 SESSIONS=()
 [ -n "$LIVE_SESSION" ] && SESSIONS+=(--session "$LIVE_SESSION")
 
 # ---- 4  the recorded walks, replayed ----------------------------------------------------------------------
 say "Replay the recorded walks of /recordings through ReplayPhone"
-for spec in "walk_lap_sample_3x3 4" "walk_wall_approach 1" "walk_jump_and_loss 1"; do
+for spec in "walk_lap_sample_3x3 4" "walk_lap5_3x3 4" "walk_wall_approach 1" "walk_jump_and_loss 1"; do
     set -- $spec
     walk="$REPO/recordings/$1.poselog"
     "$PY" "$HERE/station_rehearsal.py" record --walk "$walk" --out "$WORK/$1.state.bin" | sed 's/^/  /' || { fail "$1 could not be recorded"; continue; }

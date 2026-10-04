@@ -109,7 +109,8 @@ namespace Atlas.Telemetry.Tests
         sealed class Rig
         {
             public readonly ParamRegistry Registry = new ParamRegistry();
-            public readonly FlatWalkerKernel Kernel = new FlatWalkerKernel();
+            // The Station's kernel is the phone's (SpectatorApp): flat until a State says otherwise.
+            public readonly HolonomyWalkerKernel Kernel = new HolonomyWalkerKernel();
             public readonly FakeRooms Rooms = new FakeRooms();
             public readonly List<string> Calls = new List<string>();
             public readonly List<FakeModule> Modules = new List<FakeModule>();
@@ -482,32 +483,361 @@ namespace Atlas.Telemetry.Tests
             Assert.That(rig.Modules.Count, Is.EqualTo(made), "a broken space is not made again on every frame");
         }
 
-        [Test]
-        public void Spectator_places_the_walker_from_the_tile_and_transform_of_a_curved_space()
+        // ---- curved spaces: the phone's side of the wire ------------------------------------------------------------
+
+        const double StepMetres = 0.05;
+
+        /// <summary>A space module with a generated world, as Curved Walk is one.</summary>
+        sealed class FakeWorldModule : ISpaceModule, ISpaceWorld
         {
-            var rig = new Rig();
-            rig.World(RoomFixtures.Sample3x3, (int)SpaceId.CurvedWalk);
+            public FakeWorldModule(SpaceId id) { Id = id; }
+            public SpaceId Id { get; private set; }
+            public bool Registered { get { return false; } }
+            public long WorldSeed { get; set; }
+            public int GeneratorVersion { get; set; }
+            public string ContentHash { get; set; }
+            public void Configure(RoomModel room, ParamRegistry registry) { }
+            public void Enter(in WalkerPose start) { }
+            public void Tick(in FrameContext frame) { }
+            public void Exit() { }
+            public void WriteState(ref StateMessage state) { }
+        }
+
+        // The State as the phone fills it for a space that walks the kernel (FrameLoopCore.FillState: the tile's
+        // six words, Local row-major, p[0] = metres per unit, p[1..2] from rho), then through the wire's bytes.
+        static StateMessage Sent(IDialKernel phone, byte space, double2 head, double time)
+        {
             StateMessage s = StateMessage.Identity;
-            s.SpaceId = (byte)SpaceId.CurvedWalk;
+            s.SpaceId = space;
+            s.SceneId = space;
+            s.WorldVer = 1;
+            s.TimeUs = (long)(time * 1e6);
+            s.HeadPosX = (float)head.x;
+            s.HeadPosY = 1.6f;
+            s.HeadPosZ = (float)head.y;
+            WalkerPose pose = phone.Pose;
+            TileId tile = pose.Tile;
+            s.SetTile(tile.Xu, tile.Xv, tile.Yu, tile.Yv, tile.Tu, tile.Tv);
+            Span<double> m = stackalloc double[9];
+            pose.Local.CopyTo(m);
+            for (int i = 0; i < 9; i++) s.SetXform(i, m[i]);
+            float rho = (float)phone.CullRho;
+            s.P0 = (float)phone.MetresPerUnit;
+            s.P1 = rho - 1f;
+            s.P2 = rho;
+            // What the space adds (CurvedWalkCore.WriteState, SmallPlanetCore.WriteState): the dial and the curvature.
+            s.P3 = phone.Q;
+            s.P4 = (float)phone.CurvatureNow;
+
+            var bytes = new byte[StateMessage.Size];
+            Assert.That(s.WriteTo(bytes, 0), Is.EqualTo(StateMessage.Size));
+            StateMessage received = default(StateMessage);
+            Assert.That(received.ReadFrom(bytes, 0, bytes.Length), Is.True);
+            return received;
+        }
+
+        // The world event as the link driver logs it for a space on the phone's kernel (LinkPump.ComputeWorldHash).
+        static string SendWorld(Rig rig, RoomModel room, int space, IDialKernel phone, long seed, string content = null)
+        {
+            int q = phone.Graph.Q, lMm = WorldHash.Millimetres(phone.ConfiguredMetresPerUnit);
+            string geometry = RoomModelJson.GeometryHash(room);
+            string hash = WorldHash.Compute(space, q, seed, 1, geometry, lMm);
+            JsonValue data = JsonValue.Object().Set("worldVer", 1).Set("worldHash", hash).Set("space", space)
+                .Set("roomId", RoomFixtures.Sample3x3).Set("geomHash", geometry)
+                .Set("q", q).Set("seed", seed).Set("genVer", 1).Set("lMm", lMm);
+            if (content != null) data.Set("genHash", content);
+            rig.Core.OnEvent(new EventMessage(1, "S" + space, LinkEvents.World, data));
+            return hash;
+        }
+
+        static void AssertSamePose(WalkerPose station, WalkerPose phone, string where)
+        {
+            Assert.That(station.Tile, Is.EqualTo(phone.Tile), where + ": tile");
+            Span<double> a = stackalloc double[9], b = stackalloc double[9];
+            station.Local.CopyTo(a);
+            phone.Local.CopyTo(b);
+            for (int i = 0; i < 9; i++) Assert.That(a[i], Is.EqualTo(b[i]).Within(1e-9), where + ": xform " + i);
+            Assert.That(station.Local.Kappa, Is.EqualTo(phone.Local.Kappa), where + ": kappa");
+        }
+
+        [TestCase(5)]
+        [TestCase(6)]
+        public void Spectator_follows_a_lap_walked_in_curved_walk_from_the_bytes_of_its_states(int q)
+        {
+            RoomModel room = RoomFixtures.LoadFromProject(RoomFixtures.Sample3x3);
+            double l = room.Curvature.ForDial(q, false), side = room.LapSide;
+            const byte space = (byte)SpaceId.CurvedWalk;
+
+            // The phone: Curved Walk puts the kernel on the dial's tiling, registers the walker flat under the
+            // head and ramps the curvature in while the walker stands (CurvedWalkCore.Enter, Control).
+            IDialKernel phone = new HolonomyWalkerKernel();
+            phone.Configure(KernelConfig.Curved(q, l));
+            var head = new double2(-0.5 * side, -0.5 * side);
+            phone.ResetToFloorFlat(head);
+            phone.CullRho = 2.5;
+
+            var rig = new Rig();
+            string hash = SendWorld(rig, room, space, phone, 1);
+            double time = 0.0;
+            var tiles = new List<TileId>();
+            Action send = () =>
+            {
+                StateMessage s = Sent(phone, space, head, time);
+                rig.Core.OnState(in s);
+                rig.Frame();
+                WalkerPose pose = phone.Pose;
+                if (tiles.Count == 0 || tiles[tiles.Count - 1] != pose.Tile) tiles.Add(pose.Tile);
+                AssertSamePose(rig.Kernel.Pose, pose, "t = " + time);
+                AssertSamePose(rig.Loop.Current.Walker, pose, "frame, t = " + time);
+            };
+
+            // K = 0: the Station stands in the flat room on the same tiling.
+            send();
+            Assert.That(rig.Kernel.Q, Is.EqualTo(q));
+            Assert.That(rig.Kernel.Kappa, Is.EqualTo(0.0));
+            Assert.That(rig.Kernel.MetresPerUnit, Is.EqualTo(1.0));
+            Assert.That(rig.Host.Current, Is.EqualTo(SpaceId.CurvedWalk));
+            Assert.That(rig.Core.Banner, Is.EqualTo(SpectatorBanner.None));
+
+            // The ramp, four seconds of standing: the Station's curvature and scale are the phone's of each frame.
+            phone.SetCurvatureTarget(Curvature.Hyperbolic, l);
+            bool midRamp = false;
+            for (int i = 0; i < 300; i++)
+            {
+                time += 1.0 / 60.0;
+                phone.Step(head, true, time);
+                send();
+                Assert.That(rig.Kernel.CurvatureNow, Is.EqualTo(phone.CurvatureNow).Within(1e-6 * Math.Abs(phone.CurvatureNow)));
+                Assert.That(rig.Kernel.MetresPerUnit, Is.EqualTo(phone.MetresPerUnit).Within(1e-6 * phone.MetresPerUnit));
+                midRamp |= phone.Ramping && phone.CurvatureNow != 0.0;
+            }
+            Assert.That(midRamp, Is.True, "States were sent from inside the ramp");
+            Assert.That(phone.Ramping, Is.False);
+            Assert.That(rig.Kernel.Kappa, Is.EqualTo(Curvature.Hyperbolic));
+
+            // q sides of the lap square, the lap of Master Plan section 3.3, and then straight out of the room's
+            // tile: the head leaves the room in this test, which a kernel does not mind.
+            double2[] corner =
+            {
+                new double2(-0.5 * side, -0.5 * side), new double2(0.5 * side, -0.5 * side),
+                new double2(0.5 * side, 0.5 * side), new double2(-0.5 * side, 0.5 * side),
+            };
+            for (int k = 1; k <= q + 1; k++)
+            {
+                double2 from = head, to = k <= q ? corner[k % 4] : head + new double2(2.3, 3.1);
+                int steps = (int)Math.Ceiling(math.length(to - from) / StepMetres);
+                for (int i = 1; i <= steps; i++)
+                {
+                    time += 1.0 / 60.0;
+                    head = math.lerp(from, to, (double)i / steps);
+                    phone.Step(head, true, time);
+                    send();
+                }
+            }
+            Assert.That(tiles.Count, Is.GreaterThan(2), "tiles were crossed");
+            Assert.That(phone.Pose.Tile, Is.Not.EqualTo(TileId.Zero));
+
+            // The tile sequence the Station kept is the phone's.
+            FlatTwinTrail trail = rig.Core.Trail;
+            Assert.That(trail.TilesSeen, Is.EqualTo(tiles.Count));
+            int kept = trail.TileCount;
+            for (int k = 0; k < kept; k++) Assert.That(trail.GetTile(k), Is.EqualTo(tiles[tiles.Count - kept + k]), "trail tile " + k);
+
+            // Nothing was integrated here, and the module was handed the placed walker.
+            Assert.That(rig.Kernel.StepCount, Is.EqualTo(0));
+            AssertSamePose(rig.Module.LastFrame.Walker, phone.Pose, "module");
+            Assert.That(rig.Kernel.CullRho, Is.EqualTo(2.5), "rho is the phone's (p[2])");
+            Assert.That(rig.Kernel.Candidates.Count, Is.EqualTo(phone.Candidates.Count));
+
+            // The world hash: the Station's own kernel and room give the phone's.
+            Assert.That(rig.Core.WorldVerified, Is.True);
+            Assert.That(rig.Core.Banner, Is.EqualTo(SpectatorBanner.None));
+            string own = WorldHash.Compute(space, rig.Kernel.Graph.Q, 1, 1, RoomModelJson.GeometryHash(rig.Core.Room),
+                WorldHash.Millimetres(rig.Kernel.ConfiguredMetresPerUnit));
+            Assert.That(own, Is.EqualTo(hash));
+            Assert.That(own, Is.Not.EqualTo(SpectatorTestRooms.HashOf(room, space)), "not the hash of a flat world");
+        }
+
+        [Test]
+        public void Spectator_follows_a_walk_round_the_small_planet_and_goes_back_to_flat()
+        {
+            RoomModel room = RoomFixtures.LoadFromProject(RoomFixtures.Sample3x3);
+            double r = room.Curvature.ForDial(3, false);
+            const byte space = (byte)SpaceId.SmallPlanet;
+            IDialKernel phone = new HolonomyWalkerKernel();
+            phone.Configure(KernelConfig.Curved(3, r));
+            double2 head = double2.zero;
+            phone.ResetToFloor(head);
+
+            var rig = new Rig();
+            SendWorld(rig, room, space, phone, 0);
+            // Once round the planet in a straight line: four faces, and back on face 0.
+            int steps = (int)Math.Ceiling(2.0 * Math.PI * r / StepMetres);
+            var faces = new List<int>();
+            for (int i = 0; i <= steps; i++)
+            {
+                if (i > 0)
+                {
+                    head.x += 2.0 * Math.PI * r / steps;
+                    phone.Step(head, true, i / 60.0);
+                }
+                StateMessage s = Sent(phone, space, head, i / 60.0);
+                rig.Core.OnState(in s);
+                rig.Frame();
+                AssertSamePose(rig.Kernel.Pose, phone.Pose, "step " + i);
+                int face = CubeTiling.FaceOf(phone.Pose.Tile);
+                if (faces.Count == 0 || faces[faces.Count - 1] != face) faces.Add(face);
+            }
+            Assert.That(faces.Count, Is.EqualTo(5), "four faces and the first again");
+            Assert.That(faces[4], Is.EqualTo(0));
+            Assert.That(rig.Kernel.Q, Is.EqualTo(3));
+            Assert.That(rig.Kernel.Kappa, Is.EqualTo(Curvature.Spherical));
+            Assert.That(rig.Kernel.MetresPerUnit, Is.EqualTo((double)(float)r), "_HypL of the Station is the phone's R");
+            Assert.That(rig.Kernel.StepCount, Is.EqualTo(0));
+            Assert.That(rig.Core.Banner, Is.EqualTo(SpectatorBanner.None));
+            Assert.That(rig.Host.Current, Is.EqualTo(SpaceId.SmallPlanet));
+
+            // Home again: the kernel is the flat one of the room, the walker on the floor point under the head.
+            rig.World(RoomFixtures.Sample3x3, (int)SpaceId.Home);
+            rig.State((byte)SpaceId.Home, 0.4f, -0.3f);
+            rig.Frame();
+            Assert.That(rig.Kernel.Q, Is.EqualTo(4));
+            Assert.That(rig.Kernel.Graph.CentreSpacing, Is.EqualTo((double)room.LapSide).Within(1e-12));
+            WalkerPose flat = rig.Loop.Current.Walker;
+            Assert.That(flat.Tile, Is.EqualTo(FlatTileGraph.Cell(0, 0)));
+            Assert.That(flat.Local.M02, Is.EqualTo(0.4f).Within(1e-6));
+            Assert.That(flat.Local.M12, Is.EqualTo(-0.3f).Within(1e-6));
+        }
+
+        [Test]
+        public void Spectator_keeps_the_kernel_flat_in_aligned_cells()
+        {
+            // S3 walks a tile graph of its own: its State names a {4,5} tile and a quarter-turn, and the frame
+            // loop's kernel stays flat and registered on the phone. So it does here.
+            var rig = new Rig();
+            rig.World(RoomFixtures.Sample3x3, (int)SpaceId.AlignedCells);
+            StateMessage s = StateMessage.Identity;
+            s.SpaceId = (byte)SpaceId.AlignedCells;
             s.HeadPosX = 0.3f;
             s.HeadPosZ = 0.2f;
-            s.SetTile(3, 0, -2, 0, 1, 0);
-            s.SetXform(2, 0.25);
-            s.SetXform(5, -0.5);
+            TileId tile = new TileGraph(5).Neighbour(TileId.Zero, 1);
+            s.SetTile(tile.Xu, tile.Xv, tile.Yu, tile.Yv, tile.Tu, tile.Tv);
+            s.Sheet = 4;
+            s.Xform0 = 0; s.Xform1 = 1; s.Xform3 = -1; s.Xform4 = 0;
             rig.Core.OnState(in s);
             rig.Frame();
+            Assert.That(rig.Host.Current, Is.EqualTo(SpaceId.AlignedCells));
+            Assert.That(rig.Kernel.Q, Is.EqualTo(4));
             WalkerPose pose = rig.Loop.Current.Walker;
-            Assert.That(pose.Tile, Is.EqualTo(FlatTileGraph.Cell(3, -2)));
-            Assert.That(pose.Local.M02, Is.EqualTo(0.25).Within(1e-12));
-            Assert.That(pose.Local.M12, Is.EqualTo(-0.5).Within(1e-12));
-            Assert.That(rig.Kernel.StepCount, Is.EqualTo(0));
+            Assert.That(pose.Tile, Is.EqualTo(FlatTileGraph.Cell(0, 0)));
+            Assert.That(pose.Local.M02, Is.EqualTo(0.3f).Within(1e-6));
+            Assert.That(pose.Local.M12, Is.EqualTo(0.2f).Within(1e-6));
+            Assert.That(rig.Module.LastRead.Sheet, Is.EqualTo(4), "the module reads its own tile from the State");
+        }
 
-            // A broken transform is not handed to the kernel: the walker stands under the head.
-            s.SetXform(0, double.NaN);
-            rig.Core.OnState(in s);
+        [Test]
+        public void Spectator_keeps_the_last_good_place_when_a_curved_state_is_broken()
+        {
+            RoomModel room = RoomFixtures.LoadFromProject(RoomFixtures.Sample3x3);
+            double l = room.Curvature.ForDial(5, false);
+            const byte space = (byte)SpaceId.CurvedWalk;
+            IDialKernel phone = new HolonomyWalkerKernel();
+            phone.Configure(KernelConfig.Curved(5, l));
+            phone.ResetToFloor(double2.zero);
+            var head = new double2(0.0, 0.0);
+            for (int i = 1; i <= 40; i++)
+            {
+                head.x = i * StepMetres;
+                phone.Step(head, true);
+            }
+            Assert.That(phone.Pose.Tile, Is.Not.EqualTo(TileId.Zero));
+
+            var rig = new Rig();
+            SendWorld(rig, room, space, phone, 1);
+
+            // A first State that is no place on the tiling: the walker stands under the head on the flat kernel.
+            StateMessage broken = Sent(phone, space, head, 0.0);
+            broken.SetXform(0, double.NaN);
+            rig.Core.OnState(in broken);
             rig.Frame();
             Assert.That(rig.Loop.Current.Walker.IsValid, Is.True);
-            Assert.That(rig.Loop.Current.Walker.Tile, Is.EqualTo(FlatTileGraph.Cell(0, 0)));
+            Assert.That(rig.Kernel.Q, Is.EqualTo(4));
+
+            StateMessage good = Sent(phone, space, head, 0.1);
+            rig.Core.OnState(in good);
+            rig.Frame();
+            AssertSamePose(rig.Kernel.Pose, phone.Pose, "good");
+
+            // Broken again, and six words that are no tile of {4,5}: the last good place stays, on the same tiling.
+            rig.Core.OnState(in broken);
+            rig.Frame();
+            AssertSamePose(rig.Kernel.Pose, phone.Pose, "after a broken transform");
+            StateMessage wrong = good;
+            wrong.SetTile(7, 3, -2, 5, 1, 9);
+            rig.Core.OnState(in wrong);
+            rig.Frame();
+            AssertSamePose(rig.Kernel.Pose, phone.Pose, "after a foreign tile");
+            Assert.That(rig.Kernel.Q, Is.EqualTo(5));
+            Assert.That(rig.Host.HasSpace, Is.True);
+            Assert.That(rig.Kernel.StepCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void Spectator_shows_no_world_that_its_own_generator_made_differently()
+        {
+            // Master Plan section 7.3.1, test L8: the same room, the same tiling, another generated world.
+            RoomModel room = RoomFixtures.LoadFromProject(RoomFixtures.Sample3x3);
+            const byte space = (byte)SpaceId.CurvedWalk;
+            IDialKernel phone = new HolonomyWalkerKernel();
+            phone.Configure(KernelConfig.Curved(5, room.Curvature.ForDial(5, false)));
+            phone.ResetToFloor(double2.zero);
+
+            var rig = new Rig();
+            var made = new List<FakeWorldModule>();
+            rig.Host.Create = id =>
+            {
+                var module = new FakeWorldModule(id) { WorldSeed = 1, GeneratorVersion = 1, ContentHash = "00000000000000aa" };
+                made.Add(module);
+                return module;
+            };
+            Action frame = () =>
+            {
+                StateMessage s = Sent(phone, space, double2.zero, rig.Now);
+                rig.Core.OnState(in s);
+                rig.Frame();
+            };
+
+            // The phone's generator and this one agree: seed, version and what they made.
+            SendWorld(rig, room, space, phone, 1, "00000000000000aa");
+            for (int i = 0; i < 60; i++) frame();
+            Assert.That(rig.Core.Banner, Is.EqualTo(SpectatorBanner.None));
+            Assert.That(rig.Host.HasSpace, Is.True);
+            Assert.That(rig.Core.WorldVerified, Is.True);
+
+            // The phone now names another seed. Its hash is the hash of that seed, so the room still verifies;
+            // what this build would generate is not the walker's world.
+            SendWorld(rig, room, space, phone, 2, "00000000000000aa");
+            frame();
+            Assert.That(rig.Host.HasSpace, Is.True, "an event and a State may be a frame apart");
+            for (int i = 0; i < 60; i++) frame();
+            Assert.That(rig.Core.Banner, Is.EqualTo(SpectatorBanner.WorldMismatch));
+            Assert.That(rig.Host.HasSpace, Is.False);
+            Assert.That(rig.Host.Room, Is.Not.Null, "the room itself was not wrong");
+            int entered = made.Count;
+            for (int i = 0; i < 30; i++) frame();
+            Assert.That(made.Count, Is.EqualTo(entered), "not entered again on every frame");
+
+            // The same seed and another content (another footprint, another L): the same verdict.
+            SendWorld(rig, room, space, phone, 1, "00000000000000bb");
+            for (int i = 0; i < 60; i++) frame();
+            Assert.That(rig.Core.Banner, Is.EqualTo(SpectatorBanner.WorldMismatch));
+            Assert.That(rig.Host.HasSpace, Is.False);
+
+            // The phone's world is this one again.
+            SendWorld(rig, room, space, phone, 1, "00000000000000aa");
+            for (int i = 0; i < 10; i++) frame();
+            Assert.That(rig.Core.Banner, Is.EqualTo(SpectatorBanner.None));
+            Assert.That(rig.Host.Current, Is.EqualTo(SpaceId.CurvedWalk));
         }
 
         // ---- the room source --------------------------------------------------------------------------------------

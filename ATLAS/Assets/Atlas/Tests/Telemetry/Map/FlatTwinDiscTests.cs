@@ -511,5 +511,135 @@ namespace Atlas.Telemetry.Tests
             Assert.That(ms, Is.LessThan(5.0));
             AssertInsideDisc(twin, "q = " + q);
         }
+
+        // ---- the one call of the headset and the Station (FlatTwinBuilder.Build) --------------------------------
+
+        [TestCase(5)]
+        [TestCase(6)]
+        public void The_builder_draws_curved_walk_as_the_disc_once_the_curvature_is_on(int q)
+        {
+            RoomModel room = RoomFixtures.LoadFromProject(RoomFixtures.Sample3x3);
+            HolonomyWalkerKernel kernel = Kernel(q);
+            var trail = new FlatTwinTrail();
+            double2 at = double2.zero;
+            StateMessage state = default(StateMessage);
+            int tiles = 0;
+            TileId last = default(TileId);
+            // Out of the room's tile and round a corner: every State goes to the trail, as on both sides of the link.
+            double2[] path = { new double2(2.6, 0.0), new double2(2.6, 2.2), new double2(0.4, 2.2) };
+            for (int leg = 0; leg < path.Length; leg++)
+            {
+                double2 from = at;
+                int steps = (int)Math.Ceiling(math.length(path[leg] - from) / StepMetres);
+                for (int i = 1; i <= steps; i++)
+                {
+                    at = math.lerp(from, path[leg], (double)i / steps);
+                    kernel.Step(at, true);
+                    state = StateOf(kernel, (byte)SpaceId.CurvedWalk, at, 0.4f);
+                    state.P3 = q;
+                    state.P4 = (float)kernel.CurvatureNow;
+                    trail.Add(in state);
+                    if (tiles == 0 || last != kernel.Pose.Tile) { tiles++; last = kernel.Pose.Tile; }
+                }
+            }
+            Assert.That(tiles, Is.GreaterThan(2));
+
+            var twin = new FlatTwin();
+            var disc = new FlatTwin();
+            FlatTwinBuilder.Build(twin, room, kernel, in state, trail);
+            // The disc itself, at the scale the State names: p[0] is a float, and it is the phone's of that frame.
+            WalkerPose pose = kernel.Pose;
+            Assert.That(FlatTwinDisc.Draw(disc, kernel.Graph, in pose, kernel.Candidates, state.P0, room, trail,
+                                          FlatTwinBuilder.Heading(in state)), Is.True);
+            AssertSame(disc, twin, "q = " + q);
+            Assert.That(twin.ClipToDisc, Is.True);
+            Assert.That(twin.HalfExtent, Is.EqualTo(FlatTwinDisc.ViewHalfExtent));
+            AssertInsideDisc(twin, "q = " + q);
+            // The walker's tile, the walked tiles joined in order, and one walker.
+            Assert.That(twin.CountOf(FlatTwinShape.Line, FlatTwinInk.Highlight), Is.EqualTo(FlatTwinDisc.LinesPerTile));
+            Assert.That(trail.TilesSeen, Is.EqualTo(tiles), "the trail holds the walked tile sequence");
+            Assert.That(twin.CountOf(FlatTwinShape.Line, FlatTwinInk.Trail), Is.EqualTo(tiles - 1));
+            Assert.That(twin.CountOf(FlatTwinShape.Arrow, FlatTwinInk.Walker), Is.EqualTo(1));
+            float x, z;
+            Assert.That(twin.GetLabel(0, out x, out z), Is.EqualTo(q == 5 ? "{4,5}" : "{4,6}"));
+        }
+
+        [Test]
+        public void The_builder_draws_curved_walk_as_the_room_while_the_curvature_is_off()
+        {
+            // Curved Walk begins in the flat room on tile zero (K = 0): the map is the floor plan of Home.
+            RoomModel room = RoomFixtures.LoadFromProject(RoomFixtures.Sample3x3);
+            var kernel = new HolonomyWalkerKernel();
+            kernel.Configure(KernelConfig.Curved(5, L));
+            var head = new double2(0.4, -0.3);
+            kernel.ResetToFloorFlat(head);
+            StateMessage state = StateOf(kernel, (byte)SpaceId.CurvedWalk, head, 0f);
+            state.P3 = 5f;
+            state.P4 = 0f;
+
+            var twin = new FlatTwin();
+            FlatTwinBuilder.Build(twin, room, kernel, in state, null);
+            StateMessage home = state;
+            home.SpaceId = (byte)SpaceId.Home;
+            var plan = new FlatTwin();
+            FlatTwinBuilder.Build(plan, room, kernel, in home, null);
+            AssertSame(plan, twin, "K = 0");
+            Assert.That(twin.ClipToDisc, Is.False);
+            FlatTwinItem walker;
+            Assert.That(twin.TryFind(FlatTwinShape.Arrow, FlatTwinInk.Walker, out walker), Is.True);
+            Assert.That(walker.A, Is.EqualTo(0.4f));
+            Assert.That(walker.B, Is.EqualTo(-0.3f));
+        }
+
+        [Test]
+        public void The_builder_draws_aligned_cells_as_the_disc_round_the_cells_tile()
+        {
+            // S3 on the phone: the frame loop's kernel is flat, the tile is the module's own {4,5} tile, the
+            // transform its quarter-turn and the sheet the cell (AlignedCellsCore.WriteState).
+            var graph = new TileGraph(5);
+            var kernel = new HolonomyWalkerKernel();
+            Assert.That(kernel.Graph.Q, Is.EqualTo(4));
+            var trail = new FlatTwinTrail();
+            StateMessage state = StateMessage.Identity;
+            state.SpaceId = (byte)SpaceId.AlignedCells;
+            state.SceneId = state.SpaceId;
+            state.HeadPosX = 0.2f;
+            state.HeadPosZ = 0.1f;
+            state.Xform0 = 0; state.Xform1 = 1; state.Xform3 = -1; state.Xform4 = 0;      // a quarter-turn
+            TileId tile = TileId.Zero;
+            int[] edges = { 0, 1, 0, 3 };
+            for (int k = 0; k <= edges.Length; k++)
+            {
+                if (k > 0) tile = graph.Neighbour(tile, edges[k - 1]);
+                state.SetTile(tile.Xu, tile.Xv, tile.Yu, tile.Yv, tile.Tu, tile.Tv);
+                state.Sheet = (short)k;
+                trail.Add(in state);
+            }
+
+            var twin = new FlatTwin();
+            FlatTwinBuilder.Build(twin, RoomFixtures.LoadFromProject(RoomFixtures.Sample3x3), kernel, in state, trail);
+            Assert.That(twin.ClipToDisc, Is.True);
+            AssertInsideDisc(twin, "S3");
+            Assert.That(twin.CountOf(FlatTwinShape.Line, FlatTwinInk.Highlight), Is.EqualTo(FlatTwinDisc.LinesPerTile));
+            Assert.That(twin.CountOf(FlatTwinShape.Line, FlatTwinInk.Trail), Is.EqualTo(edges.Length));
+            // Tile zero is two steps of the graph away: on the map, as the room's anchor, without the room on it.
+            Assert.That(twin.CountOf(FlatTwinShape.Dot, FlatTwinInk.Outline), Is.EqualTo(1));
+            Assert.That(twin.CountOf(FlatTwinShape.Line, FlatTwinInk.Outline), Is.EqualTo(0));
+            // The walker stands on the centre of the cell's tile.
+            FlatTwinItem walker;
+            Assert.That(twin.TryFind(FlatTwinShape.Arrow, FlatTwinInk.Walker, out walker), Is.True);
+            Assert.That(walker.A, Is.EqualTo(0f));
+            Assert.That(walker.B, Is.EqualTo(0f));
+            // The same picture without any kernel: the map needs none in S3.
+            var bare = new FlatTwin();
+            FlatTwinBuilder.Build(bare, null, null, in state, trail);
+            AssertSame(twin, bare, "no kernel");
+
+            // Six words that are no tile: the bare square, not an exception.
+            state.SetTile(7, 3, -2, 5, 1, 9);
+            FlatTwinBuilder.Build(twin, null, kernel, in state, null);
+            Assert.That(twin.ClipToDisc, Is.False);
+            Assert.That(twin.LabelCount, Is.EqualTo(1));
+        }
     }
 }

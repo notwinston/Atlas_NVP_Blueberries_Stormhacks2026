@@ -168,15 +168,55 @@ export function parseTile(text) {
   return out;
 }
 
+// State.p[] of the curved spaces (lane B's modules write them): Curved Walk sends the dial in p[3] and the
+// signed curvature of the frame, 1/m^2, in p[4], with the metres per unit of the frame in p[0]; Small Planet
+// sends its radius in p[0]; Aligned Cells sends its columns and rows in p[4] and p[5].
+function param(p, i) {
+  const v = Array.isArray(p) ? Number(p[i]) : NaN;
+  return Number.isFinite(v) ? v : NaN;
+}
+
 /**
- * The walker's cell as the map names it for a space (StateMessage: S1 cell (i, j, k), S4 face index, S5 room
- * id; a sheet where the space has one).
+ * The curvature dial of a curved space as the Console words it: the tiling's q and the length scale the
+ * walker is drawn with. Empty for a flat space and before the first State of the space.
  */
-export function cellLabel(space, tileText, sheet) {
+export function dialLabel(space, p) {
+  if (space === 2) {
+    const q = Math.round(param(p, 3));
+    if (!(q >= 3 && q <= 6)) return '';
+    const l = param(p, 0);
+    // Until the ramp begins, and after it has come back down, the walker stands in the flat room.
+    if (!(param(p, 4) < 0) || !(l > 0)) return 'q = ' + q + ' · flat';
+    return 'q = ' + q + ' · L = ' + l.toFixed(2) + ' m';
+  }
+  if (space === 4) {
+    const r = param(p, 0);
+    return r > 0 ? 'q = 3 · R = ' + r.toFixed(2) + ' m' : '';
+  }
+  return '';
+}
+
+/**
+ * The walker's cell as the map names it for a space (StateMessage: S1 cell (i, j, k), S2 the tile of the
+ * {4,q} tiling, S3 the floor cell and the tile it shows, S4 face index, S5 room id; a sheet where the space
+ * has one). p is State.p[] and may be left out.
+ */
+export function cellLabel(space, tileText, sheet, p) {
   const t = parseTile(tileText);
   switch (space) {
     case 0: return 'room';
     case 1: return 'cell (' + t[0] + ', ' + t[1] + ', ' + t[2] + ')';
+    case 2: {
+      const q = Math.round(param(p, 3));
+      const tiling = q === 5 || q === 6 ? '{4,' + q + '} · ' : '';
+      return tiling + 'tile ' + t.join(',') + (sheet ? ' · sheet ' + sheet : '');
+    }
+    case 3: {
+      // The sheet is the cell's index, row by row; with the grid's width it is a column and a row.
+      const columns = Math.round(param(p, 4));
+      const cell = columns > 0 ? '(' + (sheet % columns) + ', ' + Math.floor(sheet / columns) + ')' : String(sheet);
+      return 'cell ' + cell + ' · tile ' + t.join(',');
+    }
     case 4: return 'face ' + t[0];
     case 5: return 'room ' + t[0] + (sheet ? ' · sheet ' + sheet : '');
     case 6: return 'room';

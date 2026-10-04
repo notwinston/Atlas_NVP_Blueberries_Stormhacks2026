@@ -136,6 +136,20 @@ namespace Atlas.Telemetry
             if (module == null) return null;
             state.SpaceId = (byte)host.Current;
             state.WorldVer = host.WorldVersion;
+            // A curved space walks the kernel: its tile, its frame and its scale, as the frame loop writes them
+            // into the State it sends (lane A contract, section 2).
+            ITileGraph graph = _kernel != null ? _kernel.Graph : null;
+            if (graph != null && graph.Q != 4)
+            {
+                WalkerPose pose = _kernel.Pose;
+                TileId tile = pose.Tile;
+                state.SetTile(tile.Xu, tile.Xv, tile.Yu, tile.Yv, tile.Tu, tile.Tv);
+                Iso2 local = pose.Local;
+                state.Xform0 = local.M00; state.Xform1 = local.M01; state.Xform2 = local.M02;
+                state.Xform3 = local.M10; state.Xform4 = local.M11; state.Xform5 = local.M12;
+                state.Xform6 = local.M20; state.Xform7 = local.M21; state.Xform8 = local.M22;
+            }
+            if (_kernel != null) state.P0 = (float)_kernel.MetresPerUnit;
             module.WriteState(ref state);
             return module;
         }

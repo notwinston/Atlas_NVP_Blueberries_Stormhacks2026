@@ -12,7 +12,7 @@ import {
 } from './controls.js';
 import { TelemetryBuffer, parseCsv } from './telemetry.js';
 import { drawLines, drawTimeline } from './charts.js';
-import { Trail, cellLabel, nearestObstacle, relativeSide } from './mapmath.js';
+import { Trail, cellLabel, dialLabel, nearestObstacle, relativeSide } from './mapmath.js';
 import { drawMap } from './mapview.js';
 import { JobList, phaseOf } from './jobs.js';
 import { CommandTracker, comfortScore, requestFor, statusText } from './commands.js';
@@ -173,8 +173,9 @@ function setLocked(locked) {
 
 function renderState(digest) {
   model.digest = digest;
-  $('space-now').textContent = spaceLabel(digest.space);
-  $('cell-now').textContent = cellLabel(digest.space, digest.tile, digest.sheet);
+  const dial = dialLabel(digest.space, digest.p);
+  $('space-now').textContent = spaceLabel(digest.space) + (dial ? ' · ' + dial : '');
+  $('cell-now').textContent = cellLabel(digest.space, digest.tile, digest.sheet, digest.p);
   $('bump-bar').dataset.level = String(digest.bump);
   $('bump-now').textContent = bumpName(digest.bump) + (digest.cue ? ' · cue' : '');
   $('tier-now').textContent = String(digest.tier);
@@ -823,7 +824,7 @@ function paintMap() {
 
   if (d) {
     $('map-space').textContent = spaceLabel(d.space);
-    $('map-cell').textContent = cellLabel(d.space, d.tile, d.sheet);
+    $('map-cell').textContent = cellLabel(d.space, d.tile, d.sheet, d.p);
     $('map-walker').textContent = 'x ' + fixed(d.head[0], 2) + ' m · z ' + fixed(d.head[2], 2) + ' m · eye ' + fixed(d.head[1], 2) + ' m';
     $('map-heading').textContent = fixed(d.yawDeg, 0) + '°';
     $('map-tracking').textContent = (['normal', 'limited', 'lost'][d.tracking] || '?') + (d.jump ? ' · pose jump rejected' : '');

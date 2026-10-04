@@ -1,13 +1,15 @@
 # End-to-end rehearsals
 
-Two rehearsals that need no Unity and no phone. Together they show that what lanes A, C and D built fits
+Two rehearsals that need no Unity and no phone. Together they show that what the four lanes built fits
 together: the frame of the phone from the head pose to the `State` on the wire, and the Station from the wire to
 its logs and its meshes. Neither renders a pixel. What only Unity or a phone can show is listed at the end.
+A third command runs both, with everything else that can be checked headless, and prints the Phase 1 gates.
 
 | Rehearsal | Command | Time |
 |---|---|---|
-| The phone's frame, headless | `python3 tools/headless/verify.py test Atlas.E2E.Tests --tag e2e` | about 3 s after the build |
-| The Station, for real | `bash tools/e2e/run_station_rehearsal.sh` | about 40 s |
+| The phone's frame, headless | `python3 tools/headless/verify.py test Atlas.E2E.Tests --tag e2e` | about 5 s after the build |
+| The Station, for real | `bash tools/e2e/run_station_rehearsal.sh` | about 45 s |
+| The gates G0 to G7 | `python3 tools/e2e/gates.py` | about ten minutes |
 
 ## 1. The phone's frame (`ATLAS/Assets/Atlas/Tests/App/E2E`)
 
@@ -50,12 +52,18 @@ What each test proves:
 | `E2E_Slicer_…` | Walking the lane moves the cut: `State.p[3]` equals the layout's cut for the head's z from the frame the lane takes over. A slider value from the Station is in the `State` within 250 ms and holds |
 | `E2E_OperatorCommands_…` | Switch (with a variant), Home, recentre, quality, STOP and lock, each sent by the Hub, each in effect within 250 ms (the tier within a second). STOP shows the cue at STRONG without changing Bump Guard's level or the world. Under lock a slider is ignored; without it an out-of-range value is clamped by the phone |
 | `E2E_SteadyState_ThePhonesFrameAllocatesNothing` (seven spaces) | 100 consecutive frames of the whole chain, link included, allocate 0 managed bytes |
+| `E2E_Phase1_OneSession_…` | Phase 1 in one session on `sample_3x3`, with a Spectator behind the Hub (`RehearsalSpectator`: the real `SpectatorCore`, `SpectatorHost` and `SpectatorLoop` on their own kernel and their own copy of the room). The room's loop-fit (s = 2.0 m, L = 1.885 m); Home; S2 with the room as tile zero and the walker over the head's floor point; the recorded five-sided lap closes after five corners; the dial to q = 4 ramps the curvature to zero and four sides close flat; back to q = 5 and the walk to the real wall crosses into another tile with Bump Guard's cue 0.83 s before contact; S3 keeps that tile id, and Bump Guard stays at its level through the fade; the cue again in S3; S4 at the room's R, three sides close on the sphere, the cue again; Home. In every frame: the curvature does not change while the head moves faster than 0.1 m/s; the Spectator's `State` is the phone's; the Station's trail holds the phone's tile sequence; the Station's kernel has the phone's tiling, tile and frame in S2 and S4, and its cell in S3; the Station generated the phone's world (same content hash) and never showed "world mismatch" |
+| `E2E_WorldFrame_…` | A room whose anchor is neither at the session's origin nor level with it nor aligned with it: after the hand-over the head over the anchor is at (0, eye height, 0), the floor is y = 0 along a walk, the kernel's walker and Bump Guard's map are in that frame, and S2 registers tile zero there (kernel.md section 9.1) |
+| `G3_CurvedSpaces_Load…` (three sample rooms) | S2, S3 and S4 load in SpaceLab on each sample room, configure the one kernel from the room's loop-fit ({4,5} at L, flat, the sphere at R) and expose their parameters; Home is flat again |
+| `G3_Mode1ToMode2_…` (three sample rooms) | The walker leaves tile zero through one edge in Mode 1; Mode 2 is entered with that tile id, on the {4,5} graph, and it is the tile in `State` |
+| `G5_StandingRoom_…` | In the 1.4 x 1.4 m room the three curved spaces load, offer no lap, and Bump Guard stays armed with the room's map |
 
 What it cannot prove, because these parts are stand-ins written in this folder:
 
 - `RehearsalPosePipeline` is not `PosePipeline`. The XR Origin move, the tracked camera, the ARAnchor and the
   session-frame branch (a scanned room on a phone) are not exercised: every walk here is already in the room frame.
-- `HomeModule`, `GluedModule`, `PortalModule` and `SlicerModule` are not the MonoBehaviour adapters. They call
+- `HomeModule`, `GluedModule`, `PortalModule`, `SlicerModule`, `CurvedWalkModule`, `AlignedCellsModule` and
+  `SmallPlanetModule`, and the Station's `StationModule`, are not the MonoBehaviour adapters. They call
   the same cores in the same order, but the meshes, materials, renderers, the Burst jobs of the Slicer, the
   stencil rooms of `PortalRenderer` and the input of the spaces are not run.
 - No eye camera exists, so the portal hold rule is only checked for "never under the walker", not for what an
@@ -74,7 +82,8 @@ it too. The exit code is 0 only when every check passed.
 3. Starts ReplayPhone with its synthetic walk, then `station_rehearsal.py live`:
    - the phone connects; `State` arrives at about 60 Hz with no loss, p95 latency a few milliseconds;
    - a parameter is set over HTTP and read back, an out-of-range value is clamped, an unknown one refused;
-   - switch space, Home, recentre, quality (pinned and automatic), STOP, lock on, lock off: each answers 200,
+   - switch space (S1, then the curved S2, S3 and S4), Home, recentre, quality (pinned and automatic), STOP,
+     lock on, lock off: each answers 200,
      the phone's own `cmd` event appears in the Hub's `events.jsonl`, and the `State` digest shows the effect;
      a parameter set under lock answers 423;
    - `sample_4x5_table` and `budget_room` are posted to the Forge with one photo per object (the phone's own
@@ -83,10 +92,10 @@ it too. The exit code is 0 only when every check passed.
      than the target, no edge over 0.25 m, within 10 % of the box, base centred, no material or texture, under
      1 MB), then by the Forge's own `forge.validator`; the room total is under 60,000 triangles; the same
      crop uploaded again is a cache hit; the Forge keeps no crop file.
-4. Turns each walk of `recordings/` into a Hub recording (`station_rehearsal.py record`), plays it through
+4. Turns each walked recording of `recordings/` (the two laps, the wall approach, the jump) into a Hub recording (`station_rehearsal.py record`), plays it through
    ReplayPhone, and reads the session's `state.bin` back from the Hub: every recorded pose is there, bit for
    bit and in order.
-5. Stops the Hub and the Forge and reads their output and the four session folders: no exception, traceback
+5. Stops the Hub and the Forge and reads their output and the five session folders: no exception, traceback
    or 500; whole records in `state.bin`; the six commands, the parameter and the Forge's job states in the
    logs; `perf.csv` with its 34 columns.
 
@@ -95,7 +104,27 @@ frame. The link runs over UDP on the loopback interface, so nothing is learnt ab
 the procedural generator; TripoSG has never run. The Console is only fetched, not operated (see
 `station/console-tests` for that).
 
-## 3. What only the Unity-side check and the phone can prove
+## 3. The gates (`tools/e2e/gates.py`)
+
+One command for "the gates as a whole". It runs `verify.py all` (keeping one `.trx` per test assembly),
+`gen_meta.py --check`, `gen_scenes.py --check`, a search for a lane placeholder header in the Phase 1 code, the
+Hub's, the Forge's and the Console's own suites, the performance summariser's tests and the Station rehearsal.
+Then it prints the checklist of G0 to G7 (Master Plan section 11.3): each line is `proven` with the tests
+and steps that prove it, `FAILED`, `not run`, or `waits` for a phone, the headset, the Editor or a person. A
+line is proven only when every test named for it ran in that run and passed, so a test that was renamed or
+removed fails its line. Section 11.1 is listed test by test at the end. The exit code is 0 when no headless
+line failed; no gate is passed by it alone, because every gate has lines that wait.
+
+```
+python3 tools/e2e/gates.py                 # everything
+python3 tools/e2e/gates.py --no-station    # the Unity assemblies and the repository checks only
+python3 tools/e2e/gates.py --trx DIR       # reuse the results of `verify.py all --results DIR`
+```
+
+Logs are kept in `~/.cache/atlas-gates/<tag>/`. The Forge's suite and the rehearsal use `FORGE_PYTHON`,
+`station/forge/.venv`, or the interpreter the script runs under, whichever has the Forge's packages.
+
+## 4. What only the Unity-side check and the phone can prove
 
 Unity Editor, no phone (F9):
 

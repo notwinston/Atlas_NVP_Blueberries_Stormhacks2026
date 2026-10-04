@@ -216,6 +216,67 @@ namespace Atlas.Input.Tests
             Assert.That(_input.LastTag(AtlasAction.NextSpace), Is.EqualTo(3));
         }
 
+        // The Editor's headset view binds the mouse to the lever, and the development overlay is drawn over the view:
+        // a click on its buttons is the overlay's, whatever the reticle is on.
+        [Test]
+        public void APressOnABlockedPointIsNotTheLever()
+        {
+            var overlay = new float2(40f, 500f);
+            var view = new float2(480f, 270f);
+            _input.PointerBlocked = p => p.x < 260f && p.y > 400f;
+            _input.Targets.Add(new GazeTargetData
+            {
+                Action = AtlasAction.NextSpace, Space = GazeSpace.World, Centre = Head + new float3(0f, 0f, 2f),
+                Radius = 0.2f, Context = InputContext.Space, Tag = 3
+            });
+            Tick(default, 5, quaternion.identity);
+            Assert.That(_input.GazeFocused.IsValid, Is.True, "the reticle is on the target");
+
+            Tick(new RawInput { PointerDown = true, PointerPosition = overlay }, 1, quaternion.identity);
+            Assert.That(_events, Is.Empty, "a click on the overlay fires neither the target nor Confirm");
+            Tick(default, 1, quaternion.identity);
+
+            Tick(new RawInput { PointerDown = true, PointerPosition = view }, 1, quaternion.identity);
+            Assert.That(_events, Is.EqualTo(new[] { (AtlasAction.NextSpace, InputSource.Lever, 3) }), "a click on the view is the lever");
+        }
+
+        [Test]
+        public void ABlockedPressIsNotTheLeverEvenWithNothingUnderTheGaze()
+        {
+            _input.PointerBlocked = p => true;
+            Tick(new RawInput { PointerDown = true, PointerPosition = new float2(10f, 10f) });
+            Assert.That(_events, Is.Empty, "no Confirm either");
+
+            _input.PointerBlocked = null;
+            Tick(default);
+            Tick(new RawInput { PointerDown = true, PointerPosition = new float2(10f, 10f) });
+            Assert.That(_events, Is.EqualTo(new[] { (AtlasAction.Confirm, InputSource.Lever, 0) }), "with nothing blocked it is");
+        }
+
+        [Test]
+        public void APressThatBeganOnTheOverlayDoesNotBecomeTheLeverWhenItLeavesIt()
+        {
+            _input.PointerBlocked = p => p.x < 260f;
+            Tick(new RawInput { PointerDown = true, PointerPosition = new float2(40f, 40f) });
+            Tick(new RawInput { PointerDown = true, PointerPosition = new float2(480f, 270f) }, 10);
+            Assert.That(_events, Is.Empty, "the press began on the overlay, so it is not a new press");
+            Tick(default);
+            Tick(new RawInput { PointerDown = true, PointerPosition = new float2(480f, 270f) });
+            Assert.That(_events.Count, Is.EqualTo(1), "the next press, on the view, is");
+        }
+
+        [Test]
+        public void ABlockedTouchInTheHandIsStillATap()
+        {
+            // The overlay's own hand-held buttons are the overlay's business (OnboardingView asks Covers itself):
+            // the service reports the touch as it always did.
+            _input.PopContext(InputContext.Space);
+            _input.PointerBlocked = p => true;
+            Tick(new RawInput { PointerDown = true, PointerPosition = new float2(5f, 5f) });
+            Assert.That(_input.TryGetTap(out float2 p), Is.True);
+            Assert.That(p, Is.EqualTo(new float2(5f, 5f)));
+        }
+
         [Test]
         public void EveryActionCanBeDoneWithTheGamepadAloneAndWithGazeAlone()
         {

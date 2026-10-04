@@ -162,6 +162,10 @@ def live_hub(hub: str) -> str:
 
     # The six operator commands (L10).
     command(hub, session, "switch to S1", "/api/scene", {"space": "S1", "variant": "", "args": {}}, "space", lambda s: s["space"] == 1)
+    # The curved spaces are spaces like any other to the Hub and the Console: S2, S3 and S4 by their codes.
+    for number in (2, 3, 4):
+        command(hub, session, f"switch to S{number}", "/api/scene", {"space": f"S{number}", "variant": "", "args": {}}, "space",
+                lambda s, number=number: s["space"] == number)
     command(hub, session, "Home", "/api/op", {"cmd": "home", "args": {}}, "home", lambda s: s["space"] == 0)
     command(hub, session, "recentre", "/api/op", {"cmd": "recentre", "args": {}}, "recentre")
     command(hub, session, "quality 2", "/api/op", {"cmd": "quality", "args": {"tier": 2}}, "quality", lambda s: s["tier"] == 2)

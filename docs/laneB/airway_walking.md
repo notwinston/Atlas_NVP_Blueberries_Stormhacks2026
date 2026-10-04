@@ -1,3 +1,5 @@
+> Written on the branch `laneB/integration`, against the placeholders of lanes A, C and D. Where this log names a placeholder (`PLACEHOLDER`, `IActionSource`, `HomeRebuild`, `EventLog.Emit`, `AtlasSurface`, `_Gates`, `room_*.json`, `SpaceLab.Home`), the real code has replaced it, except the Phase 2 and 3 stand-ins in [placeholders.md](placeholders.md): see [INTEGRATION_NOTES.md](INTEGRATION_NOTES.md). The numbers of the contract sections it cites ("kernel.md §n") are the numbers of [../contracts/lane-b-kernel.md](../contracts/lane-b-kernel.md).
+
 # Airway walking (G6): P2-B03 ValveSolver, Mode 1
 
 Source: Master Plan §10.2.3 steps 1-5 and §10.2.8 row P2-B03; G6 brief (binding, plan wins). Code: `Assets/Atlas/Blades/Lung/Walking/`
