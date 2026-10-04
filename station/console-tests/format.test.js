@@ -88,7 +88,9 @@ test('names of spaces, tiers, thermal states, bump levels and categories', () =>
   assert.equal(spaceLabel(5), 'S5 Impossible Rooms');
   assert.equal(spaceLabel(9), 'S?');
   assert.equal(spaceBuilt(1), true);
-  assert.equal(spaceBuilt(3), false);
+  for (const id of [2, 3, 4]) assert.equal(spaceBuilt(id), true, `S${id} is registered since the lane B merge`);
+  assert.equal(spaceBuilt(7), false);
+  assert.equal(spaceBuilt(-1), false);
   assert.equal(tierLabel(-1), 'auto');
   assert.match(tierLabel(2), /^tier 2 \(0\.6/);
   assert.equal(thermalName(2), 'serious');

@@ -124,9 +124,12 @@ export function spaceLabel(id) {
 
 export const SPACE_COUNT = SPACE_NAMES.length;
 
-/** Spaces whose geometry is lane B's and which this build cannot enter; the phone answers space.refused. */
+/**
+ * Whether this build can enter the space. Since the lane B merge every space S0 to S6 is registered on the phone; a space
+ * that is not (an id outside the table) is answered with space.refused.
+ */
 export function spaceBuilt(id) {
-  return id !== 2 && id !== 3 && id !== 4;
+  return Number.isInteger(id) && id >= 0 && id < SPACE_NAMES.length;
 }
 
 const THERMAL = ['nominal', 'fair', 'serious', 'critical'];
