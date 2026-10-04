@@ -10,6 +10,7 @@ namespace Atlas.Blades.Lung.Walking.Tests
     {
         public const double Dt = 1.0 / 60.0;
         public readonly AirwayWing Wing;
+        public AirwayWingModule Module;   // P2-B05: when set, frames go through the module (copies the requested mode into the wing)
         public double Speed = 0.7, Lateral;
         public float3 Head = new float3(0, 1.6f, 0);
         public long Frame;
@@ -43,8 +44,8 @@ namespace Atlas.Blades.Lung.Walking.Tests
             Head = new float3((float)pos.x, 1.6f, (float)pos.y);
             Frame++;
             var f = new FrameContext(Frame, Frame * Dt, (float)Dt, Head, quaternion.identity, true, false);
-            Wing.KernelStep(f);
-            Wing.Tick(f);
+            if (Module != null) { Module.KernelStep(f); Module.Tick(f); }
+            else { Wing.KernelStep(f); Wing.Tick(f); }
         }
     }
 }

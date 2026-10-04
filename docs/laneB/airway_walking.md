@@ -28,6 +28,7 @@ A2 (placeholders.md): Unity world xz is the RoomModel anchor frame. The live `IC
 H-1: the renderer and kit register chamber objects into `ChamberViewRegistry`.
 
 
+
 ## P2-B04 Valve walk, Mode 2
 
 Delivered: `CellValve` (MP §10.2.3 Mode 2: longest clear run, ties to the lowest direction, no run of 1 means the valve stays closed)
@@ -46,3 +47,26 @@ Deviations
   1.5x1.5 (2x2 corner demo at 0.75 m), 2.25x3 (3x4 at 0.75 m). Clearance is a fake rectangle SDF plus blocked-cell-centre points.
 - DV-B04-4: `Atlas.Blades.Lung.asmdef` gains `Atlas.Spaces.AlignedCells`; the tests asmdef gains `Atlas.Safety`, `Atlas.Spaces.AlignedCells`.
 - DV-B04-5: Mode 2 has no glyph gate, so the valve opens at chamber entry (G6 brief DV-G6-7).
+
+
+## P2-B05 Mode switch
+
+Delivered: `AirwayParams` (`curved.mode`, 1/2, range [1, 2], default 1; DV-G6-8), `AirwayModeSwitch` (automatic rule: `room.lapSquare.s < 1.5`
+at Configure, and FMS > 3 from the `fms` event `{score}` or `ReportFms`; DV-G6-9; Console switch = `registry.ApplyRemote` ->
+`AtlasParamScanner` field), `AirwayWingModule` (S2, DV-G6-18), `AirwayWingHost`, `Scenes/Lung_Airway.unity` (one `AirwayWingHost`).
+`AirwayWing` gains Mode 2 (delegating to P2-B04's `CellValveWalk`, resolving DV-B04-1 and DV-B03-5), `RequestedMode`, `Grid`, `Cells`,
+`TargetCell`, `WriteState`, and `TrySwitch`: applies only in AwaitChoice, AwaitGlyph or Waiting with the shell Opaque (DV-G6-10);
+Address, CurrentTile, NextTile, ExitEdge and Phase are kept. 1 -> 2: `Cells.Reset(head, CellFrame(CurrentTile, 0))`. 2 -> 1: DV-G6-11 rig reset.
+Tests: `Tests/Lung/Walking/ModeSwitchTests.cs` (T5.1, S5.1-S5.5, scene test); evidence `docs/laneB/evidence/P2-B05/switch_sim.json`
+(40 of 40: both directions x request in a chamber / while walking x 10 routes).
+
+Deviations
+- DV-B05-1: every `Enter` starts in Mode 1; a requested Mode 2 (small room, FMS) takes effect at the root chamber (phase AwaitChoice).
+- DV-B05-2: Mode 2 `CurrentChamberWorld/NextChamberWorld` are the current and target cell centres; entry needs `Cells.Cell == TargetCell`
+  and head <= 0.5 m (DV-G6-7); entering with a cell frame tile other than `NextTile` throws.
+- DV-B05-3: `AirwayWingHost.Register` returns the `AirwayWingModule` (G6 §3.9 returns `AirwayBeat`, which arrives with P2-B09).
+- DV-B05-4: `AirwayWingModule` copies `Requested` into the wing in `Tick` only (the wing is built in `Configure`); `AirwayModeSwitch`
+  is disposed in `Exit` and re-created at each `Configure`. `ModeSwitch`/`Params` are exposed for tests.
+- DV-B05-5: `Lung_Airway.unity` is created by the test `Scene_LungAirway_HasOneAirwayWingHost` with `EditorSceneManager` when absent.
+- DV-B05-6: `SimWalker` gains an optional `Module` so frames pass through `AirwayWingModule.Tick`.
+Phone half: `docs/laneB/TESTING.md` G10-B05 (deferred).
