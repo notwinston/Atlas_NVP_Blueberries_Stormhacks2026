@@ -248,9 +248,11 @@ class Forge:
             elif job.state not in TERMINAL_STATES:
                 crops = self._kept_crops(job)
                 if crops:
-                    # Crops were kept on disk for debugging, so the job can simply run again.
+                    # Crops were kept on disk for debugging, so the job can simply run again: from the
+                    # beginning, with none of the generations of its first run counted against it.
                     self._crops[job.jobId] = crops
                     job.state, job.error = "queued", ""
+                    job.attempts, job.attemptLog, job.timings = 0, [], {}
                 else:
                     job.state = "failed"
                     job.error = "interrupted by a Forge restart; crops are not kept, send the object again"
@@ -781,7 +783,8 @@ class Forge:
         oriented = self._timed(
             "clean-up", self.settings.cleaning_timeout_s,
             lambda: attempts.orient_attempt(raw.vertices, raw.faces, dims=job.dims, tri_target=job.triTarget,
-                                            profile_text=job.profile, views=job.views,
+                                            profile_text=job.profile,
+                                            view=job.views[index] if index < len(job.views) else None,
                                             generator_name=generator.name, settings=self.settings),
         )
         entry.update(fit=None if oriented.fit is None else round(oriented.fit, 4),

@@ -52,15 +52,29 @@ class Scripted(ProceduralGenerator):
                 for photo in self.photos]
 
 
-def run(tmp_path, generator, *, views=3, with_profile=True, name="attempts", **overrides):
-    """One chair through a Forge with ``generator``; returns ``(status, job, app)`` once the job has ended."""
+def camera_at(x, z):
+    """The meta of a view whose camera stands at (x, z) of Unity's box frame, 0.4 m up."""
+    return {"score": 0.9, "azimuthDeg": 0.0, "intrinsics": [600, 600, 128, 128],
+            "camToBox": [1, 0, 0, x, 0, 1, 0, 0.4, 0, 0, 1, z, 0, 0, 0, 1]}
+
+
+def run(tmp_path, generator, *, views=3, with_profile=True, name="attempts", dims=CHAIR, category="chair",
+        cameras=None, profile_text=None, **overrides):
+    """One object through a Forge with ``generator``; returns ``(status, job, app)`` once the job has ended.
+
+    A chair with the profile of a chair, unless told otherwise. ``cameras`` gives each view its own camera;
+    without it every view has the one of `meta_for`.
+    """
     app = create_app(make_settings(tmp_path / name, **overrides), generator)
     with TestClient(app) as client:
-        model = room_model(name, [CHAIR], ["chair"])
+        model = room_model(name, [dims], [category])
         assert client.post("/rooms", json=model).status_code == 201
         meta = meta_for(model["objects"][0], 15000)
-        meta["views"] = meta["views"] * views
-        if with_profile:
+        meta["views"] = list(cameras) if cameras is not None else meta["views"] * views
+        views = len(meta["views"])
+        if profile_text is not None:
+            meta["profile"] = profile_text
+        elif with_profile:
             meta["profile"] = chair_profile()
         photos = [jpeg(COLOURS[k], seed=k) for k in range(views)]
         job_id = post_object(client, name, meta, photos).json()["jobId"]
@@ -127,6 +141,125 @@ def test_the_poor_fit_line_is_a_setting(tmp_path):
     generator = Scripted("storage", "chair")
     status, _, _ = run(tmp_path, generator, poor_fit=0.5)
     assert status["attempts"] == 1 and 0.4 < status["fit"] <= 0.5
+
+
+class AsTripoSG(Scripted):
+    """The scripted generator under TripoSG's name, so that the settings that describe TripoSG's frame apply."""
+
+    name = "triposg"
+
+
+# Three cameras on three sides of the box: in front (+Z), on Unity's +X, and behind.
+AROUND = [camera_at(0.0, 2.0), camera_at(2.0, 0.1), camera_at(0.1, -2.0)]
+STOOL = (0.6, 0.9, 0.6)  # a chair on a square footprint: the bounds allow all four quarter turns
+
+
+def back_side(glb: bytes, dims) -> str:
+    """The side of the box on which the published chair's back rest stands, in Unity's box frame."""
+    positions, faces = glb_mesh(glb)
+    grid = profile.of_mesh(positions, faces, dims).reshape(16, 16).astype(float)
+    strips = {"-Z": grid[:2].mean(), "+Z": grid[-2:].mean(), "-X": grid[:, :2].mean(), "+X": grid[:, -2:].mean()}
+    return max(strips, key=strips.get)
+
+
+def test_with_view_a_mesh_is_turned_by_the_camera_of_the_view_it_was_made_from(tmp_path):
+    """`FORGE_TRIPOSG_FRONT=view`: the mesh's own +Z side is the one the camera of *its* photo saw."""
+    # No profile, so the setting decides alone. View 0 gives the mesh: its camera stood in front.
+    status, job, _ = run(tmp_path, AsTripoSG("chair"), with_profile=False, dims=STOOL, cameras=AROUND,
+                         triposg_front="view", name="first")
+    assert [e["view"] for e in job.attemptLog if e["published"]] == [0] and status["fitYaw"] == 0
+    assert back_side(status_glb(tmp_path, status), STOOL) == "-Z"
+
+    # View 0 fails and view 1 gives the mesh: view 1's camera stood on Unity's +X, so the mesh's front goes there.
+    status, job, _ = run(tmp_path, AsTripoSG("fail", "chair"), with_profile=False, dims=STOOL, cameras=AROUND,
+                         triposg_front="view", name="second")
+    assert [e["view"] for e in job.attemptLog if e["published"]] == [1]
+    assert status["fitYaw"] == 90 and job.attemptLog[1]["fitYaw"] == 90
+    assert back_side(status_glb(tmp_path, status), STOOL) == "-X"  # the front faces +X, the back rest is on -X
+
+    # With a profile that every quarter turn fits (a square table), the view's camera breaks the tie:
+    # two poor attempts, then the table from view 2, whose camera stood behind the box.
+    table = (1.0, 0.75, 1.0)
+    scan = profile.encode(profile.of_mesh(*build_furniture("table", table), table))
+    status, job, _ = run(tmp_path, AsTripoSG("chair", "chair", "table"), dims=table, category="table",
+                         cameras=AROUND, profile_text=scan, triposg_front="view", name="third")
+    assert [e["view"] for e in job.attemptLog if e["published"]] == [2] and status["attempts"] == 3
+    assert status["fit"] == 0.0 and status["fitYaw"] == 180
+    # `canonical` and `unknown` do not look at any camera.
+    for front in ("canonical", "unknown"):
+        status, _, _ = run(tmp_path, AsTripoSG("fail", "chair"), with_profile=False, dims=STOOL, cameras=AROUND,
+                           triposg_front=front, name=front)
+        assert status["fitYaw"] == 0
+
+
+def test_reclean_turns_each_attempt_by_its_own_camera_too(tmp_path):
+    generator = AsTripoSG("fail", "chair")
+    status, job, app = run(tmp_path, generator, with_profile=False, dims=STOOL, cameras=AROUND,
+                           triposg_front="view", debug_keep=True)
+    assert status["fitYaw"] == 90
+    settings = app.state.forge.settings
+    done = reclean.reclean(settings.data_dir / "jobs" / job.jobId, settings)
+    assert [(a["view"], a["fitYaw"], a["published"]) for a in done.attempts] == [(1, 90, True)]
+    assert done.same_full and done.same_light
+    # Clean-up tuned: the same record under another setting gives another mesh, and the tool says so.
+    canonical = make_settings(settings.data_dir, triposg_front="canonical")
+    changed = reclean.reclean(settings.data_dir / "jobs" / job.jobId, canonical)
+    assert changed.result is not None and changed.attempts[0]["fitYaw"] == 0
+    assert changed.same_full is False and changed.result.report.sha256 != status["sha256"]
+    assert back_side(changed.result.glb, STOOL) == "-Z" and back_side(done.result.glb, STOOL) == "-X"
+
+
+def test_a_profile_that_saw_under_a_tenth_of_the_box_is_no_profile_for_the_fit(tmp_path):
+    from forge import attempts
+
+    def seen(cells: int) -> str:
+        grid = np.zeros(256, dtype=np.uint8)
+        grid[:cells] = 30  # a low strip: nothing like the chair, the cupboard or the lamp
+        return profile.encode(grid)
+
+    assert attempts.MIN_FIT_COVERAGE == 0.10
+    assert attempts.scan_of(seen(25)) is None and attempts.scan_of(seen(26)) is not None  # 25 / 256 is 0.098
+    assert attempts.scan_of("") is None and attempts.scan_of(seen(0)) is None
+
+    # 25 cells seen: no fit, so one generation, however unlike the scan the mesh is.
+    generator = Scripted("storage", "chair", "chair")
+    status, job, _ = run(tmp_path, generator, profile_text=seen(25), name="thin")
+    assert status["state"] == "ready" and status["attempts"] == 1 and generator.views() == [0]
+    assert "fit" not in status and status["report"]["fit"] is None and status["report"]["candidates"] == []
+    assert job.profile == seen(25)  # the job still holds what the phone sent
+    # 26 cells seen: the fit is measured, it is poor, and the other views are tried.
+    generator = Scripted("storage", "storage", "storage")
+    status, job, _ = run(tmp_path, generator, profile_text=seen(26), name="enough")
+    assert status["attempts"] == 3 and status["fit"] > 0.2 and generator.views() == [0, 1, 2]
+
+
+def test_a_job_run_again_after_a_restart_starts_its_count_afresh(tmp_path):
+    """Under FORGE_DEBUG_KEEP a job that was interrupted runs again; its first run's generations do not count."""
+    generator = Scripted("storage", "plant", "lamp")  # three poor attempts
+    status, job, app = run(tmp_path, generator, debug_keep=True)
+    settings = app.state.forge.settings
+    assert status["state"] == "ready" and status["attempts"] == 3
+    # Put the record back to what it held when the job entered `cleaning`, as a stop at that moment leaves it,
+    # and take away what the first run published, so the second run has to generate.
+    path = settings.data_dir / "jobs" / job.jobId / "job.json"
+    record = json.loads(path.read_text())
+    assert record["attempts"] == 3 and len(record["attemptLog"]) == 3 and record["timings"]
+    record.update(state="cleaning", sha256="", lightSha256="", bytes=0, tris=0, report=None, fit=None)
+    for line in record["attemptLog"]:
+        line["published"] = False
+    path.write_text(json.dumps(record))
+    for name in ("assets", "cache"):
+        for file in (settings.data_dir / name).iterdir():
+            file.unlink()
+
+    again = Scripted("storage", "plant", "lamp")
+    with TestClient(create_app(settings, again)) as client:
+        status = wait_for(client, job.jobId)
+        assert status["state"] == "ready", status  # it failed with "no generator produced a mesh" before
+        assert status["attempts"] == 3 and again.views() == [0, 1, 2]
+        log = client.app.state.forge.job(job.jobId).attemptLog
+        assert [e["view"] for e in log] == [0, 1, 2] and sum(e["published"] for e in log) == 1
+        assert set(client.app.state.forge.job(job.jobId).timings) == {"matting", "generating", "cleaning"}
 
 
 def test_a_third_party_is_not_sent_more_photos_for_a_poor_fit(tmp_path):
@@ -506,11 +639,8 @@ def test_reclean_reproduces_the_published_bytes_from_a_kept_record(tmp_path, cap
     assert (out / "full.glb").read_bytes() == (folder / "full.glb").read_bytes()
     assert sorted(p.name for p in out.iterdir()) == ["full.glb", "light.glb", "report.json"]
 
-    # Clean-up tuned: with another stretch limit the answer may differ, and the tool says whether it does.
-    tuned = make_settings(settings.data_dir, max_anisotropy=0.0)
-    changed = reclean.reclean(folder, tuned)
-    assert changed.result is None or isinstance(changed.same_full, bool)
-    # The record itself was not touched.
+    # The record itself was not touched. (What another setting does to it:
+    # test_reclean_turns_each_attempt_by_its_own_camera_too.)
     assert hashlib.sha256((folder / "full.glb").read_bytes()).hexdigest() == status["sha256"]
 
 

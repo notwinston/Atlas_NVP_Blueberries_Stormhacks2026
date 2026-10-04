@@ -126,14 +126,20 @@ def _no_matting_model(monkeypatch):
 @pytest.fixture
 def matting(monkeypatch):
     """A matting model is installed: stands in for rembg, which the tests do not have."""
-    state = SimpleNamespace(calls=0, fail_on=set(), empty=False, load_error=None)
+    state = SimpleNamespace(calls=0, fail_on=set(), specks_on=set(), empty=False, load_error=None)
 
     def remove(image):
         state.calls += 1
         if state.calls in state.fail_on:
             raise RuntimeError("onnxruntime ran out of memory")
         cut = image.convert("RGBA")
-        cut.putalpha(Image.new("L", image.size, 0) if state.empty else object_alpha(image))
+        if state.calls in state.specks_on:
+            # A matte of dots: hundreds of pieces, none of them an object.
+            dots = np.zeros((image.size[1], image.size[0]), dtype=np.uint8)
+            dots[::8, ::8] = dots[1::8, ::8] = dots[::8, 1::8] = dots[1::8, 1::8] = 255
+            cut.putalpha(Image.fromarray(dots))
+        else:
+            cut.putalpha(Image.new("L", image.size, 0) if state.empty else object_alpha(image))
         return cut, "rembg"
 
     def load():

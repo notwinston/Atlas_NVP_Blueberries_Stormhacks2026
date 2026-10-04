@@ -136,6 +136,20 @@ def test_an_empty_or_tiny_matte_is_refused():
         frame_for_generator(crop, Image.fromarray(tiny))
 
 
+def test_a_matte_of_specks_alone_is_refused_as_an_empty_one_is():
+    # Dots of four pixels on a grid: 625 pieces, each far under 0.5 % of the matte. Nothing is left of it.
+    crop, _ = scene(200, 200, (50, 50, 150, 150))
+    dots = np.zeros((200, 200), dtype=np.uint8)
+    dots[::8, ::8] = dots[1::8, ::8] = dots[::8, 1::8] = dots[1::8, 1::8] = 255
+    with pytest.raises(ImageError, match="only specks"):
+        frame_for_generator(crop, Image.fromarray(dots))
+    with pytest.raises(ImageError, match="only specks"):
+        object_matte(Image.fromarray(dots))
+    # The same dots beside a real object are left out, and the object is framed.
+    dots[60:140, 70:130] = 255
+    assert frame_for_generator(crop, Image.fromarray(dots)).size == (96, 96)
+
+
 def test_a_matte_of_another_size_is_brought_to_the_crop():
     crop, matte = scene(400, 300, (100, 90, 300, 210))
     small = matte.resize((200, 150), Image.NEAREST)

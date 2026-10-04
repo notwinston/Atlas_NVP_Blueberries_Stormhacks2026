@@ -99,9 +99,10 @@ class CleanupReport:
     def fit_yaw(self) -> int:
         """The turn clean-up gave the mesh about +Y, as a yaw in Unity's box frame: 0, 90, 180 or 270 degrees.
 
-        Positive turns +Z towards +X, as a RoomModel yaw does: the mesh's own +Z side stands at this
-        azimuth of the box. It is the opposite of ``yaw_degrees``, which counts the same turn right-handed
-        in the GLB frame.
+        Positive turns +Z towards +X, as a RoomModel yaw does: the +Z side of the mesh, once its up
+        axis was made +Y, stands at this azimuth of the box. (That side is the generator's own +Z for
+        up axis Y or X, and its -Y for up axis Z.) It is the opposite of ``yaw_degrees``, which counts
+        the same turn right-handed in the GLB frame.
         """
         return (360 - self.yaw_degrees) % 360
 
