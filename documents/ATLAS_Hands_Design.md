@@ -1557,7 +1557,7 @@ Where they came from: the pinch thresholds and LiDAR's 0.32 m are the older spec
 | Palm length (wrist to middle knuckle) | 0.0945 |
 | Hand length (wrist to middle fingertip) | 0.194 |
 | `PalmHalfThicknessKnuckles`, `PalmHalfThicknessWrist` | 0.011, 0.014 |
-| Joint radii, base to tip: thumb 12.5 to 8.5 mm; index and middle 10 to 7 mm; ring 9.5 to 6.5 mm; little 8.5 to 6 mm | |
+| Joint radii, base to tip | Thumb 12.5 to 8.5 mm; index and middle 10 to 7 mm; ring 9.5 to 6.5 mm; little 8.5 to 6 mm |
 
 **`Hands/Core/HandsLift.cs`** (internal)
 
@@ -1756,7 +1756,7 @@ One hand, 1,288 bytes:
 
 The joints are stored as six arrays of 21, not as an array of 21 structs. The first design listed a 2,704-byte record with the version first and the joints as structs; this is the layout that was built, and the hand log is made of the same bytes.
 
-The plugin links Vision and ARKit and nothing else. C# turns `cameraToSession` into Unity's left-handed convention in place: the z axis flips on both sides, which for the 16 floats is five sign changes (`HandsNativeMath.ArKitToUnity`; it holds for an app fixed to landscape left). Joint positions go from top-left pixels into camera space as `DepthFrame.Unproject` does (`HandsDetection.Unproject`).
+The plugin imports ARKit, CoreVideo, Foundation, QuartzCore and Vision: system frameworks and no package. C# turns `cameraToSession` into Unity's left-handed convention in place: the z axis flips on both sides, which for the 16 floats is five sign changes (`HandsNativeMath.ArKitToUnity`; it holds for an app fixed to landscape left). Joint positions go from top-left pixels into camera space as `DepthFrame.Unproject` does (`HandsDetection.Unproject`).
 
 Error codes: −1 not started, −2 no session, −3 no new frame for 2 s of ticks' time, −4 the last 30 requests all failed. C# adds −5: the plugin's record is not this one (`VisionHandsSource.FaultLayout`). §4.2 has the rules.
 
@@ -1842,4 +1842,4 @@ Asked of the team lead on 4 October 2026, in order. "Recommended" marks the opti
 
 Two answers narrowed an earlier one, and the later answer is the one in force. "Grab and move things" and "objects react" were chosen in rounds 1 and 3 and then deferred in round 4 ("implement object interaction later"), with the Glued copies kept as the one reaction. "Just touch" in round 4 ruled out a hand ray; round 5 then kept pinch, which fires the target the walker is looking at and aims nothing.
 
-Round 8 was asked during implementation, after the review had run the real Bump Guard core against a masked hand; its two rows give the gist of each question as the session's log has it. Between rounds 7 and 8 the lead asked for the feature to be implemented end to end on a new branch off `main`.
+Round 8 was asked during implementation, after the review had run the real Bump Guard core; its two rows give the gist of each question as the session's log has it. Between rounds 7 and 8 the lead asked for the feature to be implemented end to end on a new branch off `main`.
