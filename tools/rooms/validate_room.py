@@ -2,15 +2,16 @@
 """Validate RoomModel JSON files (docs/contracts/lane-c-room.md, section 2.7).
 
     python3 validate_room.py FILE [FILE ...]     validate the files named
-    python3 validate_room.py --fixtures          validate the five G0 fixtures and check
+    python3 validate_room.py --fixtures          validate the G0 fixtures and check
                                                  their reference values
     python3 validate_room.py -q FILE ...         print failures only
 
 Two layers: the JSON Schema docs/contracts/roommodel.schema.json (a draft 2020-12 subset is
-implemented here), then the consistency rules R1 to R20 that a schema cannot express.
+implemented here), then the consistency rules R1 to R21 that a schema cannot express.
 Exit code 0 when every file passes, 1 otherwise. Python 3 standard library only.
 """
 
+import base64
 import json
 import math
 import os
@@ -34,7 +35,11 @@ FIXTURES = {
     "sample_4x5_table": (1.6, 3.4, 1.2, 1.130715, 0.911191, 0.763944, (1, 2, 1.6, 1.7), (2, 2, 0.8), False, 1),
     "budget_room":      (2.4, 3.4, 2.0, 1.884526, 1.518651, 1.273240, (2, 2, 1.2, 1.7), (3, 4, 0.8), False, 12),
     "tiny_standing":    (1.4, 1.4, 1.0, 0.942263, 0.759326, 0.636620, (1, 1, 1.4, 1.4), (2, 2, 0.7), True, 0),
+    "budget_room_120k": (2.4, 3.4, 2.0, 1.884526, 1.518651, 1.273240, (2, 2, 1.2, 1.7), (3, 4, 0.8), False, 24),
 }
+
+# Fixtures whose objects are all stand-ins, and the triangles they total (R20).
+STANDIN_TOTALS = {"budget_room": 60000, "budget_room_120k": 120000}
 
 
 # --------------------------------------------------------------------------------------
@@ -146,7 +151,7 @@ def grid_of(room):
 
 
 def consistency_errors(room):
-    """Rules R1 to R20. Returns (errors, warnings)."""
+    """Rules R1 to R21. Returns (errors, warnings)."""
     err, warn = [], []
     sdf_meta = room["sdf"]
     wf, df = room["freeRect"]["wf"], room["freeRect"]["df"]
@@ -333,16 +338,24 @@ def consistency_errors(room):
             err.append("R16 object %d lies outside the grid" % o["id"])
         if o["base"][1] < -0.05:
             err.append("R16 object %d starts below the floor" % o["id"])
+        if "profile" in o:
+            try:
+                size = len(base64.b64decode(o["profile"], validate=True))
+            except ValueError:
+                size = -1
+            if size != rm.PROFILE_BYTES:
+                err.append("R21 object %d: profile is %s bytes, expected %d" % (
+                    o["id"], "not base64" if size < 0 else size, rm.PROFILE_BYTES))
     stand_ins = [o for o in room["objects"] if o["mesh"] == "standIn"]
     if stand_ins:
         if len(stand_ins) != len(room["objects"]):
             err.append("R17 stand-in objects cannot be mixed with other mesh states")
         for o in stand_ins:
-            if o["triTarget"] != rm.TRI_TARGET_MAX:
+            if o["triTarget"] != rm.STANDIN_TRIANGLES:
                 err.append("R17 stand-in object %d must have triTarget 5000" % o["id"])
             verts, tris = rm.standin_ellipsoid(o["size"])
             edge = rm.longest_edge(verts, tris)
-            if len(tris) != rm.TRI_TARGET_MAX or edge > rm.MAX_EDGE:
+            if len(tris) != rm.STANDIN_TRIANGLES or edge > rm.MAX_EDGE:
                 err.append("R17 stand-in object %d: %d triangles, longest edge %.3f m" % (o["id"], len(tris), edge))
     else:
         expected = rm.assign_tri_targets(room["objects"])
@@ -392,11 +405,11 @@ def fixture_errors(room):
         out.append("R20 fixture %s: standing differs from the reference" % room["id"])
     if len(room["objects"]) != count:
         out.append("R20 fixture %s: %d objects, reference %d" % (room["id"], len(room["objects"]), count))
-    if room["id"] == "budget_room":
+    if room["id"] in STANDIN_TOTALS:
         if any(o["mesh"] != "standIn" for o in room["objects"]):
-            out.append("R20 budget_room: every object must be a stand-in")
-        if sum(o["triTarget"] for o in room["objects"]) != rm.FURNITURE_TRIANGLES:
-            out.append("R20 budget_room: stand-ins must total 60,000 triangles")
+            out.append("R20 %s: every object must be a stand-in" % room["id"])
+        if sum(o["triTarget"] for o in room["objects"]) != STANDIN_TOTALS[room["id"]]:
+            out.append("R20 %s: stand-ins must total %s triangles" % (room["id"], format(STANDIN_TOTALS[room["id"]], ",")))
     return out
 
 
