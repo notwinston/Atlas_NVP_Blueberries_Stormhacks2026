@@ -1,15 +1,17 @@
 #ifndef ATLAS_GATES_INCLUDED
 #define ATLAS_GATES_INCLUDED
-
-// Per-pixel clip against up to four sight-line gates (Aligned Cells, Master Plan section 4.7).
-// The gates _Gate0 .. _Gate3 are reserved in the block in AtlasCore.hlsl. This file declares no uniform
-// and no keyword.
-
-// Fragment stage. Discards the fragment when it lies on the hidden side of any enabled gate.
-//   positionWS  world-space position of the fragment, metres (interpolated from the vertex stage).
+// Master Plan §4.7, §8.3; R1 §F.7; kernel.md §6.5. Needs _Gate0 .. _Gate3 (UnityPerMaterial, AtlasCore.hlsl) and URP Core.hlsl.
+// This file declares no uniform and no keyword.
 void AtlasGatesClip(float3 positionWS)
 {
-    // No gate exists yet: nothing is clipped.
+    float2 e = _WorldSpaceCameraPos.xz;              // each eye's own camera
+    float2 d = positionWS.xz - e;
+    float4 gates[4] = { _Gate0, _Gate1, _Gate2, _Gate3 };
+    [unroll] for (int i = 0; i < 4; i++)
+    {
+        float4 gate = gates[i];                      // (post.x, post.z, side, unused); side 0 = off
+        float2 g = gate.xy - e;
+        if (gate.z != 0) clip(gate.z * (g.x * d.y - g.y * d.x));
+    }
 }
-
 #endif

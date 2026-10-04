@@ -6,7 +6,7 @@ namespace Atlas.Rendering
 {
     public sealed class TileShellCache : IDisposable
     {
-        readonly TileMeshGenerator gen = new TileMeshGenerator(TilePalette.Provisional);
+        readonly TileMeshGenerator gen = new TileMeshGenerator(TilePalette.Default);
         Mesh near, mid, far;
 
         public TileShellCache(int q, double lengthScale)

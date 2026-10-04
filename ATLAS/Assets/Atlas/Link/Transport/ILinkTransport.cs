@@ -42,6 +42,27 @@ namespace Atlas.Link
     }
 
     /// <summary>
+    /// Optional on a transport: when each packet arrived. A packet waits for the next <see cref="ILinkTransport.Poll"/>
+    /// before the listener sees it, up to a whole frame on the phone; a clock exchange that read its receive
+    /// times at the poll would carry that wait (Master Plan section 7.2: 2 ms at p95). A transport that
+    /// implements this stamps a packet the moment it arrives, on its receive thread.
+    /// </summary>
+    public interface ILinkReceiveStamps
+    {
+        /// <summary>
+        /// The clock the arrivals are stamped with: the listener's own, so that the stamps compare with its
+        /// other times. Its <see cref="ILinkClock.NowUs"/> is then read on the transport's receive thread.
+        /// </summary>
+        void StampWith(ILinkClock clock);
+
+        /// <summary>
+        /// Inside <see cref="ILinkTransportListener.OnReceive"/>: when the packet being delivered arrived, in
+        /// microseconds of the clock given to <see cref="StampWith"/>. Never later than that clock is now.
+        /// </summary>
+        long LastReceiveUs { get; }
+    }
+
+    /// <summary>
     /// The few things the link needs from a network: connect, send three ways, and a non-blocking poll. The real
     /// one is <see cref="LiteNetTransport"/>; tests use <see cref="LoopbackTransport"/>.
     /// </summary>

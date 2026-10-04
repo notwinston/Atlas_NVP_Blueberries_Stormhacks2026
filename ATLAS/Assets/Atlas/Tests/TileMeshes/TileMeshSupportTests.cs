@@ -12,52 +12,62 @@ namespace Atlas.TileMeshes.Tests
     public class TileMeshSupportTests
     {
         TileMeshGenerator gen;
-        readonly List<Mesh> made = new List<Mesh>();
 
-        [SetUp] public void SetUp() { gen = new TileMeshGenerator(TilePalette.Provisional); }
-        [TearDown]
-        public void TearDown()
-        {
-            foreach (var m in made) if (m != null) UnityEngine.Object.DestroyImmediate(m);
-            made.Clear();
-        }
+        [SetUp] public void SetUp() { gen = new TileMeshGenerator(TilePalette.Default); }
 
-        (Mesh m, TileMeshLayout lay) Make(TileMeshSpec s)
+        (TileMeshData m, TileMeshLayout lay) Make(TileMeshSpec s)
         {
-            var m = new Mesh(); made.Add(m);
-            return (m, gen.Build(s, m));
+            var m = new TileMeshData();
+            return (m, m.Build(gen, s));
         }
 
         [Test]
         public void VertexData()
         {
-            var pal = TilePalette.Provisional;
+            var pal = TilePalette.Default;
+            Assert.AreEqual(AtlasPalette.Uv(AtlasPalette.Floor), pal.Floor);
+            Assert.AreEqual(AtlasPalette.Uv(AtlasPalette.Kerb), pal.Kerb);
+            Assert.AreEqual(AtlasPalette.Uv(AtlasPalette.Post), pal.Post);
             foreach (var lod in new[] { TileLod.Near, TileLod.Mid, TileLod.Far })
             {
                 var (m, lay) = Make(TileMeshSpec.Hyperbolic(5, 1.9, lod, 0xF));
-                var v = m.vertices; var col = m.colors32; var uv = m.uv; var ind = m.GetIndices(0);
+                var v = m.vertices; var col = m.colors32; var uv = m.uv; var line = m.uv2; var ind = m.GetIndices(0);
+                double hw = TileChart.HalfWidth(-1, 5, 1.9);
                 Assert.AreEqual(lay.VertexCount, v.Length);
                 Assert.AreEqual(lay.IndexCount, ind.Length);
                 for (int i = 0; i < v.Length; i++)
                 {
                     float ao = col[i].r / 255f;
                     Assert.GreaterOrEqual(ao, 0.6f - 1f / 255); Assert.LessOrEqual(ao, 1f);
-                    Assert.AreEqual(col[i].r, col[i].g); Assert.AreEqual(255, col[i].a);
+                    Assert.AreEqual(255, col[i].b); Assert.AreEqual(255, col[i].a);
                 }
                 Assert.AreEqual(255, col[(int)lod / 2 * ((int)lod + 1) + (int)lod / 2].r, "tile-centre floor vertex has AO 1");
-                for (int i = 0; i < lay.FloorVertices.length; i++) Assert.AreEqual(pal.Floor.x, uv[i].x);
+                // the look's vertex layout (lane A contract 10.2): the floor's line coordinate runs 0..1 across the tile, so lines fall on its edges
+                int onEdge = 0;
+                for (int i = 0; i < lay.FloorVertices.length; i++)
+                {
+                    Assert.AreEqual(pal.Floor.x, uv[i].x); Assert.AreEqual(pal.Floor.y, uv[i].y);
+                    Assert.AreEqual(255, col[i].g, "floor line weight");
+                    var k = TileChart.ChartToKlein(new double2(v[i].x, v[i].z), -1, 1.9);
+                    Assert.AreEqual(0.5 + 0.5 * k.x / hw, line[i].x, 1e-5); Assert.AreEqual(0.5 + 0.5 * k.y / hw, line[i].y, 1e-5);
+                    if (Math.Abs(Math.Abs(k.x) - hw) < 1e-6) { Assert.IsTrue(line[i].x == 0f || line[i].x == 1f, "edge vertex on an integer"); onEdge++; }
+                    if (Math.Abs(Math.Abs(k.y) - hw) < 1e-6) { Assert.IsTrue(line[i].y == 0f || line[i].y == 1f, "edge vertex on an integer"); onEdge++; }
+                }
+                Assert.AreEqual(4 * 17, onEdge, "17 boundary vertices per edge");
                 for (int e = 0; e < 4; e++)
                 {
                     var kv = lay.KerbVertices(e);
                     for (int i = kv.start; i < kv.start + kv.length; i++)
                     {
                         Assert.AreEqual(pal.Kerb.x, uv[i].x);
+                        Assert.AreEqual(0, col[i].g, "kerbs carry no lines"); Assert.AreEqual(new Vector2(0.5f, 0.5f), line[i]);
                         Assert.AreEqual(v[i].y > 0 ? 255 : 153, col[i].r);
                     }
                     var pv = lay.PostVertices(e);
                     for (int i = pv.start; i < pv.start + pv.length; i++)
                     {
                         Assert.AreEqual(pal.Post.x, uv[i].x);
+                        Assert.AreEqual(0, col[i].g, "posts carry no lines"); Assert.AreEqual(new Vector2(0.5f, 0.5f), line[i]);
                         Assert.AreEqual(v[i].y > 0 ? 255 : 153, col[i].r);
                     }
                 }
@@ -193,5 +203,33 @@ namespace Atlas.TileMeshes.Tests
                 Assert.AreEqual(360, total * 180 / Math.PI, 0.01);
             }
         }
+
+#if !ATLAS_HEADLESS
+        // The upload: one stream in the look's vertex layout, the generator's counts, UInt16 indices.
+        [Test, Category("Unity")]
+        public void Upload_WritesTheLookLayout()
+        {
+            var mesh = new Mesh();
+            try
+            {
+                var lay = gen.Build(TileMeshSpec.Hyperbolic(5, 1.9, TileLod.Near, 0xF), mesh);
+                Assert.AreEqual(lay.VertexCount, mesh.vertexCount);
+                Assert.AreEqual(lay.IndexCount, (int)mesh.GetIndexCount(0));
+                Assert.AreEqual(UnityEngine.Rendering.IndexFormat.UInt16, mesh.indexFormat);
+                Assert.AreEqual(AtlasVertex.Stride, mesh.GetVertexBufferStride(0));
+                var attributes = mesh.GetVertexAttributes();
+                Assert.AreEqual(AtlasMesh.Layout.Length, attributes.Length);
+                for (int i = 0; i < attributes.Length; i++) Assert.AreEqual(AtlasMesh.Layout[i], attributes[i]);
+                var v = mesh.vertices; var col = mesh.colors32; var line = mesh.uv2;
+                for (int i = 0; i < lay.VertexCount; i++)
+                {
+                    Assert.AreEqual((Vector3)gen.Vertices[i].Position, v[i]);
+                    Assert.AreEqual(gen.Vertices[i].Shade, col[i].r); Assert.AreEqual(gen.Vertices[i].LineWeight, col[i].g);
+                    Assert.AreEqual((Vector2)gen.Vertices[i].Uv1, line[i]);
+                }
+            }
+            finally { UnityEngine.Object.DestroyImmediate(mesh); }
+        }
+#endif
     }
 }

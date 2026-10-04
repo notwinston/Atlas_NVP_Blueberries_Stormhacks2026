@@ -5,7 +5,6 @@ using Atlas.Kernel;
 using Atlas.Rendering;
 using NUnit.Framework;
 using Unity.Mathematics;
-using UnityEngine;
 
 namespace Atlas.Tiles.Tests
 {
@@ -106,7 +105,6 @@ namespace Atlas.Tiles.Tests
                 Assert.AreEqual(0, viol, "undrawn tile with a point nearer than rho in the true frustum, L=" + L);
                 Assert.AreEqual(0, litFloor, "plan's literal floor rule, floor points, L=" + L);
             }
-            Debug.Log("[P1-B06 T2] " + log);
             TestContext.Out.WriteLine("[P1-B06 T2] " + log);
         }
 

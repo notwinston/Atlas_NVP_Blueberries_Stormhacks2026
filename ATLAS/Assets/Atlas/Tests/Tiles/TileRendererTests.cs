@@ -1,4 +1,5 @@
-// [P1-B06] T4, T6, T7, T8 (brief section 4). All run under -nographics; none needs a GPU.
+// [P1-B06] T4, T6, T7, T8 (brief section 4). All run under -nographics; none needs a GPU. They need the engine.
+#if !ATLAS_HEADLESS
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -15,19 +16,18 @@ using Debug = UnityEngine.Debug;
 
 namespace Atlas.Tiles.Tests
 {
+    [Category("Unity")]
     public class TileRendererTests
     {
-        GameObject go; TileRenderer r; Material shared; TileGraph graph;
+        GameObject go; TileRenderer r; MaterialPool pool; TileGraph graph;
 
         [SetUp]
         public void SetUp()
         {
-            var sh = Shader.Find("Atlas/AtlasSurface");
-            Assert.NotNull(sh, "Atlas/AtlasSurface shader");
-            shared = new Material(sh) { hideFlags = HideFlags.DontSave };
+            pool = MaterialPool.CreateDefault(TileRenderer.PoolSize);
+            Assert.AreEqual("Atlas/Surface", pool.Shader.name);
             graph = new TileGraph(5);
-            Shader.SetGlobalFloat(AtlasShaderIDs.FogStart, 7f);
-            Shader.SetGlobalFloat(AtlasShaderIDs.FogEnd, 8f);
+            AtlasLook.SetFog(7f, 8f);
             go = new GameObject("TileRendererTest") { hideFlags = HideFlags.DontSave };
             r = go.AddComponent<TileRenderer>();
         }
@@ -36,17 +36,23 @@ namespace Atlas.Tiles.Tests
         public void TearDown()
         {
             if (go != null) UnityEngine.Object.DestroyImmediate(go);
-            if (shared != null) UnityEngine.Object.DestroyImmediate(shared);
+            Assert.AreEqual(0, pool.Rented, "every tile material went back to the pool");
+            pool.Dispose();
+            AtlasLook.ResetForSpace();
         }
 
-        static FrameContext Frame(long n, float3 head, quaternion rot) => new FrameContext(n, n / 60.0, 1f / 60, head, rot, true, false);
+        static FrameContext Frame(long n, float3 head, quaternion rot) => new FrameContext
+        {
+            FrameIndex = (int)n, Time = n / 60.0, DeltaTime = 1f / 60,
+            RawHeadPosition = head, RawHeadRotation = rot, HeadPosition = head, HeadRotation = rot, Tracking = TrackingState.Normal,
+        };
 
         // T4: row "no allocation on a tile crossing"; MP 11.2 tile-crossing frame <= 2 ms.
         [Test, Timeout(600000)]
         public void TileCrossing_NoAllocation_FrameCost()
         {
             const double L = 1.885;
-            r.Configure(graph, L, shared);
+            r.Configure(graph, L, pool);
             r.CullRho = 3.0;
             var pose = new WalkerPose { Tile = TileId.Zero, Local = Iso2.Boost(new double2(0.40, 0), -1) };
             double2 delta = double2.zero;
@@ -100,42 +106,54 @@ namespace Atlas.Tiles.Tests
         [Test]
         public void Fog_FromRhoMinus1_OpaqueAtRho()
         {
-            r.Configure(graph, 1.885, shared);
+            r.Configure(graph, 1.885, pool);
             var pose = new WalkerPose { Tile = TileId.Zero, Local = Iso2.Identity };
             var head = new float3(1.5f, 1.6f, -2f);
             var fc = Frame(1, head, quaternion.identity);
             r.KernelStep(pose, fc); r.Upload(fc);
-            Assert.AreEqual(3.77f, Shader.GetGlobalFloat(AtlasShaderIDs.FogStart), 1e-4);
-            Assert.AreEqual(5.655f, Shader.GetGlobalFloat(AtlasShaderIDs.FogEnd), 1e-4);
+            AssertFog(3.77f, 5.655f);
+            // _HypL and _HeadPosWS are the look step's (AtlasLook.Upload, from IWalkerKernel.MetresPerUnit and the head), not the renderer's
+            AtlasLook.Upload(fc.RawHeadPosition, r.Selection.L, fc.Time, fc.DeltaTime);
             Assert.AreEqual(1.885f, Shader.GetGlobalFloat(AtlasShaderIDs.HypL), 1e-6);
             var hp = Shader.GetGlobalVector(AtlasShaderIDs.HeadPosWS);
             Assert.AreEqual(head.x, hp.x, 1e-6); Assert.AreEqual(head.y, hp.y, 1e-6); Assert.AreEqual(head.z, hp.z, 1e-6);
+            AssertFog(3.77f, 5.655f);
             long before = r.Selection.CandidateRebuilds;
             r.CullRho = 2.5;
             fc = Frame(2, head, quaternion.identity);
             r.KernelStep(pose, fc); r.Upload(fc);
-            Assert.AreEqual(2.8275f, Shader.GetGlobalFloat(AtlasShaderIDs.FogStart), 1e-4);
-            Assert.AreEqual(4.7125f, Shader.GetGlobalFloat(AtlasShaderIDs.FogEnd), 1e-4);
+            AssertFog(2.8275f, 4.7125f);
             Assert.AreEqual(before + 1, r.Selection.CandidateRebuilds);
             r.CullRho = 5; Assert.AreEqual(3.5, r.CullRho);
             r.CullRho = 1; Assert.AreEqual(2.0, r.CullRho);
             r.enabled = false;
-            Assert.AreEqual(7f, Shader.GetGlobalFloat(AtlasShaderIDs.FogStart));
-            Assert.AreEqual(8f, Shader.GetGlobalFloat(AtlasShaderIDs.FogEnd));
+            AssertFog(7f, 8f);
+        }
+
+        // The fog as the look holds it and as the shader reads it: _AtlasFogParams = (start, 1 / (end - start)), metres.
+        static void AssertFog(float start, float end)
+        {
+            Assert.AreEqual(start, AtlasLook.State.FogStart, 1e-4);
+            Assert.AreEqual(end, AtlasLook.State.FogEnd, 1e-4);
+            var p = Shader.GetGlobalVector(AtlasShaderIDs.FogParams);
+            Assert.AreEqual(start, p.x, 1e-4); Assert.AreEqual(1f / (end - start), p.y, 1e-3);
         }
 
         // T7: row "pool of tile objects and material instances; per-tile anchor each frame"; MP 8.3 (no MaterialPropertyBlock).
         [Test]
         public void Pool_MaterialInstances_AnchorEachFrame()
         {
-            r.Configure(graph, 1.885, shared);
+            r.Configure(graph, 1.885, pool);
             Assert.AreEqual(128, r.Slots.Count);
+            Assert.AreEqual(128, pool.Rented);
             var seen = new HashSet<Material>();
             for (int i = 0; i < r.Slots.Count; i++)
             {
                 var m = r.Slots[i].sharedMaterial;
-                Assert.AreNotSame(shared, m); Assert.IsTrue(seen.Add(m), "distinct material instance " + i);
+                Assert.IsTrue(pool.Owns(m), "pooled Atlas/Surface instance " + i); Assert.IsTrue(seen.Add(m), "distinct material instance " + i);
+                Assert.AreEqual("Atlas/Surface", m.shader.name);
                 Assert.AreEqual(1f, m.GetFloat(AtlasShaderIDs.WarpMode));
+                Assert.AreEqual(TileRenderer.EdgeLineStrength, m.GetVector(AtlasShaderIDs.LineParams).z, "tile edges are drawn by the look's lines");
                 Assert.AreEqual(1000f, r.Slots[i].localBounds.size.x); Assert.AreEqual(1000f, r.Slots[i].localBounds.size.y); Assert.AreEqual(1000f, r.Slots[i].localBounds.size.z);
                 Assert.AreEqual(UnityEngine.Rendering.ShadowCastingMode.Off, r.Slots[i].shadowCastingMode);
                 Assert.IsFalse(r.Slots[i].receiveShadows);
@@ -210,3 +228,4 @@ namespace Atlas.Tiles.Tests
         }
     }
 }
+#endif

@@ -10,8 +10,10 @@ namespace Atlas.Link
     /// The link over LiteNetLib 2.1.4 with the settings of Master Plan section 7.2: two channels, ping every
     /// 500 ms, disconnect after 3 s, 5 ms logic tick, IPv4 only, unicast to a known address, connection key
     /// <c>atlas-v1</c>. Sockets run on LiteNetLib's own threads; events are handed over inside <see cref="Poll"/>.
+    /// A packet is stamped and copied on the receive thread the moment it arrives (<see cref="ILinkReceiveStamps"/>)
+    /// and waits in a queue for the poll, so the listener still hears everything on its own thread.
     /// </summary>
-    public sealed class LiteNetTransport : ILinkTransport, ILinkPeerAddresses, INetEventListener
+    public sealed class LiteNetTransport : ILinkTransport, ILinkPeerAddresses, ILinkReceiveStamps, INetEventListener
     {
         /// <summary>Milliseconds between the two connect requests of one attempt, and from the second to giving up.</summary>
         public const int ClientReconnectDelayMs = 250;
@@ -20,9 +22,31 @@ namespace Atlas.Link
         // would build a writer and its buffer for every attempt.
         static readonly byte[] s_keyBytes = NetDataWriter.FromString(LinkProtocol.ConnectionKey).CopyData();
 
+        // One State with LiteNetLib's header to spare; a larger packet (a fragmented manifest) gets its own size.
+        const int ArrivalBufferSize = 2048;
+        const int ArrivalPoolMax = 256;
+
+        // A packet between the receive thread and the poll.
+        struct Arrival
+        {
+            public NetPeer Peer;            // null once delivered
+            public byte[] Data;
+            public int Length;
+            public LinkDelivery Delivery;
+            public long StampUs;
+        }
+
         readonly NetManager _net;
         readonly Dictionary<int, NetPeer> _peers = new Dictionary<int, NetPeer>();
         bool _isHost;
+
+        // Guards _arrived and _arrivalPool, the only state the receive thread shares with the poll. Held for a
+        // copy or a swap, never across a call into LiteNetLib or the listener.
+        readonly object _arrivalLock = new object();
+        readonly List<Arrival> _arrived = new List<Arrival>(64);
+        readonly Stack<byte[]> _arrivalPool = new Stack<byte[]>(64);
+        readonly List<Arrival> _delivering = new List<Arrival>(64);     // poll thread only
+        ILinkClock _stampClock = new StopwatchClock();
 
         // The Hub's end point, parsed once per (address, port). With the Station away the client asks to connect
         // again and again for the whole session; none of those calls may allocate (section 7.5, rule 6).
@@ -42,8 +66,18 @@ namespace Atlas.Link
                 EnableStatistics = true,
                 IPv6Enabled = false,
                 UnconnectedMessagesEnabled = false,
-                BroadcastReceiveEnabled = false
+                BroadcastReceiveEnabled = false,
+                // OnNetworkReceive runs on the receive thread, where the arrival is stamped. Every other event
+                // still waits for PollEvents.
+                UnsyncedReceiveEvent = true
             };
+        }
+
+        public long LastReceiveUs { get; private set; }
+
+        public void StampWith(ILinkClock clock)
+        {
+            if (clock != null) _stampClock = clock;
         }
 
         public ILinkTransportListener Listener { get; set; }
@@ -98,7 +132,56 @@ namespace Atlas.Link
 
         public void Poll()
         {
-            if (_net.IsRunning) _net.PollEvents();
+            if (!_net.IsRunning) return;
+            // The arrivals are taken before the events: a peer's connect is raised before its first packet can
+            // arrive, so every packet taken here belongs to a peer that PollEvents has announced by the time
+            // it is delivered. A disconnect hands over its peer's packets first (OnPeerDisconnected).
+            TakeArrivals(null);
+            _net.PollEvents();
+            DeliverArrivals(null);
+            if (_delivering.Count == 0) return;
+            lock (_arrivalLock)
+            {
+                for (int i = 0; i < _delivering.Count; i++)
+                    if (_arrivalPool.Count < ArrivalPoolMax) _arrivalPool.Push(_delivering[i].Data);
+            }
+            _delivering.Clear();
+        }
+
+        // Moves what the receive thread has queued to the poll's list, in order: everything, or one peer's.
+        void TakeArrivals(NetPeer only)
+        {
+            lock (_arrivalLock)
+            {
+                int kept = 0;
+                for (int i = 0; i < _arrived.Count; i++)
+                {
+                    Arrival a = _arrived[i];
+                    if (only == null || ReferenceEquals(a.Peer, only)) _delivering.Add(a);
+                    else _arrived[kept++] = a;
+                }
+                _arrived.RemoveRange(kept, _arrived.Count - kept);
+            }
+        }
+
+        // Hands the taken packets to the listener, oldest first: all of them, or one peer's. A listener may
+        // stop the transport from inside the call, which empties the list under this loop.
+        void DeliverArrivals(NetPeer only)
+        {
+            for (int i = 0; i < _delivering.Count; i++)
+            {
+                Arrival a = _delivering[i];
+                if (a.Peer == null || (only != null && !ReferenceEquals(a.Peer, only))) continue;
+                NetPeer peer = a.Peer;
+                a.Peer = null;
+                _delivering[i] = a;
+                // A packet of a peer that has gone since (its id may be in use again) is dropped.
+                NetPeer known;
+                ILinkTransportListener listener = Listener;
+                if (listener == null || !_peers.TryGetValue(peer.Id, out known) || !ReferenceEquals(known, peer)) continue;
+                LastReceiveUs = a.StampUs;
+                listener.OnReceive(peer.Id, a.Data, 0, a.Length, a.Delivery);
+            }
         }
 
         public bool Send(int peerId, byte[] data, int offset, int length, LinkDelivery delivery)
@@ -146,6 +229,8 @@ namespace Atlas.Link
         {
             if (_net.IsRunning) _net.Stop(true);
             _peers.Clear();
+            lock (_arrivalLock) _arrived.Clear();
+            _delivering.Clear();
         }
 
         public int GetRttMs(int peerId)
@@ -186,11 +271,17 @@ namespace Atlas.Link
 
         void INetEventListener.OnPeerDisconnected(NetPeer peer, DisconnectInfo disconnectInfo)
         {
+            // What the peer sent before it left is still in the queue: that first, in order.
+            TakeArrivals(peer);
+            DeliverArrivals(peer);
             ILinkTransportListener listener = Listener;
             // A peer that closed with a last packet (its Bye): that packet first, then the disconnect.
             NetPacketReader last = disconnectInfo.AdditionalData;
             if (listener != null && last != null && !last.IsNull && last.AvailableBytes > 0 && _peers.ContainsKey(peer.Id))
+            {
+                LastReceiveUs = _stampClock.NowUs;
                 listener.OnReceive(peer.Id, last.RawData, last.Position, last.AvailableBytes, LinkDelivery.Reliable);
+            }
             _peers.Remove(peer.Id);
             if (listener != null) listener.OnPeerDisconnected(peer.Id, ReasonText(disconnectInfo.Reason));
         }
@@ -199,12 +290,28 @@ namespace Atlas.Link
 
         void INetEventListener.OnNetworkReceive(NetPeer peer, NetPacketReader reader, byte channelNumber, DeliveryMethod deliveryMethod)
         {
-            ILinkTransportListener listener = Listener;
-            if (listener == null) return;
-            LinkDelivery delivery = deliveryMethod == DeliveryMethod.Unreliable ? LinkDelivery.Unreliable
+            // On LiteNetLib's receive thread (UnsyncedReceiveEvent). The stamp comes first; the reader is
+            // recycled when this returns, so the bytes are copied into a pooled buffer for the poll.
+            long stampUs = _stampClock.NowUs;
+            int length = reader.AvailableBytes;
+            Arrival a;
+            a.Peer = peer;
+            a.Length = length;
+            a.Delivery = deliveryMethod == DeliveryMethod.Unreliable ? LinkDelivery.Unreliable
                 : deliveryMethod == DeliveryMethod.Sequenced ? LinkDelivery.Sequenced
                 : LinkDelivery.Reliable;
-            listener.OnReceive(peer.Id, reader.RawData, reader.Position, reader.AvailableBytes, delivery);
+            a.StampUs = stampUs;
+            lock (_arrivalLock)
+            {
+                a.Data = _arrivalPool.Count > 0 ? _arrivalPool.Pop() : new byte[ArrivalBufferSize];
+                if (a.Data.Length < length)
+                {
+                    _arrivalPool.Push(a.Data);
+                    a.Data = new byte[length];
+                }
+                System.Buffer.BlockCopy(reader.RawData, reader.Position, a.Data, 0, length);
+                _arrived.Add(a);
+            }
         }
 
         void INetEventListener.OnNetworkReceiveUnconnected(IPEndPoint remoteEndPoint, NetPacketReader reader, UnconnectedMessageType messageType) { }

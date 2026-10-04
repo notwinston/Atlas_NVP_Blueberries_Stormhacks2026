@@ -192,17 +192,7 @@ namespace Atlas.Telemetry
         static void ApplyBakedDefaults(ParamRegistry registry)
         {
             var asset = Resources.Load<TextAsset>(BakedDefaultsResource);
-            JsonValue baked;
-            if (asset == null || !AtlasJson.TryParse(asset.text, out baked) || !baked.IsObject) return;
-            registry.Restore(baked, ParamSource.Restore);
-            JsonValue values = baked["values"].IsObject ? baked["values"] : baked;
-            registry.Declared += entry =>
-            {
-                JsonValue v;
-                if (!values.TryGet(entry.Name, out v)) return;
-                if (v.IsNumber) registry.Set(entry, v.AsFloat(), ParamSource.Restore);
-                else if (v.IsBool) registry.Set(entry, v.AsBool() ? 1f : 0f, ParamSource.Restore);
-            };
+            if (asset != null) BakedDefaults.ApplyText(registry, asset.text);
         }
 
         static void ResolveLate(AtlasTelemetry t)

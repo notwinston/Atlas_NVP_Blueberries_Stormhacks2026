@@ -8,12 +8,14 @@ using UnityEngine.Rendering;
 namespace Atlas.Rendering
 {
     // Master Plan §3.4, §8.4: every vertex is defined as a Klein point and placed with the log chart (A.6).
+    // Vertices are written in the one layout of the look shader (AtlasVertex, lane A contract §10.2): COLOR.r is the baked AO,
+    // TEXCOORD1 on the floor runs from 0 to 1 across the tile, so the shader's lines fall on the tile's edges.
     public sealed class TileMeshGenerator
     {
         public const int MaxVertices = 1024, MaxIndices = 3072;
 
         readonly TilePalette palette;
-        readonly TileVertex[] verts = new TileVertex[MaxVertices];
+        readonly AtlasVertex[] verts = new AtlasVertex[MaxVertices];
         readonly ushort[] idx = new ushort[MaxIndices];
         readonly int[] sideIdx = new int[4 * 17];
         readonly int[] poly = new int[16];
@@ -29,7 +31,19 @@ namespace Atlas.Rendering
 
         public TileMeshGenerator(TilePalette palette) { this.palette = palette; }
 
+        /// <summary>The vertices and indices of the last Build, valid up to the layout's VertexCount and IndexCount.</summary>
+        public AtlasVertex[] Vertices => verts;
+        public ushort[] Indices => idx;
+
         public TileMeshLayout Build(in TileMeshSpec spec, Mesh target)
+        {
+            var lay = Build(spec);
+            Upload(target);
+            return lay;
+        }
+
+        /// <summary>Engine-free: fills Vertices and Indices and uploads nothing.</summary>
+        public TileMeshLayout Build(in TileMeshSpec spec)
         {
             vc = 0; ic = 0;
             kappa = spec.Kappa; scale = spec.Scale; kerbMask = spec.KerbMask; postMask = spec.PostMask;
@@ -54,7 +68,6 @@ namespace Atlas.Rendering
                 lay.SetPost(c, new RangeInt(v0, vc - v0), new RangeInt(i0, ic - i0));
             }
             lay.VertexCount = vc; lay.IndexCount = ic;
-            Upload(target);
             return lay;
         }
 
@@ -66,9 +79,9 @@ namespace Atlas.Rendering
             const MeshUpdateFlags flags = MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices;
             var arr = Mesh.AllocateWritableMeshData(1);
             var md = arr[0];
-            md.SetVertexBufferParams(vc, TileVertex.Descriptors);
+            md.SetVertexBufferParams(vc, AtlasMesh.Layout);
             md.SetIndexBufferParams(ic, IndexFormat.UInt16);
-            NativeArray<TileVertex>.Copy(verts, md.GetVertexData<TileVertex>(), vc);
+            NativeArray<AtlasVertex>.Copy(verts, md.GetVertexData<AtlasVertex>(), vc);
             NativeArray<ushort>.Copy(idx, md.GetIndexData<ushort>(), ic);
             md.subMeshCount = 1;
             md.SetSubMesh(0, new SubMeshDescriptor(0, ic) { bounds = bounds, vertexCount = vc }, flags);
@@ -101,11 +114,17 @@ namespace Atlas.Rendering
             for (int e = 0; e < 4; e++) nHat[e] = new double3(RotE(N.xy, e), N.z);
         }
 
-        int AddV(double2 k, float y, float2 uv, float ao)
+        int AddV(double2 k, float y, float2 uv, float ao, bool floor = false)
         {
             double2 c = TileChart.KleinToChart(k, kappa, scale);
             byte b = (byte)math.round(255f * ao);
-            verts[vc] = new TileVertex { Position = new float3((float)c.x, y, (float)c.y), Color = new Color32(b, b, b, 255), Uv = uv };
+            // Kerbs and posts carry no lines: a constant line coordinate and line weight 0. The shader does not light by the normal.
+            float2 line = floor ? new float2((float)(0.5 + 0.5 * (k.x / h)), (float)(0.5 + 0.5 * (k.y / h))) : new float2(0.5f, 0.5f);
+            verts[vc] = new AtlasVertex
+            {
+                Position = new float3((float)c.x, y, (float)c.y), Normal = new float3(0f, 1f, 0f),
+                Color = AtlasVertex.PackColor(b, floor ? (byte)255 : (byte)0), Uv0 = uv, Uv1 = line,
+            };
             return vc++;
         }
 
@@ -147,7 +166,7 @@ namespace Atlas.Rendering
                 for (int i = 0; i <= n; i++)
                 {
                     var k = new double2(Coord(i * m, B), Coord(j * m, B));
-                    AddV(k, 0, uv, FloorAo(k));
+                    AddV(k, 0, uv, FloorAo(k), true);
                 }
             for (int s = 0; s < 4; s++)
                 for (int jb = 0; jb <= B; jb++)
@@ -160,7 +179,7 @@ namespace Atlas.Rendering
                     }
                     double u = Coord(jb, B);
                     double2 k = s == 0 ? new double2(u, -h) : s == 1 ? new double2(h, u) : s == 2 ? new double2(u, h) : new double2(-h, u);
-                    sideIdx[s * 17 + jb] = AddV(k, 0, uv, FloorAo(k));
+                    sideIdx[s * 17 + jb] = AddV(k, 0, uv, FloorAo(k), true);
                 }
             for (int j = 0; j < n; j++)
                 for (int i = 0; i < n; i++)
@@ -178,7 +197,7 @@ namespace Atlas.Rendering
                     poly[pc++] = d;
                     if (j == 0) for (int jb = (i + 1) * m - 1; jb > i * m; jb--) poly[pc++] = sideIdx[0 * 17 + jb];
                     var mid = new double2((Coord(i * m, B) + Coord((i + 1) * m, B)) * 0.5, (Coord(j * m, B) + Coord((j + 1) * m, B)) * 0.5);
-                    int ctr = AddV(mid, 0, uv, FloorAo(mid));
+                    int ctr = AddV(mid, 0, uv, FloorAo(mid), true);
                     for (int p = 0; p < pc; p++) Tri(ctr, poly[p], poly[(p + 1) % pc]);
                 }
         }

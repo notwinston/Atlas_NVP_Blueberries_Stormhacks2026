@@ -7,12 +7,13 @@ using UnityEngine.Rendering;
 namespace Atlas.Rendering
 {
     // P1-B09: draws the lap flag (Beacon 0) and the next beacon of a LapWalk (Master Plan §3.3, §4.4, §10.1.3), each as a warped object
-    // (§8.3: one material instance each, no MaterialPropertyBlock). Anchor A = inverse(U) * F0 * Beacon_k, uploaded through
+    // (§8.3: one pooled material instance each, no MaterialPropertyBlock). Anchor A = inverse(U) * F0 * Beacon_k, uploaded through
     // WarpAnchor.ToMatrix (the only double-to-float cast, §4.6). At kappa = 0 the marker is an ordinary object at head + (A.o).xz.
     public sealed class LapMarkerView : IDisposable
     {
         readonly Marker flag, next;
         readonly GameObject root;
+        readonly MaterialPool pool;
         bool visible = true;
 
         sealed class Marker
@@ -20,16 +21,16 @@ namespace Atlas.Rendering
             public GameObject Go; public MeshRenderer Renderer; public Material Material; public Mesh Mesh;
         }
 
-        public LapMarkerView(Transform parent, Material shared)
+        public LapMarkerView(Transform parent, MaterialPool pool)
         {
-            if (shared == null) throw new ArgumentNullException(nameof(shared));
+            this.pool = pool ?? throw new ArgumentNullException(nameof(pool));
             root = new GameObject("LapMarkers") { hideFlags = HideFlags.DontSave };
             root.transform.SetParent(parent, false);
-            flag = Make("LapFlag", shared, LapMarkerMesh.FlagHeightM, LapMarkerMesh.FlagUv);
-            next = Make("LapBeacon", shared, LapMarkerMesh.BeaconHeightM, LapMarkerMesh.BeaconUv);
+            flag = Make("LapFlag", LapMarkerMesh.FlagHeightM, LapMarkerMesh.FlagUv);
+            next = Make("LapBeacon", LapMarkerMesh.BeaconHeightM, LapMarkerMesh.BeaconUv);
         }
 
-        Marker Make(string name, Material shared, float height, float2 uv)
+        Marker Make(string name, float height, float2 uv)
         {
             var m = new Marker { Go = new GameObject(name, typeof(MeshFilter), typeof(MeshRenderer)) { hideFlags = HideFlags.DontSave } };
             m.Go.transform.SetParent(root.transform, false);
@@ -37,7 +38,7 @@ namespace Atlas.Rendering
             LapMarkerMesh.Build(m.Mesh, height, LapMarkerMesh.RadiusM, uv);
             m.Go.GetComponent<MeshFilter>().sharedMesh = m.Mesh;
             m.Renderer = m.Go.GetComponent<MeshRenderer>();
-            m.Material = new Material(shared) { hideFlags = HideFlags.DontSave };
+            m.Material = pool.Rent();
             m.Renderer.sharedMaterial = m.Material;
             AtlasWarpBounds.Apply(m.Renderer);
             m.Renderer.shadowCastingMode = ShadowCastingMode.Off; m.Renderer.receiveShadows = false;
@@ -89,10 +90,11 @@ namespace Atlas.Rendering
             if (root != null) Obj(root);
         }
 
-        static void Kill(Marker m)
+        void Kill(Marker m)
         {
             if (m == null) return;
-            Obj(m.Go); Obj(m.Material); Obj(m.Mesh);
+            Obj(m.Go); Obj(m.Mesh);
+            if (pool.Owns(m.Material)) pool.Return(m.Material);
         }
 
         static void Obj(UnityEngine.Object o)

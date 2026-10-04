@@ -17,22 +17,13 @@ namespace Atlas.TileMeshes.Tests
         static readonly TileLod[] Lods = { TileLod.Near, TileLod.Mid, TileLod.Far };
 
         TileMeshGenerator gen;
-        readonly List<Mesh> made = new List<Mesh>();
 
-        [SetUp] public void SetUp() { gen = new TileMeshGenerator(TilePalette.Provisional); }
+        [SetUp] public void SetUp() { gen = new TileMeshGenerator(TilePalette.Default); }
 
-        [TearDown]
-        public void TearDown()
+        (TileMeshData mesh, TileMeshLayout lay, Vector3[] v) Make(TileMeshSpec spec)
         {
-            foreach (var m in made) if (m != null) UnityEngine.Object.DestroyImmediate(m);
-            made.Clear();
-        }
-
-        (Mesh mesh, TileMeshLayout lay, Vector3[] v) Make(TileMeshSpec spec)
-        {
-            var m = new Mesh();
-            made.Add(m);
-            var lay = gen.Build(spec, m);
+            var m = new TileMeshData();
+            var lay = m.Build(gen, spec);
             return (m, lay, m.vertices);
         }
 
@@ -60,7 +51,7 @@ namespace Atlas.TileMeshes.Tests
             var ws = new[] { new double2(0, 0), new double2(0.9 * h, 0.9 * h), new double2(0.95 * h, 0) };
             foreach (double L in Ls)
             {
-                var meshes = new Dictionary<TileLod, (Mesh, TileMeshLayout, Vector3[])>();
+                var meshes = new Dictionary<TileLod, (TileMeshData, TileMeshLayout, Vector3[])>();
                 foreach (var lod in Lods)
                 {
                     var r = Make(TileMeshSpec.Hyperbolic(5, L, lod, 0xF));
@@ -237,7 +228,7 @@ namespace Atlas.TileMeshes.Tests
             public int[] Ea, Eb;
         }
 
-        EdgeMesh ReadEdges(Mesh m)
+        EdgeMesh ReadEdges(TileMeshData m)
         {
             var v = m.vertices;
             var ind = m.GetIndices(0);
@@ -349,18 +340,15 @@ namespace Atlas.TileMeshes.Tests
                 foreach (double L in new[] { 0.9422, 1.4, 1.9, 3.0, 3.0152 })
                     for (int km = 0; km < 16; km++)
                     {
-                        var m = new Mesh(); made.Add(m);
-                        gen.Build(TileMeshSpec.Hyperbolic(5, L, lod, km), m);
-                        int tri = (int)m.GetIndexCount(0) / 3;
+                        int tri = gen.Build(TileMeshSpec.Hyperbolic(5, L, lod, km)).TriangleCount;
                         Assert.LessOrEqual(tri, TileChart.TriangleCap(lod));
                         if (km == 15) { if (first < 0) first = tri; Assert.AreEqual(first, tri, "count independent of L"); }
                         max = Math.Max(max, tri);
                     }
-                var mm = new Mesh(); made.Add(mm);
-                gen.Build(TileMeshSpec.Hyperbolic(5, 1.9, lod, 0xF), mm);
+                gen.Build(TileMeshSpec.Hyperbolic(5, 1.9, lod, 0xF));
                 sw.Restart();
                 const int reps = 200;
-                for (int i = 0; i < reps; i++) gen.Build(TileMeshSpec.Hyperbolic(5, 1.9, lod, 0xF), mm);
+                for (int i = 0; i < reps; i++) gen.Build(TileMeshSpec.Hyperbolic(5, 1.9, lod, 0xF));
                 sw.Stop();
                 TestContext.WriteLine($"[T4] {lod}: max triangles {max} (cap {TileChart.TriangleCap(lod)}); Build time {sw.Elapsed.TotalMilliseconds / reps:F3} ms per mesh");
             }

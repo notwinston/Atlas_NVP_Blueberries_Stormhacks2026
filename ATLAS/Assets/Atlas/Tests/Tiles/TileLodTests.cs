@@ -4,7 +4,6 @@ using Atlas.Kernel;
 using Atlas.Rendering;
 using NUnit.Framework;
 using Unity.Mathematics;
-using UnityEngine;
 
 namespace Atlas.Tiles.Tests
 {
@@ -61,11 +60,12 @@ namespace Atlas.Tiles.Tests
         // MP 8.5 planning "<= 250k triangles per frame"; logged only.
         static void LogTriangles(TileSelection sel, int q, double rho)
         {
-            using var cache = new TileShellCache(q, 1.885);
+            // the shells of TileShellCache (KerbMask 0, PostMask 0xF), counted with no engine object
+            var gen = new TileMeshGenerator(TilePalette.Default);
             long tri = 0;
-            for (int k = 0; k < sel.DrawnCount; k++) tri += cache.Get(sel.Drawn[k].Lod).GetIndexCount(0) / 3;
+            for (int k = 0; k < sel.DrawnCount; k++) tri += gen.Build(TileMeshSpec.Hyperbolic(q, 1.885, sel.Drawn[k].Lod, 0, 0xF)).TriangleCount;
             string msg = $"[P1-B06 T5] q={q} rho={rho}: drawn {sel.DrawnCount}, triangles per eye {tri}, both eyes {2 * tri}";
-            Debug.Log(msg); TestContext.Out.WriteLine(msg);
+            TestContext.Out.WriteLine(msg);
         }
     }
 }

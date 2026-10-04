@@ -1,8 +1,6 @@
 using System;
-using System.Runtime.InteropServices;
 using Unity.Mathematics;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace Atlas.Rendering
 {
@@ -46,27 +44,12 @@ namespace Atlas.Rendering
     {
         public float2 Floor, Kerb, Post;
 
-        // Texel centres of 16-px blocks in the 128^2 palette of Master Plan §8.1; provisional until P1-A06.
-        public static readonly TilePalette Provisional = new TilePalette
+        // The structure cells of the one palette (Master Plan §8.1; lane A contract §10.7).
+        public static readonly TilePalette Default = new TilePalette
         {
-            Floor = new float2(0.0625f, 0.0625f),
-            Kerb = new float2(0.1875f, 0.0625f),
-            Post = new float2(0.3125f, 0.0625f),
-        };
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct TileVertex
-    {
-        public float3 Position;  // xz = chart position in metres, y = height
-        public Color32 Color;    // rgb = AO, a = 255
-        public float2 Uv;        // palette UV
-
-        public static readonly VertexAttributeDescriptor[] Descriptors =
-        {
-            new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
-            new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.UNorm8, 4),
-            new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2),
+            Floor = AtlasPalette.Uv(AtlasPalette.Floor),
+            Kerb = AtlasPalette.Uv(AtlasPalette.Kerb),
+            Post = AtlasPalette.Uv(AtlasPalette.Post),
         };
     }
 

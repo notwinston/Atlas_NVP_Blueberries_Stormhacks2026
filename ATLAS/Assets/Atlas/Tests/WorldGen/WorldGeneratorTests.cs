@@ -6,7 +6,6 @@ using Atlas.Kernel;
 using Atlas.World;
 using NUnit.Framework;
 using Unity.Mathematics;
-using UnityEngine;
 
 namespace Atlas.WorldGen.Tests
 {
@@ -17,7 +16,13 @@ namespace Atlas.WorldGen.Tests
         public static RoomFootprint R33 => RoomFootprint.Rectangle(3, 3, 2.0 / 1.0613);
         const double Phi = 1.618033988749895;
 
-        public static string GoldenPath(string name) => Path.Combine(Application.dataPath, "Atlas/Tests/WorldGen/Golden", name);
+        // Unity runs tests with the project folder as the current directory; the headless runner names it.
+        public static string GoldenPath(string name)
+        {
+            string project = Environment.GetEnvironmentVariable("ATLAS_PROJECT_DIR");
+            if (string.IsNullOrEmpty(project)) project = Directory.GetCurrentDirectory();
+            return Path.Combine(project, "Assets", "Atlas", "Tests", "WorldGen", "Golden", name);
+        }
 
         static IEnumerable<string> GoldenLines(string name)
         {

@@ -9,12 +9,13 @@ namespace Atlas.World
         public const string ParamQ = "curved.q", ParamStrong = "curved.strong";
         public const string Group = "curved";
 
-        public static ushort RegisterQ(ParamRegistry registry)
-            => registry.Register(ParamQ, Group, 3, 6, 5, false);
+        // Redeclaring a name returns the same entry, so S2 and S4 may both call these from every Configure.
+        public static ParamEntry RegisterQ(ParamRegistry registry)
+            => registry.DeclareInt(ParamQ, Group, 3, 6, 5, null, false);
 
-        public static ushort RegisterStrong(ParamRegistry registry)
-            => registry.Register(ParamStrong, Group, 0, 1, 0, true);
+        public static ParamEntry RegisterStrong(ParamRegistry registry)
+            => registry.DeclareBool(ParamStrong, Group, false, null, true);
 
-        public static bool Strong(ParamRegistry registry, ushort strongId) => registry.Get(strongId) >= 0.5f;
+        public static bool Strong(ParamEntry strong) => strong.Bool;
     }
 }

@@ -1,15 +1,13 @@
 // [P1-B06] T3 (row acceptance: "over a recorded lap with head turns and looks down at the floor, no undrawn tile has a point
-// nearer than rho inside a camera frustum"). Partial: runs on the placeholder pose log (level gaze) with synthetic head turns
-// and looks down; rerun unchanged when lane C's P1-C01 recording lands.
+// nearer than rho inside a camera frustum"). Runs on the recorded lap of the sample room (level gaze) with synthetic head turns
+// and looks down. Engine-free.
 using System;
 using System.IO;
 using Atlas.Kernel;
 using Atlas.Rendering;
-using Atlas.Scan;
 using Atlas.World;
 using NUnit.Framework;
 using Unity.Mathematics;
-using UnityEngine;
 
 namespace Atlas.Tiles.Tests
 {
@@ -19,12 +17,15 @@ namespace Atlas.Tiles.Tests
         public void RecordedLap_NoUndrawnTileInView()
         {
             const int q = 5; const double rho = 3.0;
-            string root = Directory.GetParent(Application.dataPath).Parent.FullName;
-            var samples = PoseLog.Read(Path.Combine(root, "recordings", "walk_lap5_3x3.poselog"));
-            double L = RoomModel.Load(Path.Combine(root, "recordings", "room_3x3.json")).curvature.L5;
+            string project = Environment.GetEnvironmentVariable(RoomFixtures.ProjectDirVariable);
+            if (string.IsNullOrEmpty(project)) project = Directory.GetCurrentDirectory();
+            HeadPose[] samples;
+            using (StreamReader reader = File.OpenText(Path.GetFullPath(Path.Combine(project, "..", "recordings", "walk_lap5_3x3.poselog"))))
+                samples = PoseLog.Read(reader).Samples;
+            double L = RoomFixtures.LoadFromProject(RoomFixtures.Sample3x3).Curvature.L5;
             Assert.Greater(samples.Length, 100);
             double rc = TileDrawRule.CircumRadius(q);
-            // placeholder cameras: 48 deg vertical, atan(tan 48 * 1118/1032) = 50.27 deg horizontal
+            // the eye cameras: 48 deg up and down, atan(tan 48 * 1118/1032) = 50.27 deg to each side (LensModel's default limits)
             double halfUD = 48.0, halfSide = Math.Atan(Math.Tan(48.0 * Math.PI / 180) * 1118.0 / 1032.0) * 180 / Math.PI;
             var pts = TileTestPoses.MidMeshPoints(q, L);
             var graph = new TileGraph(q);
@@ -38,7 +39,7 @@ namespace Atlas.Tiles.Tests
             for (int i = 0; i < samples.Length; i++)
             {
                 var s = samples[i];
-                if (s.Tracking != 0) continue;
+                if (s.Tracking != TrackingState.Normal) continue;
                 var cur = new double2(s.Position.x, s.Position.z);
                 var step = (cur - prev) / L; prev = cur;
                 pose.Local = (pose.Local * Iso2.Boost(step, -1)).Orthonormalised();
@@ -48,7 +49,7 @@ namespace Atlas.Tiles.Tests
                 foreach (double yo in yawOffs)
                     foreach (double dn in downs)
                     {
-                        Quaternion rot = Quaternion.AngleAxis((float)yo, Vector3.up) * s.Rotation * Quaternion.AngleAxis((float)dn, Vector3.right);
+                        quaternion rot = math.mul(math.mul(quaternion.AxisAngle(math.up(), math.radians((float)yo)), s.Rotation), quaternion.AxisAngle(math.right(), math.radians((float)dn)));
                         float3 head = s.Position;
                         var cone = TileViewCone.FromHead(head, rot, halfSide, halfUD);
                         int n = sel.Update(pose, cone);
@@ -70,7 +71,7 @@ namespace Atlas.Tiles.Tests
                     }
             }
             string msg = $"[P1-B06 T3] L={L} samples={samples.Length} evals={evals} crossings={crossings} max drawn gaze={maxGaze} any={maxAny} violations={viol} outOfTile={sel.OutOfTileFrames}";
-            Debug.Log(msg); TestContext.Out.WriteLine(msg);
+            TestContext.Out.WriteLine(msg);
             Assert.AreEqual(0, viol);
             Assert.GreaterOrEqual(crossings, 1);
             Assert.AreEqual(0, sel.OutOfTileFrames);

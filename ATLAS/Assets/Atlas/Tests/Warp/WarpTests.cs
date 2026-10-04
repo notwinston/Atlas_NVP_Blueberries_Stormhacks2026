@@ -12,11 +12,28 @@ namespace Atlas.Warp.Tests
 {
     public class WarpTests
     {
-        static readonly Matrix4x4 Trs = Matrix4x4.TRS(new Vector3(1.2f, 0.3f, -0.7f), Quaternion.Euler(0, 37, 0), Vector3.one);
+        // Translation (1.2, 0.3, -0.7) after a turn of 37 degrees about +Y, built with no engine call.
+        static readonly float4x4 Trs = float4x4.TRS(new float3(1.2f, 0.3f, -0.7f), quaternion.RotateY(math.radians(37f)), new float3(1f, 1f, 1f));
 
         public static float4x4 ToF4(Matrix4x4 m) => new float4x4(
             m.m00, m.m01, m.m02, m.m03, m.m10, m.m11, m.m12, m.m13,
             m.m20, m.m21, m.m22, m.m23, m.m30, m.m31, m.m32, m.m33);
+
+        static string ShaderDir
+        {
+            get
+            {
+                string project = Environment.GetEnvironmentVariable("ATLAS_PROJECT_DIR");
+                if (string.IsNullOrEmpty(project)) project = Directory.GetCurrentDirectory();
+                return Path.Combine(project, "Assets", "Atlas", "Rendering", "Shaders", "Resources");
+            }
+        }
+
+        static string Strip(string src)
+        {
+            src = Regex.Replace(src, @"/\*.*?\*/", "", RegexOptions.Singleline);
+            return Regex.Replace(src, @"//[^\n]*", "");
+        }
 
         public static double Cmax(double3 a) => math.cmax(math.abs(a));
 
@@ -61,25 +78,20 @@ namespace Atlas.Warp.Tests
         {
             var rng = new Random(WarpSamples.Seed);
             var pts = WarpSamples.Points(-1, 1.9, rng);
-            var o2w = ToF4(Trs);
+            var o2w = Trs;
             double max = 0;
             for (int i = 0; i < 100; i++)
             {
                 var p = pts[i % 64] + i * 0.01f;
                 var w = AtlasWarpCpu.AtlasWarp(p, float4x4.identity, 0f, 1.9f, float3.zero, o2w);
-                var e = Trs.MultiplyPoint3x4(new Vector3(p.x, p.y, p.z));
+                var e = math.mul(Trs, new float4(p, 1f)).xyz;
                 max = Math.Max(max, Math.Max(Math.Abs(w.x - e.x), Math.Max(Math.Abs(w.y - e.y), Math.Abs(w.z - e.z))));
             }
             TestContext.WriteLine($"mode none max diff {max}");
             Assert.Less(max, 1e-5);
         }
 
-        public static string StrippedHlsl()
-        {
-            string src = File.ReadAllText(Path.Combine(Application.dataPath, "Atlas/Rendering/Shaders/AtlasWarp.hlsl"));
-            src = Regex.Replace(src, @"/\*.*?\*/", "", RegexOptions.Singleline);
-            return Regex.Replace(src, @"//[^\n]*", "");
-        }
+        public static string StrippedHlsl() => Strip(File.ReadAllText(Path.Combine(ShaderDir, "AtlasWarp.hlsl")));
 
         static int Count(string s, string pattern) => Regex.Matches(s, pattern).Count;
 
@@ -106,12 +118,37 @@ namespace Atlas.Warp.Tests
                 Assert.AreEqual(0, Count(s, bad), bad);
             foreach (var good in new[] { "float3 AtlasWarp(float3 positionOS)", "ATLAS_WARP_INCLUDED", "_Anchor", "_WarpMode" })
                 StringAssert.Contains(good, s);
-            StringAssert.IsMatch(@"float\s+_HypL;", s);
-            StringAssert.IsMatch(@"float3\s+_HeadPosWS;", s);
-            var ms = Regex.Matches(s, @"^\s*(float\d?(x\d)?)\s+_\w+\s*;", RegexOptions.Multiline);
-            Assert.AreEqual(2, ms.Count);
-            StringAssert.Contains("_HypL", ms[0].Value);
-            StringAssert.Contains("_HeadPosWS", ms[1].Value);
+            foreach (var good in new[] { "_HypL", "_HeadPosWS", "void AtlasWarpClip(float3 positionWS)" })
+                StringAssert.Contains(good, s);
+            // The include declares no uniform (lane A contract 10.1): AtlasCore.hlsl declares _Anchor and _WarpMode in the one
+            // per-material block and _HypL and _HeadPosWS as globals, and the shader includes it first.
+            Assert.AreEqual(0, Regex.Matches(s, @"^\s*(float\d?(x\d)?)\s+_\w+\s*;", RegexOptions.Multiline).Count);
+            string core = Strip(File.ReadAllText(Path.Combine(ShaderDir, "AtlasCore.hlsl")));
+            int blockStart = core.IndexOf("CBUFFER_START(UnityPerMaterial)", StringComparison.Ordinal), blockEnd = core.IndexOf("CBUFFER_END", StringComparison.Ordinal);
+            Assert.Greater(blockStart, -1); Assert.Greater(blockEnd, blockStart);
+            string block = core.Substring(blockStart, blockEnd - blockStart);
+            StringAssert.IsMatch(@"float4x4\s+_Anchor;", block);
+            StringAssert.IsMatch(@"float\s+_WarpMode;", block);
+            string globals = core.Substring(blockEnd);
+            StringAssert.IsMatch(@"float\s+_HypL;", globals);
+            StringAssert.IsMatch(@"float4\s+_HeadPosWS;", globals);
+            string surface = File.ReadAllText(Path.Combine(ShaderDir, "AtlasSurface.shader"));
+            int coreAt = surface.IndexOf("\"AtlasCore.hlsl\"", StringComparison.Ordinal), warpAt = surface.IndexOf("\"AtlasWarp.hlsl\"", StringComparison.Ordinal);
+            Assert.Greater(coreAt, -1); Assert.Greater(warpAt, coreAt);
+            StringAssert.Contains("AtlasWarp(input.positionOS)", surface);
+            StringAssert.Contains("AtlasWarpClip(input.positionWS)", surface);
+        }
+
+        // kernel.md §6.5; lane A contract 10.3: the four gates are _Gate0 .. _Gate3 of the one per-material block.
+        [Test]
+        public void Gates_IncludeContract()
+        {
+            string s = Strip(File.ReadAllText(Path.Combine(ShaderDir, "AtlasGates.hlsl")));
+            foreach (var bad in new[] { "CBUFFER_START", "UnityPerMaterial", "#include", "#pragma", @"\b_Gates\b" })
+                Assert.AreEqual(0, Count(s, bad), bad);
+            Assert.AreEqual(0, Regex.Matches(s, @"^\s*(float\d?(x\d)?)\s+_\w+\s*;", RegexOptions.Multiline).Count);
+            foreach (var good in new[] { "void AtlasGatesClip(float3 positionWS)", "ATLAS_GATES_INCLUDED", "_Gate0", "_Gate1", "_Gate2", "_Gate3", "_WorldSpaceCameraPos.xz" })
+                StringAssert.Contains(good, s);
         }
 
         // §4.6 "computed in double, cast to float last"; kernel.md §6.2 upload layout
@@ -154,8 +191,9 @@ namespace Atlas.Warp.Tests
             Assert.Less(max, 1e-3);
         }
 
+#if !ATLAS_HEADLESS
         // §9.5.6 "component that sets huge localBounds"; §8.3
-        [Test]
+        [Test, Category("Unity")]
         public void Warp_HugeLocalBounds()
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -174,15 +212,19 @@ namespace Atlas.Warp.Tests
             finally { UnityEngine.Object.DestroyImmediate(go); UnityEngine.Object.DestroyImmediate(go2); }
         }
 
-        // §6.4 property ids; kernel.md §6.7
-        [Test]
+        // §6.4 property ids; kernel.md §6.7; the gates are the four vectors of lane A contract 10.3
+        [Test, Category("Unity")]
         public void ShaderIDs_MatchContract()
         {
             Assert.AreEqual(Shader.PropertyToID("_HypL"), AtlasShaderIDs.HypL);
             Assert.AreEqual(Shader.PropertyToID("_HeadPosWS"), AtlasShaderIDs.HeadPosWS);
             Assert.AreEqual(Shader.PropertyToID("_Anchor"), AtlasShaderIDs.Anchor);
             Assert.AreEqual(Shader.PropertyToID("_WarpMode"), AtlasShaderIDs.WarpMode);
-            Assert.AreEqual(Shader.PropertyToID("_Gates"), AtlasShaderIDs.Gates);
+            Assert.AreEqual(Shader.PropertyToID("_Gate0"), AtlasShaderIDs.Gate0);
+            Assert.AreEqual(Shader.PropertyToID("_Gate1"), AtlasShaderIDs.Gate1);
+            Assert.AreEqual(Shader.PropertyToID("_Gate2"), AtlasShaderIDs.Gate2);
+            Assert.AreEqual(Shader.PropertyToID("_Gate3"), AtlasShaderIDs.Gate3);
         }
+#endif
     }
 }

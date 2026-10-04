@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using Atlas.Kernel;
 using Atlas.Rendering;
 using Unity.Mathematics;
-using UnityEngine;
 
 namespace Atlas.Tiles.Tests
 {
@@ -29,7 +28,7 @@ namespace Atlas.Tiles.Tests
 
         /// <summary>Unity convention: pitchDown positive looks down.</summary>
         public static quaternion Rot(double yawDeg, double pitchDownDeg) =>
-            Quaternion.Euler((float)pitchDownDeg, (float)yawDeg, 0f);
+            quaternion.Euler(math.radians((float)pitchDownDeg), math.radians((float)yawDeg), 0f);   // Unity's order (ZXY), engine-free
 
         /// <summary>The true (not widened) frustum of both eyes: four side planes as tangents.</summary>
         public readonly struct EyeFrusta
@@ -55,14 +54,10 @@ namespace Atlas.Tiles.Tests
         /// <summary>All vertices of the B05 Mid mesh (full boundary, grid, post wedges with 2.6 m tops).</summary>
         public static float3[] MidMeshPoints(int q, double L)
         {
-            var gen = new TileMeshGenerator(TilePalette.Provisional);
-            var mesh = new Mesh();
-            gen.Build(TileMeshSpec.Hyperbolic(q, L, TileLod.Mid, 0, 0xF), mesh);
-            var v = new List<Vector3>();
-            mesh.GetVertices(v);
-            var pts = new float3[v.Count];
-            for (int i = 0; i < pts.Length; i++) pts[i] = v[i];
-            UnityEngine.Object.DestroyImmediate(mesh);
+            var gen = new TileMeshGenerator(TilePalette.Default);
+            var lay = gen.Build(TileMeshSpec.Hyperbolic(q, L, TileLod.Mid, 0, 0xF));
+            var pts = new float3[lay.VertexCount];
+            for (int i = 0; i < pts.Length; i++) pts[i] = gen.Vertices[i].Position;
             return pts;
         }
 

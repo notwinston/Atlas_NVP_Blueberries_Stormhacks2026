@@ -17,7 +17,7 @@ namespace Atlas.World.Lint
         }
 
         readonly double L;
-        readonly TileMeshGenerator gen = new TileMeshGenerator(TilePalette.Provisional);
+        readonly TileMeshGenerator gen = new TileMeshGenerator(TilePalette.Default);
         readonly Dictionary<int, Entry> cache = new Dictionary<int, Entry>();
 
         public TileMeshCache(double L) { this.L = L; }

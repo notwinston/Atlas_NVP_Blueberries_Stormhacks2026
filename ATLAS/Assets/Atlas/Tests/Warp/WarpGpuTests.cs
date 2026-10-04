@@ -1,3 +1,4 @@
+#if !ATLAS_HEADLESS
 using System;
 using Atlas.Rendering;
 using NUnit.Framework;
@@ -9,6 +10,7 @@ using Random = System.Random;
 
 namespace Atlas.Warp.Tests
 {
+    [Category("Unity")]
     public class WarpGpuTests
     {
         const string Path = "Assets/Atlas/Tests/Warp/AtlasWarpProbe.compute";
@@ -93,3 +95,4 @@ namespace Atlas.Warp.Tests
         }
     }
 }
+#endif

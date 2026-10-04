@@ -25,6 +25,32 @@ namespace Atlas.Rendering
         static readonly int s_LensFrustumL = Shader.PropertyToID("_LensFrustumL");
         static readonly int s_LensFrustumR = Shader.PropertyToID("_LensFrustumR");
 
+        static LensBlit s_Active;
+
+        /// <summary>
+        /// Non-null: the one final pass draws with this material instead of the lens material (FieldFit's
+        /// composed blit, Master Plan section 10.4.3). The material samples its own sources; set it to null to
+        /// give the screen back to the lens blit.
+        /// </summary>
+        public static Material FinalBlitOverride { get; set; }
+
+        /// <summary>
+        /// Where the ordinary lens blit samples an eye's texture for a point of that eye's half of the screen.
+        /// eye 0 = left, 1 = right; screenUV is (0, 0) at the bottom left and (1, 1) at the top right of the
+        /// half. The same arithmetic as the pass (<see cref="LensModel.ScreenToEyeUv"/>). With no lens blit
+        /// in the scene the mapping is the plain copy: the identity.
+        /// </summary>
+        public static Vector2 SourceUV(int eye, Vector2 screenUV)
+        {
+            LensBlit blit = s_Active;
+            if (blit == null)
+                return screenUV;
+            var full = new float2(0.5f * (screenUV.x + (eye == 0 ? 0f : 1f)), screenUV.y);
+            // The right edge of the left half belongs to the left eye: stay below the screen's centre line.
+            if (eye == 0) full.x = math.min(full.x, 0.49999997f);
+            return blit._lens.ScreenToEyeUv(full, blit._distortion, out _);
+        }
+
         Camera _camera;
         UniversalAdditionalCameraData _cameraData;
         Material _material;
@@ -32,6 +58,9 @@ namespace Atlas.Rendering
         EyeTextureSet _eyes;
         LensModel _lens;
         StereoRig _rig;
+        // Handles of the rig's overriding eye targets, made when they change.
+        RenderTexture _overrideLeft, _overrideRight;
+        RTHandle _overrideLeftHandle, _overrideRightHandle;
         bool _distortion;
         bool _constantsValid;
         int _lensVersion;
@@ -136,17 +165,20 @@ namespace Atlas.Rendering
 
         void OnEnable()
         {
+            s_Active = this;
             RenderPipelineManager.beginCameraRendering += OnBeginCamera;
         }
 
         void OnDisable()
         {
+            if (s_Active == this) s_Active = null;
             RenderPipelineManager.beginCameraRendering -= OnBeginCamera;
         }
 
         void OnDestroy()
         {
             if (_rig != null) _rig.ModeChanged -= OnModeChanged;
+            ReleaseOverrideHandles();
             CoreUtils.Destroy(_material);
         }
 
@@ -158,17 +190,47 @@ namespace Atlas.Rendering
         // Runs just before URP sets this camera up, which is when a pass can be queued for it alone.
         void OnBeginCamera(ScriptableRenderContext context, Camera camera)
         {
-            if (camera != _camera || _material == null)
+            Material material = FinalBlitOverride != null ? FinalBlitOverride : _material;
+            if (camera != _camera || material == null)
                 return;
             ScriptableRenderer renderer = _cameraData.scriptableRenderer;
             if (renderer == null)
                 return;
 
-            if (!_constantsValid || _lensVersion != _lens.Version)
+            if (_material != null && (!_constantsValid || _lensVersion != _lens.Version))
                 UploadConstants();
 
-            _pass.Setup(_material, _eyes.LeftHandle, _eyes.RightHandle);
+            if (_rig.EyeTargetsOverridden)
+            {
+                UpdateOverrideHandles();
+                _pass.Setup(material, _overrideLeftHandle, _overrideRightHandle);
+            }
+            else
+            {
+                if (_overrideLeftHandle != null) ReleaseOverrideHandles();
+                _pass.Setup(material, _eyes.LeftHandle, _eyes.RightHandle);
+            }
             renderer.EnqueuePass(_pass);
+        }
+
+        void UpdateOverrideHandles()
+        {
+            RenderTexture left = _rig.GetEyeTargetOverride(Eye.Left), right = _rig.GetEyeTargetOverride(Eye.Right);
+            if (left == _overrideLeft && right == _overrideRight && _overrideLeftHandle != null)
+                return;
+            ReleaseOverrideHandles();
+            _overrideLeft = left;
+            _overrideRight = right;
+            _overrideLeftHandle = RTHandles.Alloc(left);
+            _overrideRightHandle = RTHandles.Alloc(right);
+        }
+
+        void ReleaseOverrideHandles()
+        {
+            if (_overrideLeftHandle != null) RTHandles.Release(_overrideLeftHandle);
+            if (_overrideRightHandle != null) RTHandles.Release(_overrideRightHandle);
+            _overrideLeftHandle = _overrideRightHandle = null;
+            _overrideLeft = _overrideRight = null;
         }
 
         void UploadConstants()

@@ -11,7 +11,7 @@ namespace Atlas.Safety
     /// with no depth image (the static map alone) and with no room (live depth alone, in the head frame).
     /// Tick allocates nothing, except on the one frame a room becomes active again.
     /// </summary>
-    public sealed unsafe class BumpGuard : IBumpGuard, IDisposable
+    public sealed unsafe class BumpGuard : IBumpGuard, IClearanceQuery, IDisposable
     {
         /// <summary>
         /// Images up to this many pixels are processed inline: the Editor's synthetic depth (64 x 48) costs less
@@ -23,6 +23,7 @@ namespace Atlas.Safety
         readonly bool _useBurstJob;
         BumpDepthRunner _runner;
         RoomModel _room;
+        double _time;
         bool _disposed;
 
         public BumpGuard() : this(true)
@@ -63,10 +64,21 @@ namespace Atlas.Safety
             else _core.ClearRoom();
         }
 
+        /// <summary>
+        /// clear(p) of section 4.10 at a floor point of the room frame, as of the last Tick: the smaller of the
+        /// static distance field and the distance to the nearest live dynamic cell. Positive infinity while no
+        /// room is loaded (the map is put away during a rescan too). Reads only; safe on the frame path.
+        /// </summary>
+        public float Clearance(float2 p)
+        {
+            return _disposed ? float.PositiveInfinity : _core.ClearAt(p, _time);
+        }
+
         /// <summary>The first call of the frame. Never awaits.</summary>
         public void Tick(in SensorFrame sensors)
         {
             if (_disposed) return;
+            _time = sensors.Time;
             bool trackingNormal = sensors.Head.Tracking == TrackingState.Normal;
 
             // The static map holds only while the head is in the room frame. While it is not (a rescan is

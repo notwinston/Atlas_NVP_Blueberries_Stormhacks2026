@@ -5,7 +5,6 @@
         "Atlas.Kernel",
         "Atlas.Rendering",
         "Atlas.World",
-        "Atlas.Scan",
         "Unity.Mathematics",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"

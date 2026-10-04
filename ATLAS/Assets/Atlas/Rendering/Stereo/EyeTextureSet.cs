@@ -20,7 +20,8 @@ namespace Atlas.Rendering
     /// The eye render textures (Master Plan sections 8.2 and 8.6, task P1-A05). One texture per eye; four sets
     /// (0.8 with 4x MSAA, 0.7 with 4x, 0.6 with 2x, 0.6 with none) are allocated once at start and the thermal
     /// ladder swaps between them without allocating. Multisampled colour and depth are memoryless, so only the
-    /// resolved colour is kept. Nobody else assigns Camera.targetTexture of the eye cameras.
+    /// resolved colour is kept. Nobody else assigns Camera.targetTexture of the eye cameras, except the rig while
+    /// its eye-target override is set (StereoRig.OverrideEyeTargets).
     /// </summary>
     public sealed class EyeTextureSet : IEyeTextures, IDisposable
     {

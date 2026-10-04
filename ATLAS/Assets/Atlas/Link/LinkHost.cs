@@ -87,6 +87,7 @@ namespace Atlas.Link
         readonly ParamSetMessage _paramSetOut = new ParamSetMessage();
         readonly RoomOutlineMessage _outlineIn = new RoomOutlineMessage();
         readonly ILinkPeerAddresses _addresses;
+        readonly ILinkReceiveStamps _stamps;    // null when the transport cannot tell when a packet arrived
         byte[] _lastOutline;
         byte[] _lastWorldEvent;
         StateMessage _stateIn;
@@ -100,6 +101,8 @@ namespace Atlas.Link
             _transport = transport;
             _clock = clock;
             _addresses = transport as ILinkPeerAddresses;
+            _stamps = transport as ILinkReceiveStamps;
+            if (_stamps != null) _stamps.StampWith(clock);
             _transport.Listener = this;
         }
 
@@ -606,6 +609,14 @@ namespace Atlas.Link
             if (handler != null) handler(peerId, peer.Role, reason);
         }
 
+        // When the packet now being delivered arrived: the transport's stamp when it has one, else this poll.
+        long ArrivalUs(long now)
+        {
+            if (_stamps == null) return now;
+            long at = _stamps.LastReceiveUs;
+            return at < now ? at : now;
+        }
+
         void ILinkTransportListener.OnReceive(int peerId, byte[] data, int offset, int length, LinkDelivery delivery)
         {
             if (length < 1) return;
@@ -616,8 +627,10 @@ namespace Atlas.Link
             {
                 var ping = new TPingMessage();
                 if (!ping.ReadFrom(data, offset, length)) return;
-                long t2 = _clock.NowUs;
-                TPongMessage pong = ClockSync.Answer(ping, t2, _clock.NowUs);
+                // t2 is the arrival and t3 is now: the wait for this poll is inside (t3 - t2), where the
+                // client subtracts it.
+                long t3 = _clock.NowUs;
+                TPongMessage pong = ClockSync.Answer(ping, ArrivalUs(t3), t3);
                 int n = pong.WriteTo(_smallBuffer, 0);
                 _transport.Send(peerId, _smallBuffer, 0, n, LinkDelivery.Unreliable);
                 _transport.Flush();
@@ -754,7 +767,8 @@ namespace Atlas.Link
                 {
                     var pong = new TPongMessage();
                     if (!pong.ReadFrom(data, offset, length)) break;
-                    long t4 = _clock.NowUs;
+                    // When the pong arrived, not when this poll got round to it.
+                    long t4 = ArrivalUs(_clock.NowUs);
                     if (!peer.Clock.OnPong(pong, t4)) break;
                     LinkHostPongHandler handler = TPongReceived;
                     if (handler != null) handler(peerId, in pong, t4);

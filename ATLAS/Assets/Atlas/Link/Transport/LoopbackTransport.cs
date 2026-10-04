@@ -365,7 +365,14 @@ namespace Atlas.Link
                             c.AnySeenBtoA = true;
                         }
                     }
-                    if (listener != null) listener.OnReceive(p.ToPeerId, p.Data, 0, p.Length, p.Delivery);
+                    if (listener != null)
+                    {
+                        // The stamp a receive thread would have taken: the packet arrived at DeliverAtUs and has
+                        // waited for this poll since.
+                        long waitedUs = _clock.NowUs - p.DeliverAtUs;
+                        endpoint.LastReceiveUs = endpoint.StampClock.NowUs - (waitedUs > 0 ? waitedUs : 0);
+                        listener.OnReceive(p.ToPeerId, p.Data, 0, p.Length, p.Delivery);
+                    }
                     break;
                 }
             }
@@ -373,7 +380,7 @@ namespace Atlas.Link
     }
 
     /// <summary>One endpoint of a <see cref="LoopbackNetwork"/>. Create it with <see cref="LoopbackNetwork.CreateEndpoint"/>.</summary>
-    public sealed class LoopbackTransport : ILinkTransport, ILinkPeerAddresses
+    public sealed class LoopbackTransport : ILinkTransport, ILinkPeerAddresses, ILinkReceiveStamps
     {
         /// <summary>What <see cref="GetPeerAddress"/> answers for every connected peer: the network is in memory.</summary>
         public const string PeerAddress = "loopback";
@@ -383,7 +390,18 @@ namespace Atlas.Link
         readonly LoopbackNetwork _network;
         int _nextPeerId;
 
-        internal LoopbackTransport(LoopbackNetwork network) { _network = network; }
+        internal LoopbackTransport(LoopbackNetwork network)
+        {
+            _network = network;
+            StampClock = network.Clock;
+        }
+
+        // The listener's clock, which a test may have shifted against the network's.
+        internal ILinkClock StampClock { get; private set; }
+
+        public long LastReceiveUs { get; internal set; }
+
+        public void StampWith(ILinkClock clock) { StampClock = clock ?? _network.Clock; }
 
         public ILinkTransportListener Listener { get; set; }
         public bool IsRunning { get; private set; }

@@ -23,6 +23,7 @@ namespace Atlas.Link
 
         readonly ILinkTransport _transport;
         readonly ILinkClock _clock;
+        readonly ILinkReceiveStamps _stamps;    // null when the transport cannot tell when a packet arrived
         readonly ClockSync _clockSync = new ClockSync();
         readonly LinkWatchdog _watchdog = new LinkWatchdog();
         readonly ParamRegistry _registry;
@@ -60,6 +61,8 @@ namespace Atlas.Link
             if (clock == null) throw new ArgumentNullException("clock");
             _transport = transport;
             _clock = clock;
+            _stamps = transport as ILinkReceiveStamps;
+            if (_stamps != null) _stamps.StampWith(clock);
             _registry = registry;
             Role = role;
             _transport.Listener = this;
@@ -499,6 +502,14 @@ namespace Atlas.Link
             _watchdog.OnTransportDisconnected(_clock.NowUs);
         }
 
+        // When the packet now being delivered arrived: the transport's stamp when it has one, else this poll.
+        long ArrivalUs(long now)
+        {
+            if (_stamps == null) return now;
+            long at = _stamps.LastReceiveUs;
+            return at < now ? at : now;
+        }
+
         void ILinkTransportListener.OnReceive(int peerId, byte[] data, int offset, int length, LinkDelivery delivery)
         {
             if (peerId != _peer || length < 1) return;
@@ -509,15 +520,18 @@ namespace Atlas.Link
             {
                 case MessageId.TPong:
                 {
+                    // t4 is when the pong arrived, not when this poll got round to it: up to a frame earlier.
                     var pong = new TPongMessage();
-                    if (pong.ReadFrom(data, offset, length)) _clockSync.OnPong(pong, now);
+                    if (pong.ReadFrom(data, offset, length)) _clockSync.OnPong(pong, ArrivalUs(now));
                     break;
                 }
                 case MessageId.TPing:
                 {
                     var ping = new TPingMessage();
                     if (!ping.ReadFrom(data, offset, length)) break;
-                    TPongMessage pong = ClockSync.Answer(ping, now, _clock.NowUs);
+                    // t2 is the arrival and t3 is now, so the wait for this poll is inside (t3 - t2), where
+                    // the Hub subtracts it.
+                    TPongMessage pong = ClockSync.Answer(ping, ArrivalUs(now), _clock.NowUs);
                     int n = pong.WriteTo(_smallBuffer, 0);
                     _transport.Send(_peer, _smallBuffer, 0, n, LinkDelivery.Unreliable);
                     _transport.Flush();

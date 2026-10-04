@@ -7,7 +7,7 @@
 
 // The one per-material block. Order and types are a contract frozen at G0; MaterialPool sets every value.
 CBUFFER_START(UnityPerMaterial)
-    float4x4 _Anchor;         // tile, room or object anchor of the warp. Identity in this build
+    float4x4 _Anchor;         // tile, room or object anchor of the warp (AtlasWarp.hlsl). Identity by default
     float4   _BaseTint;       // rgb multiplies the palette colour (linear); a = opacity 0..1, dithered
     float4   _LineColor;      // rgb line colour (linear); a unused
     float4   _LineParams;     // x minor width, y major width (multiples of _AtlasLineWidth); z minor strength, w major strength

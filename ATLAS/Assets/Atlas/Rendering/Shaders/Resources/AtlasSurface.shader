@@ -98,6 +98,7 @@ Shader "Atlas/Surface"
             {
                 AtlasGatesClip(input.positionWS);                         // first, for every material
                 AtlasPortalClip(input.positionWS);
+                AtlasWarpClip(input.positionWS);                          // the far side of the sphere
                 return AtlasShade(input.positionWS, input.uv0, input.lineCoord, input.color, input.positionCS);
             }
             ENDHLSL

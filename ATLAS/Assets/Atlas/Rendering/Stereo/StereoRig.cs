@@ -40,6 +40,10 @@ namespace Atlas.Rendering
         int _lensVersion = -1;
         float _ipd = DefaultIpd;
         DisplayMode _mode = DisplayMode.Hand;
+        // The eye-target override (FieldFit's wide source) and the targets the eye textures gave the cameras.
+        RenderTexture _overrideLeft, _overrideRight, _normalLeft, _normalRight;
+        float _overrideFov;
+        bool _overridden;
 
         /// <summary>
         /// Builds the rig under the tracked camera: "Atlas Head" with this component, "Atlas Eyes", the two eye
@@ -123,18 +127,47 @@ namespace Atlas.Rendering
             RenderPipelineManager.beginContextRendering -= OnBeginContext;
         }
 
-        // Once per frame, before any camera is culled: pick up live edits of the lens model.
+        // Once per frame, before any camera is culled: pick up live edits of the lens model, and keep an
+        // override in place when the quality ladder has swapped the eye textures under it.
         void OnBeginContext(ScriptableRenderContext context, List<Camera> cameras)
         {
             if (_lens != null && _lens.Version != _lensVersion)
                 ApplyProjection();
+            if (_overridden)
+                AssignOverrideTargets();
         }
 
         void ApplyProjection()
         {
             _lensVersion = _lens.Version;
+            if (_overridden)
+            {
+                _left.projectionMatrix = OverrideProjection(_overrideLeft);
+                _right.projectionMatrix = OverrideProjection(_overrideRight);
+                return;
+            }
             _left.projectionMatrix = _lens.GetProjection(Eye.Left, NearPlane, FarPlane);
             _right.projectionMatrix = _lens.GetProjection(Eye.Right, NearPlane, FarPlane);
+        }
+
+        Matrix4x4 OverrideProjection(RenderTexture target)
+        {
+            return Matrix4x4.Perspective(_overrideFov, (float)target.width / target.height, NearPlane, FarPlane);
+        }
+
+        // A target that is not the override was put there by the eye textures: it is what Clear gives back.
+        void AssignOverrideTargets()
+        {
+            if (_left.targetTexture != _overrideLeft)
+            {
+                _normalLeft = _left.targetTexture;
+                _left.targetTexture = _overrideLeft;
+            }
+            if (_right.targetTexture != _overrideRight)
+            {
+                _normalRight = _right.targetTexture;
+                _right.targetTexture = _overrideRight;
+            }
         }
 
         void PlaceEyes()
@@ -197,6 +230,50 @@ namespace Atlas.Rendering
 
         public Transform Head => transform;
         public Transform Hud => _hud;
+
+        /// <summary>True between <see cref="OverrideEyeTargets"/> and <see cref="ClearEyeTargetOverride"/>.</summary>
+        public bool EyeTargetsOverridden => _overridden;
+        /// <summary>The overriding target of an eye; null when there is no override.</summary>
+        public RenderTexture GetEyeTargetOverride(Eye eye) => _overridden ? (eye == Eye.Left ? _overrideLeft : _overrideRight) : null;
+
+        /// <summary>
+        /// The eye cameras draw into these textures instead of the eye textures, with a symmetric frustum of
+        /// the given vertical field of view and each texture's own aspect (FieldFit's wide source, Master Plan
+        /// section 10.4.3). The override holds while the quality ladder swaps the eye textures; the lens blit
+        /// then samples these textures. Calling it again replaces the textures and the field of view.
+        /// </summary>
+        public void OverrideEyeTargets(RenderTexture left, RenderTexture right, float verticalFovDegrees)
+        {
+            if (left == null) throw new ArgumentNullException(nameof(left));
+            if (right == null) throw new ArgumentNullException(nameof(right));
+            if (_overridden)
+                AssignOverrideTargets();   // take note of a swap made since the last frame
+            else
+            {
+                _normalLeft = _left.targetTexture;
+                _normalRight = _right.targetTexture;
+            }
+            _overridden = true;
+            _overrideLeft = left;
+            _overrideRight = right;
+            _overrideFov = verticalFovDegrees;
+            _left.targetTexture = left;
+            _right.targetTexture = right;
+            ApplyProjection();
+        }
+
+        /// <summary>Gives the eye cameras back the eye textures and the projection of the lens model.</summary>
+        public void ClearEyeTargetOverride()
+        {
+            if (!_overridden)
+                return;
+            AssignOverrideTargets();
+            _overridden = false;
+            _left.targetTexture = _normalLeft;
+            _right.targetTexture = _normalRight;
+            _overrideLeft = _overrideRight = _normalLeft = _normalRight = null;
+            ApplyProjection();
+        }
 
         public Camera GetEyeCamera(Eye eye) => eye == Eye.Left ? _left : _right;
 
