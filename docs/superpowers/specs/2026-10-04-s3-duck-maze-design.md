@@ -77,7 +77,8 @@ Engine-free, in `Atlas.Spaces.AlignedCells.Tests`, run headless:
   cell and frame match at every step.
 - Wall symmetry for every maze tile and its four neighbours.
 - Core: found on reaching the duck, `maze.wall` on walking through a wall, restart after 5 s, P7 round trip
-  rebuilds the same maze on a Station copy, `cells.maze` off leaves every existing S3 test green.
+  rebuilds the same maze on a Station copy. With `cells.maze` off S3 behaves exactly as today: the existing tests
+  of classic S3 (and the E2E tests that walk through S3) pin `cells.maze` off and stay green unchanged otherwise.
 - Duck asset: `GlbValidator` accepts it, ≤ 2,500 triangles, manifest hash matches.
 
 Not checked here: the GPU picture and a walk by a person on the phone.
