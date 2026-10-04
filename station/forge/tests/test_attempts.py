@@ -267,9 +267,18 @@ def test_the_light_copy_is_published_as_its_own_asset(tmp_path):
         assert again["cached"] is True
         cached = client.get(f"/jobs/{again['jobId']}").json()
         assert cached["lightSha256"] == status["lightSha256"] and "attempts" not in cached
-        # Another light target is another pair of copies.
+        # Another light target is another job: the same full copy, and a light copy of its own.
         other = {**meta, "triTargetLight": 2000}
-        assert post_object(client, "levels", other, [jpeg()]).status_code == 202
+        answer = post_object(client, "levels", other, [jpeg()])
+        assert answer.status_code == 202
+        second = wait_for(client, answer.json()["jobId"])
+        assert second["sha256"] == status["sha256"] and second["lightSha256"] != status["lightSha256"]
+        assert 1600 < second["lightTris"] <= 2000
+        # Each is answered from the cache with its own light copy, though the full copy is one file.
+        for sent, made in ((meta, status), (other, second)):
+            hit = client.get(f"/jobs/{post_object(client, 'levels', sent, [jpeg()]).json()['jobId']}").json()
+            assert hit["cached"] is True and hit["lightSha256"] == made["lightSha256"]
+            assert hit["lightTris"] == made["lightTris"] and hit["report"]["light"] == made["report"]["light"]
 
         # Deleting the room removes both copies.
         assert client.delete("/rooms/levels").status_code == 204

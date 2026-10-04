@@ -375,12 +375,16 @@ class Forge:
         return hashlib.sha256(text.encode("ascii", "replace")).hexdigest()
 
     def _cache_lookup(self, key: str) -> Optional[dict]:
+        """What a job with this key published, when its full copy is still there."""
         path = self._root / "cache" / f"{key}.json"
         if not path.is_file():
             return None
         try:
-            sha = _read_json(path)["sha256"]
-            info = _read_json(self._asset_path(sha).with_suffix(".json"))
+            info = _read_json(path)
+            sha = info["sha256"]
+            if "tris" not in info:
+                # An entry from before the light copy named only the asset; its record lies beside the asset.
+                info = _read_json(self._asset_path(sha).with_suffix(".json"))
         except (OSError, ValueError, KeyError):
             return None
         return info if self._asset_path(sha).is_file() else None
@@ -913,7 +917,9 @@ class Forge:
             if light is not None:
                 _write_atomic(self._asset_path(light.sha256), result.light_glb)
             _write_json(self._asset_path(report.sha256).with_suffix(".json"), info)
-            _write_json(self._root / "cache" / f"{job.cacheKey}.json", {"sha256": report.sha256})
+            # The cache keeps the whole answer under the job's own key: two jobs may give the same full
+            # copy and still differ in their light copy, their fit or their attempts.
+            _write_json(self._root / "cache" / f"{job.cacheKey}.json", info)
             self._fill_from_asset(job, info)
             if settings.debug_keep:
                 # The record: both copies and both reports beside the crops, the mattes and the raw meshes.
