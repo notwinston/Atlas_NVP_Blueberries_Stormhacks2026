@@ -123,6 +123,8 @@ namespace Atlas.App
         public RoomContent RoomContent { get; private set; }
         public QualityLadder Ladder { get; private set; }
         public SpaceLab Spaces { get; private set; }
+        /// <summary>The hexagon reveal between two spaces; null when its shader is missing (spaces fade).</summary>
+        public HexTransition Transition { get; private set; }
         public CommandRouter Commands { get; private set; }
         /// <summary>The walk input of the Station's Map page: the router writes it, the input step feeds it to the walker.</summary>
         public RemoteWalkInput RemoteWalk { get; private set; }
@@ -273,6 +275,8 @@ namespace Atlas.App
                 new SpaceStage(RoomContent));
             LoopCore.Space = Spaces;
             LoopCore.Host = Spaces;
+            Transition = HexTransition.Create(Display);
+            Spaces.Transition = Transition;
             AtlasServices.Register<ISpaceHost>(Spaces);
 
             // The parameters of the assemblies that may not name the registry, in the order of lane D's table.
@@ -311,6 +315,7 @@ namespace Atlas.App
             IPerfSource perf;
             if (AtlasServices.TryGet(out perf)) Ladder.Perf = perf;
             Spaces.Events = events;
+            if (Transition != null) Transition.Events = events;
 
             // The room hand-over and the Editor-first path.
             PosePipeline pipeline = Pose.Pipeline;
@@ -482,6 +487,7 @@ namespace Atlas.App
             Safely(() => { if (Signs != null) Signs.Shutdown(); });
             Safely(() => { if (Flow != null) Flow.LeaveHeadset(); });
             Safely(() => { if (Spaces != null) Spaces.Shutdown(); });
+            Safely(() => { if (Transition != null) Transition.Dispose(); });
             Safely(() => { if (TelemetrySystems != null) TelemetrySystems.Shutdown(); });
             // Key frames of a scan in progress and crops not yet handed over are let go.
             Safely(() => { if (ScanSystems != null && ScanSystems.Photos != null) ScanSystems.Photos.Cancel(); });

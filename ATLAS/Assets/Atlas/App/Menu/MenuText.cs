@@ -114,7 +114,9 @@ namespace Atlas.App.Menu
                     }
                     break;
                 case MenuRowKind.Space:
-                    sb.Append(model.IsCurrent(row.Space) ? "here" : "go");
+                    // A space is selected first and entered with Apply.
+                    if (model.IsCurrent(row.Space)) sb.Append("here");
+                    else if (index == model.Selected) sb.Append("(apply)");
                     break;
                 case MenuRowKind.Command:
                     sb.Append("go");

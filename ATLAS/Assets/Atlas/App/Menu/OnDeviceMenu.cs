@@ -114,14 +114,15 @@ namespace Atlas.App.Menu
             _model.NoteOpened();
             RefreshStatus();
 
-            // The panel comes up where the walker is looking, level.
+            // The panel comes up level, in the heading the chip stood in: where the walker was looking before
+            // they reached for the chip, not the chip's own direction, so it opens in the same place every time.
             float3 head = float3.zero;
             if (_app.Loop != null)
             {
                 ref readonly FrameContext frame = ref _app.Loop.Current;
                 head = frame.RawHeadPosition;
                 float yaw, pitch;
-                if (MenuFrame.TryYawPitch(frame.RawHeadRotation, out yaw, out pitch)) _frame.Snap(yaw);
+                if (MenuFrame.TryYawPitch(frame.RawHeadRotation, out yaw, out pitch)) _frame.Open(yaw, _frameSet);
             }
             _frameSet = true;
             RegisterTargets(head);
