@@ -42,11 +42,18 @@ namespace Atlas.EditorTools
             // would link it strongly is switched off for this one framework (the module import stays).
             if (!project.ContainsFramework(frameworkTarget, Framework))
                 project.AddFrameworkToProject(frameworkTarget, Framework, true);
-            project.SetBuildProperty(frameworkTarget, "OTHER_SWIFT_FLAGS",
-                "-Xfrontend -disable-autolink-framework -Xfrontend " + FrameworkName);
+            // Added once to whatever the target already hands the Swift compiler, never in its place.
+            string autolinkOff = "-disable-autolink-framework -Xfrontend " + FrameworkName;
+            string swiftFlags = project.GetBuildPropertyForAnyConfig(frameworkTarget, "OTHER_SWIFT_FLAGS");
+            if (string.IsNullOrEmpty(swiftFlags))
+                project.SetBuildProperty(frameworkTarget, "OTHER_SWIFT_FLAGS", "-Xfrontend " + autolinkOff);
+            else if (!swiftFlags.Contains(autolinkOff))
+                project.SetBuildProperty(frameworkTarget, "OTHER_SWIFT_FLAGS", swiftFlags + " -Xfrontend " + autolinkOff);
 
-            // Swift settings. Unity sets the first two itself when it finds Swift sources; they are the same here.
-            project.SetBuildProperty(frameworkTarget, "SWIFT_VERSION", "5.0");
+            // Swift settings. Unity sets the first two itself when it finds Swift sources; a version that is
+            // already chosen is left alone.
+            if (string.IsNullOrEmpty(project.GetBuildPropertyForAnyConfig(frameworkTarget, "SWIFT_VERSION")))
+                project.SetBuildProperty(frameworkTarget, "SWIFT_VERSION", "5.0");
             project.SetBuildProperty(frameworkTarget, "CLANG_ENABLE_MODULES", "YES");
             project.SetBuildProperty(mainTarget, "ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES", "YES");
             project.SetBuildProperty(frameworkTarget, "ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES", "YES");
