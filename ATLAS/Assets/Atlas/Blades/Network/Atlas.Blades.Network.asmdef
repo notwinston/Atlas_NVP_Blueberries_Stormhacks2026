@@ -1,0 +1,13 @@
+{
+    "name": "Atlas.Blades.Network",
+    "rootNamespace": "Atlas.Blades.Network",
+    "references": [
+        "Atlas.Kernel",
+        "Atlas.Link",
+        "Atlas.World",
+        "Atlas.Rendering",
+        "Atlas.Input",
+        "Atlas.Telemetry",
+        "Unity.Mathematics"
+    ]
+}

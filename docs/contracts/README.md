@@ -9,6 +9,7 @@ folder is announced to all four lanes before it is committed.
 | [lane-b-kernel.md](lane-b-kernel.md) | B | The one lane B page: `Iso2`, `Geometry2`, `TileId`, `WalkerPose`, `ITileGraph`, `IWalkerKernel` and `IDialKernel` (the walker the frame loop steps, flat, hyperbolic and spherical), exact tile ids and seeds, `TileFrame` and `RuleS`, metric and unit conventions, `AtlasWarp` and `AtlasGates` with `_Gate0` to `_Gate3`, what S2 to S4 write into `State`. [kernel.md](kernel.md) only points to it |
 | [lane-c-room.md](lane-c-room.md) | C | RoomModel schema, coordinate frame and units, sample rooms and `budget_room`, pose and sensor types, `IBumpGuard`, `IRoomContent` |
 | [lane-d-link.md](lane-d-link.md) | D | Parameter registry, link message ids and the `State` layout, event format, Hub and Forge HTTP routes, GLB asset contract |
+| [network.md](network.md) | D (architect) | The Network Atlas: `atlas.network/1` ([network.schema.json](network.schema.json)), its fixtures and bundled files, `/api/network`, `net.*` parameters and events, the Python API of `network.py`, the C# API of `NetworkModel`, `PoincareMap` and `GreedyRouter`, file ownership and test names of NET-01 to NET-11 |
 | [unity-api/](unity-api/) | all | Unity and package API facts verified against the installed sources, with file references |
 
 Scene ownership is in [../scene-ownership.md](../scene-ownership.md). Pinned versions are in [../versions.md](../versions.md).

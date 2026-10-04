@@ -14,6 +14,7 @@ import { TelemetryBuffer, parseCsv } from './telemetry.js';
 import { drawLines, drawTimeline } from './charts.js';
 import { Trail, cellLabel, dialLabel, nearestObstacle, relativeSide } from './mapmath.js';
 import { drawMap } from './mapview.js';
+import { mountNetworkPage } from './network.js';
 import { JobList, phaseOf } from './jobs.js';
 import { CommandTracker, comfortScore, fmsAlertText, requestFor, seqScore, statusText } from './commands.js';
 import { WalkKeys, WalkSender } from './walk.js';
@@ -96,7 +97,8 @@ function clockTime(date = new Date()) {
 
 // ---- tabs ------------------------------------------------------------------------------------------
 
-const PAGES = ['tuner', 'operator', 'dashboard', 'map', 'view', 'assets', 'pairing'];
+let networkPage = null;
+const PAGES = ['tuner', 'operator', 'dashboard', 'map', 'view', 'assets', 'network', 'pairing'];
 
 function showPage() {
   const wanted = location.hash.replace('#', '');
@@ -113,6 +115,7 @@ function showPage() {
   if (model.page === 'map') paintMap();
   else stopWalking();   // the walk keys work on the Map page only
   showView();
+  if (model.page === 'network') (networkPage || (networkPage = mountNetworkPage())).show();
   if (model.page === 'pairing') loadPairing('');
   if (model.page === 'tuner') refreshPresets();
 }

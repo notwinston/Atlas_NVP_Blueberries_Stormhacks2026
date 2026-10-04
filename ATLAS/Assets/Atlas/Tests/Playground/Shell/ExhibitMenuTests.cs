@@ -55,9 +55,9 @@ namespace Atlas.Blades.Playground.Tests
         [Test]
         public void TheRowsAreTheThreeExhibitsAndDone()
         {
-            Assert.That(ExhibitMenu.RowCount, Is.EqualTo(4));
-            Assert.That(new[] { ExhibitMenu.Label(0), ExhibitMenu.Label(1), ExhibitMenu.Label(2), ExhibitMenu.Label(3) },
-                        Is.EqualTo(new[] { "Glued", "Impossible Rooms", "Slicer", "Done" }));
+            Assert.That(ExhibitMenu.RowCount, Is.EqualTo(5));
+            Assert.That(new[] { ExhibitMenu.Label(0), ExhibitMenu.Label(1), ExhibitMenu.Label(2), ExhibitMenu.Label(3), ExhibitMenu.Label(4) },
+                        Is.EqualTo(new[] { "Glued", "Impossible Rooms", "Slicer", "Network", "Done" }));
             Assert.That(ExhibitMenu.SpaceOf(ExhibitId.Glued), Is.EqualTo(SpaceId.Glued));
             Assert.That(ExhibitMenu.SpaceOf(ExhibitId.ImpossibleRooms), Is.EqualTo(SpaceId.Portal));
             Assert.That(ExhibitMenu.SpaceOf(ExhibitId.Slicer), Is.EqualTo(SpaceId.Slicer));
@@ -77,6 +77,49 @@ namespace Atlas.Blades.Playground.Tests
             Assert.That(menu.IsOpen, Is.False);
         }
 
+        sealed class HomeExhibit : IHomeExhibit
+        {
+            public bool Ready { get; set; } = true;
+            public bool Active { get; private set; }
+            public string Label { get { return "Network"; } }
+            public bool Begin() { Active = true; return true; }
+            public void End() { Active = false; }
+        }
+
+        [Test]
+        public void NetworkRow_ReachableFromMenu()
+        {
+            var exhibit = new HomeExhibit();
+            var host = new FakeHost();
+            var menu = new ExhibitMenu(host, null, null);
+            Assert.That(menu.IsReady(ExhibitId.Network), Is.False, "no exhibit published: not ready");
+            AtlasServices.Register<IHomeExhibit>(exhibit);
+            try
+            {
+                Assert.That(menu.IsReady(ExhibitId.Network), Is.True);
+                ExhibitId chosen = ExhibitId.Done;
+                menu.Chosen += id => chosen = id;
+                menu.Open();
+                menu.Step(1); menu.Step(1); menu.Step(1);
+                Assert.That(menu.Selected, Is.EqualTo((int)ExhibitId.Network));
+                Assert.That(menu.Pick(), Is.True);
+                Assert.That(exhibit.Active, Is.True);
+                Assert.That(chosen, Is.EqualTo(ExhibitId.Network));
+                Assert.That(host.Switches, Is.Empty, "the network is shown in Home, not a space of its own");
+                Assert.That(menu.IsOpen, Is.False);
+
+                // Done hides it again, leaving Home as it was.
+                menu.Open();
+                Assert.That(menu.Pick((int)ExhibitId.Done), Is.True);
+                Assert.That(exhibit.Active, Is.False);
+
+                exhibit.Ready = false;
+                menu.Open();
+                Assert.That(menu.Pick((int)ExhibitId.Network), Is.False);
+            }
+            finally { AtlasServices.Unregister<IHomeExhibit>(exhibit); }
+        }
+
         [Test]
         public void StepsWrapAndSkipRowsThatAreNotReady()
         {
@@ -88,11 +131,11 @@ namespace Atlas.Blades.Playground.Tests
             menu.Step(1);
             Assert.That(menu.Selected, Is.EqualTo(1));
             menu.Step(1);
-            Assert.That(menu.Selected, Is.EqualTo(3), "the Slicer row is skipped");
+            Assert.That(menu.Selected, Is.EqualTo(4), "the Slicer and Network rows are skipped");
             menu.Step(1);
             Assert.That(menu.Selected, Is.EqualTo(0));
             menu.Step(-1);
-            Assert.That(menu.Selected, Is.EqualTo(3));
+            Assert.That(menu.Selected, Is.EqualTo(4));
         }
 
         [Test]
@@ -117,7 +160,7 @@ namespace Atlas.Blades.Playground.Tests
             menu.DonePicked += () => done++;
             menu.Open();
             menu.Step(-1);
-            Assert.That(menu.Selected, Is.EqualTo(3));
+            Assert.That(menu.Selected, Is.EqualTo(4));
             Assert.That(menu.Pick(), Is.True);
             Assert.That(done, Is.EqualTo(1));
             Assert.That(menu.IsOpen, Is.False);

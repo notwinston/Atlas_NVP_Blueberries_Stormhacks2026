@@ -1106,5 +1106,22 @@ namespace Atlas.Telemetry.Tests
             Assert.That(wrong.Core.Banner, Is.EqualTo(SpectatorBanner.WorldMismatch));
             Assert.That(wrong.Host.HasSpace, Is.False);
         }
+
+        [Test]
+        public void NetworkEvents_SetActiveFileAndCentre_AndAWorldEventEndsIt()
+        {
+            var rig = new Rig();
+            Assert.IsFalse(rig.Core.NetworkActive);
+            rig.Core.OnEvent(new EventMessage(1, "net", LinkEvents.Param,
+                JsonValue.Object().Set("id", 1).Set("name", "net.file").Set("value", 1)));
+            Assert.AreEqual(1, rig.Core.NetworkFile);
+            Assert.IsFalse(rig.Core.NetworkActive, "a parameter alone does not start the exhibit");
+            rig.Core.OnEvent(new EventMessage(2, "net", "net.recentre", JsonValue.Object().Set("node", 5).Set("r", 3.0).Set("degree", 4)));
+            Assert.IsTrue(rig.Core.NetworkActive);
+            Assert.AreEqual(5, rig.Core.NetworkCentre);
+            rig.Core.OnEvent(new EventMessage(3, "S1", LinkEvents.World, JsonValue.Object().Set("space", 1)));
+            Assert.IsFalse(rig.Core.NetworkActive);
+            Assert.AreEqual(-1, rig.Core.NetworkCentre);
+        }
     }
 }

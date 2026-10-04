@@ -95,7 +95,7 @@ const paint = () => frameCallbacks.splice(0).forEach((fn) => fn(performance.now(
 const text = (id) => byId.get(id).textContent;
 
 // Walk every page so each one draws, as an operator clicking through the tabs would.
-for (const page of ['dashboard', 'map', 'tuner', 'operator', 'assets', 'pairing']) {
+for (const page of ['dashboard', 'map', 'tuner', 'operator', 'assets', 'network', 'pairing']) {
   location.hash = '#' + page;
   globalThis.onHash();
   await sleep(700);
@@ -126,6 +126,19 @@ byId.get('seq-form').dispatch('submit');
 await sleep(600);
 paint();
 
+// The Network page: the bundled seed 7 file from the Hub, drawn in under 50 ms (headless proxy for a real browser).
+const network = await import(path.join(root, 'js/network.js'));
+const netRes = await realFetch(new URL('/api/network?file=network_7.json', base));
+let netMs = Infinity, netNodes = 0, netEdges = 0;
+if (!netRes.ok) problems.push('/api/network?file=network_7.json answered ' + netRes.status);
+else {
+  const net = network.parseNetwork(await netRes.json());
+  const drawn = network.drawNetwork(context, net, 800, {});
+  const again = network.drawNetwork(context, net, 800, {});   // the first call also samples the geodesics
+  netMs = Math.min(drawn.ms, again.ms);
+  netNodes = drawn.nodes; netEdges = drawn.edges;
+}
+
 const report = {
   phone: text('phone-state'), rtt: text('phone-rtt'), clock: text('phone-clock'), state: text('state-hz'), loss: text('state-loss'),
   session: text('session-id'), space: text('space-now'), bump: text('bump-now'), groups: groups.children.length, parameters: rows.length,
@@ -140,6 +153,9 @@ if (!/Logged 6/.test(report.seq)) problems.push('the SEQ score was not confirmed
 if (report.alertHidden || !/score 4/.test(report.alert)) problems.push('no operator alert for an FMS entry at pg.fmsStop: "' + report.alert + '"');
 if (!/rows shown/.test(report.rows)) problems.push('the dashboard shows no telemetry');
 if (!/^atlas:\/\//.test(report.pairing)) problems.push('the pairing page shows no address');
+if (netNodes !== 200 || netEdges !== 580) problems.push('network page drew ' + netNodes + ' nodes and ' + netEdges + ' edges, not 200 and 580');
+if (!(netMs < 50)) problems.push('network page drew seed 7 in ' + netMs.toFixed(1) + ' ms, not under 50 ms');
+else console.log('network page drew seed 7 in under 50 ms (' + netMs.toFixed(1) + ' ms)');
 if (report.groups === 0) problems.push('the tuner built no groups');
 
 for (const p of problems) console.log('FAIL ' + p);

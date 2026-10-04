@@ -33,6 +33,7 @@ namespace Atlas.Spectator
         Camera _mirror, _panels;
         Transform _panelRoot;
         FlatTwinPanel _map, _status;
+        NetworkMapSwitch _network;
         readonly StringBuilder _text = new StringBuilder(96);
         string _lineLink = string.Empty, _lineState = string.Empty, _lineRoom = string.Empty;
         float _sinceMap = MapSeconds, _sinceStatus = StatusSeconds;
@@ -179,10 +180,26 @@ namespace Atlas.Spectator
         void RebuildMap()
         {
             SpectatorCore core = _app.Core;
+            if (_network == null) _network = new NetworkMapSwitch(ReadNetworkFile);
+            // The network exhibit shows its disc here; otherwise the panel goes back to the flat twin.
+            NetworkDisc disc = _network.Update(core.NetworkActive, core.NetworkFile, core.NetworkCentre);
+            if (!ReferenceEquals(disc, _map.Network)) _map.ShowNetwork(disc);
+            if (disc != null)
+            {
+                _map.Apply();
+                return;
+            }
             var source = core.Host.Module as IFlatTwinSource;
             if (source != null) FlatTwinBuilder.Build(_map.Twin, source);
             else FlatTwinBuilder.Build(_map.Twin, core.Room, core.Outline, _app.WalkerKernel, in core.State, core.Trail);
             _map.Apply();
+        }
+
+        // The bundled network files are plain files under StreamingAssets/networks on the Station.
+        static string ReadNetworkFile(string name)
+        {
+            string path = System.IO.Path.Combine(Application.streamingAssetsPath, "networks", name);
+            return System.IO.File.Exists(path) ? System.IO.File.ReadAllText(path) : null;
         }
 
         // Link, State rate and space; the room; the Bump Guard level as a bar; the banner.

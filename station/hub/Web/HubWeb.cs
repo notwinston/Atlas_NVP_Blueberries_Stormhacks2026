@@ -85,6 +85,7 @@ namespace Atlas.Station
             MapCommands(app, hub);
             MapPresets(app, hub, options);
             MapLogs(app, hub, options);
+            MapNetwork(app, options);
             MapPerfUpload(app, hub);
             MapView(app, hub);
             MapInternal(app, hub);
@@ -151,6 +152,55 @@ namespace Atlas.Station
         }
 
         // ---- WebSocket feed ---------------------------------------------------------------------------
+
+        // ---- network (NET-03): the bundled atlas.network/1 files ----------------------------------------
+
+        static readonly System.Text.RegularExpressions.Regex NetworkFileName =
+            new System.Text.RegularExpressions.Regex(@"^network_(\d+)\.json$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+        static void MapNetwork(WebApplication app, HubOptions options)
+        {
+            app.MapGet("/api/network", async (HttpContext c) =>
+            {
+                string folder = Path.Combine(options.ProjectFolder ?? string.Empty, "Assets", "StreamingAssets", "networks");
+                string file = c.Request.Query["file"];
+                if (file == null)
+                {
+                    var found = new List<KeyValuePair<long, string>>();
+                    if (Directory.Exists(folder))
+                        foreach (string path in Directory.GetFiles(folder))
+                        {
+                            string name = Path.GetFileName(path);
+                            System.Text.RegularExpressions.Match m = NetworkFileName.Match(name);
+                            long seed;
+                            if (m.Success && long.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out seed))
+                                found.Add(new KeyValuePair<long, string>(seed, name));
+                        }
+                    found.Sort((a, b) => a.Key.CompareTo(b.Key));
+                    JsonValue files = JsonValue.Array();
+                    foreach (KeyValuePair<long, string> f in found) files.Add(f.Value);
+                    await Json(c, 200, JsonValue.Object().Set("files", files));
+                    return;
+                }
+                if (!NetworkFileName.IsMatch(file))
+                {
+                    await Error(c, 400, "file must look like network_7.json");
+                    return;
+                }
+                string full = Path.Combine(folder, file);
+                if (!File.Exists(full))
+                {
+                    await Error(c, 404, "no such network file");
+                    return;
+                }
+                byte[] bytes = await File.ReadAllBytesAsync(full);
+                c.Response.StatusCode = 200;
+                c.Response.ContentType = "application/json";
+                c.Response.ContentLength = bytes.Length;
+                c.Response.Headers["Cache-Control"] = "no-store";
+                await c.Response.Body.WriteAsync(bytes, 0, bytes.Length);
+            });
+        }
 
         static void MapFeed(WebApplication app, HubServer hub)
         {

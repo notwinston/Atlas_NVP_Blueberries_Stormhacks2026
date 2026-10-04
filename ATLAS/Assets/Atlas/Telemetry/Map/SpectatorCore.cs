@@ -124,6 +124,13 @@ namespace Atlas.Telemetry
         public long StatesReceived { get; private set; }
         /// <summary>Parameter values changed here by the phone's manifest and events.</summary>
         public int ParamsApplied { get; private set; }
+
+        /// <summary>True while the phone's network exhibit is running: a net.* event arrived and no world event since.</summary>
+        public bool NetworkActive { get; private set; }
+        /// <summary>net.file as the phone last said it (0 = seed 7, 1 = seed 83).</summary>
+        public int NetworkFile { get; private set; }
+        /// <summary>The node of the last net.recentre event, or -1.</summary>
+        public int NetworkCentre { get; private set; } = -1;
         /// <summary>Room searches begun.</summary>
         public int RoomRequests { get; private set; }
 
@@ -210,6 +217,7 @@ namespace Atlas.Telemetry
             {
                 ParamManifestEntry e = manifest.Params[i];
                 ParamEntry entry;
+                if (e.Name == NetworkMapSwitch.FileParam) NetworkFile = (int)e.Val;
                 if (IsOwn(e.Name) || !_registry.TryGet(e.Name, out entry)) continue;
                 if (_registry.IsGroupActive(entry.Group) != e.Active) _registry.SetGroupActive(entry.Group, e.Active);
                 if (_registry.Set(entry, e.Val, ParamSource.Remote)) ParamsApplied++;
@@ -229,14 +237,24 @@ namespace Atlas.Telemetry
             ushort id;
             string name;
             float value;
+            if (message.Ev != null && message.Ev.StartsWith("net.", StringComparison.Ordinal))
+            {
+                NetworkActive = true;
+                if (message.Ev == "net.recentre" && message.Data != null && message.Data.IsObject) NetworkCentre = message.Data.GetInt("node", -1);
+                return;
+            }
             if (LinkEvents.TryReadParam(message, out id, out name, out value))
             {
+                if (name == NetworkMapSwitch.FileParam) NetworkFile = (int)value;
                 ParamEntry entry;
                 if (!IsOwn(name) && _registry.TryGet(name, out entry) && _registry.Set(entry, value, ParamSource.Remote)) ParamsApplied++;
                 return;
             }
             if (message.Ev != LinkEvents.World || message.Data == null || !message.Data.IsObject) return;
             JsonValue data = message.Data;
+            // The world changed: the network exhibit, a use case inside Home, is over until a net.* event says otherwise.
+            NetworkActive = false;
+            NetworkCentre = -1;
             // A world event of an older build carries only the version and the space.
             string room = data.GetString("roomId", null);
             Want(room ?? _wantRoom, data.GetString("worldHash", string.Empty), data.GetString("geomHash", null), data.GetInt("space", -1));

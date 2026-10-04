@@ -13,8 +13,10 @@ namespace Atlas.Blades.Playground
         Glued = 0,
         ImpossibleRooms = 1,
         Slicer = 2,
+        /// <summary>The network exhibit, shown in Home through <see cref="IHomeExhibit"/> (contract network.md NET-08).</summary>
+        Network = 3,
         /// <summary>"Exhibit chosen, or done": done ends beat 9 and the director goes on to the return Home.</summary>
-        Done = 3
+        Done = 4
     }
 
     /// <summary>
@@ -33,8 +35,8 @@ namespace Atlas.Blades.Playground
     /// engine and the test checks that every sign is inside the free rectangle.</summary>
     public static class ExhibitSignLayout
     {
-        /// <summary>Signs per menu: three exhibits and Done.</summary>
-        public const int Count = 4;
+        /// <summary>Signs per menu: four exhibits and Done.</summary>
+        public const int Count = 5;
         /// <summary>Height of a sign's centre above the floor, metres.</summary>
         public const float Height = 1.5f;
         public const float HalfWidth = 0.22f, HalfHeight = 0.07f;
@@ -49,7 +51,7 @@ namespace Atlas.Blades.Playground
             return math.clamp(0.8f * half, 0.5f, 1.5f);
         }
 
-        /// <summary>Centre of sign k (0 to 3) in the room frame; the arc is round the centre of the free rectangle.</summary>
+        /// <summary>Centre of sign k (0 to 4) in the room frame; the arc is round the centre of the free rectangle.</summary>
         public static float3 Centre(RoomModel room, int k)
         {
             float angle = math.radians((k - 0.5f * (Count - 1)) * StepDegrees);
@@ -84,7 +86,7 @@ namespace Atlas.Blades.Playground
     /// </summary>
     public sealed class ExhibitMenu : IDisposable
     {
-        static readonly string[] s_labels = { "Glued", "Impossible Rooms", "Slicer", "Done" };
+        static readonly string[] s_labels = { "Glued", "Impossible Rooms", "Slicer", "Network", "Done" };
 
         readonly ISpaceHost _host;
         readonly IAtlasInput _input;
@@ -107,7 +109,7 @@ namespace Atlas.Blades.Playground
         }
 
         public bool IsOpen { get { return _open; } }
-        /// <summary>The highlighted row, 0 to 3.</summary>
+        /// <summary>The highlighted row, 0 to 4.</summary>
         public int Selected { get { return _selected; } }
         /// <summary>Moves on every change of the open state or the selection.</summary>
         public int Revision { get; private set; }
@@ -143,6 +145,7 @@ namespace Atlas.Blades.Playground
                 case ExhibitId.Glued: return SpaceId.Glued;
                 case ExhibitId.ImpossibleRooms: return SpaceId.Portal;
                 case ExhibitId.Slicer: return SpaceId.Slicer;
+                // Network is no space: it is shown in Home through IHomeExhibit.
                 default: return SpaceId.Home;
             }
         }
@@ -152,6 +155,7 @@ namespace Atlas.Blades.Playground
         {
             if (id == ExhibitId.Done) return true;
             if (id == ExhibitId.Slicer && _slicerSlot != null) return _slicerSlot.Ready;
+            if (id == ExhibitId.Network) return AtlasServices.TryGet(out IHomeExhibit net) && net.Ready;
             return _host.IsAvailable(SpaceOf(id));
         }
 
@@ -210,8 +214,21 @@ namespace Atlas.Blades.Playground
             var id = (ExhibitId)row;
             if (!IsReady(id)) return false;
 
+            if (id == ExhibitId.Network)
+            {
+                // The exhibit stays in Home: a second pick hides it again.
+                if (!AtlasServices.TryGet(out IHomeExhibit net)) return false;
+                if (net.Active) net.End();
+                else if (!net.Begin()) return false;
+                Close();
+                Action<ExhibitId> shown = Chosen;
+                if (shown != null && net.Active) shown(id);
+                return true;
+            }
+
             if (id == ExhibitId.Done)
             {
+                EndHomeExhibit();
                 Close();
                 Action done = DonePicked;
                 if (done != null) done();
@@ -290,7 +307,13 @@ namespace Atlas.Blades.Playground
         // A space was entered (a pick, or an operator command): the menu has done its job.
         void OnSpaceEntered(SpaceId id)
         {
+            EndHomeExhibit();
             Close();
+        }
+
+        static void EndHomeExhibit()
+        {
+            if (AtlasServices.TryGet(out IHomeExhibit net) && net.Active) net.End();
         }
 
         int FirstReady()
