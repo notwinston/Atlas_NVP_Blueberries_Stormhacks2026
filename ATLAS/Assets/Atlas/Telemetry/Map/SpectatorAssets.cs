@@ -273,6 +273,8 @@ namespace Atlas.Telemetry
             Entry e = Find(ready.BoxId);
             if (e == null) return;
             e.HasJob = true;
+            // ready.LightSha256 and ready.LightUrl are left alone on purpose: the Spectator shows the full copy
+            // everywhere (it is not a walker and sets no furniture level), so it never fetches the light one.
             Generated(e, ready.Sha256, ready.Url);
         }
 
