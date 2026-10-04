@@ -99,7 +99,8 @@ namespace Atlas.Blades.FieldFit
                 sets[r] = new[] { MakeSource(size, msaa, r, 0), MakeSource(size, msaa, r, 1) };
             }
             material = new Material(settings.blitShader) { hideFlags = HideFlags.DontSave };   // never Shader.Find
-            mask = FieldLossMask.Absent;
+            // P3-B04 (Master Plan §10.4.6, DV6): the tunnel mask from settings when assigned; none otherwise.
+            mask = settings.fieldLossMask != null ? FieldLossMask.FromTexture(settings.fieldLossMask, settings.maskHalfWidthDeg) : FieldLossMask.Absent;
             guard = new LensGuard();
             badge = LensBadge.Create(rig.EyeGeometry(0), rig.EyeGeometry(1), lut);
             material.SetTexture(FieldFitShaderIDs.LutL, lut.Left);

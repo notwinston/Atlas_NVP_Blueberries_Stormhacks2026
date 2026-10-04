@@ -177,6 +177,24 @@ namespace Atlas.Blades.FieldFit.Tests
             }
         }
 
+        [Test, Description("P3-B04 acceptance: a lens.t change rebuilds exactly once in that frame and the K* in lensOn is unchanged (Master Plan §10.4.3 Slider)")]
+        public void LensT_Change_RebuildsOnce()
+        {
+            using (var h = new Harness())
+            {
+                h.Step(); Assert.AreEqual(1, h.F.Lut.RebuildCount);
+                var on0 = h.Ev.Log[0].Value;
+                h.P.T = 0.5f; h.Step();
+                Assert.AreEqual(2, h.F.Lut.RebuildCount);
+                for (int i = 0; i < 20; i++) h.Step();
+                Assert.AreEqual(2, h.F.Lut.RebuildCount);
+                Assert.AreEqual(1, h.Ev.Count("lensOn"), "no second lensOn");
+                StringAssert.Contains("\"kStar\":2.918", on0);
+                Assert.AreEqual(0.5, h.F.CurrentParams.T, 1e-9);
+                Assert.AreEqual(LensMath.KStar(LensParams.Default), LensMath.KStar(h.F.CurrentParams), 1e-6, "K* does not depend on t");
+            }
+        }
+
         [Test, Description("P3-B03 acceptance: the blit shader and the saved scene/settings load (Brief §3, §12)")]
         public void ShaderSettingsScene_Present()
         {

@@ -162,3 +162,8 @@ Graphics sign-off (Editor with a graphics device, not -nographics): run `B10_Sha
 - Editor GPU test (run once on a machine with a graphics device, not `-nographics`):
   `FieldFitBlitTests.LensOff_RealShader_MatchesReference_GPU`. Expected: max uv difference vs the CPU mirror < 2e-3; top-row green > 0.5.
 - Headset: checklist items 1-3. Expected: no jump or flip with None; black at about 10 deg; one fused image in 3 of 3 testers (else `centreEyeSource` = true).
+
+## P3-B04 Field-loss mask and slider (deferred: headset look only)
+
+- Scene: `Blade_FieldFit.unity`; mask assigned in `FieldFitSettings.fieldLossMask` with `maskHalfWidthDeg` matching lane D's preset.
+- Steps: profile None with tunnel, then drag `lens.t` 0 -> 1 with Morph. Expected: black edge at about 10 deg (+-0.2); no visible pop while dragging; `LutRebuild` p95 reported (checklist item 10).

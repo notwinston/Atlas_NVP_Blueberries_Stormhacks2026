@@ -36,6 +36,7 @@ namespace Atlas.Blades.FieldFit
         readonly IEyeGeometry[] geo = new IEyeGeometry[2];
         NativeArray<double2>[] tangents = new NativeArray<double2>[2];   // stage A, persistent
         readonly float[] gMax = new float[2];                            // rad per texel
+        LensRadialTable table;                                           // B04, Morph 0 < t < 1 (DV16)
         bool disposed;
 
         public Texture2D Left => tex[0];
@@ -52,6 +53,7 @@ namespace Atlas.Blades.FieldFit
                 { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Point, hideFlags = HideFlags.DontSave,
                   name = e == 0 ? "FieldFit_LutL" : "FieldFit_LutR" };
             }
+            table.Fill(LensParams.Default);    // allocated once; refilled when 0 < t < 1
         }
 
         /// <summary>Stage A (Brief §7.1): view tangents per texel for one eye. Managed; once at enable.</summary>
@@ -96,11 +98,18 @@ namespace Atlas.Blades.FieldFit
             using (Marker.Auto())
             {
                 var sw = Stopwatch.StartNew();
+                // Master Plan §10.4.3 Slider: the radial table serves 0 < t < 1 only (DV16).
+                if (p.Profile == LensProfile.Morph && p.T > 0.0 && p.T < 1.0) table.Fill(p);
+                var md = (mask ?? FieldLossMask.Absent).Data;
+                bool hasMask = md.Present;
+                var dummy = hasMask ? default : new NativeArray<float>(1, Allocator.TempJob);
+                var maskArr = hasMask ? md.Dist : dummy;
                 var pix0 = tex[0].GetPixelData<half2>(0);
                 var pix1 = tex[1].GetPixelData<half2>(0);
-                var h0 = MakeJob(p, tangents[0], pix0, gMax[0]).Schedule(Size * Size, 512);
-                var h1 = MakeJob(p, tangents[1], pix1, gMax[1]).Schedule(Size * Size, 512);
+                var h0 = MakeJob(p, tangents[0], pix0, gMax[0], md, maskArr, table).Schedule(Size * Size, 512);
+                var h1 = MakeJob(p, tangents[1], pix1, gMax[1], md, maskArr, table).Schedule(Size * Size, 512);
                 JobHandle.CombineDependencies(h0, h1).Complete();
+                if (!hasMask) dummy.Dispose();
                 tex[0].Apply(false, false);     // stays readable
                 tex[1].Apply(false, false);
                 sw.Stop();
@@ -110,13 +119,17 @@ namespace Atlas.Blades.FieldFit
             return true;
         }
 
-        static LensLutJob MakeJob(in LensParams p, NativeArray<double2> tan, NativeArray<half2> output, float gmax)
+        static LensLutJob MakeJob(in LensParams p, NativeArray<double2> tan, NativeArray<half2> output, float gmax,
+                                  in FieldLossMaskData md, NativeArray<float> maskArr, in LensRadialTable tbl)
         {
             return new LensLutJob
             {
                 Tangents = tan, Output = output, Params = p,
                 TanE = math.tan(p.E), Rho0 = p.Rho0, Sigma0 = LensMath.Sigma0(p), S1 = LensMath.S1(p),
                 S = LensMath.S(p), KStar = LensMath.KStar(p), GMax = gmax,
+                HasMask = md.Present, MaskDist = maskArr, MaskW = md.Present ? md.Width : 1, MaskH = md.Present ? md.Height : 1,
+                MaskHalf = md.HalfWidthRad, Table = tbl.Sigma,
+                TableS = LensMath.S(p),
             };
         }
 
@@ -124,6 +137,7 @@ namespace Atlas.Blades.FieldFit
         {
             if (disposed) return;
             disposed = true;
+            table.Dispose();
             for (int e = 0; e < 2; e++)
             {
                 if (tangents[e].IsCreated) tangents[e].Dispose();
@@ -139,13 +153,34 @@ namespace Atlas.Blades.FieldFit
         const int N = LensLut.Size;
         [ReadOnly] public NativeArray<double2> Tangents;
         [WriteOnly] public NativeArray<half2> Output;
+        [ReadOnly] public NativeArray<float> MaskDist;       // signed distance, rad (B04); a 1-element dummy when no mask
+        [ReadOnly] public NativeArray<double> Table;         // LensRadialTable sigma_i (B04)
         public LensParams Params;
-        public double TanE, Rho0, Sigma0, S1, S, KStar;
+        public double TanE, Rho0, Sigma0, S1, S, KStar, TableS, MaskHalf;
         public float GMax;
+        public bool HasMask;
+        public int MaskW, MaskH;
 
         static half2 Lost(double d) => new half2((half)LensLut.Sentinel, (half)(float)(-math.clamp(d, 0.0, (double)LensLut.MaxEdgeDistance)));
 
-        // Margin phi (rad), lost <=> phi > 0: phi_clip = e_out - rho0 (mask terms: P3-B04). Master Plan §10.4.3; Brief §7.2.
+        // Margin phi (rad), lost <=> phi > 0 (Brief §7.2 step 2): phi_clip = e_out - rho0 for Morph and Tanh only (DV5),
+        // phi_mask and phi_out = e_out - M when a mask is present (B04, DV6).
+        double Phi(double2 v)
+        {
+            double rho = math.length(v);
+            bool clip = Params.Profile != LensProfile.None;
+            if (!clip && !HasMask) return -1.0;
+            // Fast reject before atan: sigma_out <= sigma_0 and no mask means inside the clip.
+            double eOut = math.atan(rho);
+            double phi = double.NegativeInfinity;
+            if (clip) phi = eOut - Rho0;
+            if (HasMask)
+            {
+                double2 n = rho > 0 ? v / rho : new double2(1, 0);
+                phi = math.max(phi, FieldLossMaskData.MarginStatic(MaskDist, MaskW, MaskH, MaskHalf, eOut, n.x, n.y));
+            }
+            return phi;
+        }
 
         public void Execute(int index)
         {
@@ -155,22 +190,9 @@ namespace Atlas.Blades.FieldFit
             double2 n = rho > 0 ? v / rho : new double2(1, 0);
             var prof = Params.Profile;
 
-            if (prof == LensProfile.None)
+            double phi = Phi(v);
+            if (phi > 0)
             {
-                // DV5: no rho0 clip. Continued uv clamped so it can never reach the sentinel threshold.
-                double2 uvN = 0.5 + 0.5 * v / TanE;
-                Output[index] = new half2((half)(float)math.clamp(uvN.x, -0.5, 1.5), (half)(float)math.clamp(uvN.y, -0.5, 1.5));
-                return;
-            }
-
-            double sOut = 2.0 * rho / (1.0 + math.sqrt(1.0 + rho2));   // 2 tan(e_out/2)
-            bool lost = sOut > Sigma0;
-            double eOut = 0;
-            if (lost || prof == LensProfile.Tanh) eOut = math.atan(rho);
-            if (!lost && eOut - Rho0 > 0) lost = true;
-            if (lost)
-            {
-                double phi = eOut - Rho0;
                 double d = LensLut.MaxEdgeDistance;
                 if (phi < 4.0 * GMax)
                 {
@@ -185,6 +207,15 @@ namespace Atlas.Blades.FieldFit
                 return;
             }
 
+            if (prof == LensProfile.None)
+            {
+                // DV5: no rho0 clip. Continued uv clamped so it can never reach the sentinel threshold.
+                double2 uvN = 0.5 + 0.5 * v / TanE;
+                Output[index] = new half2((half)(float)math.clamp(uvN.x, -0.5, 1.5), (half)(float)math.clamp(uvN.y, -0.5, 1.5));
+                return;
+            }
+
+            double sOut = 2.0 * rho / (1.0 + math.sqrt(1.0 + rho2));   // 2 tan(e_out/2)
             double tanSrc;
             if (prof == LensProfile.Morph)
             {
@@ -192,11 +223,12 @@ namespace Atlas.Blades.FieldFit
                 double sg = math.min(sOut, Sigma0);
                 if (Params.T >= 1.0) s = sg <= S1 ? sg : S1 * math.pow(sg / S1, KStar);
                 else if (Params.T <= 0.0) s = sg * S / Sigma0;
-                else s = LensMath.Stereo(LensMath.Inverse(eOut, Params));   // B04 swaps in LensRadialTable for 0 < t < 1 (DV16)
+                else s = LensRadialTable.InverseS(Table, TableS, sg);   // DV16
                 tanSrc = s / (1.0 - 0.25 * s * s);
             }
             else   // Tanh
             {
+                double eOut = math.atan(rho);
                 double eSrc = LensMath.TanhInverse(eOut, Params);
                 if (!(eSrc < 0.5 * math.PI_DBL)) { Output[index] = Lost(0); return; }
                 tanSrc = math.tan(eSrc);
@@ -210,7 +242,7 @@ namespace Atlas.Blades.FieldFit
         {
             double2 v = Tangents[k];
             if (!math.all(math.isfinite(v))) return 0;
-            return math.atan(math.length(v)) - Rho0;
+            return Phi(v);
         }
     }
 }
