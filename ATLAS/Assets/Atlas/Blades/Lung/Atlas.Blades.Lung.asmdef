@@ -10,6 +10,9 @@
         "Atlas.Scan",
         "Atlas.Safety",
         "Atlas.Link",
-        "Unity.Mathematics"
+        "Unity.Mathematics",
+        "Unity.Burst",
+        "Unity.Collections",
+        "Unity.TextMeshPro"
     ]
 }
