@@ -247,7 +247,7 @@ distance field treats every outline edge as a wall, with or without an opening (
 | `category` | string | One of the 23 names of §6 |
 | `base` | `[x, y, z]`, m | **Centre of the box's base**, room frame. `y` is 0 for furniture on the floor and above 0 for a wall-mounted screen. This point is the origin of the object's mesh (GLB contract, §7.4) |
 | `size` | `[w, h, d]`, m, each 0.02 to 6 | Full size: `w` along the box's local X, `h` up, `d` along its local Z |
-| `yaw` | number, rad, (−π, π] | Rotation about `+Y` (§1) |
+| `yaw` | number, rad, (−π, π], and in a file at most 3.1415928 | Rotation about `+Y` (§1). The builder writes every yaw wrapped, at six decimals and not beyond ±3.141592, so a half turn is stored as 3.141592 (π itself rounds to 3.141593, which the reader and the schema refuse) |
 | `mesh` | string | What is drawn: `"placeholder"`, `"requested"`, `"ready"`, `"builtIn"`, or `"standIn"` (◆ `budget_room` only, §5.3) |
 | `assetHash` | string | SHA-256 of the generated GLB, 64 lower-case hexadecimal digits, exactly when `mesh` is `"ready"`; otherwise empty. This is the `boxId → sha256` record of §7.4 |
 | ◆ `triTarget` | integer | Triangle target of the **full** copy, sent with the Forge job: `0` for an object that is not one of the 32 that receive meshes (it keeps its first shape), otherwise 3000 to 15000. The 32 largest objects by volume share 120,000 triangles by surface area; the rule is below the table (§4.5 of the plan) |
@@ -268,13 +268,13 @@ Mesh states and who moves them:
 An object whose box does not reach into the band from 0.10 m to 2.0 m above the floor (a ceiling lamp, a rug) is
 kept in `objects` but does not block the floor.
 
-**The three optional keys.** They come after `triTarget`, in this order (`assetHashLight`, `facing`, `profile`),
-each only when it has a value; a file without them reads and writes exactly as before. `version` stays 1. None of
-the three is part of the geometry hash. `RoomModelJson.Read` ignores a `null` for any of them and rejects a
-`facing` other than the four names, an `assetHashLight` that is not 64 lower-case hexadecimal digits and a
-`profile` that is not standard base64; the length of the profile is rule R21, not the reader's. With a profile on
-all 64 objects a file is about 23 kB longer (359 characters per object) against the 300 kB limit. A line of
-`objects` with all three (the base64 and the hash are shortened here):
+**The three optional keys.** They come after `triTarget`, in this order (`assetHashLight`, `facing`, `profile`), each
+only when it has a value; a file without them reads and writes exactly as before. `version` stays 1. None of the three
+is part of the geometry hash. `RoomModelJson.Read` ignores a `null` for any of them and rejects a `facing` other than
+the four names, an `assetHashLight` that is not 64 lower-case hexadecimal digits and a `profile` with any character
+outside A–Z, a–z, 0–9, `+`, `/` and `=` (white space included) or that is not standard base64; the length of the
+profile is rule R21, not the reader's. With a profile on all 64 objects a file is about 23 kB longer (359 characters
+per object) against the 300 kB limit. A line of `objects` with all three (the base64 and the hash are shortened here):
 
 ```json
 {"id": 1, "category": "chair", "base": [0.8, 0.0, -0.4], "size": [0.5, 0.9, 0.5], "yaw": 1.570796, "mesh": "ready", "assetHash": "9f2c…", "triTarget": 6228, "assetHashLight": "41ab…", "facing": "profile", "profile": "AAAAAP8A…"}
@@ -282,9 +282,9 @@ all 64 objects a file is about 23 kB longer (359 characters per object) against 
 
 **The front.** After a scan with a LiDAR mesh, **local +Z is the front of every object**: the back of a chair is on
 local −Z, a cupboard's doors are on +Z. The builder turns the box by whole quarter turns to make it so: the yaw
-changes by k·π/2 (wrapped to (−π, π], six decimals), `size.w` and `size.d` swap on an odd k, and the profile is
-turned with them. The footprint does not change, so no reader of the RoomModel needs to change. An object whose
-`facing` is `box` has the front RoomPlan's axis gave it, which is a guess (§2.8, rule G14). Azimuth 0 of a photo
+changes by k·π/2 (wrapped, six decimals, never beyond ±3.141592), `size.w` and `size.d` swap on an odd k, and the
+profile is turned with them. The footprint does not change, so no reader of the RoomModel needs to change. An object
+whose `facing` is `box` has the front RoomPlan's axis gave it, which is a guess (§2.8, rule G14). Azimuth 0 of a photo
 view (§11.2) is the front.
 
 **The profile.** The box's local frame is Unity's: origin at the centre of the base, +Y up, local +X along
@@ -682,7 +682,7 @@ The first 16 digits for each fixture are in §5.1; `validate_room.py` prints the
 | R13 | `standing` = (`wf` < 1.5) |
 | R14 | Every wall is at least 0.05 m long, lies on an outline edge to within 0.01 m and runs the same way |
 | R15 | Every opening fits inside its wall, has `bottom < top ≤ height`, a door has `bottom = 0`, and openings of one wall do not overlap |
-| R16 | Object ids are unique; `assetHash` is set exactly when `mesh` is `ready`; every base lies inside the grid and not more than 0.05 m below the floor |
+| R16 | Object ids are unique; `assetHash` is set exactly when `mesh` is `ready`; every base lies inside the grid and not more than 0.05 m below the floor; every `yaw`, as written at six decimals, lies in (−3.1415928, 3.1415928], which is what the reader accepts (a room that validates reads back) |
 | R17 | Every `triTarget` equals the rule of §2.4 applied to the room's own boxes: the 32 largest by volume 3000 to 15000 by surface area, every other object 0. A room with a `standIn` object has only `standIn` objects, each with `triTarget` 5000 and a stand-in mesh of exactly 5,000 triangles with no edge over 0.25 m (§9.5); the surface-area rule does not apply to it |
 | R18 | No cell overlapped by the footprint of an object that blocks the floor is free |
 | R19 | (warning) A scanned room (`route` > 0) has a non-empty `anchor.id` |
@@ -716,7 +716,7 @@ are decided here. Rule G14 comes after the grid: it works on the scanned mesh an
 | G10 Free rectangle | Among all axis-aligned rectangles of WALK cells choose by, in order: (1) the longest short side, counted only up to 3.6 m (72 cells), beyond which s gains nothing; (2) the largest area; (3) the centre nearest the walker; (4) the lowest row, then the lowest column. §3.2 calls the lap square "the largest square the walker can comfortably lap", so the short side comes before the area (decided here; see Open for the lead, item 4) |
 | G11 Room frame | Origin at the rectangle's centre. X along its short side: a quarter turn is added when the rectangle is longer along the work frame's x, in the sense that keeps the frame's yaw in (−90°, 90°]. Cells are **re-indexed, never resampled**, which is why `originX` and `originZ` are multiples of 0.025 |
 | G12 Polygon | `walkable` = the boundary of WALK traced along cell edges with the region on the left; where two cells touch only at a corner the trace turns left (§2.3) |
-| G13 Objects | The boxes supplied (RoomPlan, route 3) come first. Then one box per 4-connected blob of at least 4 OBST cells inside the outline that are not only wall, window or door. A blob is dropped when at least half its cells lie under a supplied box. The RoomModel builder gives each its profile and front (G14), then keeps the 64 largest by volume and numbers them by decreasing volume |
+| G13 Objects | The boxes supplied (RoomPlan, route 3) come first. Then one box per 4-connected blob of at least 4 OBST cells inside the outline that are not only wall, window or door. A blob is dropped when at least half its cells lie under the supplied boxes taken together, each grown by one cell (`FloorScanCore.Explained`): furniture that stands in a row, box touching box, is one blob that no single box covers by half, and it gets no further box round the whole row; something unreported that touches a supplied box and is larger than it leaves less than half and is still an object. With no scanned mesh the grid adds no box at all, as in `roommath.py`. The RoomModel builder gives each its profile and front (G14), then keeps the 64 largest by volume and numbers them by decreasing volume |
 | G14 Profile and facing | After G13, and only when the snapshot holds a scanned LiDAR mesh (`ScanSnapshot.HasScannedMesh`: triangles present and not laid over planes). Every object gets its **profile**: 16 × 16 heights of the scan inside its box, made by casting rays straight down. Unless `ScanOptions.DecideFacing` is off, the first rule of the object's category list that answers decides its **front**, and the box is turned by whole quarter turns so that local +Z is the front. The whole rule is under the table |
 
 The grid core reports `FloorGridStatus.NoFloor` (nothing to build a grid from) or `NoWalkableFloor` (WALK is
@@ -768,7 +768,7 @@ frame. Ties in every rule go to the lowest k.
 |---|---|---|
 | `profile` | The back is the side whose edge strip (the outer 3 of 16 rows) is highest on average; the front is the opposite side | The profile covers at least 0.30 of the box; the highest strip has at least a quarter of its 48 cells seen; its mean height exceeds the next strip's by 0.15 of the box height |
 | `table` | The front is the side whose outward normal points most towards the centre of the nearest table | A table's box lies within 1.0 m of the object's box, measured between the two footprints on the floor (0 when they overlap) |
-| `clearance` | The front is the side with the most free floor in front of it: the room's distance field read 0.30 m outside the middle of each side | The best side exceeds its opposite side by 0.10 m (the tie rule below) |
+| `clearance` | The front is the side with free floor in front of it and blocked floor behind it: the room's distance field read 0.30 m outside the middle of each side. The object stands with its back against a wall or another object | Exactly one side qualifies and its reading is at least 0.10 m (the rule below) |
 | `box` | The box's own axis, as RoomPlan gave it: k = 0 | Always |
 
 | Categories | Rules, in order |
@@ -780,7 +780,7 @@ frame. Ties in every rule go to the lowest k.
 
 The rule that answered is written to `facing`; `box` is not written. Thresholds are constants of `ObjectFacing`
 (`MinCoverage` 0.30, `StripRows` 3, `MinStripSeen` 0.25, `ProfileMargin` 0.15, `TableReach` 1.0 m,
-`ClearanceProbe` 0.30 m, `ClearanceMargin` 0.10 m, `ClearanceTie` 0.05 m). They are starting values (Open for the
+`ClearanceProbe` 0.30 m, `ClearanceMargin` 0.10 m, `ClearanceSlack` 0.025 m). They are starting values (Open for the
 lead, item 15). How each rule is read where the plan leaves room (decided here):
 
 - *Strips.* The back strip of the candidate front +Z is rows j = 0 to 2; of +X columns i = 0 to 2; of −Z rows 13 to
@@ -793,15 +793,21 @@ lead, item 15). How each rule is read where the plan leaves room (decided here):
 - *Table.* Of two tables equally near, the one with the nearer centre. No answer when the table's centre is the
   object's own. A table is never turned (its list is `box`), so the order in which objects are turned cannot change
   which way a chair finds its table.
-- *Clearance, and its tie rule (decided here).* The object's own box caps the reading of every open side at about
-  0.25 m (the probe of 0.30 m less the cell of margin that FREE keeps from an obstacle, rule G7). So for a deep
-  appliance against a wall, the three sides that are not against the wall read the same, and "the most free floor"
-  is a three-way tie. A literal reading would face the appliance only when its box axis happens to point into the
-  room. The rule is therefore: sides that read within `ClearanceTie` (one cell, 0.05 m) of the best reading count
-  as equally free, and of those the one that exceeds its opposite side by most is the front. The 0.10 m margin is
-  tested on that side. Where one side is clearly the freest the answer is the literal one. An exact tie that
-  remains (a square box in a corner) goes to the lowest k, the side nearest the box's own axis. Setting
-  `ClearanceTie` to 0 would leave only exact ties decided this way.
+- *Clearance (decided here).* The room's distance field is read 0.30 m outside the middle of each side of the box. A
+  side can be the front when the floor there is free (a reading above `ClearanceSlack`, half a cell) and the floor
+  outside the opposite side is blocked (a reading below −`ClearanceSlack`): the object stands with its back against
+  a wall or another object. A reading within half a cell of zero counts as neither free nor blocked, so rooms on the
+  5 cm lattice, where readings of exactly 0 are common, do not depend on float noise. The rule answers when
+  exactly one side can be the front and its reading is at least `ClearanceMargin` (0.10 m). When two sides can, as
+  in a room corner, the floor cannot tell which is the front: the rule gives no answer and the box keeps its axis.
+  It never compares two readings, so neither the depth of the blocked floor nor the proportions of the box decides
+  anything; a deep appliance against a wall has three open sides, but only one has blocked floor opposite. What
+  follows: in a room corner, with a neighbour standing against exactly one side (a cupboard at the end of a row is a
+  corner made of a wall and furniture), or more than roughly 0.3 m off the wall behind it (0.25 m answers, 0.45 m
+  does not), the floor gives no answer and the box keeps its axis; in the middle of a room likewise. A neighbour
+  0.5 m off one side does not stop the answer. **A corner object whose scanned box is wrong stays wrong**: a rule
+  that put it right would have to know the proportions of each category (the long face for storage, couch, sink and
+  screen, the short face for toilet and bed), which is a new rule and is not built (Open for the lead, item 18).
 - *Margins.* "Exceeds by" is ≥ for both 0.15 and 0.10.
 - *Halved photo score.* A view from the back half is penalised by §11.2 for every object, including one whose
   `facing` is `box`, where the "front" is only RoomPlan's axis.
@@ -2386,6 +2392,14 @@ namespace Atlas.World
         /// </summary>
         bool SetBuiltInMesh(int objectId, Mesh sharedMesh, Vector3 scale, float fadeSeconds = 0.3f);
 
+        /// <summary>
+        /// True while the mesh is on a renderer of the room or is about to be: the mesh an object shows, its light
+        /// copy, the mesh that is fading out and a mesh waiting for its swap. A client that owns a mesh the room
+        /// content never destroys (a first shape) asks this before destroying it once it has been replaced.
+        /// False after Clear.
+        /// </summary>
+        bool IsMeshDrawn(Mesh mesh);
+
         event Action<RoomModel> Built;           // after Build
         event Action<int> ObjectChanged;         // object id, after a state or a mesh change
     }
@@ -2453,32 +2467,39 @@ Rules:
   `ObjectsVisible` and its warp properties on `ShellMaterial` and on each view's `Material` in `Enter`. SpaceLab calls
   `ResetPresentation()` between two spaces. The asset client calls `SetObjectState`, `SetGeneratedMesh`,
   `SetGeneratedLightMesh` and `SetBuiltInMesh`. The furniture level is set by `FurnitureLevelPolicy` (below, §9.2).
-  Nobody else changes the room. - **State changes.** `Data.Mesh`, `Data.AssetHash`, `Data.AssetHashLight` and
-  `ObjectChanged` are set when a mesh swap begins, not when its fade ends. `SetObjectState` is refused (false) once an
-  object shows a generated, built-in or stand-in mesh, and while a swap of it is queued. - **Saving.** Nothing saves
-  the RoomModel on `ObjectChanged` in this build: a saved room holds the mesh states of the moment it was saved
-  (§14.2, row 3), so the `boxId → sha256` record of §7.4 is not kept on the phone. An object that a loaded room lists
-  as `Ready` or `BuiltIn` is drawn as its box until the asset client places the mesh again. - **Two meshes per
-  generated object, and the level.** A view keeps the full mesh and, when the Forge has made one, the light mesh.
-  `FurnitureLevel` Full draws the full mesh; Light draws the light mesh of an object that has one and the full mesh of
-  an object that has none. A change of level swaps the drawn mesh at once, with no cross-fade and no allocation, and
-  `TriangleCount` of a view and `TrianglesPerEye` count the mesh drawn. `ResetPresentation`, and so `Build`, returns
-  the level to Full. Release: a new full mesh, a built-in mesh or `Clear` releases both meshes the way the full one
-  was released before. `SetGeneratedLightMesh` is refused (false) unless the object shows a generated mesh or one is
-  waiting its turn; a light mesh sent while the full mesh is still queued waits with it, and a newer one replaces the
-  waiting one. The light mesh belongs to the room content, which destroys it; the caller destroys it only when the
-  call returns false. - **First shapes are not shared.** `SetBuiltInMesh` was written for one mesh shared between
+  Nobody else changes the room.
+- **State changes.** `Data.Mesh`, `Data.AssetHash`, `Data.AssetHashLight` and `ObjectChanged` are set when a mesh swap
+  begins, not when its fade ends. `SetObjectState` is refused (false) once an object shows a generated, built-in or
+  stand-in mesh, and while a swap of it is queued.
+- **Saving.** Nothing saves the RoomModel on `ObjectChanged` in this build: a saved room holds the mesh states of the
+  moment it was saved (§14.2, row 3), so the `boxId → sha256` record of §7.4 is not kept on the phone. An object that
+  a loaded room lists as `Ready` or `BuiltIn` is drawn as its box until the asset client places the mesh again.
+- **Two meshes per generated object, and the level.** A view keeps the full mesh and, when the Forge has made one, the
+  light mesh. `FurnitureLevel` Full draws the full mesh; Light draws the light mesh of an object that has one and the
+  full mesh of an object that has none. A change of level swaps the drawn mesh at once, with no cross-fade and no
+  allocation, and `TriangleCount` of a view and `TrianglesPerEye` count the mesh drawn. `ResetPresentation`, and so
+  `Build`, returns the level to Full. Release: a new full mesh, a built-in mesh or `Clear` releases both meshes the
+  way the full one was released before. `SetGeneratedLightMesh` is refused (false) unless the object shows a generated
+  mesh or one is waiting its turn; a light mesh sent while the full mesh is still queued waits with it, and a newer
+  one replaces the waiting one. The light mesh belongs to the room content, which destroys it; the caller destroys it
+  only when the call returns false.
+- **First shapes are not shared, and are destroyed late.** `SetBuiltInMesh` was written for one mesh shared between
   objects. A first shape (§9.4) is built for its object at its own size, so the asset client passes scale one and
-  keeps the mesh itself. - **Materials.** One pooled instance for the shell and one per object, never a
-  `MaterialPropertyBlock`. A curved space writes its per-material anchor to these instances: the shell uses the room's
-  coordinates as tile-zero coordinates; each object gets its own anchor at its scanned position so it stays rigid
-  (§4.6). - **Bounds.** A space that warps the room sets large `localBounds` on `FloorRenderer`, `WallRenderer` and
-  each view's `Renderer` itself, and restores them in `Exit`. - **Cross-fade.** By dither, with the alpha of the
-  material's base tint (`_BaseTint.a`, lane A §10.8): the old mesh fades out on its own rented material while the new
-  one fades in. One extra draw call and one extra pool material per object for 0.3 s. - **At most one mesh swap begins
-  per frame**; further calls in the same frame queue (worst frame < 20 ms, §7.4). - **Ticking.** Wall changes and
-  cross-fades advance in `RoomContent.Tick`, which the installer hooks to the frame loop's upload step after boot.
-  With no `IFrameLoop` published the content stays `Instant`: no sinking, no fade.
+  keeps the mesh itself. When a generated mesh replaces it, the client does not destroy it on a clock: it keeps it in
+  `RetiredMeshes` (`Atlas.Telemetry`) and destroys it once, only when `IsMeshDrawn` is false, so a queued swap or a
+  cross-fade never draws a destroyed mesh. The Spectator's furniture does the same. The room content still destroys
+  only the meshes it owns.
+- **Materials.** One pooled instance for the shell and one per object, never a `MaterialPropertyBlock`. A curved space
+  writes its per-material anchor to these instances: the shell uses the room's coordinates as tile-zero coordinates;
+  each object gets its own anchor at its scanned position so it stays rigid (§4.6).
+- **Bounds.** A space that warps the room sets large `localBounds` on `FloorRenderer`, `WallRenderer` and each view's
+  `Renderer` itself, and restores them in `Exit`.
+- **Cross-fade.** By dither, with the alpha of the material's base tint (`_BaseTint.a`, lane A §10.8): the old mesh
+  fades out on its own rented material while the new one fades in. One extra draw call and one extra pool material per
+  object for 0.3 s.
+- **At most one mesh swap begins per frame**; further calls in the same frame queue (worst frame < 20 ms, §7.4).
+- **Ticking.** Wall changes and cross-fades advance in `RoomContent.Tick`, which the installer hooks to the frame
+  loop's upload step after boot. With no `IFrameLoop` published the content stays `Instant`: no sinking, no fade.
 
 ### 9.2 How each space uses the room
 
@@ -2501,7 +2522,12 @@ beside the quality ladder) puts `FurnitureLevel` on the room content when a spac
 ladder changes tier, when `render.furniture` changes and when the room is rebuilt (`Built`); all of these run
 between frames. On entering a space `SpaceLab` calls `ISpaceStage.ResetForSpace(SpaceId? next)` (`next` is null on the
 way to nothing); `SpaceStage` resets the room's presentation first, which returns the level to Full, and then tells
-the policy the space. With no space entered the level is Full. The level is then:
+the policy the space. If a space fails to load, `SpaceLab` falls back to Home and calls `ResetForSpace(Home)` again,
+so Home is entered at Home's own level, not the failed space's; when nothing loads it calls `ResetForSpace(null)` and
+the level is Full. `SpaceStage` has a second public constructor,
+`SpaceStage(room, policy, Action resetLook, Action<float> setFade)`, which takes the look reset and the fade as
+delegates so that a test can run without shader globals; the first one passes `AtlasLook`'s. With no space entered
+the level is Full. The level is then:
 
 | `render.furniture` | Level |
 |---|---|
@@ -3222,6 +3248,12 @@ Plan §4.2 (pre-scan path), task `P1-C13`. Files are those of README F8.
 | `Application.persistentDataPath/rooms/room_<id>.worldmap` | The bytes of `ARWorldMap.Serialize`, unchanged |
 | `PlayerPrefs` key `atlas.room.last` | Id of the last room confirmed or relocalised |
 
+A triangle target is derived from the boxes by the rule of the day (§2.4), not scanned. A room saved under an earlier
+rule carries that rule's targets and would fail rule R17 now, so `RoomStore.TryLoad` (and so `List`, `RoomIndex` and
+`ScanSystems.UseSavedRoom`, which load through it) assigns the targets again with `RefreshTargets` when no object is a
+stand-in. Loading does not write: the file keeps its old targets until the next `Save` of that room. A loader that
+bypasses the store (the Spectator reading the room the phone published, the fixtures) is not refreshed.
+
 ```csharp
 // File: ATLAS/Assets/Atlas/Scan/Build/RoomStore.cs
 using System.Collections.Generic;
@@ -3251,7 +3283,11 @@ namespace Atlas.Scan
         public bool Exists(string id);
         /// <summary>Newest first. Returns the count.</summary>
         public int List(List<RoomSummary> into);
+        /// <summary>Reads room_id.json. The triangle targets are assigned again by today's rule (RefreshTargets); the
+        /// file is left as it is.</summary>
         public bool TryLoad(string id, out RoomModel room, out string error);
+        /// <summary>ObjectMeshRules.Assign for a room that has no stand-in object; a room of stand-ins keeps its 5,000s.</summary>
+        public static void RefreshTargets(RoomModel room);
         /// <summary>Queues a write of room_id.json (to a temporary file, then renamed). The latest call wins.</summary>
         public void Save(RoomModel room);
         /// <summary>Writes room_id.json before returning. For tools and tests; the app uses Save.</summary>
@@ -3751,10 +3787,13 @@ that holds the test.
 | `GazeDwell_Timing` | `Atlas.Input.Tests`, `GazeDwellTests` | With the `GazeDwell` core: fires at 0.7 s ± one frame; clamps to 0.6 and 0.8; `Once`, `Repeat` and `Hold` behave as §13.2 |
 | `RoomModel_ObjectKeys` | `Atlas.World.Tests`, `RoomModelJsonTests` | `assetHashLight`, `facing` and `profile` are read and written after `triTarget` in that order; a file without them is read and written byte for byte as before and keeps its geometry hash; R17 follows the rule of §2.4 (the six vectors of `roommath.py` are tests of `ObjectMeshRules`) and R21 refuses a profile of another length |
 | `ObjectProfile` | `Atlas.Scan.Tests`, `ObjectProfileTests` | Test vectors A, B and C of rule G14; the cell rule of `Rotate`, and `Rotate` equals the profile of the same scan in a turned box; a box turned and moved off the origin gives vector A's bytes; floor-class triangles, hits under 0.02 m and hits above the ray start are ignored; a ray through an edge or a vertex hits; many boxes in one pass equal one by one |
-| `ObjectFacing` | `Atlas.Scan.Tests`, `ObjectFacingTests` | A chair whose scanned back is on each of the four sides ends with its back on local −Z (rule `profile`); a backless stool faces the table from each side; storage and a deep appliance on each of four walls with each of the four box axes face the room (rule `clearance`); a table and an unknown object keep their axis; thin coverage falls through to the next rule; the lists of G14; `Apply` |
-| `Scan_ObjectShape` | `Atlas.Scan.Tests`, `ScanObjectShapeTests` | Through `ScanSolver`, and once through `ScanFlow` from the sweep to the final room: the chair with its back on +X ends with the back on −Z, a 256-byte profile, a valid RoomModel that reads back, whichever quarter turn it was scanned at; no LiDAR mesh gives no profile and no turn; `decideFacing` off keeps every box of the three reference rooms as written, and `ScanOptions.DecideFacing` false through `ScanFlow` (background or not) leaves the chair unturned, with its profile and no `facing` key; the budget room with it on turns the furniture that looks at a wall |
+| `ObjectFacing` | `Atlas.Scan.Tests`, `ObjectFacingTests` | A chair whose scanned back is on each of the four sides ends with its back on local −Z (rule `profile`); a backless stool faces the table from each side; storage and a deep appliance on each of four walls with each of the four box axes face the room (rule `clearance`); in a room corner a box that is right is not turned and the floor gives no answer, for seven shapes of box, each of the four box axes and each of the four corners; a neighbour against one side makes a corner, one half a metre off does not; between two neighbours only the room side is the front; the answer needs the wall within reach (four distances off the wall); a table and an unknown object keep their axis; thin coverage falls through to the next rule; the lists of G14; `Apply` |
+| `Scan_ObjectShape` | `Atlas.Scan.Tests`, `ScanObjectShapeTests` | Through `ScanSolver`, and once through `ScanFlow` from the sweep to the final room: the chair with its back on +X ends with the back on −Z, a 256-byte profile, a RoomModel that validates, is written and reads back identically (every room of that file is read back), whichever quarter turn it was scanned at; no LiDAR mesh gives no profile and no turn; `decideFacing` off keeps every box of the three reference rooms as written, and `ScanOptions.DecideFacing` false through `ScanFlow` (background or not) leaves the chair unturned, with its profile and no `facing` key; the budget room with it on turns three boxes half a turn (stored as ±3.141592) and reads back; the screen on the east wall is left as it was, no rule answered |
+| `RoomModelBuilder_StoredYaw`, `RoomStore_Refresh` | `Atlas.Scan.Tests`, `RoomModelBuilderTests` (`StoredYaw_IsWrappedRoundedAndAlwaysReadable`, `ABoxScannedHalfATurnRound_GivesARoomThatReadsBack`), `RoomStoreTests` (`ARoomSavedUnderTheEarlierTriangleRule_LoadsWithTodaysTargets`, `ARoomStillQueuedForWriting_IsRefreshedToo`) | Every yaw the builder writes is wrapped, at six decimals and within ±3.141592, for boxes at π, −π and the float below π; a room saved with the earlier targets loads with today's, also while its write is still queued, and a stand-in room keeps its 5,000s |
+| `FloorScan_SuppliedBoxes` | `Atlas.Scan.Tests`, `FloorScanSuppliedBoxTests` | Rule G13: three touching supplied boxes are three objects and no unknown one, also through the solver with their scanned mesh; two touching boxes are two; a blob half under the supplied boxes together is explained and one cell column less is not (the added box is the block); something unscanned and larger beside a supplied box is still an object |
+| `RoomModel_ReadableYaw` | `Atlas.World.Tests`, `RoomModelJsonTests` (`YawOutsideTheReadableRange_IsRefusedByR16`, `EveryRoomThatValidates_SurvivesWriteThenRead`, `Profile_RefusesWhiteSpace`) | R16 refuses a yaw that is written outside (−3.1415928, 3.1415928] (3.141593, float π, NaN) and passes ±3.141592; every fixture and code-built room that validates writes and reads back to the same text; a `profile` with a space or a newline is refused |
 | `PhotoPreference` | `Atlas.Scan.Tests`, `PhotoPreferenceTests` and `PhotoSetTests` | Of a front and a back view of equal quality the front one is view 0; 45° above loses to 20° above; a single back view is still chosen; the 30° spread holds. The photo set carries the profile (or none) and the room's light target for 1, 12, 13, 20 and 32 meshed objects |
-| `Furniture_Level` | `Atlas.Rendering.Tests`, `FurnitureLevelTests` (engine-free) and `FurnitureLevelUnityTests` (`[Category("Unity")]`, not run headless); `Atlas.App.Tests`, `FurnitureLevelPolicyTests` | The light copy is drawn at Light and the full one at Full, an object without a light copy draws its full one; a change of level swaps at once; the release rules of §9.1; `RoomBudget` at both levels and Home's row of 80 draw calls and 250,000 triangles; `SpaceFurniture` per space, the ladder's cap and `render.furniture` resolve as §9.2 |
+| `Furniture_Level` | `Atlas.Rendering.Tests`, `FurnitureLevelTests` (engine-free) and `FurnitureLevelUnityTests` (`[Category("Unity")]`, not run headless); `Atlas.App.Tests`, `FurnitureLevelPolicyTests` | The light copy is drawn at Light and the full one at Full, an object without a light copy draws its full one; a change of level swaps at once; the release rules of §9.1, including that a light copy arriving while its full copy is queued waits with it, that a cross-fade fades the drawn copy out, that `Clear` with swaps pending releases every owned mesh once and that `IsMeshDrawn` is true during and false after a fade (the Unity tests); `RoomBudget` at both levels and Home's row of 80 draw calls and 250,000 triangles; `SpaceFurniture` per space, the ladder's cap and `render.furniture` resolve as §9.2; the real `SpaceStage` resets the presentation and then sets the level (`SpaceStage_ResetsThePresentation_ThenSetsTheLevel`), and `SpaceLab` tells the stage the fallback space after a failed load and none when nothing loads (`SpaceLabTests.LoadFailure_TellsTheStageTheFallbackSpace_AndNoSpaceWhenNothingLoads`); `Atlas.Telemetry.Tests`, `RetiredMeshesTests`: a retired first shape is destroyed once and never while it is drawn, also over a 32-mesh queue and a room cleared with swaps pending |
 | `WallBridge_Switch` | `Atlas.Scan.Tests`, `WallBridgeTests`; `Atlas.App.Tests`, `ScanWallBridgeParamTests`; `Atlas.Editor.Tests`, `AtlasRoomPlanProjectTests` (Editor only) | With `scan.wallBridge` off the bridge is never asked and the walls are as today; on with an available bridge it begins, ends and merges; on with an unavailable or missing bridge nothing changes; the parameter is wired to `WallBridge.Apply`; the project edit adds the Swift file, links RoomPlan weakly and applied twice equals applied once |
 | Fixture validation | CI, no Unity | `python3 tools/rooms/validate_room.py --fixtures`, `python3 tools/rooms/make_fixtures.py --check` and `python3 tools/rooms/roommath.py` exit 0 |
 
@@ -3828,7 +3867,7 @@ that holds the test.
     uses its own (§14.1). They share the `RoomStore`, and only onboarding's is ever ticked. Decide which one
     stays.
 15. **The thresholds of rule G14 are starting values.** 0.15 and 0.10 m for the profile and clearance margins, 0.30
-    for coverage, 1.0 m for the table, 0.05 m for the clearance tie, a quarter of the strip seen. Nothing has been
+    for coverage, 1.0 m for the table, 0.025 m for the clearance slack, a quarter of the strip seen. Nothing has been
     measured on a recorded scan or a phone; the mesh design's check M1 (facing right for 90 % of chairs and couches
     and every wall-backed object) is where they are tuned. The photo factor of §11.2 (0.5 beyond 90° and 30°) is
     the same kind of value.
@@ -3846,3 +3885,10 @@ that holds the test.
 17. **The kill-switch list does not name `scan.wallBridge`.** `MenuModel.KillSwitchIds` is fixed by lane D's
     contract (§1.5, 21 names, asserted by `MenuModelTests`), so `scan.wallBridge` is on the menu's Parameters page
     only, and so is `render.furniture`. Add them together with the contract and the count in the test, or leave it.
+18. **A corner object whose scanned box is wrong stays wrong.** The clearance rule gives no answer in a room corner
+    (§2.8, G14), so the box keeps the axis RoomPlan gave it. Putting it right would take a rule about the proportions
+    of each category (the long face for storage, couch, sink and screen; the short face for toilet and bed). That is
+    a new rule, not built. Decide whether it is wanted.
+19. **A wall-mounted screen above other furniture.** The floor in front of it is blocked by the furniture below it, so
+    no rule answers and its `facing` stays `box`; the budget room's screen looks at the east wall before and after.
+    Decide whether it needs a rule of its own.
