@@ -132,6 +132,7 @@ with `backend: "cache"` never reaches any generator.
 What the `triposg` generator does around the model (mesh design §5.1):
 
 - **The model is loaded when the service starts**, by the worker, so the first object does not pay for it.
+  The matting model is loaded then too: fetching it the first time takes longer than the matting time-out.
   `generatorReady` is true only once that load has succeeded; until then `generatorNote` says what is missing
   or going on (`the model is being loaded`, `the weights are being downloaded to …`). Jobs wait in the queue
   meanwhile. A load that failed is tried again by the next job.
@@ -178,13 +179,22 @@ cells. Every job's output is validated at the full level before it is published.
 
 ## First run on the Station
 
-**None of this has been run.** It was written on a Mac with no GPU and no PyTorch, from TripoSG's public
-repository (commit `fc5c409`, 18 April 2025) and from `diso`'s build script. What was checked: the three
-requirement lists resolve together for Python 3.11 on Windows (`uv pip compile`, 4 October 2026) and every pin
-has a Windows wheel; `pip install diso` fails in pip's isolated build environment (seen here, pip 26.2.1); the
-service, `tools/first_run.py` and the `curl` commands below work against the Forge with the procedural
-generator; the adapter passes its tests with a fake pipeline. Nothing below was tried on Windows, on a GPU, or
-with TripoSG. Expect to correct it, and correct this section when you do.
+**None of this has been run.** It was written on a Mac with no GPU, from TripoSG's public repository (commit
+`fc5c409`, 18 April 2025) and from `diso`'s build script. Nothing below was tried on Windows, on a GPU, or with
+TripoSG's weights, and TripoSG has not generated a mesh anywhere. Expect to correct it, and correct this
+section when you do. What was checked, all on 4 October 2026:
+
+- The three requirement lists resolve together for Python 3.11 on Windows (`uv pip compile`), and every pin has
+  a Windows wheel except `antlr4-python3-runtime`, which is pure Python.
+- `pip install diso` fails in pip's isolated build environment, because its build script imports PyTorch (seen
+  with pip 26.2.1).
+- In a throw-away Python 3.11 environment on the Mac, with `requirements.lock`, `requirements-triposg.txt`,
+  PyTorch 2.7.1 for the processor and `rembg[cpu]==2.0.69`: TripoSG's package imports through the adapter's own
+  import, with `diso` replaced by a stub; the mesh extraction of the second decoder (scikit-image's marching
+  cubes) runs with the pinned numpy; `rembg` cuts TripoSG's example pictures and the Forge frames them; the
+  Forge's tests pass.
+- The service, `tools/first_run.py` and the `curl` commands below work against the Forge with the procedural
+  generator. The adapter passes its tests with a fake pipeline.
 
 The Station is the Windows PC with the RTX 5070. Use the **x64 Native Tools Command Prompt for VS 2022** for
 step 2, so the compiler is on the path; any Command Prompt will do afterwards. In PowerShell, write
@@ -405,9 +415,11 @@ Then move "TripoSG on the RTX 5070" out of that page's "Not yet verified" list.
   and memory per object; the size of the raw mesh; and TripoSG's output frame.
 - **The fallback decoder** is inferred from TripoSG's source and one open report (issue 63). That
   `use_flash_decoder=False` works where the default fails is untested.
-- **rembg** was never installed here. The framing is tested with synthetic pictures and mattes, not with a
-  matte `rembg` made.
-- **The requirement lists** were resolved, not installed.
+- **rembg** was tried once on the Mac's processor, on TripoSG's example pictures put on a plain background: it
+  cut them in 0.2 s each and the framing was right. It was not tried on the Station, with `onnxruntime-gpu`, or on
+  a photo of a room. The tests use synthetic pictures and mattes.
+- **The requirement lists** were resolved for Windows and installed once on macOS, never on Windows and never
+  with the CUDA wheels. `diso` was never built.
 - **Up and front.** Bounds cannot tell a mesh from the same mesh turned by 180° or standing on its head, so the
   generator's own up direction is trusted unless another axis fits the box clearly better. The fit to the scan
   that settles it is not built yet.

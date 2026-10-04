@@ -153,9 +153,10 @@ def test_matted_view_cutout_and_dominant_colour():
     assert imaging.dominant_colour(cutout) == (40, 54, 92)
 
 
-def test_without_a_matting_model_the_crop_passes_through():
-    # The tests run without rembg: the method is "none" and nothing is cut away.
-    assert imaging.matting_method() == "none" and imaging.load_matting() == "none"
+def test_without_a_matting_model_the_crop_passes_through(monkeypatch):
+    # As on a machine without rembg: the method is "none" and nothing is cut away.
+    monkeypatch.setattr(imaging, "matting_method", lambda: "none")
+    assert imaging.load_matting() == "none"
     crop, _ = scene(64, 64, (10, 10, 50, 50))
     image, method = imaging.remove_background(crop)
     assert method == "none" and image.mode == "RGBA" and np.asarray(image)[..., 3].min() == 255

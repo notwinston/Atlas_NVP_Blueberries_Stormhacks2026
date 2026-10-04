@@ -5,9 +5,11 @@
 #
 #   pip install -r requirements-gpu.txt
 #
-# NEVER INSTALLED: the version is the one `uv pip compile` chose for Python 3.11 on Windows on
-# 4 October 2026, together with the other three lists. What it brings with it (onnxruntime-gpu,
-# opencv-python-headless, pymatting, numba and others) is not pinned; write the installed
-# versions into docs/versions.md. If onnxruntime finds no CUDA and cuDNN libraries it runs on
-# the processor, which is fast enough for one crop per object.
+# NEVER INSTALLED AS WRITTEN: the version is the one `uv pip compile` chose for Python 3.11 on
+# Windows on 4 October 2026, together with the other three lists. `rembg[cpu]` of the same
+# version was tried once on macOS, where it cut a picture in 0.2 s on the processor; the `gpu`
+# extra was never installed. What it brings with it (onnxruntime-gpu, opencv-python-headless,
+# pymatting, numba and others) is not pinned; write the installed versions into
+# docs/versions.md. If onnxruntime finds no CUDA and cuDNN libraries it runs on the processor,
+# which is fast enough for one crop per object.
 rembg[gpu]==2.0.69

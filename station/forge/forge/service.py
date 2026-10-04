@@ -562,25 +562,27 @@ class Forge:
         return ready, note
 
     def _warm_up(self) -> None:
-        """Load the generator's model, and the matting model it needs, before the first job.
+        """Load the matting model and the generator's model before the first job.
 
-        A model that cannot be loaded is no reason to stop: GET /health reports why,
-        cached assets are still served, and each job tries the load again.
+        The first job would otherwise pay for both inside its own time-outs. A model
+        that cannot be loaded is no reason to stop: GET /health reports why, cached
+        assets are still served, and each job tries the load again.
         """
+        if imaging.matting_method() != "none":
+            try:
+                imaging.load_matting()
+            except Exception as exc:
+                log.warning("the matting model could not be loaded: %s", exc)
+                # Without a matte the colour is read from the plain crop; only a generator
+                # that takes matted pictures alone cannot work.
+                if getattr(self.generator, "needs_matting", False):
+                    self._matting_error = f"the matting model could not be loaded: {exc}"
         try:
             self.generator.warm_up()
         except GeneratorError as exc:
             log.warning("the %s generator is not ready: %s", self.generator.name, exc)
-            return
         except Exception as exc:  # model code raises anything; the worker must reach its queue
             log.exception("the %s generator failed to load: %s", self.generator.name, exc)
-            return
-        if getattr(self.generator, "needs_matting", False):
-            try:
-                imaging.load_matting()
-            except Exception as exc:
-                self._matting_error = f"the matting model could not be loaded: {exc}"
-                log.warning(self._matting_error)
 
     def _work(self) -> None:
         self._warm_up()

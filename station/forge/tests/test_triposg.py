@@ -1,4 +1,5 @@
 """The TripoSG adapter, driven by a fake pipeline: no test here imports PyTorch, and none runs TripoSG."""
+import importlib.util
 import sys
 import threading
 import time
@@ -177,6 +178,12 @@ def matting(monkeypatch):
     return state
 
 
+@pytest.fixture
+def no_matting(monkeypatch):
+    """No matting model is installed, whatever this machine has."""
+    monkeypatch.setattr(imaging, "matting_method", lambda: "none")
+
+
 def picture(size=64, colour=(200, 60, 40)) -> Image.Image:
     return Image.new("RGB", (size, size), colour)
 
@@ -195,8 +202,8 @@ def wait_until(condition, timeout=10.0):
 # --------------------------------------------------------------------------- availability
 
 
-def test_on_a_machine_with_nothing_installed_everything_missing_is_named(tmp_path):
-    generator = TripoSGGenerator(make_settings(tmp_path / "data", generator="triposg"))  # the real runtime
+def test_on_a_machine_with_nothing_installed_everything_missing_is_named(tmp_path, no_matting):
+    generator = TripoSGGenerator(make_settings(tmp_path / "data", generator="triposg"), FakeRuntime(modules=()))
     ready, note = generator.availability()
     assert ready is False and generator.gpu() is None
     for word in ("PyTorch is not installed", "FORGE_TRIPOSG_REPO", "diso is not installed", "no matting model"):
@@ -219,7 +226,18 @@ def test_each_missing_piece_is_reported(tmp_path, matting):
     assert TripoSGGenerator(settings, FakeRuntime()).availability() == (False, "the model is not loaded yet")
 
 
-def test_matting_is_required(tmp_path):
+def test_the_real_runtime_finds_what_is_installed_without_importing_it(tmp_path):
+    from forge.generators.triposg import _Runtime
+
+    runtime = _Runtime()
+    assert runtime.installed("numpy") is True and runtime.installed("no_such_module_anywhere") is False
+    # The adapter of a service that was only created has imported nothing.
+    before = set(sys.modules)
+    TripoSGGenerator(make_settings(tmp_path / "data", generator="triposg")).availability()
+    assert not {"torch", "diso", "triposg"} & (set(sys.modules) - before)
+
+
+def test_matting_is_required(tmp_path, no_matting):
     # No matting model on this machine: TripoSG says so and never loads.
     runtime = FakeRuntime()
     generator = TripoSGGenerator(station(tmp_path), runtime)
@@ -488,7 +506,7 @@ def test_health_answers_and_jobs_wait_while_the_model_loads(tmp_path, matting):
         assert client.get("/health").json()["generatorReady"] is True
 
 
-def test_without_a_matting_model_the_service_says_so_and_no_photo_reaches_the_model(tmp_path):
+def test_without_a_matting_model_the_service_says_so_and_no_photo_reaches_the_model(tmp_path, no_matting):
     runtime = FakeRuntime()  # PyTorch, CUDA, diso, the checkout and the weights are all there
     app, _ = served(tmp_path, runtime)
     with TestClient(app) as client:
@@ -543,6 +561,24 @@ def test_a_matting_model_that_cannot_be_loaded_is_reported(tmp_path, matting):
         assert client.get("/health").json()["generatorReady"] is True
 
 
+def test_the_matting_model_is_loaded_at_the_start_for_any_generator(tmp_path, matting):
+    loads = []
+    real_load = imaging.load_matting
+    imaging.load_matting = lambda: loads.append(1) or real_load()  # the fixture restores it
+    try:
+        with TestClient(create_app(make_settings(tmp_path / "a"))) as client:  # the procedural generator
+            wait_until(lambda: loads)
+            assert client.get("/health").json()["generatorReady"] is True
+        # A matting model that cannot be loaded stops only a generator that needs it.
+        matting.load_error = "u2net.onnx could not be downloaded"
+        with TestClient(create_app(make_settings(tmp_path / "b"))) as client:
+            wait_until(lambda: len(loads) == 2)
+            health = client.get("/health").json()
+            assert health["generatorReady"] is True and health["generatorNote"] == ""
+    finally:
+        imaging.load_matting = real_load
+
+
 def test_the_job_reports_the_decoder_that_made_its_mesh(tmp_path, matting):
     runtime = FakeRuntime(pipe=FakePipe(flash="none"))
     app, settings = served(tmp_path, runtime)
@@ -566,5 +602,7 @@ def test_the_job_reports_the_decoder_that_made_its_mesh(tmp_path, matting):
         assert "hierarchical decoder: CUDA error" in status["error"] and "decoder" not in status
 
 
+@pytest.mark.skipif(importlib.util.find_spec("torch") is not None,
+                    reason="PyTorch is installed here: the service's own start-up may load it")
 def test_no_test_imported_pytorch():
     assert "torch" not in sys.modules and "diso" not in sys.modules and "rembg" not in sys.modules

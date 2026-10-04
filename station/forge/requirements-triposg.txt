@@ -1,11 +1,13 @@
 # Station only: what TripoSG needs, with the Forge's own pins for Python 3.11 on Windows.
 #
-# NEVER INSTALLED. The list was resolved with `uv pip compile` for Python 3.11 on Windows
-# (x86_64-pc-windows-msvc) against PyPI and the cu128 PyTorch index on 4 October 2026,
-# together with requirements.lock and requirements-gpu.txt, and every pin below has a wheel
-# for that platform except antlr4-python3-runtime, which is pure Python and built by pip.
-# Nothing was installed and TripoSG was not run with it. README, "First run on the Station",
-# gives the order of the commands; write what was really installed into docs/versions.md.
+# NEVER INSTALLED ON WINDOWS OR WITH CUDA. The list was resolved with `uv pip compile` for
+# Python 3.11 on Windows (x86_64-pc-windows-msvc) against PyPI and the cu128 PyTorch index on
+# 4 October 2026, together with requirements.lock and requirements-gpu.txt, and every pin below
+# has a wheel for that platform except antlr4-python3-runtime, which is pure Python and built
+# by pip. It was installed once on macOS with PyTorch 2.7.1 for the processor: there TripoSG's
+# package imports (with diso replaced by a stub) and the Forge's tests pass. TripoSG was not
+# run with it. README, "First run on the Station", gives the order of the commands; write what
+# was really installed into docs/versions.md.
 #
 # Why not TripoSG's own requirements.txt (commit fc5c409 of 18 April 2025):
 #   - it pins numpy==1.22.3, which has no build for Python 3.11. The Forge keeps the numpy of
