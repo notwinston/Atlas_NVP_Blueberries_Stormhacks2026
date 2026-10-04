@@ -83,7 +83,7 @@ differently, that page wins and this one is corrected at the freeze.
 | `IBumpGuard`, `BumpLevel`, `SensorFrame`, `BumpCue.Fire`, `CueSource` | lane C | `IBumpGuard.Tick(in SensorFrame)`, `IBumpGuard.Level`, `BumpCue.Fire(BumpLevel, float2, CueSource)`, `BumpCue.Shown` |
 | `IPosePipeline` | lane C | `Atlas.World`. `Sensors` (the `SensorFrame` of this frame, with `RoomActive`), `Source`, `PredictionRotation`, `GyroPredictMs`, `ResetGeometry()` |
 | `IAtlasInput`, `AtlasAction`, `AtlasAxis`, `InputContext`, `GazeTarget` | lane C | `Atlas.Input`. `Tick(Vector3 headPosition, Quaternion headRotation, float deltaTime)`, `Pressed(AtlasAction)`, `Axis(AtlasAxis)`, `Walker`, `DwellSeconds`, `PushContext`, `PopContext`, `RegisterGazeTarget` |
-| `IRoomContent`, `WallMode`, object category | lane C | `Root`, `IsBuilt`, `SetWallMode(WallMode mode, float seconds = 0.5f)` with `WallMode.Full` and `WallMode.Kerbs`, `FloorVisible`, `ObjectsVisible`, `ResetPresentation()`, `FurnitureLevel FurnitureLevel { get; set; }` (the enum `FurnitureLevel { Full = 0, Light = 1 }` is in `Atlas.World`; `ResetPresentation()` returns it to `Full`), `Built`, `IsBuilt`; the category as an integer 0 to 31 (the order of `objects[].category` in the schema) |
+| `IRoomContent`, `WallMode`, object category | lane C | `Root`, `IsBuilt`, `SetWallMode(WallMode mode, float seconds = 0.5f)` with `WallMode.Full` and `WallMode.Kerbs`, `FloorVisible`, `ObjectsVisible`, `ResetPresentation()`, `FurnitureLevel FurnitureLevel { get; set; }` (the enum `FurnitureLevel { Full = 0, Light = 1 }` is in `Atlas.World`; `ResetPresentation()` returns it to `Full`), `bool IsMeshDrawn(Mesh)` (true while a view shows the mesh, holds it as its light copy, fades it out or has it waiting for its swap; the asset client destroys a replaced first shape only when it is false), `Built`, `IsBuilt`; the category as an integer 0 to 31 (the order of `objects[].category` in the schema) |
 | `ParamRegistry`, `ParamEntry`, `ParamSource`, `StateMessage` | lane D | `Atlas.Link`. `DeclareFloat`, `DeclareInt`, `DeclareBool`, `DeclareEnum` (by name, idempotent, keep the current value; the last argument is `onRelease`), `Find`, `TryGet`, `Set`, `SetGroupActive(string group, bool active)`, `PushAll()` |
 | `AtlasPerfProbe` | lane D | Implements `IPerfSource` (§9.5) |
 
@@ -328,7 +328,7 @@ namespace Atlas.World
 engine-free class, `SpaceLab : ISpaceHost, ISpaceFrame, IAfterFrameStep`, built as
 `new SpaceLab(ParamRegistry registry, IWalkerKernel kernel, IWalkerReset walker, ISpaceLoader loader, ISpaceStage stage)`:
 `SceneSpaceLoader` brings the scene-or-factory rule (§5.2) and `SpaceStage` the fade, the reset between two
-spaces and the furniture level (below); `SpaceStage(IRoomContent room, FurnitureLevelPolicy furniture = null)`. A switch advances once per frame at step 8b.
+spaces and the furniture level (below); `SpaceStage(IRoomContent room, FurnitureLevelPolicy furniture = null)`, and a second constructor `SpaceStage(room, furniture, Action resetLook, Action<float> setFade)` that takes the look's reset and fade as delegates, for a test that has no shader globals to write. A switch advances once per frame at step 8b.
 
 ```csharp
 // File: World/Spaces/ISpaceHost.cs
@@ -411,7 +411,7 @@ first fade frame starts within 250 ms of an operator command (test L10).
 | 2 | `Loading` | `old.Exit()`; raises `SpaceExited`; marks the old parameter group inactive; `ISpaceLoader.Unload`: destroys the old root, or `SceneManager.UnloadSceneAsync` for a scene |
 | 3 | `Loading` | `ISpaceStage.ResetForSpace(SpaceId? next)`, with `next` the space about to be entered, or null when the switch ends in `Empty`: `AtlasLook.ResetForSpace()` (§10.8), `IRoomContent.ResetPresentation()` when the room content is built, and then `FurnitureLevelPolicy.EnterSpace(next)`, which sets the room's furniture level (below). A module that uses a `PortalRenderer` clears it in its own `Exit` |
 | – | `Loading` | Waits here while `IWalkerReset.RoomResetPending`: a room was just made active and the head is not in its frame yet, so the walker cannot be placed |
-| 4 | `Loading` | Creates the module by the scene-or-factory rule of §5.2. On failure, or when `Configure` or `Enter` throws: logs `space.loadFailed` and continues once with Home; if Home fails too, ends in `Empty` with the fade at 1 and the room content visible |
+| 4 | `Loading` | Creates the module by the scene-or-factory rule of §5.2. On failure, or when `Configure` or `Enter` throws: logs `space.loadFailed` and continues once with Home, telling the stage `ResetForSpace(Home)` again so that Home is entered at its own furniture level (`Full`) and not at the failed space's; if Home fails too, calls `ResetForSpace(null)` and ends in `Empty` with the fade at 1 and the room content visible |
 | 5 | `Loading` | `module.Configure(Room, registry)`; `WorldVersion += 1`; marks the new parameter group active |
 | 6 | `Loading` | If `module.Registered`: `IWalkerReset.ResetWalkerToFloor()` (lane B §7.2). Then `module.Enter(kernel.Pose)`, or, for S3 entered from S2 at q = 5, `module.Enter` with the tile and frame S2 stood in (below); caches `module as IUploadStep`; raises `SpaceEntered`, on which `AppParams` writes `space.id` back (§9.6) |
 | 7 | `FadingIn` | From the next frame, ramps `_AtlasFade` 0 → 1 over `FadeInSeconds`. The new module ticks from the first frame |
@@ -1466,7 +1466,7 @@ The ladder (§8.6):
 
 The Furniture column (mesh design §5.4) is the highest furniture level the tier allows. `Nominal` and `High` allow
 `Full`, so a space keeps the level it asks for (§4.2). `Fair` and every tier below it force `Light` in every space,
-so the first step below nominal drops the furniture to its light copies before any step lowers the render scale.
+so the first step below nominal, `Fair`, drops the furniture to its light copies in the same step in which it lowers the render scale from 0.8 to 0.7; the table has no step that changes only the furniture.
 The column is a table in `Rendering/Quality/QualityFurniture.cs` (`QualityFurniture.Cap(QualityTier)` and
 `QualityFurniture.Limit(FurnitureLevel spaceLevel, QualityTier)`), not a field of `QualityRow`, which lives in
 `Atlas.World`; moving the column onto the row is a later change in that assembly. `FurnitureLevel` is `Atlas.World.FurnitureLevel`
