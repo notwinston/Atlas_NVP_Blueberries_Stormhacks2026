@@ -252,6 +252,9 @@ namespace Atlas.App.Tests
             Assert.That(model.Row(2).Space, Is.EqualTo(SpaceId.Glued));
             model.Step(-1);
             Assert.That(host.Calls, Is.Empty, "minus does not run a row");
+            model.Step(1);
+            Assert.That(host.Calls, Is.Empty, "a space is selected, then entered with Apply");
+            Assert.That(model.ApplyReady, Is.True);
             model.Confirm();
             Assert.That(requested, Is.EqualTo(new[] { SpaceId.Glued }));
             Assert.That(host.Calls, Is.EqualTo(new[] { "switch S1" }));
@@ -259,6 +262,8 @@ namespace Atlas.App.Tests
 
             model.NoteOpened();
             Assert.That(model.CloseRequested, Is.False);
+            model.Select(1);
+            Assert.That(model.ApplyReady, Is.False, "Apply has nothing to do on the space the walker is in");
             model.Select(RowOf(model, MenuCommand.ReturnHome));
             model.Step(1);
             Assert.That(host.Calls[host.Calls.Count - 1], Is.EqualTo("home"));
