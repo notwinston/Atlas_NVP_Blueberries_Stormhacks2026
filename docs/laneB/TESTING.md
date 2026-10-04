@@ -125,3 +125,9 @@ Same scene and preconditions as above.
 - **Pass (acceptance):** at the designed fork both arrows are visible on arrival, pointing into different child corridors, the beacon into `target.address[len(fork)]`; exactly one `compass_choice` and one `fork` event for that address, choice matching the corridor taken.
 - **Pass (supporting):** at the other fork no arrow before 8 s, arrow at 8 s +/- 1 frame, `fork` event `beacon_shown` = true.
 - **Record:** compass, beacon, choice, t_s, thermal state. Do not claim P2-D07's 4-fork criterion (PH-39).
+
+## P2-B09 Lesion chamber hand-over (Editor tests pass; phone measurement deferred)
+- Editor: `HandOverTests` (T9.1 trigger at end tile, T9.2 ramp only while standing 3-5 s, T9.3 S6 requested once + beat, T9.4 no simulated frame > 33 ms; evidence `evidence/P2-B09/handover_sim.json`).
+- Phone, deferred (phone in headset): Lung_Airway.unity, run once with `lung.route` = 1 and once with 0 (PH-39). Walk to the end chamber, stand on the glyph, take one step mid-ramp, stand again, wait for S6.
+  Expected: curvature changes only while standing; ramp 3-5 s of standing (4.0 s set); S6 loads; no frame > 33 ms from end-chamber entry to S6 + 2 s (Frame Timing Stats max). Record max, p95, ramp time.
+- Deviations: DV-B09-1 route is a constructor value (AirwayParams/Mode 2 from P2-B04/B05 not on this branch; Mode 2 path S6-at-entry not built); DV-B09-2 AirwayBeat wraps AirwayWing + LesionHandOver (AirwayWingModule is B05).
