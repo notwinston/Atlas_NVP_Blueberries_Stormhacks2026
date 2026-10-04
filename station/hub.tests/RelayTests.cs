@@ -121,6 +121,15 @@ namespace Atlas.Station.Tests
             }
         }
 
+        // A message may arrive more than once (an unacknowledged AssetReady is sent again), so look by job.
+        static AssetReadyMessage Find(TestClient client, string jobId)
+        {
+            foreach (AssetReadyMessage m in client.Readies.ToArray()) if (m.JobId == jobId) return m;
+            return null;
+        }
+
+        static bool HasBoth(TestClient client) { return Find(client, "j1") != null && Find(client, "j2") != null; }
+
         [Test]
         public async Task ForgeJob_LightCopyFields_ArePassedThroughUnchanged()
         {
@@ -138,22 +147,22 @@ namespace Atlas.Station.Tests
                 await t.PostJson("/internal/job",
                     "{\"jobId\":\"j2\",\"roomId\":\"r1\",\"boxId\":4,\"sha256\":\"def456\",\"url\":\"/assets/def456.glb\",\"bytes\":1000,\"tris\":3000}", 204);
 
-                Wait.Until(() => phone.Readies.Count == 2 && spectator.Readies.Count == 2, "both AssetReady messages to be relayed");
+                Wait.Until(() => HasBoth(phone) && HasBoth(spectator), "both AssetReady messages to be relayed");
                 foreach (TestClient receiver in new[] { phone, spectator })
                 {
-                    AssetReadyMessage[] ready = receiver.Readies.ToArray();
-                    Assert.That(ready[0].Sha256, Is.EqualTo("abc123"));
-                    Assert.That(ready[0].Tris, Is.EqualTo(9000));
-                    Assert.That(ready[0].LightSha256, Is.EqualTo(light));
-                    Assert.That(ready[0].LightUrl, Is.EqualTo("/assets/" + light + ".glb"));
-                    Assert.That(ready[0].LightBytes, Is.EqualTo(400));
-                    Assert.That(ready[0].LightTris, Is.EqualTo(3000));
+                    AssetReadyMessage withLight = Find(receiver, "j1"), without = Find(receiver, "j2");
+                    Assert.That(withLight.Sha256, Is.EqualTo("abc123"));
+                    Assert.That(withLight.Tris, Is.EqualTo(9000));
+                    Assert.That(withLight.LightSha256, Is.EqualTo(light));
+                    Assert.That(withLight.LightUrl, Is.EqualTo("/assets/" + light + ".glb"));
+                    Assert.That(withLight.LightBytes, Is.EqualTo(400));
+                    Assert.That(withLight.LightTris, Is.EqualTo(3000));
                     // A job with no light copy still reads as before.
-                    Assert.That(ready[1].Sha256, Is.EqualTo("def456"));
-                    Assert.That(ready[1].LightSha256, Is.EqualTo(string.Empty));
-                    Assert.That(ready[1].LightUrl, Is.EqualTo(string.Empty));
-                    Assert.That(ready[1].LightBytes, Is.EqualTo(0));
-                    Assert.That(ready[1].LightTris, Is.EqualTo(0));
+                    Assert.That(without.Sha256, Is.EqualTo("def456"));
+                    Assert.That(without.LightSha256, Is.EqualTo(string.Empty));
+                    Assert.That(without.LightUrl, Is.EqualTo(string.Empty));
+                    Assert.That(without.LightBytes, Is.EqualTo(0));
+                    Assert.That(without.LightTris, Is.EqualTo(0));
                 }
             }
         }
