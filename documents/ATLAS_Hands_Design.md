@@ -6,7 +6,7 @@
 |---|---|
 | Date | 4 October 2026 |
 | Status | Design. Nothing in this document is implemented |
-| Written against | `main` at `e56b23f` |
+| Written against | `main` at `b039c33` (4 October). Line numbers are of that commit |
 | Scope | The phone app (`ATLAS/`). The Station gets events only |
 | How it is built | One new module, `Atlas.Hands`, plus a short list of small additive edits to existing files (§3.7). Built by one person off `main` |
 | Read with | Master Plan §0.5 (rules), §4.10 (Bump Guard), §6.3 (the frame), §8 (look and budgets). The earlier, never-built hand design is in the Engineering Spec §4.5, §6.8 and §7.1 |
@@ -101,7 +101,7 @@ These came from seven rounds of questions on 4 October (Appendix E has every que
 | H10 | The hands are masked out of the depth image before Bump Guard reads it. Limits: confident detections only, nothing beyond about 0.8 m, the scanned room map is never masked | §7.1 |
 | H11 | While Bump Guard warns, hands fade out and touches are suspended | §7.2 |
 | H12 | Heat: hands give way first. Detection runs 30 times a second, 15 at the first ladder step, and stops at Serious | §7.3 |
-| H13 | The Station gets status and events. No hands are drawn on the Spectator | §8 |
+| H13 | The Station gets status and events. No hands are drawn on the Spectator. (The Hub's View page, which arrived on `main` while this was being written, shows the phone's own left-eye picture, so hands appear there by themselves) | §8 |
 | H14 | In a hands session the menu and the prompt chips come within reach, about 0.45 m away, with rows sized for a fingertip. Gaze dwell keeps working on them | §6.1 |
 | H15 | Nothing on screen teaches hands. The operator explains | §1 |
 | H16 | The design is isolated: one module, few and small edits elsewhere, no split across lanes, no rewrite of the plan | §3 |
@@ -217,7 +217,8 @@ Facts the design stands on. Paths are under `ATLAS/Assets/Atlas/` unless they st
 | The composition root builds everything in a fixed order and publishes services through `AtlasServices` | `App/AtlasApp.cs:159-380`; `World/Services/AtlasServices.cs` | One installer call, placed after Bump Guard is built |
 | Which assembly may reference which is written in three places and tested | `docs/contracts/README.md` F1; `tools/headless/verify.py:76-95`; `Tests/Architecture/AssemblyGraphTests.cs:20-36` | A new assembly means one new row in each, and one more name in the App row |
 | Parameters are declared in code through the registry and appear on the Console and the on-device menu by themselves | `Link/Params/ParamRegistry.cs`; `App/Params/AppParams.cs` | `hands.*` parameters need no Console code |
-| Events go through `IEventLog` (in `Atlas.World`); the Console prints any event | `World/Services/IEventLog.cs`; `station/hub/wwwroot/js/app.js:660-714` | Hand events reach the operator with no Station change |
+| Events go through `IEventLog` (in `Atlas.World`); the Console prints any event | `World/Services/IEventLog.cs`; `station/hub/wwwroot/js/app.js` | Hand events reach the operator with no Station change |
+| The Hub's View page shows the phone's left-eye picture, taken before the lens pass, while someone has the page open | `App/View/ViewStreamer.cs:123-124` (commit `b1e2adb`) | Hands are drawn into that picture, so the operator sees them there with no work |
 | Native plugins are `Assets/Plugins/iOS/Atlas*.swift` or `.mm`, called through `[DllImport("__Internal")]` under `#if UNITY_IOS && !UNITY_EDITOR`, with a neutral stand-in elsewhere | `Scan/ARKit/RoomPlan/ArKitWallBridge.cs:27-37` | The detector follows the same shape |
 
 ### 2.6 What has and has not been run
@@ -849,6 +850,7 @@ What must be measured before any of this is believed is in §9.3: the detector's
 | Editor | The mouse-and-keys stand-in drives two hands in front of the Editor's head, so touch, pinch and the mask can be exercised with no phone | House rule "Editor first" (contract README F9) |
 | Perf tour and soak | Follow the gate. A tour with a gamepad connected measures the app without hands; one without measures it with them | No change to the tour |
 | The Station's Spectator | No hands | H13. Head-locked panels of a hands session are not drawn there either, as today's HUD is not |
+| The Hub's View page | Hands and near panels are visible, exactly as the walker's left eye sees them | The page streams the left eye's picture. Nothing in this design is needed for it |
 
 ---
 
@@ -896,6 +898,8 @@ Every tuning constant of the lift, the filter, touch and the mask is a constant 
 ### 8.3 What the link and the Station do not get
 
 `State` stays 202 bytes and unchanged. The 1 Hz telemetry row keeps its 34 columns. No new message, no new command. Recorded sessions therefore replay on the Hub and the Spectator exactly as before, and `tools/ReplayPhone` needs no change.
+
+What the operator does get for free is the View page: it shows the phone's left-eye picture, so the hands, the near panels and the contact marks are all on it whenever the page is open.
 
 ---
 
