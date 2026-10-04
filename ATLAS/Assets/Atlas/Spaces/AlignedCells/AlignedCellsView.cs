@@ -12,7 +12,8 @@ namespace Atlas.Spaces.AlignedCells
     // Materials are Atlas/Surface instances rented from the MaterialPool as instances are first drawn; the gates go into the
     // frozen block's _Gate0 .. _Gate3 through MaterialPool.SetGate. A cell takes its tile's region tint, as the same tile does in S2.
     // The duck maze (S3 duck maze design, 2026-10-04, §3): a cell takes the mesh of its tile's wall mask (16 meshes, kerbs on the
-    // walled edges, built once), a tile off the maze is tinted Void, and the duck stands in every cell that shows its tile, gated
+    // walled edges; mesh 0 is built with the view, masks 1 to 15 the first time a maze is drawn, so classic S3 builds one), a tile
+    // off the maze is tinted Void, and the duck stands in every cell that shows its tile, gated
     // as that cell. The ducks are pooled (MaxDuckViews) and made, with their mesh, the first time a maze is drawn.
     public sealed class AlignedCellsView : IDisposable
     {
@@ -27,6 +28,7 @@ namespace Atlas.Spaces.AlignedCells
         readonly Transform root;
         readonly MaterialPool pool;
         readonly Mesh[] cellMeshes = new Mesh[CellMeshCount];
+        readonly TileMeshGenerator cellGenerator = new TileMeshGenerator(TilePalette.Default);
         readonly Mesh postsMesh;
         readonly GameObject[] objects = new GameObject[SightLines.MaxInstances];
         readonly Transform[] transforms = new Transform[SightLines.MaxInstances];
@@ -50,6 +52,8 @@ namespace Atlas.Spaces.AlignedCells
         public int ActiveInstanceCount { get; private set; }
         public int MaterialsRented { get; private set; }
         public int CellTriangles { get; }
+        /// <summary>True once the kerbed cell meshes (masks 1 to 15) are built: the first time a maze is drawn.</summary>
+        public bool KerbsBuilt { get; private set; }
         public int PostTriangles { get; }
         /// <summary>Ducks drawn by the last Apply: one per instance showing the duck's tile, at most MaxDuckViews.</summary>
         public int DuckViewCount { get; private set; }
@@ -59,13 +63,7 @@ namespace Atlas.Spaces.AlignedCells
         {
             this.root = root; this.grid = grid; this.kit = kit;
             this.pool = pool ?? throw new ArgumentNullException(nameof(pool));
-            var gen = new TileMeshGenerator(TilePalette.Default);
-            for (int mask = 0; mask < CellMeshCount; mask++)
-            {
-                cellMeshes[mask] = new Mesh { name = "AlignedCell" + mask, hideFlags = HideFlags.HideAndDontSave };
-                int triangles = gen.Build(TileMeshSpec.FlatCell(grid.Side, kerbMask: mask, postMask: 0), cellMeshes[mask]).TriangleCount;
-                if (mask == 0) CellTriangles = triangles;
-            }
+            CellTriangles = BuildCellMesh(0);
             var data = new AtlasMeshBuilder(256, 1024);
             PostTriangles = PostMesh.Build(grid, TilePalette.Default, data);
             postsMesh = AtlasMesh.Create(data, "AlignedPosts");
@@ -78,6 +76,20 @@ namespace Atlas.Spaces.AlignedCells
             postsMaterial = Rent();
             postsObject = MakeObject("Posts", postsMesh, out _, out MeshRenderer posts);
             posts.sharedMaterial = postsMaterial;
+        }
+
+        // The flat cell with kerbs on the mesh edges of `mask`; its triangle count.
+        int BuildCellMesh(int mask)
+        {
+            cellMeshes[mask] = new Mesh { name = "AlignedCell" + mask, hideFlags = HideFlags.HideAndDontSave };
+            return cellGenerator.Build(TileMeshSpec.FlatCell(grid.Side, kerbMask: mask, postMask: 0), cellMeshes[mask]).TriangleCount;
+        }
+
+        void BuildKerbs()
+        {
+            if (KerbsBuilt) return;
+            KerbsBuilt = true;
+            for (int mask = 1; mask < CellMeshCount; mask++) BuildCellMesh(mask);
         }
 
         Material Rent()
@@ -138,6 +150,7 @@ namespace Atlas.Spaces.AlignedCells
         public void Apply(CellInstanceList list, DuckMaze maze)
         {
             int n = list.Count, ducks = 0;
+            if (maze != null) BuildKerbs();
             for (int i = 0; i < n; i++)
             {
                 ref readonly CellInstance inst = ref list[i];
@@ -242,8 +255,13 @@ namespace Atlas.Spaces.AlignedCells
             }
         }
 
-        /// <summary>The cell mesh of a kerb mask (0..15): kerbs on the mesh edges whose bit is set.</summary>
-        public Mesh CellMesh(int kerbMask) => cellMeshes[kerbMask & 0xF];
+        /// <summary>The cell mesh of a kerb mask (0..15): kerbs on the mesh edges whose bit is set. Builds the kerbed ones if needed.</summary>
+        public Mesh CellMesh(int kerbMask)
+        {
+            int mask = kerbMask & 0xF;
+            if (mask != 0) BuildKerbs();
+            return cellMeshes[mask];
+        }
         /// <summary>The mesh instance i draws now.</summary>
         public Mesh InstanceMesh(int i) => filters[i].sharedMesh;
         /// <summary>Duck view d (0..MaxDuckViews - 1), or null before the first duck is drawn.</summary>

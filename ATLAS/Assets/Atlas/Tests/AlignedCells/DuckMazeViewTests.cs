@@ -209,6 +209,16 @@ namespace Atlas.Spaces.AlignedCells.Tests
                 Assert.AreEqual(16, AlignedCellsView.CellMeshCount);
                 int t0 = (int)view.CellMesh(0).GetIndexCount(0) / 3;
                 Assert.AreEqual(view.CellTriangles, t0);
+                // Classic S3 builds only the plain cell: the kerbs wait for the first maze.
+                Assert.IsFalse(view.KerbsBuilt);
+                var graph = new TileGraph(5);
+                var list = new CellInstanceList();
+                SightLines.Build(Grid4(), graph, new int2(1, 1), new CellFrame(TileId.Zero, 0), list);
+                view.Apply(list);
+                Assert.IsFalse(view.KerbsBuilt, "no maze drawn yet");
+                view.Apply(list, DuckMaze.Generate(Grid4(), graph, new int2(1, 1), 1234));
+                Assert.IsTrue(view.KerbsBuilt, "built with the first maze");
+                Assert.AreEqual(view.CellTriangles, t0);
                 for (int m = 1; m < 16; m++)
                 {
                     Assert.IsNotNull(view.CellMesh(m));
