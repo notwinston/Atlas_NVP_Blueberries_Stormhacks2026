@@ -105,3 +105,9 @@ Measured (Editor): auto-off 10 of 10 simulated trials in the first frame over 0.
 | DV-B05-b | The blit composites the badge as premultiplied alpha (`col*(1-a) + rgb`) because the TMP distance-field shader writes premultiplied colour. A one-line change to the B03 shader; a white opaque badge is unaffected. |
 | DV-B05-c | Test hook `FieldFitFeature.TestBadgeTexture` gives a ready badge without a font; the real-font path is tested in `Badge_FromFont` (ignored without a graphics device). |
 | DV-B05-d | `Badge_VisibleWhileActive` and `Badge_FromFont` need a graphics device and are ignored on the `-nographics` runner (DV-B03-g). |
+
+## Phone performance pass (P3-B08)
+
+Deliverable here: the soak scene `Blade_FieldFit_Soak.unity` (same content as `Blade_FieldFit`) and the ready-to-run checklist (items 7-10) with the results
+table; nothing is measured yet (needs phone A in the headset, Xcode and the Station). The Editor-side proxies are in the evidence of B02-B05
+(rebuild 0.58 ms median; zero managed allocation per frame over 600 frames; lens-off displacement 0.54 px).

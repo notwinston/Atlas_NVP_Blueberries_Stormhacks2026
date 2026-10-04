@@ -203,7 +203,8 @@ namespace Atlas.Blades.FieldFit.Tests
             Assert.IsNotNull(sh); Assert.IsFalse(ShaderUtil.ShaderHasError(sh), "FieldFitBlit has shader errors"); Assert.IsTrue(sh.isSupported || UnityEngine.SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Null);
             var st = AssetDatabase.LoadAssetAtPath<FieldFitSettings>("Assets/Atlas/Blades/FieldFit/FieldFitSettings.asset");
             Assert.IsNotNull(st); Assert.AreSame(sh, st.blitShader); Assert.AreEqual(30f, st.maskHalfWidthDeg); Assert.IsFalse(st.centreEyeSource); Assert.IsNotNull(st.badgeFont, "badge font assigned");
-            const string scenePath = "Assets/Atlas/Blades/FieldFit/Scenes/Blade_FieldFit.unity";
+            foreach (var scenePath in new[] { "Assets/Atlas/Blades/FieldFit/Scenes/Blade_FieldFit.unity", "Assets/Atlas/Blades/FieldFit/Scenes/Blade_FieldFit_Soak.unity" })
+            {
             var scene = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(scenePath, UnityEditor.SceneManagement.OpenSceneMode.Additive);
             try
             {
@@ -213,6 +214,7 @@ namespace Atlas.Blades.FieldFit.Tests
                 Assert.AreSame(st, f.Settings);
             }
             finally { UnityEditor.SceneManagement.EditorSceneManager.CloseScene(scene, true); }
+            }
         }
     }
 }
