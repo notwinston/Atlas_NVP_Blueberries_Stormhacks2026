@@ -3,6 +3,7 @@
     "rootNamespace": "Atlas.Kernel.Tests",
     "references": [
         "Atlas.Kernel",
+        "Unity.Mathematics",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],
