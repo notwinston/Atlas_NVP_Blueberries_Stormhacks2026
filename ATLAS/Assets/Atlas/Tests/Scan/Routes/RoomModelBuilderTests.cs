@@ -176,30 +176,96 @@ namespace Atlas.Scan.Tests.Routes
             return boxes;
         }
 
-        [TestCase(1, 5000)]
-        [TestCase(12, 5000)]
-        [TestCase(13, 4615)]
-        [TestCase(20, 3000)]
-        public void TriangleTargets_ShareTheBudget(int count, int target)
+        // One box per size, side by side on the floor.
+        static ObstacleBox[] Sized(params float3[] sizes)
         {
-            RoomObject[] objects = RoomModelBuilder.Objects(GridWithBoxes(Boxes(count)));
-            Assert.That(objects.Length, Is.EqualTo(count));
-            foreach (RoomObject o in objects) Assert.That(o.TriTarget, Is.EqualTo(target));
+            var boxes = new ObstacleBox[sizes.Length];
+            for (int k = 0; k < sizes.Length; k++)
+                boxes[k] = new ObstacleBox { Base = new float3(-8f + 0.2f * k, 0f, 0f), Size = sizes[k], SourceId = 100 + k };
+            return boxes;
+        }
+
+        static float3[] Repeat(float3 size, int count)
+        {
+            var sizes = new float3[count];
+            for (int k = 0; k < count; k++) sizes[k] = size;
+            return sizes;
+        }
+
+        // Every object wider than widerThan has the target wide, every other one the target narrow.
+        static void AssertTargets(string what, float3[] sizes, float widerThan, int wide, int narrow)
+        {
+            RoomObject[] objects = RoomModelBuilder.Objects(GridWithBoxes(Sized(sizes)));
+            Assert.That(objects.Length, Is.EqualTo(sizes.Length), what);
+            foreach (RoomObject o in objects)
+                Assert.That(o.TriTarget, Is.EqualTo(o.Size.x > widerThan ? wide : narrow), what + ", object " + o.Id + " of width " + o.Size.x);
+        }
+
+        // The rule of mesh design section 5.4, in whole millimetres. The objects that receive meshes (the 32
+        // largest by volume) share 120,000 triangles by surface area a = 2 (wh + hd + wd), A their sum:
+        //     t = clamp(floor(120000 a / A), 3000, 15000)
+        //     when the sum of t is above 120000:  t = 3000 + floor((t - 3000) (120000 - 3000 n) / sum of (t - 3000))
+        // The cases are the vectors of the mesh brief (S5) and one worked out here.
+        [Test]
+        public void TriangleTargets_ShareTheBudget()
+        {
+            // One object has all the surface: 120000, cut to the most an object may have.
+            AssertTargets("one object", Repeat(new float3(0.6f, 0.45f, 0.6f), 1), 0f, 15000, 15000);
+            // Five equal ones: 120000 / 5 = 24000 each, cut to 15000.
+            AssertTargets("five cubes", Repeat(new float3(1f, 1f, 1f), 5), 0f, 15000, 15000);
+            // Three unequal ones, a = 8.24, 2.3 and 4.14 m2 of A = 14.68: 67356, 18801 and 33841, each cut to 15000.
+            AssertTargets("three unequal", new[] { new float3(2f, 0.8f, 0.9f), new float3(0.5f, 0.9f, 0.5f), new float3(1.2f, 0.75f, 0.6f) },
+                0f, 15000, 15000);
+            // Twelve equal ones: 120000 / 12.
+            AssertTargets("twelve equal", Repeat(new float3(1.8f, 0.8f, 0.9f), 12), 0f, 10000, 10000);
+
+            // Five cubes of 1 m (a = 6 m2) and five of 0.5 m (a = 1.5 m2), A = 37.5 m2:
+            // 120000 * 6 / 37.5 = 19200, cut to 15000, and 120000 * 1.5 / 37.5 = 4800. The sum is 99000: no second step.
+            var mixed = new float3[10];
+            for (int k = 0; k < 10; k++) mixed[k] = k % 2 == 0 ? new float3(1f, 1f, 1f) : new float3(0.5f, 0.5f, 0.5f);
+            AssertTargets("five large and five small", mixed, 0.75f, 15000, 4800);
+
+            // Eight of 1.5 x 1 x 1 (a = 8 m2) and 24 cubes of 0.2 m (a = 0.24 m2), A = 69.76 m2:
+            // floor(120000 * 8 / 69.76) = 13761, and floor(120000 * 0.24 / 69.76) = 412, raised to 3000.
+            // The sum 8 * 13761 + 24 * 3000 = 182088 is over, so with 8 * 10761 = 86088 above the floor and
+            // 120000 - 32 * 3000 = 24000 to share: 3000 + floor(10761 * 24000 / 86088) = 6000; the small ones stay at 3000.
+            var crowded = new float3[32];
+            for (int k = 0; k < 32; k++) crowded[k] = k % 4 == 0 ? new float3(1.5f, 1f, 1f) : new float3(0.2f, 0.2f, 0.2f);
+            AssertTargets("eight large and twenty-four small", crowded, 0.75f, 6000, 3000);
         }
 
         [Test]
-        public void Objects_AreLargestFirst_AndOnlyTwentyGetMeshes()
+        public void Objects_AreLargestFirst_AndOnlyThirtyTwoGetMeshes()
         {
-            RoomObject[] objects = RoomModelBuilder.Objects(GridWithBoxes(Boxes(27)));
-            Assert.That(objects.Length, Is.EqualTo(27));
+            // The fourth vector of the mesh brief (S5): forty boxes, box i of 0.3 + 0.05 i by 0.5 by 0.4 m, handed
+            // over in no particular order. The eight smallest get no mesh; the 32 others share the budget by
+            // surface area (a = 1.8 w + 0.4 m2, A = 100.64 m2), which passes 120,000 once the small ones are
+            // raised to 3000, so the second step of the rule spreads what is left: 119,990 in all.
+            int[] expected =
+            {
+                5043, 4952, 4861, 4770, 4679, 4588, 4497, 4407, 4315, 4225, 4134, 4043, 3952, 3861, 3770, 3679,
+                3589, 3498, 3407, 3316, 3226, 3134, 3044, 3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000,
+                0, 0, 0, 0, 0, 0, 0, 0,
+            };
+            var sizes = new float3[40];
+            for (int k = 0; k < 40; k++) sizes[k] = new float3(0.3f + 0.05f * (1 + (k * 37) % 40), 0.5f, 0.4f);
+
+            RoomObject[] objects = RoomModelBuilder.Objects(GridWithBoxes(Sized(sizes)));
+            Assert.That(objects.Length, Is.EqualTo(40));
+            int total = 0;
             for (int k = 0; k < objects.Length; k++)
             {
                 Assert.That(objects[k].Id, Is.EqualTo(k + 1));
-                if (k > 0) Assert.That(objects[k].Volume, Is.LessThanOrEqualTo(objects[k - 1].Volume));
-                Assert.That(objects[k].TriTarget, Is.EqualTo(k < 20 ? 3000 : 0), "object " + (k + 1));
+                if (k > 0) Assert.That(objects[k].Volume, Is.LessThan(objects[k - 1].Volume));
+                Assert.That(objects[k].Size.x, Is.EqualTo(0.3f + 0.05f * (40 - k)).Within(1e-5f), "object " + (k + 1));
+                Assert.That(objects[k].TriTarget, Is.EqualTo(expected[k]), "object " + (k + 1));
                 Assert.That(objects[k].Mesh, Is.EqualTo(MeshState.Placeholder));
                 Assert.That(objects[k].AssetHash, Is.EqualTo(""));
+                Assert.That(objects[k].Profile, Is.Null);
+                Assert.That(objects[k].Facing, Is.EqualTo(ObjectFacingRule.Box));
+                total += objects[k].TriTarget;
             }
+            Assert.That(total, Is.EqualTo(119990));
         }
 
         [Test]
