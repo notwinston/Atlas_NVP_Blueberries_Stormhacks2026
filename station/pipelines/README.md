@@ -202,6 +202,17 @@ The C# tests build `csharp/` with `dotnet build`; without a .NET SDK they are re
 
 Regenerate the P2-D01 fixture after a deliberate contract change: `.venv/bin/python tests/fixtures/make_p2_d01_fixture.py`.
 
+### Engine-free airway core (lane B: P2-B01, P2-B06, P2-B08)
+
+`csharp/Atlas.Airway.Core/` is the C# side of `airway/tree.json`: the resolver of rule `atlas.airway/2`, the Rule S
+steps, the beacon, the route cost and the Two Compasses, without Unity (see its `README.md`). Its tests are
+`tests/test_p2_b_airway_core.py`. They run from a clean checkout on committed copies of `tree.json` and `greedy.json`
+(`tests/fixtures/p2_b_airway/`, model-generated, no patient data); with `ATLAS_CASES_DIR=<out>/cases` the same checks run
+on the built `lung101` package and the copies must be byte-equal to it.
+
+After a deliberate change of `atlas_pipelines/airway.py` regenerate the copies and the resolver reference:
+`PYTHONPATH=. .venv/bin/python tests/fixtures/make_p2_b_airway_fixture.py`, and port the change to `AirwayResolver.cs`.
+
 ## Pilot export (P2-D13)
 
 `atlas pilot export <events.jsonl> [<events.jsonl> ...] [--out lung_summary.csv]` turns the Hub's per-session
