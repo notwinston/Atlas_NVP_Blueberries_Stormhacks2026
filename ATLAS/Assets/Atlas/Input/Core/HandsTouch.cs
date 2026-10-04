@@ -282,12 +282,11 @@ namespace Atlas.Input
             return (hands.PinchDownLeft && Free(0)) || (hands.PinchDownRight && Free(1));
         }
 
-        /// <summary>The pinch fired a target: for the report, and so that its label outlives it.</summary>
-        public void NotePinch(GazeTargetId id)
+        /// <summary>The pinch toggled the on-device menu: for the report. It fires no target.</summary>
+        public void NotePinch()
         {
             _state.PinchFired = true;
-            _state.PinchTarget = id;
-            NoteFired(PinchIndex, id);
+            _state.PinchTarget = default;
         }
 
         /// <summary>A target's label; null when it has none or is unknown. A target a hand fired in the last step is known even if firing it removed it.</summary>

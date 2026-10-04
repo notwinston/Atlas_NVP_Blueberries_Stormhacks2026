@@ -26,8 +26,16 @@ namespace Atlas.Rendering
             Ceiling = 23, Opening = 24, Placeholder = 25, AvatarBody = 26, AvatarLeft = 27, AvatarRight = 28,
             Landmark = 29, Booth = 30, VirtualWall = 31;
 
+        // The rubber duck of the S3 maze (a kit piece). Category tints exist for the 23 object categories, 0 to 22, so the
+        // cells of categories 28 to 31 are free; they hold the duck's four colours instead, and Category(28 to 31) is the
+        // duck's colour, not a tint (nothing asks for it). Non-emissive: row 3 is below EmissiveRow.
+        // Row 3: the duck.
+        public const int DuckYellow = 60, DuckOrange = 61, DuckWhite = 62, DuckBlack = 63;
+
         // Blocks.
         public const int CategoryBase = 32, CategoryCount = 32;
+        /// <summary>Category tints before the duck's cells: categories 0..27.</summary>
+        public const int CategoryTintCount = DuckYellow - CategoryBase;
         public const int ObjectBase = 64, ObjectCount = 64;
         public const int RegionBase = 128, RegionCount = 4, RegionSteps = 4;
         public const int Cell4DBase = 208, Cell4DCount = 32;
@@ -87,7 +95,11 @@ namespace Atlas.Rendering
             return TexelSrgb(column * CellPixels + CellPixels / 2, row * CellPixels + CellPixels / 2);
         }
 
-        /// <summary>Tint cell of an object category (0..31): CategoryBase + category.</summary>
+        /// <summary>
+        /// Tint cell of an object category: CategoryBase + category, clamped to 0..31. Only categories 0..27
+        /// (CategoryTintCount) have a tint: the cells of 28..31 hold the duck's colours (DuckYellow, DuckOrange,
+        /// DuckWhite, DuckBlack). ObjectCategories.Count must stay at most CategoryTintCount (PaletteTests).
+        /// </summary>
         public static int Category(int category)
         {
             return CategoryBase + math.clamp(category, 0, CategoryCount - 1);
@@ -137,6 +149,11 @@ namespace Atlas.Rendering
                 case 3:
                 {
                     int category = (row - 2) * CellsPerSide + column;
+                    int cell = CategoryBase + category;
+                    if (cell == DuckYellow) return Hex(0xFFC21A);
+                    if (cell == DuckOrange) return Hex(0xFF4A12);
+                    if (cell == DuckWhite) return Hex(0xE8E8E8);
+                    if (cell == DuckBlack) return Hex(0x1A1A1A);
                     return category == 0
                         ? HsvToRgb(0f, 0f, 0.45f)
                         : HsvToRgb(GoldenHue(category), 0.40f, 0.50f);

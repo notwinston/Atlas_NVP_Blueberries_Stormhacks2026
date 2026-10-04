@@ -47,7 +47,7 @@ namespace Atlas.Hands
         public const string Group = "hands";
         public const string ParamEnabled = "hands.enabled", ParamRate = "hands.rate", ParamReach = "hands.reach",
                             ParamSound = "hands.sound", ParamDraw = "hands.draw", ParamEditor = "hands.editor",
-                            ParamBench = "hands.bench", ParamRecord = "hands.record";
+                            ParamBench = "hands.bench", ParamRecord = "hands.record", ParamIgnoreHeat = "hands.ignoreHeat";
         static readonly string[] s_rates = { "auto", "30", "15" };
 
         public HandsRuntime Runtime { get; internal set; }
@@ -73,7 +73,11 @@ namespace Atlas.Hands
             if (registry == null) return;
             HandsRuntime runtime = Runtime;
             EditorHandsSource editor = Editor;
-            registry.DeclareBool(ParamEnabled, Group, false, on => runtime.Enabled = on);
+            // On by default; the menu's Hands row (Spaces page) and the kill switch turn it off.
+            ParamEntry enabled = registry.DeclareBool(ParamEnabled, Group, true, on => runtime.Enabled = on);
+            // Declaring does not call the callback: the runtime takes the value in force now, or it would stay
+            // off until the switch was flipped.
+            if (runtime != null) runtime.Enabled = enabled.Bool;
             registry.DeclareEnum(ParamRate, Group, s_rates, 0, index => runtime.RateOverride = index == 1 ? 30 : index == 2 ? 15 : 0);
             registry.DeclareFloat(ParamReach, Group, HandsConstants.ReachMinMetres, HandsConstants.ReachMaxMetres,
                 HandsConstants.ReachMetres, metres => runtime.Reach = metres);
@@ -82,6 +86,9 @@ namespace Atlas.Hands
             registry.DeclareBool(ParamEditor, Group, false, on => { if (editor != null) editor.Enabled = on; });
             registry.DeclareBool(ParamBench, Group, false, on => runtime.Bench = on);
             registry.DeclareBool(ParamRecord, Group, false, on => runtime.Record = on);
+            // On by default: the hands keep running on a hot phone, at the reduced rate. The menu's "Hands in heat" row turns it off.
+            ParamEntry ignoreHeat = registry.DeclareBool(ParamIgnoreHeat, Group, true, on => runtime.IgnoreHeat = on);
+            if (runtime != null) runtime.IgnoreHeat = ignoreHeat.Bool;
         }
 
         /// <summary>Stops the detector, returns the materials, destroys the objects. Safe to call twice.</summary>

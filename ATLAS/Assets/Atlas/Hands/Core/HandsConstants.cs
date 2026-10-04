@@ -50,8 +50,13 @@ namespace Atlas.Hands
         public const float JointDepthDecides = 0.02f;
         /// <summary>A finger may bend backwards this far before the lift penalises it, degrees.</summary>
         public const float BackwardBendDegrees = 20f;
-        /// <summary>Confidence is capped here when the palm's distance came from the hand's size and the hand's size has not been measured yet.</summary>
-        public const float ConfidenceWithoutDepth = 0.5f;
+        /// <summary>
+        /// Confidence is capped here when the palm's distance came from the hand's size and the hand's size has
+        /// not been measured yet. In the headset a hand held up before the face is mostly nearer than LiDAR's
+        /// range, so this is above <see cref="EnterConfidence"/> and <see cref="InteractConfidence"/>: at 0.5 such
+        /// a hand was shown only when every other term was perfect, and could never pinch.
+        /// </summary>
+        public const float ConfidenceWithoutDepth = 0.65f;
         /// <summary>
         /// Once the walker's hand size is measured, the size branch is trusted this far: a pressing palm is
         /// nearer than LiDAR's range, and a press must still be able to fire (it needs <see cref="InteractConfidence"/>).

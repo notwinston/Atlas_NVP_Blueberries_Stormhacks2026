@@ -37,8 +37,36 @@ namespace Atlas.Spaces.AlignedCells.Tests
             return room;
         }
 
+        // Today's S3 without the duck maze (cells.maze off): the tests of the classic grid, the Mode-1 hand-over and the sight lines.
+        public static ParamRegistry ClassicRegistry()
+        {
+            var r = new ParamRegistry();
+            AlignedCellsCore.DeclareParams(r);
+            r.Find(AlignedCellsCore.ParamMaze).Set(false);
+            return r;
+        }
+
         public static RoomObject Obj(int id, float px, float pz, float sx, float sy, float sz, float yaw, int triangles = 12) => new RoomObject
         { Id = id, Category = ObjectCategory.Other, Base = new float3(px, 0, pz), Size = new float3(sx, sy, sz), Yaw = yaw, Mesh = MeshState.Placeholder, TriTarget = triangles };
+    }
+
+    /// <summary>Keeps what S3 logged (cells.*, maze.*): the event names and their data, in order. Touches no engine object.</summary>
+    sealed class RecordingLog : IEventLog
+    {
+        public readonly List<string> Events = new List<string>(), Data = new List<string>();
+        public void Log(string ev) { Events.Add(ev); Data.Add(""); }
+        public void Log(string ev, string key, double value) { Events.Add(ev); Data.Add(key); }
+        public void Log(string ev, string key, string value) { Events.Add(ev); Data.Add(key); }
+        public void Log(string ev, string key1, double value1, string key2, double value2) { Events.Add(ev); Data.Add(key1); }
+        public void LogJson(string ev, string dataJson) { Events.Add(ev); Data.Add(dataJson); }
+        public int Count(string ev) { int n = 0; foreach (string e in Events) if (e == ev) n++; return n; }
+        public List<string> DataOf(string ev)
+        {
+            var list = new List<string>();
+            for (int i = 0; i < Events.Count; i++) if (Events[i] == ev) list.Add(Data[i]);
+            return list;
+        }
+        public string Last(string ev) { for (int i = Events.Count - 1; i >= 0; i--) if (Events[i] == ev) return Data[i]; return null; }
     }
 
     // What S3 asks of the room content, recorded; no engine object. The shell's triangle counts are the real shell builder's.
@@ -124,20 +152,21 @@ namespace Atlas.Spaces.AlignedCells.Tests
     }
 
     // Test rig: the engine-free core on a room, with the room driver on a recording room content, walked as the frame loop
-    // walks it (one head sample per frame, step 5 then step 6).
+    // walks it (one head sample per frame, step 5 then step 6). Classic S3 (cells.maze off) unless a registry is given.
     sealed class Rig
     {
         public readonly RoomModel Room;
-        public readonly ParamRegistry Registry = new ParamRegistry();
+        public readonly ParamRegistry Registry;
         public readonly AlignedCellsCore Core = new AlignedCellsCore();
         public readonly FakeRoomContent Content;
         public readonly AlignedCellsRoomView RoomView;
         public double X, Z;
         public CellGrid Grid => Core.Grid;
 
-        public Rig(RoomModel room, int2? startCell = null, WalkerPose? start = null)
+        public Rig(RoomModel room, int2? startCell = null, WalkerPose? start = null, ParamRegistry registry = null)
         {
             Room = room;
+            Registry = registry ?? Fixtures.ClassicRegistry();
             Core.Configure(room, Registry);
             Content = new FakeRoomContent(room);
             RoomView = new AlignedCellsRoomView(Content, Core.Grid);

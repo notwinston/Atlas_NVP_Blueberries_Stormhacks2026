@@ -147,6 +147,10 @@ namespace Atlas.App.Menu
 
         // Resetting space.id would walk the wearer out of the space they are standing in.
         const string SpaceParam = "space.id";
+        /// <summary>The tracked hands' switch, shown at the top of the Spaces page as "Hands".</summary>
+        public const string HandsEnabled = "hands.enabled";
+        /// <summary>Keeps the hands on when the phone is hot, shown under it as "Hands in heat".</summary>
+        public const string HandsIgnoreHeat = "hands.ignoreHeat";
 
         static readonly string[] s_pageNames = { "Spaces", "Quality", "Parameters", "Session" };
 
@@ -310,6 +314,12 @@ namespace Atlas.App.Menu
         void BuildSpaces()
         {
             if (_spaces == null) return;
+            // The tracked hands' switch first, where the menu opens: hands.enabled itself, so it stays in step
+            // with the kill switch on the Quality page and with the Station.
+            ParamEntry hands = _registry.Find(HandsEnabled);
+            if (hands != null) _rows.Add(new MenuRow { Kind = MenuRowKind.Param, Entry = hands, Label = "Hands" });
+            ParamEntry heat = _registry.Find(HandsIgnoreHeat);
+            if (heat != null) _rows.Add(new MenuRow { Kind = MenuRowKind.Param, Entry = heat, Label = "Hands in heat" });
             for (int i = 0; i < SpaceIds.Count; i++)
             {
                 var id = (SpaceId)i;
@@ -486,7 +496,8 @@ namespace Atlas.App.Menu
                 {
                     ParamEntry entry = row.Entry;
                     float value = Stepped(entry, _hasPending ? _pendingValue : entry.Value, direction);
-                    if (!entry.OnRelease)
+                    // A switch waits for Apply like an on-release value: applied here, Apply's toggle undid it.
+                    if (!entry.OnRelease && entry.Kind != ParamKind.Bool)
                     {
                         Apply(entry, value);
                         break;

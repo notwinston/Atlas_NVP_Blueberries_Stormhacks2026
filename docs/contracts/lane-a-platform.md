@@ -2218,7 +2218,7 @@ Layout: 16 × 16 cells of 8 × 8 pixels. Cell index = row · 16 + column. Row 0 
 |---|---|---|---|
 | 0 | 0 – 15 | Neutrals (the dark base) | HSV(215°, 0.25 − 0.01·i, 0.03 + 0.05·i) for i = 0 … 15 |
 | 1 | 16 – 31 | Structure | Named cells, table below |
-| 2 – 3 | 32 – 63 | Object category tints | `CategoryBase` = 32. Cell 32 + c for category c (lane C's order; 0 = unknown). Category 0: HSV(0°, 0, 0.45). Others: HSV((c · 137.5°) mod 360°, 0.40, 0.50) |
+| 2 – 3 | 32 – 63 | Object category tints | `CategoryBase` = 32. Cell 32 + c for category c (lane C's order; 0 = unknown). Category 0: HSV(0°, 0, 0.45). Others: HSV((c · 137.5°) mod 360°, 0.40, 0.50), except cells 60 – 63 (categories 28 – 31, which no category uses): the rubber duck of the S3 maze, `DuckYellow` #FFC21A, `DuckOrange` #FF4A12, `DuckWhite` #E8E8E8, `DuckBlack` #1A1A1A |
 | 4 – 7 | 64 – 127 | Object colours | `ObjectBase` = 64. What the Forge and the built-in set may pick. An asset may use one or more of these cells (§10.2); `AssetReady.palette` names the cell that covers the most surface. Row 4 + k has value V = 0.28, 0.42, 0.58, 0.74 for k = 0 … 3. Columns 0 – 11: HSV(column · 30°, 0.50, V). Column 12: HSV(30°, 0.12, V). 13: HSV(210°, 0.12, V). 14: HSV(28°, 0.35, V). 15: HSV(0°, 0, V) |
 | 8 | 128 – 143 | Region hues | `RegionBase` = 128. Region r, step t: HSV(h_r, 0.45, 0.22 + 0.12·t) with h = 200°, 150°, 35°, 320° |
 | 9 | 144 – 159 | Strip: warm | Continuous along u: HSV(15°, 0.55, 0.15 → 0.75) |

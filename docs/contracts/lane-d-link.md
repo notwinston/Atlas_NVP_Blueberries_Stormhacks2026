@@ -325,6 +325,8 @@ lane A's rows are those of lane A §9.6 and §14.
 | `curved.q` | Int | 3 … 6 | 5 | tiles per corner | | `curved` | `CurvedDialParams.RegisterQ`, from S2 and S4 · the dial; S2 takes 4 to 6, 3 hands over to S4 |
 | `curved.strong` | Bool | | false | – | R | `curved` | `CurvedDialParams.RegisterStrong` · the dial uses the loop-fit radius below the comfort floor |
 | `cells.viewDepth` | Int | 0 … 2 | 2 | cells | K | `cells` | S3 (`AlignedCellsCore.DeclareParams`) · neighbour cells drawn |
+| `cells.maze` | Bool | | true | – | | `cells` | S3 (`AlignedCellsCore.DeclareParams`) · the duck maze: on, every entry but from Curved Walk is a maze run on a 4 × 4 grid; off, classic S3. A change while S3 is entered reconfigures it |
+| `cells.mazeSeed` | Int | 0 … 1,048,575 | 0 | – | | `cells` | S3 (`AlignedCellsCore.DeclareParams`) · the seed of every maze run; 0, a fresh seed each run |
 | `planet.R` | Float | 0 … 4 | 0 (the loop-fit R) | m | K R | `planet` | S4 (`SmallPlanetCore.DeclareParams`) · the sphere's radius |
 | `planet.fogRho` | Float | 0.5π … 0.8π | 0.8π | rad | K | `planet` | S4 · the opaque end of the fog |
 | `portal.depth` | Int | 0 … 1 | 1 | – | K | `portal` | `AppParams` (unowned), then S5 |
@@ -958,7 +960,7 @@ frame was drawn with. With no space entered the defaults are sent, with `spaceId
 | S0 Home | six zeros | 0 | identity | zeros | B.1 |
 | S1 Glued | `(ci, cj, 0, 0, 0, 0)`: the lattice cell the head is in | 0 | identity | mode, copies per side, cell size x, cell size z, 0 | lane A §14.1 |
 | S2 Curved Walk | `Pose.Tile` (the kernel's, written by `FillState`) | 0 | `Pose.Local` | `p[3]` the dial's q, `p[4]` the signed curvature of the frame (1/m²), the rest 0 | lane B §7.3 |
-| S3 Aligned Cells | the cell frame's tile id, kept from Mode 1 | Mode 2 cell index `y · countX + x` | the cell's quarter-turn | `p[3]` shown depth, `p[4]`, `p[5]` cell counts, `p[6]` cell side in metres, `p[7]` 0 | lane B §7.3 |
+| S3 Aligned Cells | the cell frame's tile id: kept from Mode 1 when S3 is entered from Curved Walk (a classic run); a duck-maze run starts at tile zero | Mode 2 cell index `y · countX + x` | the cell's quarter-turn | `p[3]` shown depth, `p[4]`, `p[5]` cell counts, `p[6]` cell side in metres, `p[7]` the maze code (seed · 16 + start cell) in a duck-maze run, 0 otherwise | lane B §7.3 |
 | S4 Small Planet | `Pose.Tile` (the face in word 0) | 0 | `Pose.Local` (κ = +1) | `p[3]` = 3, `p[4]` = 1/R², `p[5]` the opaque end of the fog in radians, `p[6]`, `p[7]` = 0 | lane B §7.3 |
 | S5 Impossible Rooms | `(room id, 0, 0, 0, 0, 0)` | current room id | identity | layout, room count, portal depth, 0, 0 | lane A §14.2 |
 | S6 Slicer | six zeros | 0 | identity | w₀; the XW, YW, ZW angles in radians; object + 16 · view | lane A §14.3 |

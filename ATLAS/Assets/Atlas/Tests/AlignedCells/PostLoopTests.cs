@@ -12,24 +12,6 @@ namespace Atlas.Spaces.AlignedCells.Tests
     // Console and in events.jsonl.
     public class PostLoopTests
     {
-        /// <summary>Keeps what was logged. Touches no engine object.</summary>
-        sealed class RecordingLog : IEventLog
-        {
-            public readonly List<string> Events = new List<string>(), Data = new List<string>();
-            public void Log(string ev) { Events.Add(ev); Data.Add(""); }
-            public void Log(string ev, string key, double value) { Events.Add(ev); Data.Add(key); }
-            public void Log(string ev, string key, string value) { Events.Add(ev); Data.Add(key); }
-            public void Log(string ev, string key1, double value1, string key2, double value2) { Events.Add(ev); Data.Add(key1); }
-            public void LogJson(string ev, string dataJson) { Events.Add(ev); Data.Add(dataJson); }
-            public int Count(string ev) { int n = 0; foreach (string e in Events) if (e == ev) n++; return n; }
-            public List<string> DataOf(string ev)
-            {
-                var list = new List<string>();
-                for (int i = 0; i < Events.Count; i++) if (Events[i] == ev) list.Add(Data[i]);
-                return list;
-            }
-        }
-
         // sample_3x3: a 3 x 3 grid, interior posts at corners (1,1), (2,1), (1,2), (2,2). The four cells round post (1,1)
         // counter-clockwise (x right, z up).
         static readonly int2[] RoundPost11 = { new int2(0, 0), new int2(1, 0), new int2(1, 1), new int2(0, 1) };
@@ -134,7 +116,7 @@ namespace Atlas.Spaces.AlignedCells.Tests
             RoomModel room = Fixtures.Room(RoomFixtures.Sample3x3);
             var phone = new Rig(room, RoundPost11[0]);
             var station = new AlignedCellsCore();
-            station.Configure(room, new ParamRegistry());
+            station.Configure(room, Fixtures.ClassicRegistry());
             var log = new RecordingLog();
             station.Events = log;
             station.Enter(WalkerPose.Start, double2.zero);
