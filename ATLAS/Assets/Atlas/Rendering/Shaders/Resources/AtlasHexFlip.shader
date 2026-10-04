@@ -38,6 +38,7 @@ Shader "Hidden/Atlas/HexFlip"
             float4 _OldCentre;      // world position the old still was taken from
             float4 _NewCentre;      // and the new one
             float _TileDelays[TILE_COUNT];  // seconds after the reveal begins that each tile starts to turn
+            float4 _TileAxes[TILE_COUNT];   // xyz: what each tile turns about, object space (HexDome.WaveAxes)
             float _RevealTime;      // seconds since the reveal began; negative before
 
             // The six faces of a still, as HexTransition renders them: forward and up of each camera.
@@ -53,7 +54,7 @@ Shader "Hidden/Atlas/HexFlip"
             struct Attributes
             {
                 float3 positionOS : POSITION;
-                float3 axis : NORMAL;           // the tile's turning axis, unit, object space
+                float3 axis : NORMAL;           // the tile's vertical; the turn reads _TileAxes
                 float4 centre : TEXCOORD0;      // xyz: the tile's centre, object space; w: the tile's index
                 float2 rim : TEXCOORD1;         // x: 0 at the centre, 1 on the edge
             };
@@ -77,8 +78,9 @@ Shader "Hidden/Atlas/HexFlip"
             {
                 Varyings output;
                 float3 centre = input.centre.xyz;
-                float3 axis = input.axis;
-                float delay = _TileDelays[(int)(input.centre.w + 0.5)];
+                int tile = (int)(input.centre.w + 0.5);
+                float3 axis = _TileAxes[tile].xyz;
+                float delay = _TileDelays[tile];
                 float x = saturate((_RevealTime - delay) / FLIP_SECONDS);
                 float turn = x * x * (3.0 - 2.0 * x);
                 float s, c;

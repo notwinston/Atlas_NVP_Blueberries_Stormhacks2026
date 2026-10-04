@@ -107,6 +107,27 @@ namespace Atlas.App.Tests
         }
 
         [Test]
+        public void TheWave_TurnsEveryTileOverAwayFromTheFirst_TheFirstOnItsPole()
+        {
+            var axes = new float3[HexDome.TileCount];
+            int first = s_Dome.TileAt(new float3(0f, 0f, 1f));
+            s_Dome.WaveAxes(first, axes);
+            Assert.That(math.distance(axes[first], new float3(0f, 1f, 0f)), Is.LessThan(1e-4f));
+            for (int i = 0; i < HexDome.TileCount; i++)
+            {
+                float3 n = s_Dome.Centres[i];
+                Assert.That(math.length(axes[i]), Is.EqualTo(1f).Within(1e-4f));
+                Assert.That(math.dot(axes[i], n), Is.EqualTo(0f).Within(1e-4f), "laid in the tile");
+                if (i == first) continue;
+                float3 towards = s_Dome.Centres[first] - math.dot(s_Dome.Centres[first], n) * n;
+                if (math.lengthsq(towards) < 1e-6f) continue;
+                towards = math.normalize(towards);
+                // The edge nearest the first tile swings towards the walker (inwards) as the turn starts.
+                Assert.That(math.dot(math.cross(axes[i], towards), -n), Is.EqualTo(1f).Within(1e-3f));
+            }
+        }
+
+        [Test]
         public void ANeighbour_StartsBeforeItsSetterHasTurned()
         {
             // The next ring starts partway through the turn of the ring before: a wave, not steps.

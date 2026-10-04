@@ -35,7 +35,7 @@ namespace Atlas.App
         public readonly float3[][] Corners = new float3[TileCount][];
         /// <summary>The tiles that share an edge with each tile: 6 round a hexagon, 5 round a pentagon.</summary>
         public readonly int[][] Neighbours = new int[TileCount][];
-        /// <summary>The line through a tile's centre it turns about: the local vertical, laid in the tile.</summary>
+        /// <summary>The local vertical laid in each tile: the pole the first tile of a ripple turns about.</summary>
         public readonly float3[] Axes = new float3[TileCount];
 
         // The mesh, one fan per tile: the centre vertex first, then the corners.
@@ -166,6 +166,25 @@ namespace Atlas.App
                 }
             }
             return outer;
+        }
+
+        /// <summary>
+        /// The axes of a ripple from one tile: the first turns about its vertical pole; every other tile turns
+        /// over away from it, the edge nearest the first tile swinging towards the walker, so each ring turns
+        /// over as one, outwards. axes must hold TileCount entries; all unit, laid in their tiles.
+        /// </summary>
+        public void WaveAxes(int first, float3[] axes)
+        {
+            float3 origin = Centres[first];
+            for (int i = 0; i < TileCount; i++)
+            {
+                float3 n = Centres[i];
+                // Along the tile, towards the first one.
+                float3 towards = origin - math.dot(origin, n) * n;
+                axes[i] = i == first || math.lengthsq(towards) < 1e-6f
+                    ? Axes[i]
+                    : math.normalize(math.cross(n, math.normalize(towards)));
+            }
         }
 
         /// <summary>Seconds after the reveal begins that a tile of a ring starts to turn.</summary>

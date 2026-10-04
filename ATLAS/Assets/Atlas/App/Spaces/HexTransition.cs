@@ -36,6 +36,7 @@ namespace Atlas.App
         static readonly int s_OldCentre = Shader.PropertyToID("_OldCentre");
         static readonly int s_NewCentre = Shader.PropertyToID("_NewCentre");
         static readonly int s_TileDelays = Shader.PropertyToID("_TileDelays");
+        static readonly int s_TileAxes = Shader.PropertyToID("_TileAxes");
         static readonly int s_RevealTime = Shader.PropertyToID("_RevealTime");
 
         // The faces of a still in the order the shader reads them: +x, -x, +y, -y, +z, -z.
@@ -59,6 +60,8 @@ namespace Atlas.App
         readonly HexDome _tiles = new HexDome();
         readonly int[] _rings = new int[HexDome.TileCount];
         readonly float[] _delays = new float[HexDome.TileCount];
+        readonly float3[] _waveAxes = new float3[HexDome.TileCount];
+        readonly Vector4[] _axes = new Vector4[HexDome.TileCount];
 
         RenderTexture _old, _new;
         bool _covered;
@@ -142,8 +145,13 @@ namespace Atlas.App
             _material.SetTexture(s_NewStill, _old);
             _material.SetVector(s_OldCentre, centre);
             _material.SetVector(s_NewCentre, centre);
-            for (int i = 0; i < _delays.Length; i++) _delays[i] = 0f;
+            for (int i = 0; i < _delays.Length; i++)
+            {
+                _delays[i] = 0f;
+                _axes[i] = (Vector3)_tiles.Axes[i];
+            }
             _material.SetFloatArray(s_TileDelays, _delays);
+            _material.SetVectorArray(s_TileAxes, _axes);
             _material.SetFloat(s_RevealTime, -1f);
             _renderer.enabled = true;
             _covered = true;
@@ -164,9 +172,16 @@ namespace Atlas.App
             // stills are read by direction from it): the level hexagon straight ahead goes where the walker
             // looks now, wherever they turned while the space loaded. It turns first and sets off the ripple.
             _dome.transform.rotation = Quaternion.LookRotation(head.forward, Vector3.up);
-            int outer = _tiles.Rings(_tiles.TileAt(new float3(0f, 0f, 1f)), _rings);
-            for (int i = 0; i < _delays.Length; i++) _delays[i] = HexDome.Delay(_rings[i]);
+            int first = _tiles.TileAt(new float3(0f, 0f, 1f));
+            int outer = _tiles.Rings(first, _rings);
+            _tiles.WaveAxes(first, _waveAxes);
+            for (int i = 0; i < _delays.Length; i++)
+            {
+                _delays[i] = HexDome.Delay(_rings[i]);
+                _axes[i] = (Vector3)_waveAxes[i];
+            }
             _material.SetFloatArray(s_TileDelays, _delays);
+            _material.SetVectorArray(s_TileAxes, _axes);
             _material.SetFloat(s_RevealTime, 0f);
             Log("reveal", null);
             return HexDome.RevealSeconds(outer);
