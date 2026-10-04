@@ -86,7 +86,7 @@ namespace Atlas.Kernel.Tests
                 if (a != addrs[0] && a != addrs[1]) maxBitsRandom = Math.Max(maxBitsRandom, Bits(t));
             }
             Assert.AreEqual(53, Bits(RuleS.FrameOf(addrs[0], TileFrame.Zero).Tile));
-            UnityEngine.Debug.Log($"K3 random max bit length = {maxBitsRandom}; alternating path = {Bits(RuleS.FrameOf(addrs[0], TileFrame.Zero).Tile)}");
+            TestContext.WriteLine($"K3 random max bit length = {maxBitsRandom}; alternating path = {Bits(RuleS.FrameOf(addrs[0], TileFrame.Zero).Tile)}");
         }
 
         static (BigInteger, BigInteger) Mul((BigInteger, BigInteger) a, (BigInteger, BigInteger) b) =>

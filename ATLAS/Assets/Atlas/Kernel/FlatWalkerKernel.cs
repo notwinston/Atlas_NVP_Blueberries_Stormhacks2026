@@ -64,8 +64,9 @@ namespace Atlas.Kernel
             // OfQ rejects a q that is no tiling at all; the curved tilings are then refused by name.
             if (Curvature.OfQ(config.Q) != Curvature.Flat)
             {
-                throw new NotSupportedException(Curvature.NotAvailable(
-                    "q = " + config.Q.ToString(CultureInfo.InvariantCulture), "P1-B04"));
+                throw new NotSupportedException(
+                    "Atlas.Kernel: q = " + config.Q.ToString(CultureInfo.InvariantCulture) + " is not a flat tiling. " +
+                    "FlatWalkerKernel carries kappa = 0 (q = 4) only; HolonomyWalkerKernel carries the curved dial positions.");
             }
             if (!(config.MetresPerUnit > 0.0) || double.IsInfinity(config.MetresPerUnit))
             {
@@ -109,7 +110,7 @@ namespace Atlas.Kernel
             }
             if (ti != 0.0 || tj != 0.0)
             {
-                local = Iso2.Boost(new double2(-a * ti, -a * tj), Curvature.Flat) * local;
+                local = FlatTileGraph.Translation(-a * ti, -a * tj) * local;
                 i += (long)ti;
                 j += (long)tj;
             }
@@ -151,7 +152,7 @@ namespace Atlas.Kernel
             }
 
             _pose.Tile = FlatTileGraph.Cell((long)fi, (long)fj);
-            _pose.Local = Iso2.Boost(new double2(ux - a * fi, uz - a * fj), Curvature.Flat);
+            _pose.Local = FlatTileGraph.Translation(ux - a * fi, uz - a * fj);
             _previous = floorMetres;
             _hasPrevious = true;
             ClearLastStep();
@@ -191,7 +192,7 @@ namespace Atlas.Kernel
             if (!rejected)
             {
                 double a = _graph.CentreSpacing;
-                Iso2 local = (_pose.Local * Iso2.Boost(d / _metresPerUnit, Curvature.Flat)).Orthonormalised();
+                Iso2 local = (_pose.Local * FlatTileGraph.Translation(d.x / _metresPerUnit, d.y / _metresPerUnit)).Orthonormalised();
                 TileId tile = _pose.Tile;
 
                 while (result.Crossings < KernelConstants.MaxCrossingsPerStep)

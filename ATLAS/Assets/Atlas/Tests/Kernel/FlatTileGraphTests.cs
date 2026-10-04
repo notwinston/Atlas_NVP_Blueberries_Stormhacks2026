@@ -70,7 +70,7 @@ namespace Atlas.Kernel.Tests
                         Iso2 step = graph.EdgeStep(t, k);
                         Assert.That(KernelTestUtil.MaxAbsDifference(graph.EdgeStep(n, back), step.Inverse()),
                             Is.LessThan(1e-12));
-                        Assert.That(KernelMaps.Distance(step.Position, KernelMaps.BasePoint, graph.Kappa),
+                        Assert.That(Geometry2.Distance(step.Position, Geometry2.BasePoint, graph.Kappa),
                             Is.EqualTo(graph.CentreSpacing).Within(1e-12));
                     }
                 }
@@ -141,7 +141,7 @@ namespace Atlas.Kernel.Tests
                             Assert.That(v.GraphDistance, Is.EqualTo(Math.Abs(di) + Math.Abs(dj)));
                             Assert.That(v.Chain.Position, Is.EqualTo(new double3(a * di, a * dj, 1.0)));
                             Assert.That(v.Chain.Kappa, Is.EqualTo(graph.Kappa));
-                            Assert.That(KernelMaps.Distance(v.Chain.Position, KernelMaps.BasePoint, graph.Kappa),
+                            Assert.That(Geometry2.Distance(v.Chain.Position, Geometry2.BasePoint, graph.Kappa),
                                 Is.LessThanOrEqualTo(rho + KernelConstants.RadiusEpsilon));
                             previous = v.GraphDistance;
                         }

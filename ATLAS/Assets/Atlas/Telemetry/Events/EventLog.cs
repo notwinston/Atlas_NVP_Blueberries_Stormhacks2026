@@ -65,10 +65,16 @@ namespace Atlas.Telemetry
 
         public void LogJson(string ev, string dataJson)
         {
-            JsonValue data;
-            if (string.IsNullOrEmpty(dataJson)) data = JsonValue.Object();
-            else if (!AtlasJson.TryParse(dataJson, out data) || !data.IsObject) data = JsonValue.Object().Set("text", dataJson);
-            Log(ev, data);
+            Log(ev, DataOf(dataJson));
+        }
+
+        /// <summary>
+        /// As <see cref="LogJson(string, string)"/>, for an event that belongs to a scene other than the entered
+        /// space: a use case names itself (<c>lung</c>, contract section 2.6). Null or empty keeps the current scene.
+        /// </summary>
+        public void LogJson(string scene, string ev, string dataJson)
+        {
+            Log(new EventMessage(_clock.NowUs, string.IsNullOrEmpty(scene) ? _scene : scene, ev ?? string.Empty, DataOf(dataJson)));
         }
 
         /// <summary>Logs an event whose data is already a JSON object.</summary>
@@ -147,12 +153,34 @@ namespace Atlas.Telemetry
             if (logged != null) logged(message);
         }
 
+        static JsonValue DataOf(string dataJson)
+        {
+            JsonValue data;
+            if (string.IsNullOrEmpty(dataJson)) data = JsonValue.Object();
+            else if (!AtlasJson.TryParse(dataJson, out data) || !data.IsObject) data = JsonValue.Object().Set("text", dataJson);
+            return data;
+        }
+
         // Counts and levels arrive as doubles through IEventLog; a whole number is written as one.
         static JsonValue Number(double value)
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) return JsonValue.From(0L);
             if (value == Math.Floor(value) && Math.Abs(value) < 9.0e15) return JsonValue.From((long)value);
             return JsonValue.From(value);
+        }
+    }
+
+    /// <summary>The scene-tagged <c>LogJson</c> for code that holds the service as <see cref="IEventLog"/>.</summary>
+    public static class EventLogExtensions
+    {
+        /// <summary>Logs under <paramref name="scene"/> when the log is the session's <see cref="EventLog"/>; any other
+        /// <see cref="IEventLog"/> has no scene to set and takes the event as <c>LogJson(ev, dataJson)</c>.</summary>
+        public static void LogJson(this IEventLog log, string scene, string ev, string dataJson)
+        {
+            if (log == null) throw new ArgumentNullException("log");
+            EventLog real = log as EventLog;
+            if (real != null) real.LogJson(scene, ev, dataJson);
+            else log.LogJson(ev, dataJson);
         }
     }
 }

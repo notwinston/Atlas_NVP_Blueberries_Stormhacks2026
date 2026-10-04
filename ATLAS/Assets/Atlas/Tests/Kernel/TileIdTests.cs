@@ -5,7 +5,6 @@ using System.Globalization;
 using System.IO;
 using NUnit.Framework;
 using Unity.Mathematics;
-using UnityEngine;
 using BigInteger = System.Numerics.BigInteger;
 using Random = System.Random;
 
@@ -13,6 +12,9 @@ namespace Atlas.Kernel.Tests
 {
     public class TileIdTests
     {
+        // The project folder: the current directory inside Unity, ATLAS_PROJECT_DIR in the headless run.
+        static string ProjectDir => Environment.GetEnvironmentVariable("ATLAS_PROJECT_DIR") ?? Directory.GetCurrentDirectory();
+
         const int Seed = 20261003;
         static readonly long[] A377322 = { 1, 4, 12, 28, 64, 148, 340, 780, 1792, 4116, 9452 };
         static readonly Iso2 Id1 = new Iso2(double3x3.identity, -1);
@@ -271,7 +273,12 @@ namespace Atlas.Kernel.Tests
             var times = CrossingTimes(g, list, Rho, 100, 100, cycle, exits);
             var s = new List<double>(times); s.Sort();
             double med = s[50], p95 = s[94], max = s[99];
-            TestContext.WriteLine($"crossing rho={Rho}: median {med:F4} ms, p95 {p95:F4} ms, max {max:F4} ms; codeOptimization={UnityEditor.Compilation.CompilationPipeline.codeOptimization}; visible={list.Count}");
+#if ATLAS_HEADLESS
+            string optimization = "headless";
+#else
+            string optimization = UnityEditor.Compilation.CompilationPipeline.codeOptimization.ToString();
+#endif
+            TestContext.WriteLine($"crossing rho={Rho}: median {med:F4} ms, p95 {p95:F4} ms, max {max:F4} ms; codeOptimization={optimization}; visible={list.Count}");
             var t2 = CrossingTimes(g, list, 3.0 + 2 * 0.8425, 100, 100, cycle, exits);
             TestContext.WriteLine($"info rho=4.685: median {Median(t2):F4} ms; visible={list.Count}");
             var fresh = new TileGraph(5); var tm = new List<double>(); var sw = new Stopwatch();
@@ -360,7 +367,7 @@ namespace Atlas.Kernel.Tests
             Assert.AreEqual(0x486B6F16E8179850UL, e1.ContentSeed(0));
             Assert.AreEqual(0x7EE67468759C7B41UL, e1.ContentSeed(12345));
 
-            var path = Path.Combine(Application.dataPath, "Atlas/Tests/Kernel/Golden/TileId_Seed_golden.csv");
+            var path = Path.Combine(ProjectDir, "Assets/Atlas/Tests/Kernel/Golden/TileId_Seed_golden.csv");
             var rows = new List<string[]>();
             foreach (var raw in File.ReadAllLines(path))
             {

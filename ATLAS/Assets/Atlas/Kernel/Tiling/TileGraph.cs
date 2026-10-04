@@ -4,21 +4,6 @@ using Unity.Mathematics;
 
 namespace Atlas.Kernel
 {
-    public interface ITileGraph
-    {
-        int Q { get; } // tiles per corner (Master Plan §6.5)
-        void VisibleSet(TileId centre, double rho, List<VisibleTile> into);
-    }
-
-    // kernel.md §4.1. F = F[t]: tile t's frame -> the centre tile's frame (§4.6); kappa = -1.
-    public readonly struct VisibleTile
-    {
-        public VisibleTile(TileId id, Iso2 f, int graphDistance) { Id = id; F = f; GraphDistance = graphDistance; }
-        public readonly TileId Id;
-        public readonly Iso2 F;
-        public readonly int GraphDistance; // edge steps from the centre tile (BFS depth)
-    }
-
     // Tile graph of {4,q}, q = 5 (exact ids, Master Plan A.5) or q = 6 (tolerance-hash variant, R3 §A3). Main thread only; never evicts.
     public sealed class TileGraph : ITileGraph
     {
@@ -90,7 +75,9 @@ namespace Atlas.Kernel
         }
 
         public int Q => q;
+        public double Kappa => Curvature.Hyperbolic;
         public double InRadius => inR;
+        public double CentreSpacing => 2 * inR;   // A.3 centre spacing 2r
         public double CircumRadius => circR;
         internal int Count => count;
 
@@ -180,6 +167,19 @@ namespace Atlas.Kernel
             int t = IndexOf(tile);
             NeighbourIndex(t, edge);
             return G[4 * edge + spin[4 * t + edge]];
+        }
+
+        // ITileGraph name of StepMatrix.
+        public Iso2 EdgeStep(TileId tile, int edge) => StepMatrix(tile, edge);
+
+        // The edge of Neighbour(tile, edge) that leads back to tile. The neighbour's raw frame M*S_k has edge 0 facing back
+        // (kernel.md §5.3) and its canonical frame is raw*R^j, whose edge e is raw's edge (e + j) mod 4: so e = -j mod 4.
+        public int BackEdge(TileId tile, int edge)
+        {
+            if (edge < 0 || edge > 3) throw new ArgumentOutOfRangeException(nameof(edge));
+            int t = IndexOf(tile);
+            NeighbourIndex(t, edge);
+            return (4 - spin[4 * t + edge]) & 3;
         }
 
         // ---- visible set (kernel.md §4.6) ----

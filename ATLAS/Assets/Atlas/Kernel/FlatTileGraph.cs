@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using Unity.Mathematics;
 
 namespace Atlas.Kernel
 {
@@ -60,10 +59,10 @@ namespace Atlas.Kernel
             RequireCell(tile, out i, out j);
             switch (edge)
             {
-                case 0: return Iso2.Boost(new double2(_spacing, 0.0), Curvature.Flat);
-                case 1: return Iso2.Boost(new double2(0.0, _spacing), Curvature.Flat);
-                case 2: return Iso2.Boost(new double2(-_spacing, 0.0), Curvature.Flat);
-                case 3: return Iso2.Boost(new double2(0.0, -_spacing), Curvature.Flat);
+                case 0: return Translation(_spacing, 0.0);
+                case 1: return Translation(0.0, _spacing);
+                case 2: return Translation(-_spacing, 0.0);
+                case 3: return Translation(0.0, -_spacing);
                 default: throw BadEdge(edge);
             }
         }
@@ -101,12 +100,17 @@ namespace Atlas.Kernel
             double z = dj;
             if (_spacing * Math.Sqrt(x * x + z * z) > limit) return;
 
-            VisibleTile entry;
-            entry.Tile = Cell(ci + di, cj + dj);
             // Built from the offset each time: nothing accumulates between calls or along a chain.
-            entry.Chain = Iso2.Boost(new double2(_spacing * x, _spacing * z), Curvature.Flat);
-            entry.GraphDistance = ring;
-            into.Add(entry);
+            into.Add(new VisibleTile(Cell(ci + di, cj + dj), Translation(_spacing * x, _spacing * z), ring));
+        }
+
+        /// <summary>The flat boost by (x, z) with the entries written as given: Iso2.Boost forms them as
+        /// length times direction, which can differ in the last bit.</summary>
+        internal static Iso2 Translation(double x, double z)
+        {
+            return new Iso2(1.0, 0.0, x,
+                            0.0, 1.0, z,
+                            0.0, 0.0, 1.0, Curvature.Flat);
         }
 
         /// <summary>The id of grid cell (i, j): i counts tiles along +x, j along +z, from tile zero.</summary>

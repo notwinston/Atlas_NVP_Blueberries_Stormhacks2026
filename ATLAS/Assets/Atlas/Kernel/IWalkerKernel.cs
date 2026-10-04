@@ -6,7 +6,8 @@ namespace Atlas.Kernel
     /// <summary>How the kernel is set up for one room and one dial position.</summary>
     public struct KernelConfig
     {
-        /// <summary>Tiles per corner: 3, 4, 5 or 6 (the dial of section 3.2). Only 4 in this build.</summary>
+        /// <summary>Tiles per corner: 3, 4, 5 or 6 (the dial of section 3.2). FlatWalkerKernel takes 4;
+        /// HolonomyWalkerKernel takes 4, 5 and 6.</summary>
         public int Q;
         /// <summary>L for q = 5 and 6, R for q = 3; any positive value for q = 4. Metres per kernel unit.</summary>
         public double MetresPerUnit;
@@ -27,6 +28,17 @@ namespace Atlas.Kernel
             config.Q = 4;
             config.MetresPerUnit = metresPerUnit;
             config.TileSideMetres = tileSideMetres;
+            return config;
+        }
+
+        /// <summary>Q = 5 or 6 ({4,5}, {4,6}; kappa = -1) or 3 ({4,3}; kappa = +1) with L (or R) in metres.
+        /// TileSideMetres is 0: the spacing follows from Q and MetresPerUnit.</summary>
+        public static KernelConfig Curved(int q, double metresPerUnit)
+        {
+            KernelConfig config;
+            config.Q = q;
+            config.MetresPerUnit = metresPerUnit;
+            config.TileSideMetres = 0.0;
             return config;
         }
     }

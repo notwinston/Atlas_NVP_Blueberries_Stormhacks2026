@@ -95,6 +95,20 @@ namespace Atlas.Kernel
     public sealed class CubeTileGraph : ITileGraph
     {
         public int Q => 3;
+        public double Kappa => Curvature.Spherical;
+        public double CentreSpacing => CubeTiling.CentreSpacing;
+        public double CircumRadius => CubeTiling.Circumradius;
+
+        static int Face(TileId tile)
+        {
+            int f = CubeTiling.FaceOf(tile);
+            if (f < 0) throw new ArgumentException("not a face id", nameof(tile));
+            return f;
+        }
+
+        public TileId Neighbour(TileId tile, int edge) => CubeTiling.FaceId(CubeTiling.Neighbour(Face(tile), edge));
+        public int BackEdge(TileId tile, int edge) => CubeTiling.BackEdge(Face(tile), edge);
+        public Iso2 EdgeStep(TileId tile, int edge) => CubeTiling.Step(Face(tile), edge);
 
         // Merge fix (P1-B09 worktree): P1-B04's VisibleTile is a readonly struct (Id, F, GraphDistance); F = Chain(from, face).
         static VisibleTile Make(int face, int from)

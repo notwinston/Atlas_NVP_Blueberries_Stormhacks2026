@@ -13,7 +13,7 @@ namespace Atlas.Kernel.Tests
         [Test]
         public void Iso2_Conventions()
         {
-            double3 o = KernelMaps.BasePoint;
+            double3 o = Geometry2.BasePoint;
             Iso2 boost = Iso2.Boost(new double2(1.0, 0.0), Flat);
             Iso2 quarter = Iso2.Rot(Math.PI / 2.0);
 
@@ -124,14 +124,14 @@ namespace Atlas.Kernel.Tests
             for (int n = 0; n < 1000; n++)
             {
                 double2 t = KernelTestUtil.RandomStep(random, 4.0);
-                double3 p = KernelMaps.Exp(t, Flat);
+                double3 p = Geometry2.Exp(t, Flat);
 
-                Assert.That(math.cmax(math.abs(KernelMaps.Log(p, Flat) - t)), Is.LessThan(1e-12));
-                Assert.That(KernelMaps.Distance(p, KernelMaps.BasePoint, Flat), Is.EqualTo(math.length(t)).Within(1e-12));
+                Assert.That(math.cmax(math.abs(Geometry2.Log(p, Flat) - t)), Is.LessThan(1e-12));
+                Assert.That(Geometry2.Distance(p, Geometry2.BasePoint, Flat), Is.EqualTo(math.length(t)).Within(1e-12));
                 // Exp agrees with the boost: both move the base point along the same tangent vector.
                 Assert.That(KernelTestUtil.MaxAbsDifference(Iso2.Boost(t, Flat).Position, p), Is.LessThan(1e-12));
             }
-            Assert.That(KernelMaps.BasePoint, Is.EqualTo(new double3(0.0, 0.0, 1.0)));
+            Assert.That(Geometry2.BasePoint, Is.EqualTo(new double3(0.0, 0.0, 1.0)));
         }
 
         [Test]
