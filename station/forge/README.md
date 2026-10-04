@@ -39,7 +39,7 @@ pip install -r requirements.lock
 ```
 
 The generator is installed on the Station only: PyTorch with the cu128 wheels, `requirements-triposg.txt`,
-`diso` built from source, `requirements-gpu.txt` and a TripoSG checkout. "First run on the Station" below gives
+`diso` built from source, `requirements-gpu.txt` and a TripoSG checkout (any NVIDIA driver supporting CUDA 12.8). "First run on the Station" below gives
 the commands in order. TripoSG's own `requirements.txt` is not used: it pins a numpy that has no build for
 Python 3.11, and pip cannot build its `diso` in an isolated build environment.
 
@@ -65,13 +65,13 @@ One process only: it owns the GPU. Start it from `station/forge`.
 | `FORGE_TRIPOSG_REPO`, `FORGE_TRIPOSG_WEIGHTS` | empty | TripoSG checkout and weights folder (`<checkout>/pretrained_weights/TripoSG` when empty) |
 | `FORGE_TRIPOSG_STEPS`, `_GUIDANCE`, `_SEED`, `_FP16` | 50, 7.0, 42, on | Inference settings. All four are part of the cache key |
 | `FORGE_TRIPOSG_OCTREE_DEPTH` | unset | The decoder's octree depth, 6 to 10; unset leaves TripoSG's own 9. Part of the cache key. **Do not lower it:** depth 8 measured on an RTX 4060 Laptop (4 October 2026) cut generation from 87 s to 50 s, but the flash decoder then gives a stair-stepped surface with holes through the seat of a chair |
-| `FORGE_MAX_GENERATED` | 32 | How many of a room's largest boxes are generated, 1 to 32; the rest are answered `placeholder` and keep their first shape. Lower it where the generator is slow. The triangle targets of the boxes that are generated stay those of the rule of 32, so the phone and the Forge agree |
+| `FORGE_MAX_GENERATED` | 32, or 16 on a card under 11.5 GB unless `FORGE_MAX_GENERATED` is set (8 under 7.5 GB) | How many of a room's largest boxes are generated, 1 to 32; the rest are answered `placeholder` and keep their first shape. Lower it where the generator is slow. The triangle targets of the boxes that are generated stay those of the rule of 32, so the phone and the Forge agree |
 | `FORGE_TRIPOSG_FALLBACK_DECODER` | on | When TripoSG's default decoder fails, generate once more with `use_flash_decoder=False` |
 | `FORGE_TRIPOSG_UP` | `Y` | Which axis of TripoSG's own frame is up: `Y`, `Z` or `X`. The only up axis clean-up tries for a TripoSG mesh. Measured on the Station (below) |
 | `FORGE_TRIPOSG_FRONT` | `unknown` | Where the front of a TripoSG mesh is: `canonical` (on its own +Z), `view` (towards the camera of the photo it was generated from) or `unknown`. Breaks a tie of the fit, and decides alone when a job has no profile. Measured on the Station (below) |
 | `FORGE_TRIPOSG_INSIDE_OUT` | off | `1` when TripoSG's faces are wound clockwise seen from outside: the adapter then reverses them. Measured on the Station (below) |
 | `FORGE_POOR_FIT` | 0.20 | A fit to the scanned profile above this is poor, in fractions of the box height: the next photo is then tried |
-| `FORGE_MATTING_TIMEOUT_S`, `FORGE_GENERATE_TIMEOUT_S`, `FORGE_HOSTED_TIMEOUT_S`, `FORGE_CLEANING_TIMEOUT_S` | 10, 90, 120, 60 | Stage time-outs (§7.4) |
+| `FORGE_MATTING_TIMEOUT_S`, `FORGE_GENERATE_TIMEOUT_S`, `FORGE_HOSTED_TIMEOUT_S`, `FORGE_CLEANING_TIMEOUT_S` | 10, 240, 120, 60 | Stage time-outs (§7.4) |
 | `FORGE_MAX_ANISOTROPY` | 0.15 | Stretch allowed per axis when fitting a mesh to its box |
 
 `FORGE_TRIPOSG_UP` and `FORGE_TRIPOSG_FRONT` describe TripoSG's meshes only: a mesh of the procedural or the
@@ -118,7 +118,7 @@ TripoSG). When ready it also holds:
 ## The queue and the furniture budget
 
 - One worker owns the generator and runs one job at a time, the largest box first.
-- When a room is uploaded the Forge ranks its boxes by volume. The 32 largest (or `FORGE_MAX_GENERATED`) receive meshes. A job for any
+- When a room is uploaded the Forge ranks its boxes by volume. The 32 largest (fewer when `FORGE_MAX_GENERATED` or the 8 GB auto cap of 16 lowers it) receive meshes. A job for any
   other box is answered with `placeholder: true` and is never generated.
 - The room's 120,000 furniture triangles are shared between those boxes by surface area, 3,000 to 15,000 each
   (mesh design §5.4; `forge/budget.py`, in whole numbers so that the phone and `tools/rooms/roommath.py` give
@@ -144,7 +144,7 @@ TripoSG). When ready it also holds:
 
 | `FORGE_GENERATOR` | What it is |
 |---|---|
-| `triposg` | TripoSG on the Station's GPU. The default. **It has never run**, see below |
+| `triposg` | TripoSG on the Station's GPU. The default. It ran once on the RTX 4060 Laptop (8 GB), 4 October 2026, at about 87 s per object: see "Measured on the RTX 4060 Laptop" |
 | `procedural` | Builds a plausible mesh for the category from the box size alone (table, chair, couch, bed, storage, lamp, plant, screen, stairs, basin, toilet, plain box), facing local +Z as the box does: the back of a chair, a couch, a bed and a toilet is on −Z. Deterministic, no GPU. For tests and for running the whole round trip without the Station's graphics card. It does not look at the photo, except for the colours |
 | `hosted` | A third-party service only. The interface exists; **no vendor is wired** (Master Plan §14, open item 8) |
 
@@ -260,12 +260,19 @@ settings the job ran under they are; change clean-up, or `FORGE_TRIPOSG_UP`, `FO
 into the record. `tools/meshcheck/check.py` at the repository root reads a whole room's record and prints the
 numbers of checks M1 and M2.
 
+## Measured on the RTX 4060 Laptop
+
+On 4 October 2026 TripoSG ran at about 87 s per object on the Station's RTX 4060 Laptop (8 GB). The decoder
+dominates: 30 steps instead of 50 saved only 7 s, so steps are not the lever. Octree depth 8
+(`FORGE_TRIPOSG_OCTREE_DEPTH=8`) left holes in the mesh, so the setting stays unset (TripoSG's own 9). Peak memory is not yet recorded.
+Half precision stays on. The generation time-out is 240 s, which holds a failed default decoder and the fallback
+decoder in one call, and the cap is 16 objects on this card (`FORGE_MAX_GENERATED` overrides it).
+
 ## First run on the Station
 
-**None of this has been run.** It was written on a Mac with no GPU, from TripoSG's public repository (commit
-`fc5c409`, 18 April 2025) and from `diso`'s build script. Nothing below was tried on Windows, on a GPU, or with
-TripoSG's weights, and TripoSG has not generated a mesh anywhere. Expect to correct it, and correct this
-section when you do. What was checked, all on 4 October 2026:
+**This was written on a Mac with no GPU**, from TripoSG's public repository (commit `fc5c409`, 18 April 2025)
+and from `diso`'s build script. TripoSG has since generated meshes on the RTX 4060 Laptop (4 October 2026), but
+the steps below were not recorded from that run. Expect to correct them, and correct this section when you do. What was checked, all on 4 October 2026:
 
 - The three requirement lists resolve together for Python 3.11 on Windows (`uv pip compile`), and every pin has
   a Windows wheel except `antlr4-python3-runtime`, which is pure Python.
@@ -279,7 +286,7 @@ section when you do. What was checked, all on 4 October 2026:
 - The service, `tools/first_run.py` and the `curl` commands below work against the Forge with the procedural
   generator. The adapter passes its tests with a fake pipeline.
 
-The Station is the Windows PC with the RTX 5070. Use the **x64 Native Tools Command Prompt for VS 2022** for
+The Station is the Windows PC with the RTX 4060 Laptop (8 GB). Use the **x64 Native Tools Command Prompt for VS 2022** for
 step 2, so the compiler is on the path; any Command Prompt will do afterwards. In PowerShell, write
 `$env:NAME = "value"` for `set NAME=value` and `curl.exe` for `curl`.
 
@@ -288,7 +295,7 @@ step 2, so the compiler is on the path; any Command Prompt will do afterwards. I
 | Needed | Check | Why |
 |---|---|---|
 | Python 3.11, 64-bit | `py -3.11 --version` | The lists are pinned for 3.11 |
-| NVIDIA driver for the RTX 50 series | `nvidia-smi` shows the card | PyTorch's cu128 build needs it |
+| An NVIDIA driver supporting CUDA 12.8 | `nvidia-smi` shows the card | PyTorch's cu128 build needs it; the RTX 4060 (sm_89) is covered |
 | Build Tools for Visual Studio 2022, workload "Desktop development with C++" | `cl` prints the compiler's version | `diso` is compiled here |
 | CUDA Toolkit 12.8 | `nvcc --version`, and `echo %CUDA_PATH%` shows its folder | `diso`'s CUDA part |
 | Git, and about 20 GB of free disk | `git --version` | The checkout, the weights (7.95 GB), the wheels |
@@ -309,6 +316,7 @@ pip install -r requirements-triposg.txt
 
 pip install setuptools wheel
 set CUDA_HOME=%CUDA_PATH%
+set TORCH_CUDA_ARCH_LIST=8.9
 pip install --no-build-isolation diso==0.1.4
 
 pip install -r requirements-gpu.txt
@@ -423,7 +431,7 @@ in use; write down the peak.
 | `error` | Meaning |
 |---|---|
 | `TripoSG cannot run: …` | The same reasons as `generatorNote` in step 4 |
-| `generation (triposg) timed out after 90 s` | Too slow, or both decoders ran inside one time-out. Lower `FORGE_TRIPOSG_STEPS`, or raise `FORGE_GENERATE_TIMEOUT_S` to see how long it really takes |
+| `generation (triposg) timed out after 240 s` | Too slow, or both decoders ran inside one time-out (the wait for the card is not counted). Steps are not the lever (see "Measured on the RTX 4060 Laptop"); raise `FORGE_GENERATE_TIMEOUT_S` to see how long it really takes |
 | `TripoSG inference failed: flash decoder: …; hierarchical decoder: …` | Both decoders failed; the two reasons are TripoSG's own. `'NoneType' object has no attribute 'astype'` is what TripoSG raises when a decoder returned nothing |
 | `view 0: the matte is empty …`, `view 0: background removal failed: …` | The matting model found no object in the photo, or failed on it |
 | `clean-up: …`, `asset contract: [frame.bounds] …` | The mesh could not be brought to the box. Check the measures you typed. A mesh that stands askew in its box also ends here, and so does one whose up axis is not `FORGE_TRIPOSG_UP` (only that axis is tried for TripoSG, and it is `Y` until measured); step 6 still reads it |
@@ -505,14 +513,13 @@ in a commit.
   `sourceTriangles`.
 - Anything in this section that was wrong.
 
-Then move "TripoSG on the RTX 5070" out of that page's "Not yet verified" list.
+Then move "TripoSG on the RTX 4060 Laptop" out of that page's "Not yet verified" list.
 
 ## What is unverified
 
-- **TripoSG** (`forge/generators/triposg.py`) has never run: the machines it was written on have no GPU and no
-  PyTorch. Its calls were read against the public repository; its tests use a fake pipeline. Not known until
-  the first run: whether the install works as written; whether `diso` builds and runs on the Station; the time
-  and memory per object; the size of the raw mesh; and TripoSG's output frame.
+- **TripoSG** (`forge/generators/triposg.py`) ran once on the RTX 4060 Laptop on 4 October 2026 (about 87 s per
+  object). Its tests use a fake pipeline. Not yet known: peak memory per object; a full-room run with the 240 s
+  time-out and the 16-object cap; the size of the raw mesh; and TripoSG's output frame.
 - **The fallback decoder** is inferred from TripoSG's source and one open report (issue 63). That
   `use_flash_decoder=False` works where the default fails is untested.
 - **rembg** was tried once on the Mac's processor, on TripoSG's example pictures put on a plain background: it

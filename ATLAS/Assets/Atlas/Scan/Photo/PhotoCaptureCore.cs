@@ -18,7 +18,9 @@ namespace Atlas.Scan
     /// Object photo capture without the engine (Master Plan sections 4.5 and 7.4, task P1-C08; contract lane C
     /// section 11): the key-frame ring of a sweep, then for each object of the final room the choice of one to
     /// three key frames, their crops and JPEG encoding on a worker thread, and the hand-over to the photo sink
-    /// on the caller's thread, one object per Tick. The key frames are dropped as soon as the crops exist;
+    /// on the caller's thread, one object per Tick. Frames are tried in up to three tiers per object: the
+    /// strict test, then partial views checked against the depth image, then partial views with no depth
+    /// test; a later tier runs only when the one before made no view. The key frames are dropped as soon as the crops exist;
     /// nothing is written to disk (rule 10 of section 0.5).
     /// </summary>
     public sealed class PhotoCaptureCore
@@ -71,6 +73,27 @@ namespace Atlas.Scan
         public int Errors { get; private set; }
         /// <summary>The first such error, or null.</summary>
         public string FirstError { get; private set; }
+        /// <summary>(Key frame, object) pairs the strict test looked at in the last capture.</summary>
+        public int ViewsChecked { get; private set; }
+        /// <summary>Objects of the last capture whose views came from partial views checked against depth.</summary>
+        public int PartialViewObjects { get; private set; }
+        /// <summary>Objects of the last capture whose views came from partial views with the depth test left out.</summary>
+        public int DepthIgnoredObjects { get; private set; }
+        /// <summary>Times the JPEG encoder returned nothing in the last capture. Not counted in Errors.</summary>
+        public int EncodeFailures { get; private set; }
+
+        readonly int[] _rejections = new int[PhotoScore.RejectionKinds];
+
+        /// <summary>
+        /// How many (key frame, object) pairs of the last capture the strict test ended with this reason;
+        /// None counts those it accepted, Occluded those that passed on geometry and failed on depth. Valid
+        /// once the last capture has been delivered, like Errors.
+        /// </summary>
+        public int RejectionCount(ViewRejection reason)
+        {
+            int index = (int)reason;
+            return index >= 0 && index < _rejections.Length ? _rejections[index] : 0;
+        }
 
         /// <summary>A sweep starts: any capture in progress is dropped and the ring is emptied.</summary>
         public void BeginSweep()
@@ -107,6 +130,11 @@ namespace Atlas.Scan
             NoPhoto = 0;
             Errors = 0;
             FirstError = null;
+            ViewsChecked = 0;
+            PartialViewObjects = 0;
+            DepthIgnoredObjects = 0;
+            EncodeFailures = 0;
+            Array.Clear(_rejections, 0, _rejections.Length);
             FramesUsed = _ring.Count;
             _delivered = 0;
             _activeSink = Sink ?? _nullSink;
@@ -146,6 +174,11 @@ namespace Atlas.Scan
             }
             Errors = job.Errors;
             FirstError = job.FirstError;
+            ViewsChecked = job.ViewsChecked;
+            PartialViewObjects = job.PartialViewObjects;
+            DepthIgnoredObjects = job.DepthIgnoredObjects;
+            EncodeFailures = job.EncodeFailures;
+            Array.Copy(job.Rejections, _rejections, _rejections.Length);
             IObjectPhotoSink sink = _activeSink;
             _job = null;
             _activeSink = null;
@@ -199,6 +232,11 @@ namespace Atlas.Scan
             public volatile bool Cancelled;
             public volatile int Errors;
             public volatile string FirstError;
+            // Written by the worker before it publishes Completed, read by Tick after it has seen the last object finish.
+            public readonly int[] Rejections = new int[PhotoScore.RejectionKinds];
+            public int ViewsChecked, PartialViewObjects, DepthIgnoredObjects, EncodeFailures;
+
+            enum Tier { Strict, Partial, PartialIgnoringDepth }
 
             readonly PhotoBox[] _boxes;
             readonly IPhotoEncoder _encoder;
@@ -276,7 +314,8 @@ namespace Atlas.Scan
                 Errors = Errors + 1;
             }
 
-            ObjectPhotoSet Shoot(int k, KeyFrame[] frames, float median)
+            // Scores every key frame for one object in the given tier. Only the strict tier is counted.
+            void ScoreFrames(int k, KeyFrame[] frames, float median, Tier tier)
             {
                 PhotoBox box = _boxes[k];
                 int n = frames.Length;
@@ -284,21 +323,63 @@ namespace Atlas.Scan
                 {
                     KeyFrame frame = frames[i];
                     PhotoCamera camera = frame.Camera;
-                    float score = PhotoScore.Evaluate(in camera, in box, _sharpness[i], median, out _projections[i]);
-                    if (score > 0f && PhotoScore.IsOccluded(frame.DepthAt(_projections[i].Centre), _projections[i].FaceDepth))
-                        score = 0f;
+                    float score;
+                    if (tier == Tier.Strict)
+                    {
+                        ViewRejection reason = PhotoScore.Check(in camera, in box, out _projections[i]);
+                        score = reason == ViewRejection.None
+                            ? PhotoScore.Evaluate(in camera, in box, _sharpness[i], median, out _projections[i]) : 0f;
+                        if (score > 0f && PhotoScore.IsOccluded(frame.DepthAt(_projections[i].Centre), _projections[i].FaceDepth))
+                        {
+                            score = 0f;
+                            reason = ViewRejection.Occluded;
+                        }
+                        ViewsChecked++;
+                        Rejections[(int)reason]++;
+                    }
+                    else
+                    {
+                        score = PhotoScore.EvaluatePartial(in camera, in box, _sharpness[i], median, out _projections[i]);
+                        if (tier == Tier.Partial && score > 0f &&
+                            PhotoScore.IsOccluded(frame.DepthAt(_projections[i].Centre), _projections[i].FaceDepth))
+                            score = 0f;
+                    }
                     _scores[i] = score;
                     _azimuths[i] = score > 0f ? PhotoScore.AzimuthDeg(frame.Position, in box) : 0f;
                 }
+            }
 
-                int chosen = PhotoScore.Select(_scores, _azimuths, n, _picked);
+            // Chooses and crops the views of the scored frames; how many were made.
+            int MakeViews(KeyFrame[] frames, in PhotoBox box, Tier tier)
+            {
+                int chosen = PhotoScore.Select(_scores, _azimuths, frames.Length, _picked);
                 int made = 0;
                 for (int v = 0; v < chosen && !Cancelled; v++)
                 {
                     int i = _picked[v];
                     ObjectView view;
-                    if (!TryMakeView(frames[i], in box, in _projections[i], _scores[i], _azimuths[i], out view)) continue;
+                    if (!TryMakeView(frames[i], in box, in _projections[i], tier != Tier.Strict, _scores[i], _azimuths[i], out view)) continue;
                     _views[made++] = view;
+                }
+                return made;
+            }
+
+            ObjectPhotoSet Shoot(int k, KeyFrame[] frames, float median)
+            {
+                PhotoBox box = _boxes[k];
+                ScoreFrames(k, frames, median, Tier.Strict);
+                int made = MakeViews(frames, in box, Tier.Strict);
+                if (made == 0 && !Cancelled)
+                {
+                    ScoreFrames(k, frames, median, Tier.Partial);
+                    made = MakeViews(frames, in box, Tier.Partial);
+                    if (made > 0) PartialViewObjects++;
+                }
+                if (made == 0 && !Cancelled)
+                {
+                    ScoreFrames(k, frames, median, Tier.PartialIgnoringDepth);
+                    made = MakeViews(frames, in box, Tier.PartialIgnoringDepth);
+                    if (made > 0) DepthIgnoredObjects++;
                 }
                 if (made == 0 || Cancelled) return null;
 
@@ -319,11 +400,18 @@ namespace Atlas.Scan
                 };
             }
 
-            unsafe bool TryMakeView(KeyFrame frame, in PhotoBox box, in BoxProjection projection, float score, float azimuth,
-                out ObjectView view)
+            unsafe bool TryMakeView(KeyFrame frame, in PhotoBox box, in BoxProjection projection, bool partial, float score,
+                float azimuth, out ObjectView view)
             {
                 view = default(ObjectView);
-                CropRect crop = PhotoScore.Crop(projection.Min, projection.Max, frame.Width, frame.Height);
+                // A partial view is cropped about the part of the box that is in the image.
+                float2 min = projection.Min, max = projection.Max;
+                if (partial)
+                {
+                    PhotoCamera camera = frame.Camera;
+                    PhotoScore.Clip(in camera, in projection, out min, out max);
+                }
+                CropRect crop = PhotoScore.Crop(min, max, frame.Width, frame.Height);
                 int width, height;
                 PhotoScore.OutputSize(in crop, out width, out height);
 
@@ -350,7 +438,12 @@ namespace Atlas.Scan
                 for (int quality = JpegQuality; quality >= MinJpegQuality; quality -= JpegQualityStep)
                 {
                     jpeg = _encoder.EncodeJpeg(rgba, width, height, quality);
-                    if (jpeg == null || jpeg.Length == 0) return false;
+                    if (jpeg == null || jpeg.Length == 0)
+                    {
+                        EncodeFailures++;
+                        if (FirstError == null) FirstError = "JPEG encoder returned nothing (" + width + "x" + height + ")";
+                        return false;
+                    }
                     if (jpeg.Length <= MaxJpegBytes) break;
                     jpeg = null;
                 }

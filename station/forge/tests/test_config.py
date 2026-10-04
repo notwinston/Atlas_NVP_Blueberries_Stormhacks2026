@@ -17,7 +17,7 @@ def env(monkeypatch):
 def test_defaults(env):
     for settings in (Settings(), Settings.from_env()):
         assert settings.cleaning_timeout_s == 60.0  # was 20: clean-up now casts rays and makes two copies
-        assert settings.matting_timeout_s == 10.0 and settings.generate_timeout_s == 90.0
+        assert settings.matting_timeout_s == 10.0 and settings.generate_timeout_s == 240.0
         assert settings.poor_fit == 0.20
         assert settings.triposg_up == "Y" and settings.triposg_front == "unknown"
         assert settings.triposg_fallback_decoder is True and settings.triposg_inside_out is False
@@ -57,6 +57,12 @@ def test_the_generation_cap_and_the_decoder_depth_have_their_variables(env):
     env.setenv("FORGE_TRIPOSG_OCTREE_DEPTH", "8")
     settings = Settings.from_env()
     assert settings.max_generated == 8 and settings.triposg_octree_depth == 8
+    assert settings.max_generated_from_env is True
+
+
+def test_the_generation_cap_remembers_whether_it_was_set(env):
+    assert Settings().max_generated_from_env is False
+    assert Settings.from_env().max_generated_from_env is False  # the adapter may then size it to the card
 
 
 @pytest.mark.parametrize("name, value", [("FORGE_MAX_GENERATED", "0"), ("FORGE_MAX_GENERATED", "33"),

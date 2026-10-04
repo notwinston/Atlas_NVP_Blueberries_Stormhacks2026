@@ -1,6 +1,6 @@
 import pytest
 
-from forge.budget import MAX_GENERATED_PER_ROOM, light_target, mm, plan, plan_room, rank_boxes
+from forge.budget import MAX_GENERATED_PER_ROOM, auto_max_generated, light_target, mm, plan, plan_room, rank_boxes
 
 # The test vectors of the mesh design brief (S5): boxes, the full targets in the order of the ids, the light target.
 VECTORS = [
@@ -87,3 +87,9 @@ def test_a_lower_cap_meshes_only_the_largest_and_keeps_their_share_of_the_32():
 def test_a_cap_above_thirty_two_is_the_rule_of_thirty_two():
     boxes = [(i + 1, (0.1 * (i + 1), 1.0, 1.0)) for i in range(40)]
     assert plan_room(boxes, max_generated=50) == plan_room(boxes)
+
+
+@pytest.mark.parametrize("vram, expected", [(None, 32), (24.0, 32), (11.5, 32), (11.4, 16), (8.0, 16),
+                                            (7.5, 16), (7.4, 8), (4.0, 8)])
+def test_auto_max_generated_follows_the_cards_memory(vram, expected):
+    assert auto_max_generated(vram) == expected

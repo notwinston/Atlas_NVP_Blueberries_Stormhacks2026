@@ -676,8 +676,13 @@ class Forge:
         log.warning("job %s (room %s, box %d) failed: %s", job.jobId, job.roomId, job.boxId, error)
         self._announce(job)
 
-    def _timed(self, what: str, seconds: float, fn: Callable[[], Any]) -> Any:
-        """Run ``fn`` on a helper thread and give up on it after ``seconds``."""
+    def _timed(self, what: str, seconds: float, fn: Callable[[], Any],
+               started: Optional[threading.Event] = None) -> Any:
+        """Run ``fn`` on a helper thread and give up on it after ``seconds``.
+
+        With ``started``, the ``seconds`` begin once ``fn`` sets it: ``fn`` is then bound to set it
+        within a time of its own (the wait for the GPU, `_generate`), or to fail.
+        """
         box: dict[str, Any] = {}
 
         def run() -> None:
@@ -688,6 +693,8 @@ class Forge:
 
         thread = threading.Thread(target=run, name=f"forge-{what}", daemon=True)
         thread.start()
+        if started is not None:
+            started.wait()
         thread.join(seconds)
         if thread.is_alive():
             raise StageTimeout(f"{what} timed out after {seconds:g} s")
@@ -738,15 +745,28 @@ class Forge:
             raise ImageError(f"view {index}: {exc}") from exc
 
     def _generate(self, generator: Generator, view: MattedView, index: int, job: Job, seconds: float):
+        # The time-out counts the generation, not the wait for the card: a thread that timed out
+        # keeps the lock until its generation ends, and the next job would otherwise be timed
+        # for that wait. The wait has a cap of its own.
+        locked = threading.Event()
+        wait = seconds * 2
+        what = f"generation ({generator.name})"
+
         def run():
-            with self._gpu_lock:
+            got = self._gpu_lock.acquire(timeout=wait)
+            locked.set()  # also on failure: the caller stops waiting and reads the error
+            if not got:
+                raise StageTimeout(f"{what} timed out after {wait:g} s of waiting for the graphics card")
+            try:
                 # The model, when the load at start-up did not get it; a generator that cannot run says so here.
                 generator.warm_up()
                 request = GenerationRequest(image=self._picture(generator, view, index), category=job.category,
                                             dims=job.dims, seed=self.settings.triposg_seed)
                 return generator.generate(request)
+            finally:
+                self._gpu_lock.release()
 
-        return self._timed(f"generation ({generator.name})", seconds, run)
+        return self._timed(what, seconds, run, started=locked)
 
     def _keep_raw(self, job: Job, index: int, raw) -> None:
         """Under FORGE_DEBUG_KEEP=1: the generator's output as it came, before clean-up touches it.

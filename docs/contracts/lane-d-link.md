@@ -2345,7 +2345,7 @@ validate the list of what is wrong.
 
 | Route | Request | Response |
 |---|---|---|
-| `GET /health` | – | 200 `{"ok": true, "gpu": true, "gpuName": "NVIDIA GeForce RTX 5070", "queue": 2, "pipelineVer": "3", "debugKeep": false, "generator": "triposg", "generatorReady": true, "generatorNote": "", "hosted": false, "hostedEnabled": false, "matting": "rembg"}`. Answers at once and never waits for the model. `gpu` is false and `gpuName` null with no CUDA device, and for `triposg` until the model load has imported PyTorch. `queue` counts jobs not yet `ready`, `failed` or `placeholder`. `hostedEnabled` is the same flag as `hosted` under its older name. `matting` is `rembg` or `none`. For `triposg`, `generatorReady` is true only after the model has loaded and with a matting model; `generatorNote` is then empty, and otherwise says what is missing or going on (below) |
+| `GET /health` | – | 200 `{"ok": true, "gpu": true, "gpuName": "NVIDIA GeForce RTX 4060 Laptop GPU", "queue": 2, "pipelineVer": "3", "debugKeep": false, "generator": "triposg", "generatorReady": true, "generatorNote": "", "hosted": false, "hostedEnabled": false, "matting": "rembg"}`. Answers at once and never waits for the model. `gpu` is false and `gpuName` null with no CUDA device, and for `triposg` until the model load has imported PyTorch. `queue` counts jobs not yet `ready`, `failed` or `placeholder`. `hostedEnabled` is the same flag as `hosted` under its older name. `matting` is `rembg` or `none`. For `triposg`, `generatorReady` is true only after the model has loaded and with a matting model; `generatorNote` is then empty, and otherwise says what is missing or going on (below) |
 | `POST /rooms` | RoomModel JSON (`docs/contracts/roommodel.schema.json`), at most 2 MB. The Forge checks `version` 1, `id`, and each object's `id` (1 … 255, unique) and `size`, whose three sides must be finite and above zero (else 422, and the room is not stored); at most 64 objects | 201 `{"roomId": "…", "roomHash": "…", "generated": [ids], "placeholders": [ids], "triTarget": 15000, "triTargets": {"4": 15000, "7": 6120}, "triTargetLight": 5000}`, also when the id existed (the record is replaced). 422 when it does not validate; 413 |
 | `PUT /rooms/{roomId}/mesh` | Binary mesh, at most 2 MB | 204; 404; 413. Optional (§7.4); the app does not send it in Phase 1 |
 | `GET /rooms/{roomId}` | – | 200: the exact bytes that were posted; 404 |
@@ -2370,7 +2370,7 @@ included; absent for an answer from the cache) and `report` (§3.9). Members wit
 - Lane C keeps a RoomModel file under 300 kB (§7.4; lane C §2.6). The Forge accepts up to 2 MB, so the limit
   is the phone's to enforce and a larger grid does not need a Forge change **(decided here)**.
 - At `POST /rooms` the Forge ranks the room's boxes by volume (`size[0] · size[1] · size[2]`, in whole cubic
-  millimetres; equal volumes keep the lower id first). The 32 largest are `generated`; the rest are
+  millimetres; equal volumes keep the lower id first). The 32 largest (fewer when `FORGE_MAX_GENERATED` or the 8 GB auto cap of 16 lowers it) are `generated`; the rest are
   `placeholders`. `triTargets` gives every box its full target by the rule of §4.1 (0 for a box in `placeholders`),
   `triTarget` is the largest of them (0 for an empty room) and `triTargetLight` is the room's light target (0 for
   an empty room). `forge/budget.py` writes the rule in whole numbers, as `ObjectMeshRules` does on the phone and
@@ -2416,7 +2416,7 @@ matting model could not be loaded: …`.
 | (at upload) | Cache lookup by a key made of the SHA-256 of every view's bytes, the job's `triTarget` and `triTargetLight`, `pipelineVer`, the box (`dims`, `yaw`), the category, the generator's name, the profile, every view's `intrinsics` and `camToBox`, and the settings `FORGE_TRIPOSG_UP`, `FORGE_TRIPOSG_FRONT`, `FORGE_POOR_FIT` and `FORGE_MAX_ANISOTROPY` | – | hit → `ready` (source `cache`, 200 `cached` with the four light members when the cached mesh has a light copy; `GET /jobs/{jobId}` and `GET /jobs?room=` carry them too; an older entry answers as before); `backend` `cache` and miss → `failed`; a box in `placeholders` → `placeholder`; else `queued` |
 | `queued` | Waits for the worker | – | `matting` (or `ready` when the cache gained the asset meanwhile) |
 | `matting` | Decode the JPEG of `view0`; background removal (`rembg` when installed). A removal that fails is skipped, and the plain crop goes on, for a generator that does not need matting; for `triposg` that view is not sent to the model. Another view is decoded and matted when an attempt or the colours need it | 10 s per view | `generating`; `failed` for a crop that cannot be decoded or a time-out |
-| `generating` | The attempts, below: one generation per view, at most three. Each generated mesh is welded, reduced, turned and scaled to the box at once (§3.9, steps 1 to 5), which gives its fit | 90 s per generation, 120 s for the hosted service; 60 s for the turn and scale of each mesh | `cleaning`; `failed` |
+| `generating` | The attempts, below: one generation per view, at most three. Each generated mesh is welded, reduced, turned and scaled to the box at once (§3.9, steps 1 to 5), which gives its fit | 240 s per generation (the wait for the card is not counted), 120 s for the hosted service; 60 s for the turn and scale of each mesh | `cleaning`; `failed` |
 | `cleaning` | The other views are matted for the colours. The attempts are finished, the best fit first, until one gives a full copy that meets the contract: regrid, colour, shade, then the light copy, both validated by §4.2 (§3.9, steps 6 to 12) | 60 s for each attempt finished | `ready`; `failed` |
 | `ready` | Both copies are stored under their hashes; the cache entry holds the whole answer | – | – |
 | `failed` | `error` holds a sentence for a person, for example `view 0: …`, `clean-up: …`, `asset contract: [edge.long] …`; the sentences of several attempts are joined by `"; "` | – | – |
@@ -2441,7 +2441,7 @@ the generator, view 1 and then view 2 when they exist; any other fit stops. The 
 - **Queue order:** largest box first, by volume `dims[0] · dims[1] · dims[2]`; ties in arrival order. One job on
   the GPU at a time. The order is across all rooms.
 - **At most 32 objects per room** receive meshes (plan §4.5). The phone sends at most 32; a job for a box
-  outside the Forge's own 32 is answered with `placeholder: true` and is never generated.
+  outside the Forge's own 32 (fewer when `FORGE_MAX_GENERATED` or the 8 GB auto cap of 16 lowers it) is answered with `placeholder: true` and is never generated.
 - A second upload for a `boxId` whose job is still waiting or running returns that job.
 - **Notification.** At every change of state the Forge posts `{"type": "JobStatus", "jobId", "roomId",
   "boxId", "state", "source", "error"}` to `FORGE_HUB_URL`; at `ready` it posts `{"type": "AssetReady", …}`
@@ -2509,7 +2509,7 @@ Contract of `generate`:
 
 | Adapter | `source` | What it is | Usable when |
 |---|---|---|---|
-| `triposg` | `local` | TripoSG (MIT) on the RTX 5070. Written from the public repository's inference script. **It has never run**: not on a GPU, not on Windows, not with its weights; its tests drive a fake pipeline | PyTorch, a CUDA device, the TripoSG checkout, `diso` and a matting model are present and the model has loaded |
+| `triposg` | `local` | TripoSG (MIT) on the RTX 4060 Laptop (8 GB). Written from the public repository's inference script. It ran once on 4 October 2026 at about 87 s per object; its tests drive a fake pipeline | PyTorch, a CUDA device, the TripoSG checkout, `diso` and a matting model are present and the model has loaded |
 | `hosted` | `hosted` | A hosted image-to-3D service: open item 8. The interface exists; no vendor is wired (`HostedGenerator._request` raises `GeneratorUnavailable`) | `FORGE_HOSTED_ENABLED=1` and `FORGE_HOSTED_URL` and `FORGE_HOSTED_KEY` both set |
 | `procedural` | `local` | Deterministic, no GPU, no network: a plausible mesh for the category built from the box size alone (table, chair, couch, bed, storage, lamp, plant, screen, stairs, basin, toilet, plain box), returned normalised to a unit cube. Every shape faces local +Z: the back of a chair, a couch, a bed and a toilet is on −Z, a cupboard's doors on +Z. The photo is not looked at, and it needs no matting. For the Forge's own tests, for a Station with no GPU, and for cache tests (L18) | Always |
 
@@ -2738,7 +2738,7 @@ The rows below hold for both except where a row names the level.
 
 The room's furniture is at most 32 such objects and 120,000 triangles of full copies (plan §4.5; mesh design §5.4). The
 32 largest boxes by volume (whole cubic millimetres, ties to the lower id) receive meshes and share the budget by surface
-area, in whole numbers so that the phone (`ObjectMeshRules`), the Forge (`forge/budget.py`) and `tools/rooms/roommath.py`
+area (the Forge generates fewer when `FORGE_MAX_GENERATED` or the 8 GB auto cap of 16 lowers it; the targets stay these), in whole numbers so that the phone (`ObjectMeshRules`), the Forge (`forge/budget.py`) and `tools/rooms/roommath.py`
 give the same figures:
 
 ```text
@@ -3959,7 +3959,7 @@ L22 of §7.6.
 
 1. **Hosted image-to-3D service** (open item 8 of §14; settle by G6): which one, what budget, what licence, what
    data-retention terms. Until then the `hosted` adapter has no vendor and rule 1 of §3.10 holds: nothing leaves
-   the Station. Also wanted with it: the measured time per object on the RTX 5070.
+   the Station. Also wanted with it: the measured peak memory per object on the RTX 4060 Laptop (8 GB).
 2. **The Station's address.** `192.168.0.10` is this page's default; the third number is the router's
    (`P1-X04`). One constant, `PairingController.DefaultAddress`.
 3. **Where the phone's CSV lives.** README F8 says `persistentDataPath/logs/`, §7.3.3 says

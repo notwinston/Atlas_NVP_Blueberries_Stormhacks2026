@@ -19,6 +19,9 @@
 #   - it lists opencv-python and pymeshlab, which only TripoSG's scripts use. The Forge frames
 #     the picture and reduces the mesh itself, so neither is installed.
 #
+# The cu128 pins stay: they need any driver supporting CUDA 12.8, and the RTX 4060 (sm_89) is
+# covered. Set TORCH_CUDA_ARCH_LIST=8.9 before building diso on the 4060.
+#
 # Install after requirements.lock and after PyTorch:
 #
 #   pip install -r requirements.lock

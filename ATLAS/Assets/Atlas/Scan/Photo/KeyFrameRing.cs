@@ -15,6 +15,22 @@ namespace Atlas.Scan
         Rgb24 = 4
     }
 
+    /// <summary>Why a frame that was due to become a key frame did not (counted by the ring and the engine adapter).</summary>
+    public enum KeyFrameRefusal : byte
+    {
+        NotTracking = 0,
+        TurningFast = 1,
+        /// <summary>No AR camera, or it is off.</summary>
+        NoCamera = 2,
+        NoIntrinsics = 3,
+        /// <summary>The camera gave no CPU image.</summary>
+        NoImage = 4,
+        /// <summary>The CPU image format is not handled.</summary>
+        Format = 5,
+        /// <summary>The image is too small or its planes are shorter than they should be.</summary>
+        ImageSize = 6
+    }
+
     /// <summary>
     /// One camera image kept during the sweep, with the pose and intrinsics it was taken with and the depth
     /// image of the same frame (contract lane C section 11.1). It lives in memory only and is never written
@@ -162,6 +178,8 @@ namespace Atlas.Scan
         public const float MaxTurnRateDeg = 30f;
         /// <summary>Widest image stored. A wider camera image keeps every n-th pixel.</summary>
         public const int MaxStoredWidth = 1280;
+        /// <summary>Number of KeyFrameRefusal values.</summary>
+        public const int RefusalKinds = 7;
 
         readonly KeyFrame[] _slots;
         int _oldest, _count;
@@ -171,6 +189,7 @@ namespace Atlas.Scan
         double _previousTime;
         float3 _keyPosition;
         float _turnRateDeg;
+        readonly int[] _refused = new int[RefusalKinds];
 
         public KeyFrameRing(int capacity = DefaultCapacity)
         {
@@ -182,6 +201,27 @@ namespace Atlas.Scan
         public int Count { get { return _count; } }
         /// <summary>Key frames dropped because the ring was full, since the last Clear.</summary>
         public int Evicted { get; private set; }
+
+        /// <summary>
+        /// Frames that were due for a key frame and were refused for this reason, since the last ResetCounts.
+        /// Clear does not reset it: the summary is printed after the frames have been taken.
+        /// </summary>
+        public int Refused(KeyFrameRefusal reason)
+        {
+            return (uint)reason < (uint)RefusalKinds ? _refused[(int)reason] : 0;
+        }
+
+        /// <summary>Counts one refusal the adapter met itself (no camera, no image, a format it cannot read).</summary>
+        public void NoteRefused(KeyFrameRefusal reason)
+        {
+            if ((uint)reason < (uint)RefusalKinds) _refused[(int)reason]++;
+        }
+
+        /// <summary>Zeroes the refusal counts.</summary>
+        public void ResetCounts()
+        {
+            Array.Clear(_refused, 0, _refused.Length);
+        }
 
         /// <summary>Key frame i, 0 being the oldest.</summary>
         public KeyFrame this[int index]
@@ -208,7 +248,8 @@ namespace Atlas.Scan
 
         /// <summary>
         /// Call once per frame of the sweep with the raw pose. True when this frame should become a key
-        /// frame; the answer stays true on the following frames until Add is called.
+        /// frame; the answer stays true on the following frames until Add is called. A frame that is due
+        /// (no key yet, or moved or turned enough) but refused for tracking or turn rate is counted.
         /// </summary>
         public bool Wants(in HeadPose raw)
         {
@@ -221,10 +262,19 @@ namespace Atlas.Scan
             _previousTime = raw.Time;
             _hasPrevious = true;
 
-            if (raw.Tracking == TrackingState.NotTracking) return false;
-            if (_turnRateDeg >= MaxTurnRateDeg) return false;
-            if (!_hasKey) return true;
-            return math.distance(raw.Position, _keyPosition) >= MoveMetres || AngleDeg(_keyRotation, raw.Rotation) >= TurnDegrees;
+            bool due = !_hasKey || math.distance(raw.Position, _keyPosition) >= MoveMetres ||
+                       AngleDeg(_keyRotation, raw.Rotation) >= TurnDegrees;
+            if (raw.Tracking == TrackingState.NotTracking)
+            {
+                if (due) _refused[(int)KeyFrameRefusal.NotTracking]++;
+                return false;
+            }
+            if (_turnRateDeg >= MaxTurnRateDeg)
+            {
+                if (due) _refused[(int)KeyFrameRefusal.TurningFast]++;
+                return false;
+            }
+            return due;
         }
 
         /// <summary>

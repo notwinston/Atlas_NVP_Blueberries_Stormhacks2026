@@ -29,12 +29,15 @@ class FakeTorch:
 
     float16, float32 = "float16", "float32"
 
-    def __init__(self, cuda=True):
+    def __init__(self, cuda=True, total_gb=8.0):
         self.emptied = 0
+        self.total_gb = total_gb
         self.cuda = SimpleNamespace(
             is_available=lambda: cuda,
             get_device_name=lambda index: "Fake RTX 5070",
             empty_cache=self._empty,
+            get_device_properties=lambda index: SimpleNamespace(total_memory=int(self.total_gb * 2**30),
+                                                                major=8, minor=9),
         )
 
     def _empty(self):
@@ -267,6 +270,18 @@ def test_diso_that_is_installed_but_does_not_load(tmp_path, matting):
     assert generator.availability() == (False, "diso cannot be imported: DLL load failed while importing _C")
     assert generator.gpu() == "Fake RTX 5070"  # the card is there, the generator is not
     assert runtime.loads == []
+
+
+def test_the_card_sizes_the_generation_cap_unless_it_was_set(tmp_path, matting):
+    settings = station(tmp_path)
+    assert settings.max_generated == 32 and settings.max_generated_from_env is False
+    TripoSGGenerator(settings, FakeRuntime()).warm_up()  # the fake card has 8 GB
+    assert settings.max_generated == 16
+
+    kept = station(tmp_path / "kept")
+    kept.max_generated, kept.max_generated_from_env = 5, True
+    TripoSGGenerator(kept, FakeRuntime()).warm_up()
+    assert kept.max_generated == 5
 
 
 # --------------------------------------------------------------------------- the weights

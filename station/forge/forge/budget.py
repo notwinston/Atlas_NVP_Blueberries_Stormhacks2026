@@ -18,6 +18,19 @@ ROOM_TRIANGLE_BUDGET = 120_000
 TARGET_MIN = 3_000
 TARGET_MAX = 15_000
 
+
+
+def auto_max_generated(vram_gb: float | None) -> int:
+    """The default cap on generated objects for a card with ``vram_gb`` of memory.
+
+    32 where the memory is unknown or at least 11.5 GB, 16 from 7.5 GB (an 8 GB card measured
+    about 87 s per object), else 8. ``FORGE_MAX_GENERATED`` overrides it.
+    """
+    if vram_gb is None or vram_gb >= 11.5:
+        return MAX_GENERATED_PER_ROOM
+    return 16 if vram_gb >= 7.5 else 8
+
+
 # The light copies of a room: the budget the furniture had before the full copies existed.
 ROOM_LIGHT_BUDGET = 60_000
 LIGHT_TARGET_MIN = 1_500

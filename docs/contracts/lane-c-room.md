@@ -255,7 +255,7 @@ distance field treats every outline edge as a wall, with or without an opening (
 | `yaw` | number, rad, (−π, π], and in a file at most 3.1415928 | Rotation about `+Y` (§1). The builder writes every yaw wrapped, at six decimals and not beyond ±3.141592, so a half turn is stored as 3.141592 (π itself rounds to 3.141593, which the reader and the schema refuse) |
 | `mesh` | string | What is drawn: `"placeholder"`, `"requested"`, `"ready"`, `"builtIn"`, or `"standIn"` (◆ `budget_room` only, §5.3) |
 | `assetHash` | string | SHA-256 of the generated GLB, 64 lower-case hexadecimal digits, exactly when `mesh` is `"ready"`; otherwise empty. This is the `boxId → sha256` record of §7.4 |
-| ◆ `triTarget` | integer | Triangle target of the **full** copy, sent with the Forge job: `0` for an object that is not one of the 32 that receive meshes (it keeps its first shape), otherwise 3000 to 15000. The 32 largest objects by volume share 120,000 triangles by surface area; the rule is below the table (§4.5 of the plan) |
+| ◆ `triTarget` | integer | Triangle target of the **full** copy, sent with the Forge job: `0` for an object that is not one of the 32 that receive meshes (it keeps its first shape), otherwise 3000 to 15000. The 32 largest objects by volume share 120,000 triangles by surface area; the rule is below the table (§4.5 of the plan). The Forge may generate fewer of them (its `FORGE_MAX_GENERATED` cap; 16 by default on an 8 GB card): the others are answered `placeholder`, and the targets stay those of this rule |
 | ◆ `assetHashLight` | string, optional | SHA-256 of the **light** copy of the generated GLB, 64 lower-case hexadecimal digits. Written only when there is one. A light copy follows a full one: the asset client sets it after `assetHash` (no rule checks that). `IRoomContent.SetGeneratedMesh` clears it and `SetGeneratedLightMesh` sets it (§9.1) |
 | ◆ `facing` | string, optional | The rule that decided which side of the box is the front: `"profile"`, `"table"` or `"clearance"` (§2.8, rule G14). Written only for those three; absent means `box` (RoomPlan's own axis, or no scanned mesh to decide from). A reader also accepts `"box"` |
 | ◆ `profile` | string, optional | The object profile: the heights of the scanned surface inside the box, 16 × 16 cells of one byte, as standard base64 with padding. Exactly 256 bytes, 344 characters (rule R21). Layout below. Absent for a room with no scanned LiDAR mesh (route 1, a phone without LiDAR, a fixture) and for an object in whose box no ray hit anything |
@@ -2956,7 +2956,7 @@ Objects beyond the 32 that receive meshes (`triTarget` 0) get a first shape too 
 shape stays `builtIn` until the generated mesh arrives; the limit of 1,500 triangles and the 0.25 m edge rule are
 the built-in set's.
 
-- Only the objects with `triTarget` > 0 (at most 32, §2.4) are sent to the Forge and can reach `Ready`.
+- Only the objects with `triTarget` > 0 (at most 32; fewer when the Forge's `FORGE_MAX_GENERATED` cap is lower; 16 by default on an 8 GB card, §2.4) are sent to the Forge and can reach `Ready`.
 - A box that stands on the floor is darkened where it meets it (occlusion 0.6, as the shell).
 - One draw call per object per eye.
 - The object's `Transform` is at `base`, rotated by `yaw`. Local +X is `w`, +Y is `h`, +Z is `d` and **the front**
@@ -3407,6 +3407,7 @@ frames. Nobody else calls it.
 | A key frame holds | The camera image (`TryAcquireLatestCpuImage`; on ARKit the two planes of `IosYpCbCr420_8BiPlanarFullRange`, copied; the `XRCpuImage` is disposed at once, AF §7.3), as delivered up to 1280 pixels wide and with every n-th pixel kept above that; its size; the tracked camera's pose in the AR session frame (relative to `XROrigin.TrackablesParent`, so a moved XR Origin cannot misplace it); the intrinsics; the depth image of the same frame as 16-bit millimetres; and its sharpness |
 | Sharpness | Variance of the 4-neighbour Laplacian of the luma plane reduced to 160 pixels wide, computed on a worker thread |
 | Memory | About 1.5 MB per frame at 1280 × 720 with its depth image: up to 145 MB during the sweep. Released when cropping ends or the scan is cancelled |
+| Refusals | A due frame (the movement or turn threshold is met) that is not stored is counted by reason in `KeyFrameRefusal`: not tracking, turning fast, no camera, no intrinsics, no image, format (an unhandled image format), image size. Frames dropped from a full ring are counted too. `KeyFrameRing.ResetCounts` runs at the start of the sweep; `Clear` keeps the counts so they can be logged when selection starts |
 | Cost on the frame path | One copy per key frame, < 2 ms; nothing on other frames |
 
 ### 11.2 Selection (when the RoomModel is final)
@@ -3427,8 +3428,32 @@ score = (0.4 · min(area / 0.35, 1) + 0.3 · centredness + 0.3 · min(sharpness 
         elevation    = the angle above the horizontal of the direction from the box centre to the camera
 view 0 = the best candidate
 views 1, 2 = the next best whose azimuth about the box differs by ≥ 30° from every view already taken
-no candidate: the object is reported with ReportNoPhoto and takes its built-in mesh at once
+no candidate: see the two fallback tiers below; with no view from any tier the object is reported with
+              ReportNoPhoto and takes its built-in mesh at once
 ```
+
+Only when the candidate rule gives an object no usable crop is the second tier tried, and only when that gives
+nothing, the third:
+
+```text
+partial view (tier 2):  the projected box centre is inside the image
+                        and at least 60 % of the projected bounding box lies inside the image (PhotoScore.MinVisibleShare)
+                        and the visible (clipped) box covers 5 % to 90 % of the image (RelaxedMinArea, RelaxedMaxArea)
+                        and the camera is 0.4 m to 4.0 m from the box centre (RelaxedMinDistance, RelaxedMaxDistance)
+                        and the same occlusion test passes
+                        score = the score above with the clipped area × the view factor × 0.35 (RelaxedFactor)
+                        the crop is made from the bounding box clipped to the image
+ignoring depth (tier 3): the partial-view rule without the occlusion test, so that a box larger than the
+                        furniture does not cost the photo; scored as tier 2
+no view from any tier:  ReportNoPhoto; a frame in which a corner of the box is behind the camera, or its centre
+                        is outside the image, passes no tier
+```
+
+The key frames are 1280 × 720 (16:9), so the vertical field is about 39° and about 35° inside the margin. A phone
+held 1.2 m to 1.4 m up rarely frames a whole piece of furniture, bottom corners on the floor included, inside that
+window: head-on, a sofa passes the candidate rule only at about 2.2 m to 2.8 m and 10° to 30° down, and a wardrobe
+2 m high never does. The factor 0.35 keeps any strict candidate ahead of any partial view of the same object, and
+the tiers are never mixed: a partial view is used only when there is no strict crop.
 
 A frame with no depth image, or with no return at the projected box centre, is not rejected by the occlusion
 test, so a phone without LiDAR still gets photos. The objects are placed with `room.Anchor.Position` and
@@ -3452,11 +3477,22 @@ only RoomPlan's axis. Nothing downstream puts a threshold on the score.
 ### 11.3 Crops
 
 - Crop rectangle: the projected bounding box grown by 12 % on every side, made square about its centre, then
-  cut to the image, so a crop at the image's edge can be non-square.
+  cut to the image, so a crop at the image's edge can be non-square. For a partial view (§11.2) the bounding box
+  is first clipped to the image.
 - Scaled down to at most 768 × 768 (never up), converted to RGBA, encoded as JPEG quality 85 with
   `ImageConversion.EncodeArrayToJPG` on a worker thread (it is thread-safe, IN §7). Each crop ≤ 200 kB; when it
   is larger, quality drops by 10 until it fits. A crop still too large at quality 15 is dropped; an object with
-  no surviving crop is reported with `ReportNoPhoto`.
+  no surviving crop is reported with `ReportNoPhoto`. An encoder that returns nothing is counted
+  (`EncodeFailures`) and the view is rejected.
+- Log lines. Two warnings reach the Hub's `phone.log`, the first when selection starts and the second when it
+  ends:
+
+  ```text
+  Atlas: object photos: choosing from {frames} key frames for {objects} objects; refused: not tracking {a}, turning fast {b}, no camera {c}, no intrinsics {d}, no image {e}, format {f}, image size {g}; ring full dropped {n}
+  Atlas: object photos: {sent} objects sent ({p} from partial views, {d} ignoring depth), {noPhoto} take the built-in mesh; {v} views checked: {k} strict candidates, behind camera {}, outside image {}, too small {}, too large {}, too near {}, too far {}, occluded {}; JPEG failures {j}; key frames released
+  ```
+
+  The rejection counts cover the strict tier over every (frame, object) pair.
 - A crop is handed to the sink on the main thread, one object per frame at most, at step 8b of the frame
   (`ScanSession.PhotoDelivery`, added to the frame loop by `ScanSystems.Publish`).
 - When the last crop is delivered the ring is cleared. No camera frame survives the scan (rule 10 of §0.5).

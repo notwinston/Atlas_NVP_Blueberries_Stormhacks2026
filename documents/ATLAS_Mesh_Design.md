@@ -133,7 +133,7 @@ Station"; nothing here was run on the Station):
 
 **The views.** Facing is known when the photos are chosen (§5.2), so selection can prefer what the model was trained
 on: a view's score is halved when the camera stands in the back half of the object, or more than 30° above its centre.
-A view from behind is still taken when there is no other.
+A view from behind is still taken when there is no other. When no frame passes the strict candidate rule (§7.4 of the plan), a partial view is taken instead: the box centre inside the image, at least 60 % of the box in view, the visible part 5 to 90 % of the image, 0.4 to 4.0 m away; its score is multiplied by 0.35 as well, and when depth also rejects it, the depth test is dropped. A partial view is therefore never preferred to a strict candidate.
 
 **The output frame.** Which way is up, and where the mesh's front is, is measured once on the Station with a test photo of an object that is clearly not symmetric (a chair seen from the front-left); `tools/first_run.py` reads both from a finished job. The answer is set as `triposg_up` and `triposg_front` in `forge/config.py`: settings read from `FORGE_TRIPOSG_UP` and `FORGE_TRIPOSG_FRONT` (defaults `Y` and `unknown`) and checked at start-up. `triposg_up` is the only up axis tried for a TripoSG mesh; if TripoSG's up is another axis, every job fails with `asset contract: [frame.bounds]` until the setting is measured, and a mesh standing on its head is not among the candidates. `triposg_front` is `canonical` (the front is on the mesh's own +Z, which after §5.2 is also the box's front), `view` (the front is on the side the generating view's camera saw) or `unknown`; it only breaks ties of the fit, and decides alone when a job has no profile (§5.3).
 

@@ -36,6 +36,65 @@ namespace Atlas.Scan.Tests.Photo
         }
 
         [Test]
+        public void Refusals_CountOnlyWhenTheFrameIsDue()
+        {
+            var ring = new KeyFrameRing();
+            // No key yet: due, so counted.
+            Assert.That(ring.Wants(Pose(0.0, float3.zero, 0f, TrackingState.NotTracking)), Is.False);
+            Assert.That(ring.Refused(KeyFrameRefusal.NotTracking), Is.EqualTo(1));
+            ring.Add(Pose(0.1, float3.zero));
+            // Key taken and not moved: not due, not counted.
+            Assert.That(ring.Wants(Pose(0.2, float3.zero, 0f, TrackingState.NotTracking)), Is.False);
+            Assert.That(ring.Refused(KeyFrameRefusal.NotTracking), Is.EqualTo(1));
+            // Moved 0.5 m: due.
+            Assert.That(ring.Wants(Pose(0.3, new float3(0.5f, 0f, 0f), 0f, TrackingState.NotTracking)), Is.False);
+            Assert.That(ring.Refused(KeyFrameRefusal.NotTracking), Is.EqualTo(2));
+            Assert.That(ring.Wants(Pose(0.4, new float3(0.5f, 0f, 0f))), Is.True);
+        }
+
+        [Test]
+        public void Refusals_FastTurnWhileDueCountsTurningFast()
+        {
+            var ring = new KeyFrameRing();
+            ring.Wants(Pose(0.0, float3.zero));
+            ring.Add(Pose(0.0, float3.zero));
+            // 20 degrees in 0.1 s is 200 deg/s, and 20 degrees is past the 15 degree key-frame turn.
+            Assert.That(ring.Wants(Pose(0.1, float3.zero, 20f)), Is.False);
+            Assert.That(ring.Refused(KeyFrameRefusal.TurningFast), Is.EqualTo(1));
+            Assert.That(ring.Refused(KeyFrameRefusal.NotTracking), Is.EqualTo(0));
+            // 2 degrees in 0.1 s is not due.
+            ring.Wants(Pose(0.2, float3.zero, 22f));
+            Assert.That(ring.Refused(KeyFrameRefusal.TurningFast), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Refusals_NoteRefusedCounts_AndOutOfRangeIsIgnored()
+        {
+            var ring = new KeyFrameRing();
+            ring.NoteRefused(KeyFrameRefusal.NoImage);
+            ring.NoteRefused(KeyFrameRefusal.NoImage);
+            ring.NoteRefused((KeyFrameRefusal)99);
+            Assert.That(ring.Refused(KeyFrameRefusal.NoImage), Is.EqualTo(2));
+            Assert.That(ring.Refused((KeyFrameRefusal)99), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void Refusals_SurviveClearAndTakeAll_ResetCountsZeroesThem()
+        {
+            var ring = new KeyFrameRing(2);
+            ring.NoteRefused(KeyFrameRefusal.Format);
+            for (int i = 0; i < 3; i++) ring.Add(Pose(i, new float3(i, 0f, 0f)));
+            Assert.That(ring.Evicted, Is.EqualTo(1));
+            ring.TakeAll();
+            Assert.That(ring.Evicted, Is.EqualTo(0));
+            Assert.That(ring.Refused(KeyFrameRefusal.Format), Is.EqualTo(1));
+            ring.Clear();
+            Assert.That(ring.Refused(KeyFrameRefusal.Format), Is.EqualTo(1));
+            ring.ResetCounts();
+            Assert.That(ring.Refused(KeyFrameRefusal.Format), Is.EqualTo(0));
+        }
+
+        [Test]
         public void Ring_DefaultCapacityIs96()
         {
             var ring = new KeyFrameRing();

@@ -56,7 +56,7 @@ class Settings:
     port: int = 8000
     data_dir: Path = field(default_factory=lambda: _PACKAGE_ROOT / "data")
 
-    # Which generator the one worker owns: "triposg" (the Station's RTX 5070),
+    # Which generator the one worker owns: "triposg" (the Station's RTX 4060 Laptop, 8 GB),
     # "procedural" (no GPU; tests and dry runs) or "hosted" (third party only).
     generator: str = "triposg"
     # The hosted fallback sends a crop to a third party, so it is off unless the
@@ -75,7 +75,7 @@ class Settings:
     public_url: str = ""
 
     matting_timeout_s: float = 10.0
-    generate_timeout_s: float = 90.0
+    generate_timeout_s: float = 240.0
     hosted_timeout_s: float = 120.0
     # Clean-up casts rays and makes two copies of every mesh (mesh design section 5.3).
     cleaning_timeout_s: float = 60.0
@@ -90,12 +90,15 @@ class Settings:
     # The rest keep their first shape. Lower it where the generator is slow: the triangle split
     # stays the rule of the 32, so the phone and the Forge still agree on every target.
     max_generated: int = 32
+    # Whether FORGE_MAX_GENERATED was set; when it was not, the TripoSG adapter lowers the cap
+    # to what the card's memory allows (`budget.auto_max_generated`) once it has read the card.
+    max_generated_from_env: bool = False
 
     max_room_bytes: int = 2 * 1024 * 1024
     max_room_mesh_bytes: int = 2 * 1024 * 1024
     max_crop_bytes: int = 1024 * 1024
 
-    # TripoSG (unverified on the build machine; see README).
+    # TripoSG (ran once on the Station, 4 October 2026; see README).
     triposg_repo: str = ""
     triposg_weights: str = ""
     rmbg_weights: str = ""
@@ -137,6 +140,7 @@ class Settings:
         s.cleaning_timeout_s = _number("FORGE_CLEANING_TIMEOUT_S", s.cleaning_timeout_s)
         s.max_anisotropy = _number("FORGE_MAX_ANISOTROPY", s.max_anisotropy)
         s.poor_fit = _number("FORGE_POOR_FIT", s.poor_fit)
+        s.max_generated_from_env = bool(os.environ.get("FORGE_MAX_GENERATED", "").strip())
         s.max_generated = _whole("FORGE_MAX_GENERATED", s.max_generated, 1, MAX_GENERATED_PER_ROOM)
         s.triposg_repo = os.environ.get("FORGE_TRIPOSG_REPO", "")
         s.triposg_weights = os.environ.get("FORGE_TRIPOSG_WEIGHTS", "")

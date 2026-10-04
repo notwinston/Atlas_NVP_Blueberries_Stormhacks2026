@@ -67,10 +67,20 @@ def torch_and_cuda() -> str:
     total = torch.cuda.get_device_properties(0).total_memory / 2**30
     VERSIONS.append(("CUDA (PyTorch build)", str(torch.version.cuda)))
     VERSIONS.append(("GPU", f"{name}, {total:.1f} GB"))
+    major, minor = torch.cuda.get_device_capability(0)
+    arch = f"sm_{major}{minor}"
+    VERSIONS.append(("GPU compute capability", f"{major}.{minor} ({arch})"))
+    if arch not in torch.cuda.get_arch_list():
+        print(f"WARN  PyTorch build: it lists {' '.join(torch.cuda.get_arch_list())} and not {arch}; "
+              "kernels may fail on first use")
     # A build that does not know the card's architecture imports and then fails on first use.
     value = float((torch.ones(8, device="cuda") * 2).sum())
     if value != 16.0:
         raise RuntimeError(f"a sum on the card gave {value}")
+    if total < 11:
+        raise Note(f"torch {torch.__version__}, CUDA {torch.version.cuda}, {name}, {total:.1f} GB. 8 GB card: "
+                   "half precision stays on; FORGE_MAX_GENERATED defaults to 16; "
+                   "TripoSG measured ~87 s/object on an RTX 4060 Laptop")
     return f"torch {torch.__version__}, CUDA {torch.version.cuda}, {name}, {total:.1f} GB"
 
 

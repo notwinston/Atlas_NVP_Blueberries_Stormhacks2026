@@ -249,7 +249,10 @@ namespace Atlas.Scan.Tests.Photo
             AddFrame(core, in chair, 0f, 2f, 4, 1000);
             core.BeginCapture(Room(), float3.zero, 0f);
             TickUntilIdle(core);
-            Assert.That(blocked.Calls, Does.Contain("none " + ChairId));
+            // It is no strict candidate, but with every tier tried the photo is still taken, depth left out.
+            Assert.That(core.RejectionCount(ViewRejection.Occluded), Is.EqualTo(1));
+            Assert.That(core.DepthIgnoredObjects, Is.EqualTo(1));
+            Assert.That(blocked.Calls, Does.Contain("submit " + ChairId));
 
             var clear = new RecordingSink();
             core = Core(new FakeEncoder(), clear);
@@ -258,6 +261,8 @@ namespace Atlas.Scan.Tests.Photo
             core.BeginCapture(Room(), float3.zero, 0f);
             TickUntilIdle(core);
             Assert.That(clear.Calls, Does.Contain("submit " + ChairId));
+            Assert.That(core.RejectionCount(ViewRejection.None), Is.EqualTo(1));
+            Assert.That(core.DepthIgnoredObjects, Is.EqualTo(0));
         }
 
         [Test]

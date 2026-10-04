@@ -1,11 +1,12 @@
 """TripoSG on the Station's GPU (Master Plan section 7.4, state `generating`; mesh design section 5.1).
 
-NEVER RUN. This adapter was written from the public TripoSG repository
+This adapter was written from the public TripoSG repository
 (github.com/VAST-AI-Research/TripoSG, MIT; commit fc5c409 of 18 April 2025),
 its `scripts/inference_triposg.py` and `triposg/pipelines/pipeline_triposg.py`.
 The machines it was written on have no GPU and no PyTorch, so its tests drive
-it with a fake pipeline. Check it on the RTX 5070 before relying on it
-(README, "First run on the Station").
+it with a fake pipeline. It ran on 4 October 2026 on the Station's RTX 4060
+Laptop (8 GB) at about 87 s per object, the decoder dominating (README,
+"Measured on the RTX 4060 Laptop").
 
 Nothing here imports PyTorch until the model is loaded, and the model is loaded
 by the worker when the service starts, so GET /health answers at once on any
@@ -31,6 +32,7 @@ import numpy as np
 from PIL import Image
 
 from .. import imaging
+from ..budget import auto_max_generated
 from ..config import Settings
 from .base import GenerationRequest, GeneratorError, GeneratorUnavailable, RawMesh
 
@@ -195,6 +197,22 @@ class TripoSGGenerator:
                 self._loading = ""
             return self._pipe
 
+    def _read_card(self, torch) -> None:
+        """Log the card once; without FORGE_MAX_GENERATED, size the generation cap to its memory."""
+        settings = self._settings
+        total_gb = None
+        try:
+            props = torch.cuda.get_device_properties(0)
+            total_gb = props.total_memory / 2**30
+            log.info("GPU %s, %.1f GB, compute capability %d.%d", self._gpu_name, total_gb,
+                     props.major, props.minor)
+        except Exception as exc:  # the card's numbers are for the log; they never stop the load
+            log.warning("the card's memory and compute capability could not be read: %s", exc)
+        if not settings.max_generated_from_env and total_gb is not None:
+            settings.max_generated = auto_max_generated(total_gb)
+            log.info("FORGE_MAX_GENERATED is not set: %d objects per room for %.1f GB", settings.max_generated,
+                     total_gb)
+
     def _load_locked(self):
         runtime, settings = self._runtime, self._settings
         torch = None
@@ -205,6 +223,8 @@ class TripoSGGenerator:
                 torch = runtime.torch()
                 cuda = bool(torch.cuda.is_available())
                 self._gpu_name = torch.cuda.get_device_name(0) if cuda else None
+                if cuda:
+                    self._read_card(torch)
             except Exception as exc:  # a broken install raises anything
                 raise _NotReady(f"PyTorch cannot be imported: {exc}") from exc
             if not cuda:

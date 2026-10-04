@@ -52,6 +52,7 @@ namespace Atlas.Scan
         public void BeginSweep()
         {
             _core.BeginSweep();
+            _core.Ring.ResetCounts();
             _wasBusy = false;
             _captured = null;
         }
@@ -66,12 +67,23 @@ namespace Atlas.Scan
             if (!_core.Ring.Wants(in raw)) return;
 
             ARCameraManager camera = _rig.Camera;
-            if (camera == null || !camera.enabled || camera.subsystem == null) return;
+            if (camera == null || !camera.enabled || camera.subsystem == null)
+            {
+                _core.Ring.NoteRefused(KeyFrameRefusal.NoCamera);
+                return;
+            }
             // XR Simulation answers with an all-zero struct.
             if (!camera.TryGetIntrinsics(out XRCameraIntrinsics intrinsics) || intrinsics.resolution.x <= 0 ||
                 intrinsics.resolution.y <= 0 || !(intrinsics.focalLength.x > 0f) || !(intrinsics.focalLength.y > 0f))
+            {
+                _core.Ring.NoteRefused(KeyFrameRefusal.NoIntrinsics);
                 return;
-            if (!camera.TryAcquireLatestCpuImage(out XRCpuImage image)) return;
+            }
+            if (!camera.TryAcquireLatestCpuImage(out XRCpuImage image))
+            {
+                _core.Ring.NoteRefused(KeyFrameRefusal.NoImage);
+                return;
+            }
             using (image)       // released at once on every path: holding camera images stalls ARKit
             {
                 Store(in image, in intrinsics, in raw, in depth);
@@ -92,12 +104,16 @@ namespace Atlas.Scan
             _captured = room;
             int frames = _core.KeyFrameCount;
             bool swept = _core.Sweeping;
+            // BeginCapture empties the ring and its dropped count; the refusal counts survive it.
+            int evicted = _core.Ring.Evicted;
+            var refused = new int[KeyFrameRing.RefusalKinds];
+            for (int i = 0; i < refused.Length; i++) refused[i] = _core.Ring.Refused((KeyFrameRefusal)i);
             _core.BeginCapture(room, room.Anchor.Position, room.Anchor.Yaw);
             _wasBusy = _core.Busy;
             // A warning, not a log line: only warnings reach the Hub's phone.log, and these two lines are what
             // tells a scan that sent the Forge no photos apart (no key frames, or none that saw the furniture).
             if (swept)
-                Debug.LogWarning(LogPrefix + "object photos: choosing from " + frames + " key frames for " + room.MeshedObjectCount + " objects");
+                Debug.LogWarning(LogPrefix + PhotoDiagnostics.KeyFrameSummary(frames, room.MeshedObjectCount, refused, evicted));
         }
 
         /// <summary>Delivers finished crops, one object per frame.</summary>
@@ -107,9 +123,11 @@ namespace Atlas.Scan
             _core.Tick();
             if (_core.Busy) return;
             _wasBusy = false;
-            Debug.LogWarning(LogPrefix + "object photos: " + _core.Submitted + " objects sent, " + _core.NoPhoto +
-                             " take the built-in mesh; key frames released");
-            if (_core.Errors > 0)
+            var rejections = new int[PhotoScore.RejectionKinds];
+            for (int i = 0; i < rejections.Length; i++) rejections[i] = _core.RejectionCount((ViewRejection)i);
+            Debug.LogWarning(LogPrefix + PhotoDiagnostics.ResultSummary(_core.Submitted, _core.NoPhoto, _core.PartialViewObjects,
+                _core.DepthIgnoredObjects, _core.ViewsChecked, rejections, _core.EncodeFailures));
+            if (_core.Errors > 0 || _core.EncodeFailures > 0)
                 Debug.LogWarning(LogPrefix + "object photos: " + _core.Errors + " objects failed to crop (" + _core.FirstError + ")");
         }
 
@@ -137,23 +155,40 @@ namespace Atlas.Scan
                         _formatLogged = true;
                         Debug.LogWarning(LogPrefix + "object photos: camera image format " + image.format + " is not handled; furniture takes the built-in meshes");
                     }
+                    _core.Ring.NoteRefused(KeyFrameRefusal.Format);
                     return;
             }
             bool biplanar = format == KeyFrameFormat.YCbCr420;
-            if (image.planeCount < (biplanar ? 2 : 1)) return;
+            if (image.planeCount < (biplanar ? 2 : 1))
+            {
+                _core.Ring.NoteRefused(KeyFrameRefusal.ImageSize);
+                return;
+            }
 
             int step = KeyFrameRing.StepFor(image.width);
             int width = (image.width / step) & ~1, height = (image.height / step) & ~1;
-            if (width < 16 || height < 16) return;
+            if (width < 16 || height < 16)
+            {
+                _core.Ring.NoteRefused(KeyFrameRefusal.ImageSize);
+                return;
+            }
             int bytesPerPixel = KeyFrame.BytesPerPixelOf(format);
 
             XRCpuImage.Plane plane0 = image.GetPlane(0);
-            if (!Covers(in plane0, width, height, step, bytesPerPixel)) return;
+            if (!Covers(in plane0, width, height, step, bytesPerPixel))
+            {
+                _core.Ring.NoteRefused(KeyFrameRefusal.ImageSize);
+                return;
+            }
             XRCpuImage.Plane plane1 = default(XRCpuImage.Plane);
             if (biplanar)
             {
                 plane1 = image.GetPlane(1);
-                if (!Covers(in plane1, width / 2, height / 2, step, 2)) return;
+                if (!Covers(in plane1, width / 2, height / 2, step, 2))
+                {
+                    _core.Ring.NoteRefused(KeyFrameRefusal.ImageSize);
+                    return;
+                }
             }
 
             // Everything is known to fit: only now does the ring give up its oldest frame.

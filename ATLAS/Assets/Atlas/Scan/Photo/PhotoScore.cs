@@ -45,6 +45,19 @@ namespace Atlas.Scan
         public float FaceDepth;
     }
 
+    /// <summary>Why a view of a box is refused, in the order the tests are made (None: it is accepted).</summary>
+    public enum ViewRejection : byte
+    {
+        None = 0,
+        BehindCamera = 1,
+        OutsideImage = 2,
+        TooSmall = 3,
+        TooLarge = 4,
+        TooNear = 5,
+        TooFar = 6,
+        Occluded = 7
+    }
+
     /// <summary>A pixel rectangle inside an image; (X, Y) is its top-left corner.</summary>
     public struct CropRect
     {
@@ -55,7 +68,9 @@ namespace Atlas.Scan
     /// Which key frames show an object best (Master Plan sections 4.5 and 7.4, task P1-C08; contract lane C
     /// section 11.2 and 11.3; mesh design section 5.1). Engine-free: projection of an oriented box, the
     /// candidate test, the score, the preference for views from the front, the choice of one to three views
-    /// and the crop rectangle.
+    /// and the crop rectangle. There are two tiers of candidate: the strict one (the whole box inside the
+    /// image) and a relaxed one for a partial view, whose score is lower so a whole view always wins. The
+    /// relaxed tier exists because furniture seen from a phone held at head height rarely fits the image.
     /// </summary>
     public static class PhotoScore
     {
@@ -84,6 +99,16 @@ namespace Atlas.Scan
         public const float CropGrow = 0.12f;
         /// <summary>Largest side of a delivered crop, pixels.</summary>
         public const int MaxCropSide = 768;
+        /// <summary>The number of ViewRejection values, for tables of counts.</summary>
+        public const int RejectionKinds = 8;
+        /// <summary>What the score of a partial view is multiplied by, so that any whole view ranks above it.</summary>
+        public const float RelaxedFactor = 0.35f;
+        /// <summary>Share of the projected bounding box that must lie inside the image for a partial view.</summary>
+        public const float MinVisibleShare = 0.6f;
+        /// <summary>Smallest and largest share of the image the visible (clipped) box may cover in a partial view.</summary>
+        public const float RelaxedMinArea = 0.05f, RelaxedMaxArea = 0.90f;
+        /// <summary>Metres from the camera to the box centre in a partial view.</summary>
+        public const float RelaxedMinDistance = 0.4f, RelaxedMaxDistance = 4.0f;
 
         // A corner nearer than this to the camera plane has no usable projection.
         const float NearPlane = 0.05f;
@@ -172,11 +197,65 @@ namespace Atlas.Scan
         /// </summary>
         public static bool IsCandidate(in PhotoCamera camera, in BoxProjection projection)
         {
+            return CheckProjection(in camera, in projection) == ViewRejection.None;
+        }
+
+        /// <summary>
+        /// The strict geometric test with no depth, and the first reason it fails: the box is behind the
+        /// camera (or the camera is unusable), leaves the image, is too small, too large, too near or too far.
+        /// </summary>
+        public static ViewRejection Check(in PhotoCamera camera, in PhotoBox box, out BoxProjection projection)
+        {
+            if (!Project(in camera, in box, out projection)) return ViewRejection.BehindCamera;
+            return CheckProjection(in camera, in projection);
+        }
+
+        static ViewRejection CheckProjection(in PhotoCamera camera, in BoxProjection projection)
+        {
             float mx = EdgeMargin * camera.Width, my = EdgeMargin * camera.Height;
-            if (projection.Min.x < mx || projection.Max.x > camera.Width - mx) return false;
-            if (projection.Min.y < my || projection.Max.y > camera.Height - my) return false;
-            if (!(projection.Area >= MinArea) || projection.Area > MaxArea) return false;
-            return projection.Distance >= MinDistance && projection.Distance <= MaxDistance;
+            if (projection.Min.x < mx || projection.Max.x > camera.Width - mx) return ViewRejection.OutsideImage;
+            if (projection.Min.y < my || projection.Max.y > camera.Height - my) return ViewRejection.OutsideImage;
+            if (!(projection.Area >= MinArea)) return ViewRejection.TooSmall;
+            if (projection.Area > MaxArea) return ViewRejection.TooLarge;
+            if (projection.Distance < MinDistance) return ViewRejection.TooNear;
+            if (projection.Distance > MaxDistance) return ViewRejection.TooFar;
+            return ViewRejection.None;
+        }
+
+        /// <summary>The share of the projected bounding box that lies inside the image, 0 to 1; 0 for an empty box.</summary>
+        public static float VisibleShare(in PhotoCamera camera, in BoxProjection projection)
+        {
+            float2 size = projection.Max - projection.Min;
+            float whole = size.x * size.y;
+            if (!(whole > 0f)) return 0f;
+            float2 lo, hi;
+            Clip(in camera, in projection, out lo, out hi);
+            return math.saturate((hi.x - lo.x) * (hi.y - lo.y) / whole);
+        }
+
+        /// <summary>The projected bounding box clamped to the image, pixels.</summary>
+        public static void Clip(in PhotoCamera camera, in BoxProjection projection, out float2 min, out float2 max)
+        {
+            var image = new float2(camera.Width, camera.Height);
+            min = math.clamp(projection.Min, float2.zero, image);
+            max = math.clamp(projection.Max, float2.zero, image);
+        }
+
+        /// <summary>
+        /// The relaxed candidate test, for a box that does not fit the image: its projected centre is inside
+        /// the image, at least 60 % of its bounding box is, that visible part covers 5 % to 90 % of the image,
+        /// and the camera is 0.4 m to 4.0 m from the box centre.
+        /// </summary>
+        public static bool IsPartialCandidate(in PhotoCamera camera, in BoxProjection projection)
+        {
+            float2 c = projection.Centre;
+            if (!(c.x >= 0f && c.x <= camera.Width && c.y >= 0f && c.y <= camera.Height)) return false;
+            if (!(VisibleShare(in camera, in projection) >= MinVisibleShare)) return false;
+            float2 lo, hi;
+            Clip(in camera, in projection, out lo, out hi);
+            float area = (hi.x - lo.x) * (hi.y - lo.y) / ((float)camera.Width * camera.Height);
+            if (!(area >= RelaxedMinArea) || area > RelaxedMaxArea) return false;
+            return projection.Distance >= RelaxedMinDistance && projection.Distance <= RelaxedMaxDistance;
         }
 
         /// <summary>
@@ -205,10 +284,27 @@ namespace Atlas.Scan
         public static float Evaluate(in PhotoCamera camera, in PhotoBox box, float sharpness, float medianSharpness,
             out BoxProjection projection)
         {
-            if (!Project(in camera, in box, out projection)) return 0f;
-            if (!IsCandidate(in camera, in projection)) return 0f;
+            if (Check(in camera, in box, out projection) != ViewRejection.None) return 0f;
             return Score(in projection, sharpness, medianSharpness) *
                    ViewFactor(AzimuthDeg(camera.Position, in box), ElevationDeg(camera.Position, in box));
+        }
+
+        /// <summary>
+        /// The score of a partial view, with no depth test: 0 when any corner is behind the camera or the view
+        /// is not a partial candidate; otherwise Score with the area of the visible, clipped box, times
+        /// ViewFactor, times RelaxedFactor. The projection is the unclipped one.
+        /// </summary>
+        public static float EvaluatePartial(in PhotoCamera camera, in PhotoBox box, float sharpness, float medianSharpness,
+            out BoxProjection projection)
+        {
+            if (!Project(in camera, in box, out projection)) return 0f;
+            if (!IsPartialCandidate(in camera, in projection)) return 0f;
+            float2 lo, hi;
+            Clip(in camera, in projection, out lo, out hi);
+            BoxProjection clipped = projection;
+            clipped.Area = (hi.x - lo.x) * (hi.y - lo.y) / ((float)camera.Width * camera.Height);
+            return Score(in clipped, sharpness, medianSharpness) *
+                   ViewFactor(AzimuthDeg(camera.Position, in box), ElevationDeg(camera.Position, in box)) * RelaxedFactor;
         }
 
         /// <summary>Direction from the box centre to the camera in the box's local frame, atan2(x, z), degrees in (-180, 180].</summary>

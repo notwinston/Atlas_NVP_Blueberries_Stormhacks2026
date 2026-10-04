@@ -5,6 +5,11 @@
 #
 #   pip install -r requirements-gpu.txt
 #
+# On an 8 GB card (the RTX 4060 Laptop) run rembg on the processor (`rembg[cpu]`, or leave
+# onnxruntime without CUDA): TripoSG needs the card's memory, and a crop is cut in 0.2 s on the
+# processor. The cu128 pins of the other lists need any driver supporting CUDA 12.8; the RTX 4060
+# (sm_89) is covered.
+#
 # NEVER INSTALLED AS WRITTEN: the version is the one `uv pip compile` chose for Python 3.11 on
 # Windows on 4 October 2026, together with the other three lists. `rembg[cpu]` of the same
 # version was tried once on macOS, where it cut a picture in 0.2 s on the processor; the `gpu`
