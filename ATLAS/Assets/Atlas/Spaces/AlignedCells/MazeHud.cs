@@ -7,9 +7,9 @@ namespace Atlas.Spaces.AlignedCells
 {
     // S3 duck maze design (2026-10-04) §5: the head-locked read-out of the maze, one TextMeshPro object under the HUD root as
     // CurvedWalkHud's (same font, distance and tilt). While searching "Find the duck  m:ss  walls N"; once found "Found the duck!
-    // N steps, M walls, m:ss". The text is rebuilt into one cached builder only when the shown second, the walls, the steps of
-    // a find or the found state change, and handed over without a string. A build without TextMeshPro fonts shows nothing and
-    // runs on.
+    // N steps, M walls crossed, m:ss". The text is rebuilt into one cached builder only when the shown second, the walls, the
+    // steps of a find or the found state change, and handed over without a string. A build without TextMeshPro fonts shows
+    // nothing and runs on.
     public sealed class MazeHud : IDisposable
     {
         /// <summary>Distance of the read-out from the eyes, metres, how far above the view axis it sits, degrees, its line height.</summary>
@@ -23,7 +23,7 @@ namespace Atlas.Spaces.AlignedCells
         readonly GameObject readoutObject;
         readonly TextMeshPro readout;
         int shownSecond = -1, shownWalls = -1, shownSteps = -1;
-        bool shown, shownFound;
+        bool shown, shownFound, disposed;
 
         /// <summary>hud: the head-locked root (IStereoRig.Hud), or null (no read-out).</summary>
         public MazeHud(Transform hud)
@@ -65,6 +65,7 @@ namespace Atlas.Spaces.AlignedCells
         /// <summary>Per frame in maze mode: the run's time, steps and walls crossed, and whether the duck is found.</summary>
         public void Show(double elapsedSeconds, int steps, int walls, bool found)
         {
+            if (disposed) return;
             int second = WholeSeconds(elapsedSeconds);
             int foundSteps = found ? steps : -1;
             if (shown && second == shownSecond && walls == shownWalls && found == shownFound && foundSteps == shownSteps) return;
@@ -79,13 +80,17 @@ namespace Atlas.Spaces.AlignedCells
         /// <summary>Out of maze mode and on Exit.</summary>
         public void Hide()
         {
+            if (disposed) return;
             shown = false;
             if (readoutObject != null && readoutObject.activeSelf) readoutObject.SetActive(false);
         }
 
+        /// <summary>Destroys the read-out; Show and Hide do nothing afterwards.</summary>
         public void Dispose()
         {
+            if (disposed) return;
             Hide();
+            disposed = true;
             if (readoutObject != null) Kill(readoutObject);
         }
 
@@ -102,7 +107,7 @@ namespace Atlas.Spaces.AlignedCells
             {
                 sb.Append("Found the duck!  ");
                 AppendInt(sb, steps); sb.Append(" steps, ");
-                AppendInt(sb, walls); sb.Append(" walls, ");
+                AppendInt(sb, walls); sb.Append(" walls crossed, ");
                 AppendTime(sb, elapsedSeconds);
             }
             else

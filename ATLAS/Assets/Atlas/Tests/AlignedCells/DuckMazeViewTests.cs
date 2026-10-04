@@ -131,9 +131,9 @@ namespace Atlas.Spaces.AlignedCells.Tests
             MazeHud.Format(sb, 0, 0, 0, false);
             Assert.That(sb.ToString(), Is.EqualTo("Find the duck  0:00  walls 0"));
             MazeHud.Format(sb, 47.2, 12, 2, true);
-            Assert.That(sb.ToString(), Is.EqualTo("Found the duck!  12 steps, 2 walls, 0:47"));
+            Assert.That(sb.ToString(), Is.EqualTo("Found the duck!  12 steps, 2 walls crossed, 0:47"));
             MazeHud.Format(sb, 725, 105, 10, true);
-            Assert.That(sb.ToString(), Is.EqualTo("Found the duck!  105 steps, 10 walls, 12:05"));
+            Assert.That(sb.ToString(), Is.EqualTo("Found the duck!  105 steps, 10 walls crossed, 12:05"));
             MazeHud.Format(sb, -3, 0, 0, false);
             Assert.That(sb.ToString(), Is.EqualTo("Find the duck  0:00  walls 0"));
         }
@@ -144,9 +144,17 @@ namespace Atlas.Spaces.AlignedCells.Tests
             var hud = new MazeHud(null);
             hud.Show(12.5, 3, 1, false);
             hud.Show(13.5, 4, 1, true);
+            Assert.That(hud.Visible, Is.True);
+            Assert.That(hud.Text.ToString(), Is.EqualTo("Found the duck!  4 steps, 1 walls crossed, 0:13"));
             hud.Hide();
+            Assert.That(hud.Visible, Is.False);
             hud.Dispose();
             hud.Dispose();
+            // After Dispose, Show and Hide do nothing.
+            hud.Show(20, 9, 2, false);
+            Assert.That(hud.Visible, Is.False);
+            Assert.That(hud.Text.ToString(), Is.EqualTo("Found the duck!  4 steps, 1 walls crossed, 0:13"));
+            hud.Hide();
         }
 
 #if !ATLAS_HEADLESS
