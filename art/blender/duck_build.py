@@ -21,7 +21,6 @@ art/blender/hero_build.py.
 import os
 import sys
 
-import bmesh
 import bpy
 
 HERO = "ATLAS_Hero"
