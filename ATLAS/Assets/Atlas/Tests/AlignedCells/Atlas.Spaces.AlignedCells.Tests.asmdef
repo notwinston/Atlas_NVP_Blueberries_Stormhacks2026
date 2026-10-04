@@ -1,5 +1,5 @@
 { "name": "Atlas.Spaces.AlignedCells.Tests", "rootNamespace": "Atlas.Spaces.AlignedCells.Tests",
-  "references": ["Atlas.Spaces.AlignedCells","Atlas.Kernel","Atlas.Rendering","Unity.Mathematics",
+  "references": ["Atlas.Spaces.AlignedCells","Atlas.Kernel","Atlas.Rendering","Atlas.World","Atlas.Link","Unity.Mathematics",
                  "UnityEngine.TestRunner","UnityEditor.TestRunner"],
   "includePlatforms": ["Editor"], "overrideReferences": true, "precompiledReferences": ["nunit.framework.dll"],
   "autoReferenced": false, "defineConstraints": ["UNITY_INCLUDE_TESTS"] }
