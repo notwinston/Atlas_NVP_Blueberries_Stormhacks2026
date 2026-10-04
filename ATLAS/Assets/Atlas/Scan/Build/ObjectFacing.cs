@@ -25,11 +25,10 @@ namespace Atlas.Scan
         public const float TableReach = 1.0f;
         /// <summary>The distance field is read this far outside the middle of each side, metres.</summary>
         public const float ClearanceProbe = 0.30f;
-        /// <summary>The front's reading must exceed the opposite side's by this, metres.</summary>
+        /// <summary>The front's reading must exceed the opposite side's, which is blocked and counts as 0, by this, metres.</summary>
         public const float ClearanceMargin = 0.10f;
-        /// <summary>Readings within one cell of the best are equally free, metres: the object's own box caps
-        /// every open side at about the same value, so the side that beats its opposite by most is the front.</summary>
-        public const float ClearanceTie = RoomSdf.CellSize;
+        /// <summary>A reading within half a cell of zero is neither free floor nor blocked floor, metres.</summary>
+        public const float ClearanceSlack = 0.5f * RoomSdf.CellSize;
 
         /// <summary>
         /// The quarter turns that bring the front of an object onto local +Z, and the rule that answered.
@@ -210,10 +209,11 @@ namespace Atlas.Scan
         }
 
         /// <summary>
-        /// The clearance rule: the front is the side with the most free floor in front of it, by the room's
-        /// distance field read 0.30 m outside the middle of each side. Sides that read within one cell of the
-        /// best count as equally free, and of those the one that exceeds its opposite side by most is taken.
-        /// Answers when it exceeds its opposite side by 0.10 m.
+        /// The clearance rule. The room's distance field is read 0.30 m outside the middle of each side. A side
+        /// can be the front when the floor there is free and the floor outside the opposite side is blocked:
+        /// the object stands with its back against a wall or another object. Answers when exactly one side can
+        /// be the front and its reading is at least 0.10 m. In a room corner two sides can, the floor cannot
+        /// tell which, and the rule gives no answer: the box keeps its axis.
         /// </summary>
         public static bool TryClearance(float3 boxBase, float3 boxSize, float boxYaw, RoomSdf sdf, out int quarterTurns)
         {
@@ -226,24 +226,19 @@ namespace Atlas.Scan
             float2 centre = boxBase.xz;
             float alongZ = 0.5f * boxSize.z + ClearanceProbe, alongX = 0.5f * boxSize.x + ClearanceProbe;
             // The readings outside +Z, +X, -Z and -X, in the order of the quarter turns.
-            var free = new float4(sdf.Sample(centre + forward * alongZ), sdf.Sample(centre + right * alongX),
+            var floor = new float4(sdf.Sample(centre + forward * alongZ), sdf.Sample(centre + right * alongX),
                 sdf.Sample(centre - forward * alongZ), sdf.Sample(centre - right * alongX));
 
-            float most = math.cmax(free);
-            int best = -1;
-            float bestLead = float.MinValue;
+            int front = -1;
             for (int side = 0; side < 4; side++)
             {
-                if (free[side] < most - ClearanceTie) continue;
-                float lead = free[side] - free[(side + 2) & 3];
-                if (lead > bestLead)
-                {
-                    bestLead = lead;
-                    best = side;
-                }
+                bool free = floor[side] > ClearanceSlack, backed = floor[(side + 2) & 3] < -ClearanceSlack;
+                if (!free || !backed) continue;
+                if (front >= 0) return false;       // a second side with free floor in front and none behind: it cannot tell
+                front = side;
             }
-            if (best < 0 || bestLead < ClearanceMargin) return false;
-            quarterTurns = best;
+            if (front < 0 || floor[front] < ClearanceMargin) return false;
+            quarterTurns = front;
             return true;
         }
 
