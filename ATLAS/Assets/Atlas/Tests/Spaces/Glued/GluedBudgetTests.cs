@@ -13,10 +13,11 @@ namespace Atlas.Spaces.Tests
     {
         static readonly string[] SampleRooms = { RoomFixtures.Sample3x3, RoomFixtures.SampleL3x4, RoomFixtures.Sample4x5Table };
 
-        internal static void AssertFacesAgreeWithNormals(AtlasMeshBuilder mesh)
+        /// <summary>Every triangle from index firstIndex on is a real one and faces the way its vertex normals do.</summary>
+        internal static void AssertFacesAgreeWithNormals(AtlasMeshBuilder mesh, int firstIndex = 0)
         {
             Assert.That(mesh.IndexCount % 3, Is.EqualTo(0));
-            for (int t = 0; t < mesh.IndexCount; t += 3)
+            for (int t = firstIndex; t < mesh.IndexCount; t += 3)
             {
                 var a = mesh.Vertices[mesh.Indices[t]];
                 var b = mesh.Vertices[mesh.Indices[t + 1]];

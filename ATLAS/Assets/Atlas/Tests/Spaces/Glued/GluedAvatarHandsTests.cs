@@ -124,7 +124,7 @@ namespace Atlas.Spaces.Tests
         static quaternion HeadRotation(float heading) { return math.mul(quaternion.RotateY(heading), quaternion.RotateX(0.3f)); }
 
         /// <summary>A fake that tracks both hands at the given avatar-frame joints for this head and heading.</summary>
-        static GluedFakeHands BothHands(float3 head, float heading, float curl, out float3[] left, out float3[] right)
+        internal static GluedFakeHands BothHands(float3 head, float heading, float curl, out float3[] left, out float3[] right)
         {
             left = GluedHandPoses.InAvatarFrame(HandSide.Left, GluedHandPoses.Wrist(HandSide.Left), curl);
             right = GluedHandPoses.InAvatarFrame(HandSide.Right, GluedHandPoses.Wrist(HandSide.Right), curl);
@@ -134,13 +134,13 @@ namespace Atlas.Spaces.Tests
             return hands;
         }
 
-        static float3 Mean(AtlasMeshBuilder data, int first)
+        internal static float3 Mean(AtlasMeshBuilder data, int first)
         {
             return 0.25f * (data.Vertices[first].Position + data.Vertices[first + 1].Position
                             + data.Vertices[first + 2].Position + data.Vertices[first + 3].Position);
         }
 
-        static void AssertNear(float3 actual, float3 expected, string what, float tolerance = 1e-5f)
+        internal static void AssertNear(float3 actual, float3 expected, string what, float tolerance = 1e-5f)
         {
             Assert.That(math.length(actual - expected), Is.LessThan(tolerance), what + ": " + actual + " against " + expected);
         }
@@ -519,7 +519,7 @@ namespace Atlas.Spaces.Tests
         }
 
         // Where a point of the avatar's mesh is in the room for a copy: the transform GluedSpace gives the copy's object.
-        static float3 CopyPoint(float3 meshPoint, float3 position, float copyHeading, bool mirrored)
+        internal static float3 CopyPoint(float3 meshPoint, float3 position, float copyHeading, bool mirrored)
         {
             var flipped = new float3(mirrored ? -meshPoint.x : meshPoint.x, meshPoint.y, meshPoint.z);
             return position + math.mul(quaternion.RotateY(copyHeading), flipped);

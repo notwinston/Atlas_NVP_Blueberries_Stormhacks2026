@@ -24,7 +24,10 @@ namespace Atlas.Spaces.Glued
     /// The walker's copies carry the walker's hands (documents/ATLAS_Hands_Design.md section 5.6): while
     /// <see cref="IHands"/> reports a hand as tracked, the shared avatar mesh also holds it, rebuilt in the upload
     /// step from <see cref="GluedAvatarRig"/>. No copy gains a draw call, and with no service or no tracked hand
-    /// the mesh is the body alone, as it always was, and nothing is uploaded.
+    /// the mesh is the body alone, as it always was, and nothing is uploaded. The body is the kit avatar when the
+    /// build ships one and the built-in body when it does not, and the rig gives it the hands it leaves room for
+    /// inside <see cref="AtlasMeshBudget.SelfAvatar"/> (decision R15): the full hands on the built-in body, the
+    /// reduced ones on the kit avatar, so a copy shows the walker's hands whichever body the kit ships.
     /// </remarks>
     public sealed class GluedSpace : MonoBehaviour, ISpaceModule, ISpaceStateReader, IUploadStep
     {
@@ -173,9 +176,9 @@ namespace Atlas.Spaces.Glued
 
         /// <summary>
         /// Step 6: puts the walker's hands into the shared avatar mesh, in the avatar's own frame (relative to the
-        /// head and turned back by the heading <see cref="Tick"/> posed the copies with), so every copy shows them
-        /// through its own transform and a mirrored copy shows the other hand with no extra work. Nothing happens
-        /// while no hand is tracked or none has moved since the last frame.
+        /// head and turned back by the heading <see cref="Tick"/> posed the copies with), at the level the body leaves
+        /// room for, so every copy shows them through its own transform and a mirrored copy shows the other hand with
+        /// no extra work. Nothing happens while no hand is tracked or none has moved since the last frame.
         /// </summary>
         public void Upload(in FrameContext frame)
         {
@@ -294,7 +297,7 @@ namespace Atlas.Spaces.Glued
             GluedCellMesh.Build(sizeX, sizeZ, data, landmark);
             _cellMesh = AtlasMesh.Create(data, "Glued Cell");
             // The avatar is the body alone until a hand is tracked: the rig builds it with GluedAvatarMesh (the kit
-            // avatar when there is one) and keeps room for the hands.
+            // avatar when there is one), picks the level of hands the body leaves room for and keeps room for them.
             _avatarRig = new GluedAvatarRig(avatar);
             _avatarMesh = AtlasMesh.Create(_avatarRig.Data, "Glued Avatar");
             _avatarDynamic = false;

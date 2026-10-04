@@ -7,8 +7,22 @@ using Unity.Mathematics;
 namespace Atlas.Spaces.Glued
 {
     /// <summary>
+    /// How much of each hand a copy of the walker draws (decision R15). The rig picks it from the room the body leaves
+    /// inside <see cref="AtlasMeshBudget.SelfAvatar"/> (<see cref="GluedAvatarRig.LevelFor"/>).
+    /// </summary>
+    public enum GluedHandsLevel : byte
+    {
+        /// <summary>No hand: the body leaves no room even for the reduced ones.</summary>
+        None = 0,
+        /// <summary>The forearm, the palm and one box for each finger, from its knuckle to its tip: 7 boxes, 84 triangles a hand.</summary>
+        Reduced = 1,
+        /// <summary>The forearm, the palm and three boxes for each finger, one a bone: 17 boxes, 204 triangles a hand.</summary>
+        Full = 2,
+    }
+
+    /// <summary>
     /// The walker's hands on the walker's copies (documents/ATLAS_Hands_Design.md section 5.6): per hand a palm, five
-    /// fingers of three four-sided segments and a forearm from the avatar's elbow to the wrist. Engine-free.
+    /// fingers and a forearm from the avatar's elbow to the wrist, as four-sided boxes. Engine-free.
     /// </summary>
     /// <remarks>
     /// Everything is built in the avatar's own frame (<see cref="GluedAvatarMesh"/>: the origin is the tracked head, +Z
@@ -19,9 +33,12 @@ namespace Atlas.Spaces.Glued
     /// A piece is a closed box, tapered when its two ends differ: six faces of four vertices (the start cap, the end
     /// cap, then the four sides), 24 vertices and 12 triangles whatever the pose, so the figures below are exact and a
     /// hand never costs more than <see cref="TrianglesPerHand"/>. Boxes are appended in a fixed order: the palm, the
-    /// forearm, then each finger from the thumb to the little finger with its three segments from base to tip. A
-    /// piece with no length (a pose that has no shape yet) is left out. The left hand takes the palette cell
-    /// <see cref="AtlasPalette.AvatarLeft"/> and the right <see cref="AtlasPalette.AvatarRight"/>, like the avatar's arms.
+    /// forearm, then each finger from the thumb to the little finger. At the <see cref="GluedHandsLevel.Full"/> level a
+    /// finger is its three segments from base to tip; at the <see cref="GluedHandsLevel.Reduced"/> level it is one box
+    /// from its base joint, its knuckle, to its tip (for the thumb the base joint is the carpometacarpal one, so its
+    /// box is the whole thumb), as thick at each end as the full finger is there. A piece with no length (a pose that
+    /// has no shape yet) is left out. The left hand takes the palette cell <see cref="AtlasPalette.AvatarLeft"/> and
+    /// the right <see cref="AtlasPalette.AvatarRight"/>, like the avatar's arms.
     /// </remarks>
     public static class GluedAvatarHands
     {
@@ -29,22 +46,29 @@ namespace Atlas.Spaces.Glued
         internal const int MaxHands = 2;
         /// <summary>The segments of a finger: its three bones.</summary>
         internal const int SegmentsPerFinger = HandJoints.PerFinger - 1;
-        /// <summary>Boxes of one hand: the palm, the forearm and the fifteen finger segments.</summary>
+        /// <summary>Boxes of one full hand: the palm, the forearm and the fifteen finger segments.</summary>
         internal const int BoxesPerHand = 2 + HandJoints.FingerCount * SegmentsPerFinger;
         /// <summary>Vertices of a box: six faces of four, so that every face has its own normal.</summary>
         internal const int VerticesPerBox = 24;
         /// <summary>Triangles of a box: six faces of two.</summary>
         internal const int TrianglesPerBox = 12;
-        /// <summary>Vertices of one hand with its forearm, whatever the pose.</summary>
+        /// <summary>Vertices of one full hand with its forearm, whatever the pose.</summary>
         internal const int VerticesPerHand = BoxesPerHand * VerticesPerBox;
-        /// <summary>Triangles of one hand with its forearm, whatever the pose.</summary>
+        /// <summary>Triangles of one full hand with its forearm, whatever the pose.</summary>
         internal const int TrianglesPerHand = BoxesPerHand * TrianglesPerBox;
-        /// <summary>The most vertices a copy's mesh gains: both hands with their forearms.</summary>
+        /// <summary>The most vertices a copy's mesh gains: both hands with their forearms, at the full level.</summary>
         internal const int MaxVertices = MaxHands * VerticesPerHand;
-        /// <summary>The most triangles a copy's mesh gains: both hands with their forearms.</summary>
+        /// <summary>The most triangles a copy's mesh gains: both hands with their forearms, at the full level.</summary>
         internal const int MaxTriangles = MaxHands * TrianglesPerHand;
-        /// <summary>The most indices a copy's mesh gains.</summary>
+        /// <summary>The most indices a copy's mesh gains, at the full level.</summary>
         internal const int MaxIndices = 3 * MaxTriangles;
+
+        /// <summary>Boxes of one reduced hand: the palm, the forearm and one box for each finger.</summary>
+        internal const int ReducedBoxesPerHand = 2 + HandJoints.FingerCount;
+        /// <summary>Vertices of one reduced hand with its forearm, whatever the pose.</summary>
+        internal const int ReducedVerticesPerHand = ReducedBoxesPerHand * VerticesPerBox;
+        /// <summary>Triangles of one reduced hand with its forearm, whatever the pose.</summary>
+        internal const int ReducedTrianglesPerHand = ReducedBoxesPerHand * TrianglesPerBox;
 
         /// <summary>Half the palm's width at the wrist, metres at hand scale 1.</summary>
         internal const float PalmWristHalfWidth = 0.028f;
@@ -80,6 +104,18 @@ namespace Atlas.Spaces.Glued
             return s_fingerHalfWidth[math.clamp(finger, 0, HandJoints.FingerCount - 1)];
         }
 
+        /// <summary>Boxes of one hand at a level, whatever the pose: 17, 7 or none.</summary>
+        internal static int BoxesAt(GluedHandsLevel level)
+        {
+            return level == GluedHandsLevel.Full ? BoxesPerHand : level == GluedHandsLevel.Reduced ? ReducedBoxesPerHand : 0;
+        }
+
+        /// <summary>Triangles of both hands at a level, whatever the pose: 408, 168 or none. What a copy gains with both of them tracked.</summary>
+        public static int TrianglesAt(GluedHandsLevel level)
+        {
+            return MaxHands * BoxesAt(level) * TrianglesPerBox;
+        }
+
         /// <summary>
         /// A point of the room frame in the avatar's own frame: relative to the head and turned back by the walker's
         /// heading, which is how <see cref="GluedSpace"/> poses every copy (the copy's position is the head's image,
@@ -97,13 +133,16 @@ namespace Atlas.Spaces.Glued
         }
 
         /// <summary>
-        /// Appends one hand and its forearm. <paramref name="joints"/> holds the 21 joints in the avatar's frame, all
-        /// finite. Returns the boxes added: <see cref="BoxesPerHand"/>, or fewer when part of the pose has no length.
+        /// Appends one hand and its forearm at a level. <paramref name="joints"/> holds the 21 joints in the avatar's
+        /// frame, all finite. Returns the boxes added: <see cref="BoxesAt"/> of the level (17 for the full one, 7 for
+        /// the reduced one), or fewer when part of the pose has no length, and none for <see cref="GluedHandsLevel.None"/>.
         /// </summary>
-        public static int Append(AtlasMeshBuilder data, HandSide side, float3[] joints, float scale)
+        public static int Append(AtlasMeshBuilder data, HandSide side, float3[] joints, float scale,
+                                 GluedHandsLevel level = GluedHandsLevel.Full)
         {
             if (data == null) throw new ArgumentNullException(nameof(data));
             if (joints == null || joints.Length < HandJoints.Count) throw new ArgumentException("A hand has 21 joints.", nameof(joints));
+            if (level == GluedHandsLevel.None) return 0;
             scale = SaneScale(scale);
             float2 uv = AtlasPalette.Uv(side == HandSide.Left ? AtlasPalette.AvatarLeft : AtlasPalette.AvatarRight);
             int boxes = 0;
@@ -144,25 +183,37 @@ namespace Atlas.Spaces.Glued
                 boxes++;
             }
 
-            // The fingers: each segment runs from its joint to the next and is a little thinner than the one before.
+            // The fingers. Reduced: one box from the finger's base joint to its tip, as thick at each end as the full
+            // finger is there. Full: each segment runs from its joint to the next and is a little thinner than the one before.
             for (int finger = 0; finger < HandJoints.FingerCount; finger++)
             {
                 int joint = HandJoints.Base(finger);
                 float half = FingerHalfWidth(finger) * scale;
+                if (level == GluedHandsLevel.Reduced)
+                {
+                    if (AddFingerBox(data, joints[joint], joints[HandJoints.Tip(finger)], across, through, half, half * FingerTaper, uv)) boxes++;
+                    continue;
+                }
                 for (int segment = 0; segment < SegmentsPerFinger; segment++)
                 {
-                    float3 from = joints[joint + segment], to = joints[joint + segment + 1];
-                    float length = math.distance(from, to);
-                    if (!(length > MinLength)) continue;
-                    float3 axis = (to - from) / length;
-                    float3 segmentSide = Perpendicular(across, axis, through);
                     float start = half * math.lerp(1f, FingerTaper, (float)segment / SegmentsPerFinger);
                     float end = half * math.lerp(1f, FingerTaper, (float)(segment + 1) / SegmentsPerFinger);
-                    AddPrism(data, from, to, segmentSide, math.cross(axis, segmentSide), new float2(start), new float2(end), uv);
-                    boxes++;
+                    if (AddFingerBox(data, joints[joint + segment], joints[joint + segment + 1], across, through, start, end, uv)) boxes++;
                 }
             }
             return boxes;
+        }
+
+        // One piece of a finger from `from` to `to`, square, with these half widths at its two ends and its sides along
+        // the knuckle line. False, and nothing added, when it has no length.
+        static bool AddFingerBox(AtlasMeshBuilder data, float3 from, float3 to, float3 across, float3 through, float start, float end, float2 uv)
+        {
+            float length = math.distance(from, to);
+            if (!(length > MinLength)) return false;
+            float3 axis = (to - from) / length;
+            float3 side = Perpendicular(across, axis, through);
+            AddPrism(data, from, to, side, math.cross(axis, side), new float2(start), new float2(end), uv);
+            return true;
         }
 
         // The unit vector of `reference` made perpendicular to the unit vector `axis`. When it has no length, the
@@ -240,6 +291,11 @@ namespace Atlas.Spaces.Glued
     /// <see cref="Update"/> never reports a change. When a hand appears or disappears, or any joint, the head's
     /// turn or the hand's scale differs from the frame the data was built from, the hands are appended again after
     /// the body in one call; nothing is allocated, because the builder was given room for both hands at the start.
+    ///
+    /// The hands come at the level the body leaves room for (decision R15, <see cref="LevelFor"/>): the full hands
+    /// when body and both of them fit inside <see cref="AtlasMeshBudget.SelfAvatar"/>, as with the built-in body; the
+    /// reduced hands when only those fit, as with the kit avatar; none when not even those do. The level is fixed
+    /// by the body, so the avatar never draws more than the budget allows whatever the kit ships.
     /// </remarks>
     public sealed class GluedAvatarRig
     {
@@ -254,21 +310,26 @@ namespace Atlas.Spaces.Glued
         readonly float[] _builtScale = new float[GluedAvatarHands.MaxHands];
         // Bit 0: the left hand is in the data. Bit 1: the right hand is.
         int _shown;
-        // The body leaves room for both hands inside the avatar's triangle budget.
-        readonly bool _handsFit;
+        // How much of a hand the body leaves room for inside the avatar's triangle budget.
+        readonly GluedHandsLevel _level;
 
         /// <summary>
-        /// A body of this many triangles leaves room for both hands inside <see cref="AtlasMeshBudget.SelfAvatar"/>.
-        /// A body that does not is drawn without hands: the budget holds whatever the kit ships.
+        /// The level of hands a body of this many triangles leaves room for inside <see cref="AtlasMeshBudget.SelfAvatar"/>
+        /// (decision R15): <see cref="GluedHandsLevel.Full"/> when the body and both full hands fit (body + 408 is at
+        /// most 600), <see cref="GluedHandsLevel.Reduced"/> when only both reduced hands do (body + 168), and
+        /// <see cref="GluedHandsLevel.None"/> otherwise. The budget holds whatever the kit ships.
         /// </summary>
-        public static bool HandsFit(int bodyTriangles)
+        public static GluedHandsLevel LevelFor(int bodyTriangles)
         {
-            return bodyTriangles + GluedAvatarHands.MaxTriangles <= AtlasMeshBudget.SelfAvatar;
+            int room = AtlasMeshBudget.SelfAvatar - bodyTriangles;
+            if (room >= GluedAvatarHands.TrianglesAt(GluedHandsLevel.Full)) return GluedHandsLevel.Full;
+            if (room >= GluedAvatarHands.TrianglesAt(GluedHandsLevel.Reduced)) return GluedHandsLevel.Reduced;
+            return GluedHandsLevel.None;
         }
 
         /// <summary>
-        /// Builds the body (the kit avatar when one is given) and makes room for both hands after it. Holds the body
-        /// alone until <see cref="Update"/> brings a hand.
+        /// Builds the body (the kit avatar when one is given), picks the hands' level from the room it leaves and
+        /// makes room for both hands after it at that level. Holds the body alone until <see cref="Update"/> brings a hand.
         /// </summary>
         public GluedAvatarRig(MeshData kit = null)
         {
@@ -278,12 +339,16 @@ namespace Atlas.Spaces.Glued
             _bodyIndices = _data.IndexCount;
             _bodyMin = _data.BoundsMin;
             _bodyMax = _data.BoundsMax;
-            _handsFit = HandsFit(_data.TriangleCount);
-            if (_handsFit) _data.Reserve(GluedAvatarHands.MaxVertices, GluedAvatarHands.MaxIndices);
+            _level = LevelFor(_data.TriangleCount);
+            int boxes = GluedAvatarHands.MaxHands * GluedAvatarHands.BoxesAt(_level);
+            _data.Reserve(boxes * GluedAvatarHands.VerticesPerBox, 3 * boxes * GluedAvatarHands.TrianglesPerBox);
         }
 
-        /// <summary>The body leaves room for the hands; when false <see cref="Update"/> never brings one.</summary>
-        public bool CanShowHands { get { return _handsFit; } }
+        /// <summary>The level of hand this body carries: what <see cref="Update"/> brings when a hand is tracked.</summary>
+        public GluedHandsLevel Level { get { return _level; } }
+
+        /// <summary>The body leaves room for hands at some level; when false <see cref="Update"/> never brings one.</summary>
+        public bool CanShowHands { get { return _level != GluedHandsLevel.None; } }
 
         /// <summary>The vertices, indices and bounds to upload. The body first, then the hands. Do not change them.</summary>
         public AtlasMeshBuilder Data { get { return _data; } }
@@ -303,16 +368,16 @@ namespace Atlas.Spaces.Glued
         }
 
         /// <summary>
-        /// Brings the data up to this frame: each hand the service reports as tracked, from its joints in the avatar's
-        /// frame (relative to <paramref name="head"/> and turned back by <paramref name="heading"/>, the walker's
-        /// heading about +Y, as <see cref="GluedSpace"/> poses the copies). A hand with a joint that is not a number is
-        /// left out. Returns true when the data changed and must be uploaded: a hand came, went or moved. Null
-        /// <paramref name="hands"/> is no service. Allocates nothing.
+        /// Brings the data up to this frame: each hand the service reports as tracked, at the rig's
+        /// <see cref="Level"/>, from its joints in the avatar's frame (relative to <paramref name="head"/> and turned
+        /// back by <paramref name="heading"/>, the walker's heading about +Y, as <see cref="GluedSpace"/> poses the
+        /// copies). A hand with a joint that is not a number is left out. Returns true when the data changed and must
+        /// be uploaded: a hand came, went or moved. Null <paramref name="hands"/> is no service. Allocates nothing.
         /// </summary>
         public bool Update(IHands hands, float3 head, float heading)
         {
             int mask = 0;
-            if (hands != null && _handsFit)
+            if (hands != null && _level != GluedHandsLevel.None)
             {
                 quaternion turnBack = quaternion.RotateY(-heading);
                 for (int side = 0; side < GluedAvatarHands.MaxHands; side++)
@@ -375,7 +440,7 @@ namespace Atlas.Spaces.Glued
             for (int side = 0; side < GluedAvatarHands.MaxHands; side++)
             {
                 if ((mask & (1 << side)) == 0) continue;
-                GluedAvatarHands.Append(_data, (HandSide)side, _joints[side], _scale[side]);
+                GluedAvatarHands.Append(_data, (HandSide)side, _joints[side], _scale[side], _level);
                 Array.Copy(_joints[side], _built[side], HandJoints.Count);
                 _builtScale[side] = _scale[side];
             }
