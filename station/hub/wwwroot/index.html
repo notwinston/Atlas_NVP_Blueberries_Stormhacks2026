@@ -151,6 +151,14 @@
             <button type="submit">Log score</button>
             <span class="status" id="fms-status" role="status"></span>
           </form>
+          <div class="banner danger" id="fms-alert" role="alert" hidden></div>
+          <h2>Ease score (SEQ)</h2>
+          <p class="hint">At the end of each use case: how easy was that, 1 (very difficult) to 7 (very easy). Logged as a <code>seq</code> event with the Hub's clock.</p>
+          <form class="row" id="seq-form">
+            <input type="number" id="seq-score" min="1" max="7" step="1" inputmode="numeric" placeholder="1–7" aria-label="Ease score, 1 to 7">
+            <button type="submit">Log SEQ</button>
+            <span class="status" id="seq-status" role="status"></span>
+          </form>
           <form class="row" id="note-form">
             <input type="text" id="note-text" maxlength="400" placeholder="Note for the session log" aria-label="Note for the session log">
             <button type="submit">Log note</button>

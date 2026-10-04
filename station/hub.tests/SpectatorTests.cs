@@ -65,7 +65,7 @@ namespace Atlas.Station.Tests
                     Wait.Until(() => spectator.Manifests.Count == 1, "the phone's manifest at the Spectator");
                     ParamManifestMessage manifest;
                     Assert.That(spectator.Manifests.TryPeek(out manifest), Is.True);
-                    Assert.That(manifest.Params.Count, Is.EqualTo(3));
+                    Assert.That(manifest.Params.Count, Is.EqualTo(4));
                     Assert.That(manifest.Params[0].Name, Is.EqualTo("curved.cullRho"));
                     Assert.That(manifest.Params[0].Val, Is.EqualTo(3f));
 

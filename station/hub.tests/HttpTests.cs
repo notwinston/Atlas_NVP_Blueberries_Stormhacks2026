@@ -91,9 +91,9 @@ namespace Atlas.Station.Tests
         [Test]
         public async Task Params_ListAndGet_ComeFromThePhonesManifest()
         {
-            Wait.Until(() => _t.Hub.GetParams()["params"].Count == 3, "the manifest");
+            Wait.Until(() => _t.Hub.GetParams()["params"].Count == 4, "the manifest");
             JsonValue list = await _t.GetJson("/api/params");
-            Assert.That(list["params"].Count, Is.EqualTo(3));
+            Assert.That(list["params"].Count, Is.EqualTo(4));
             JsonValue rho = list["params"][0];
             foreach (string key in new[] { "id", "name", "group", "min", "max", "def", "val", "onRelease", "kind", "active" })
                 Assert.That(rho.Has(key), Is.True, key);
@@ -114,7 +114,7 @@ namespace Atlas.Station.Tests
         [Test]
         public async Task ParamSet_FromHttp_ReachesThePhone_IsClamped_AndIsEchoed()
         {
-            Wait.Until(() => _t.Hub.GetParams()["params"].Count == 3, "the manifest");
+            Wait.Until(() => _t.Hub.GetParams()["params"].Count == 4, "the manifest");
 
             JsonValue applied = await _t.PostJson("/api/params/curved.cullRho", "{\"value\": 2.5}");
             Assert.That(applied.GetString("name"), Is.EqualTo("curved.cullRho"));
@@ -159,9 +159,55 @@ namespace Atlas.Station.Tests
         }
 
         [Test]
+        public async Task Seq_IsValidatedAndLoggedByTheHub()
+        {
+            foreach (string bad in new[] { "0", "8", "3.5", "-1", "\"4\"", "null" })
+                Assert.That(_t.Hub.HandleConsoleMessage(AtlasJson.Parse("{\"t\":\"seq\",\"score\":" + bad + "}")).GetString("t"), Is.EqualTo("error"), bad);
+            Assert.That(_t.Hub.HandleConsoleMessage(AtlasJson.Parse("{\"t\":\"seq\"}")).GetString("t"), Is.EqualTo("error"));
+            Assert.That(_t.Hub.HandleConsoleMessage(AtlasJson.Parse("{\"t\":\"seq\",\"score\":1}")), Is.Null);
+            Assert.That(_t.Hub.HandleConsoleMessage(AtlasJson.Parse("{\"t\":\"seq\",\"score\":7}")), Is.Null);
+            string events = await _t.Http.GetStringAsync("/logs/" + _t.Hub.SessionId + "/events.jsonl");
+            string[] seq = Array.FindAll(events.Split('\n', StringSplitOptions.RemoveEmptyEntries), l => l.Contains("\"ev\":\"seq\""));
+            Assert.That(seq.Length, Is.EqualTo(2), "only the two valid entries");
+            foreach (string line in seq)
+            {
+                EventMessage e;
+                Assert.That(EventMessage.TryParseLine(line, out e), Is.True, line);
+                Assert.That(e.Scene, Is.EqualTo("hub"));
+            }
+            Assert.That(seq[0], Does.Contain("\"score\":1"));
+            Assert.That(seq[1], Does.Contain("\"score\":7"));
+        }
+
+        [Test]
+        public async Task Fms_AtOrAboveFmsStop_LogsAnAlert_UsingThePhonesValue()
+        {
+            Wait.Until(() => _t.Hub.GetParams()["params"].Count == 4, "the manifest");
+            // The phone declares pg.fmsStop = 4: 3 is quiet, 4 and 9 alert.
+            _t.Hub.HandleConsoleMessage(AtlasJson.Parse("{\"t\":\"fms\",\"score\":3}"));
+            _t.Hub.HandleConsoleMessage(AtlasJson.Parse("{\"t\":\"fms\",\"score\":4}"));
+            // The operator moves the threshold from the Console; the next entry is judged against the new value.
+            JsonValue applied = await _t.PostJson("/api/params/pg.fmsStop", "{\"value\": 10}");
+            Assert.That(applied.GetFloat("value"), Is.EqualTo(10f));
+            Wait.Until(() => _phone.FmsStop.Int == 10, "the phone to apply 10");
+            Wait.Until(() => _t.Hub.GetParams()["params"][3].GetFloat("val") == 10f, "the Hub to know 10");
+            _t.Hub.HandleConsoleMessage(AtlasJson.Parse("{\"t\":\"fms\",\"score\":9}"));
+            _t.Hub.HandleConsoleMessage(AtlasJson.Parse("{\"t\":\"fms\",\"score\":10}"));
+
+            string events = await _t.Http.GetStringAsync("/logs/" + _t.Hub.SessionId + "/events.jsonl");
+            string[] lines = events.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            string[] fms = Array.FindAll(lines, l => l.Contains("\"ev\":\"fms\""));
+            string[] alerts = Array.FindAll(lines, l => l.Contains("\"ev\":\"pg.fmsAlert\""));
+            Assert.That(fms.Length, Is.EqualTo(4), "one fms line per entry, all written by the Hub");
+            Assert.That(alerts.Length, Is.EqualTo(2));
+            Assert.That(alerts[0], Does.Contain("\"score\":4").And.Contain("\"stop\":4").And.Contain("\"scene\":\"hub\""));
+            Assert.That(alerts[1], Does.Contain("\"score\":10").And.Contain("\"stop\":10"));
+        }
+
+        [Test]
         public async Task ParamSet_UnderDemoLock_IsRefused_AndThePhoneKeepsItsValue()
         {
-            Wait.Until(() => _t.Hub.GetParams()["params"].Count == 3, "the manifest");
+            Wait.Until(() => _t.Hub.GetParams()["params"].Count == 4, "the manifest");
             await _t.PostJson("/api/op", "{\"cmd\": \"lock\", \"args\": {\"on\": true}}");
             Wait.Until(() => _phone.Commands.Count == 1, "the lock to reach the phone");
             Assert.That((await _t.GetJson("/api/session")).GetBool("demoLock"), Is.True);
@@ -269,7 +315,7 @@ namespace Atlas.Station.Tests
             Assert.That(hubLog, Does.Contain(" start {"));
             Assert.That(hubLog, Does.Contain(" join {"));
             JsonValue manifest = AtlasJson.Parse(await _t.Http.GetStringAsync("/logs/" + _t.Hub.SessionId + "/manifest.json"));
-            Assert.That(manifest["params"].Count, Is.EqualTo(3));
+            Assert.That(manifest["params"].Count, Is.EqualTo(4));
 
             // A comfort score and a note from the Console land in events.jsonl as Hub events.
             Assert.That(_t.Hub.HandleConsoleMessage(AtlasJson.Parse("{\"t\":\"fms\",\"score\":3}")), Is.Null);
@@ -300,7 +346,7 @@ namespace Atlas.Station.Tests
         [Test]
         public async Task Presets_SaveListLoad()
         {
-            Wait.Until(() => _t.Hub.GetParams()["params"].Count == 3, "the manifest");
+            Wait.Until(() => _t.Hub.GetParams()["params"].Count == 4, "the manifest");
             Assert.That((await _t.GetJson("/api/presets"))["presets"].Count, Is.EqualTo(0));
 
             await _t.PostJson("/api/presets/demo", "{\"values\": {\"curved.cullRho\": 2.75, \"glued.copies\": 3}}", 204);
@@ -313,7 +359,7 @@ namespace Atlas.Station.Tests
             JsonValue list = await _t.GetJson("/api/presets");
             Assert.That(list["presets"].Count, Is.EqualTo(2));
             Assert.That(list["presets"][0].GetString("name"), Is.EqualTo("current"));
-            Assert.That(list["presets"][0].GetInt("count"), Is.EqualTo(3));
+            Assert.That(list["presets"][0].GetInt("count"), Is.EqualTo(4));
             Assert.That(list["presets"][1].GetString("name"), Is.EqualTo("demo"));
             Assert.That(list["presets"][1].GetInt("count"), Is.EqualTo(2));
             Assert.That(list["presets"][1].GetString("modified"), Does.Match("^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\dZ$"));
@@ -342,7 +388,7 @@ namespace Atlas.Station.Tests
         [Test]
         public async Task WebSocket_FeedsTheConsole_AndCarriesItsCommands()
         {
-            Wait.Until(() => _t.Hub.GetParams()["params"].Count == 3, "the manifest");
+            Wait.Until(() => _t.Hub.GetParams()["params"].Count == 4, "the manifest");
             using (var socket = new ClientWebSocket())
             using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15)))
             {
@@ -381,7 +427,7 @@ namespace Atlas.Station.Tests
                 await ReadUntil(() => seen.ContainsKey("link") && seen.ContainsKey("manifest"));
                 Assert.That(seen["link"]["phone"].GetString("state"), Is.EqualTo("connected"));
                 Assert.That(seen["link"].GetInt("consoles"), Is.EqualTo(1));
-                Assert.That(seen["manifest"]["params"].Count, Is.EqualTo(3));
+                Assert.That(seen["manifest"]["params"].Count, Is.EqualTo(4));
                 Assert.That(seen["manifest"].GetInt("ver"), Is.GreaterThanOrEqualTo(1));
 
                 // State as a digest at about 10 Hz, not at 60, and Telemetry as it arrives.

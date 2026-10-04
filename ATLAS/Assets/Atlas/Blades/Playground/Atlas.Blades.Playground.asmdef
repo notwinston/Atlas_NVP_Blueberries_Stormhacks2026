@@ -9,6 +9,10 @@
         "Atlas.Telemetry",
         "Atlas.Scan",
         "Atlas.Safety",
-        "Atlas.Link"
+        "Atlas.Link",
+        "Unity.InputSystem",
+        "Atlas.Spaces.Glued",
+        "Atlas.Spaces.Portal",
+        "Unity.Mathematics"
     ]
 }

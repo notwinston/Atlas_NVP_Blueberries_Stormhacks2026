@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CommandTracker, comfortScore, describe, requestFor, statusText } from '../hub/wwwroot/js/commands.js';
+import { CommandTracker, comfortScore, describe, fmsAlertText, seqScore, requestFor, statusText } from '../hub/wwwroot/js/commands.js';
 
 test('the six commands map to the Hub\'s two routes', () => {
   assert.deepEqual(requestFor('space', { space: 1 }), { path: '/api/scene', body: { space: 'S1', variant: '', args: {} } });
@@ -85,4 +85,20 @@ test('the tracker keeps a bounded history, newest first', () => {
   for (let i = 0; i < 5; i++) tracker.sent('home', {}, i);
   assert.equal(tracker.entries.length, 3);
   assert.equal(tracker.entries[0].sentMs, 4);
+});
+
+test('the SEQ field takes a whole number from 1 to 7 and nothing else', () => {
+  for (let n = 1; n <= 7; n++) assert.equal(seqScore(String(n)), n);
+  assert.equal(seqScore(' 4 '), 4);
+  assert.equal(seqScore(7), 7);
+  for (const bad of ['0', '8', '10', '-1', '3.5', '', 'x']) assert.equal(seqScore(bad), null, bad);
+});
+
+test('the FMS alert text names the score and the stop value the Hub judged it against', () => {
+  const text = fmsAlertText({ score: 6, stop: 4 });
+  assert.match(text, /score 6/);
+  assert.match(text, /stop value 4/);
+  assert.match(text, /pg\.fmsStop/);
+  assert.equal(fmsAlertText(null), '');
+  assert.equal(fmsAlertText({}), '');
 });

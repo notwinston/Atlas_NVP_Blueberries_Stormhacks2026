@@ -1398,7 +1398,7 @@ Events in this build. A lane adds a name by adding a row.
 | `asset` | `{step, boxId, …}`; `step`: `room`, `upload`, `requested`, `cached`, `ready`, `placed`, `builtin`, `failed`, `rejected`, `unreachable`, `reachable`; with `jobId`, `sha256`, `reason`, `attempt`, `tris`, `loadMs` as the step has them | D (`AssetClientCore`) | Asset client (§4.3; §11.4.7 reads these) |
 | `menu` | `{state: "open" \| "close"}` | D (`MenuModel`) | On-device menu opened or closed |
 | `perf.runBegin`, `perf.runEnd`, `perf.summary`, `perf.note` | the perf tour's | A (`App/PerfTour`) | The scripted performance tour |
-| `fms`, `note`, `asset_ack` | `{score}`, `{text}`, the `AssetAck` body | Hub | Console entries (§3.5) and acknowledgements; written by the Hub with the Hub clock and `"scene": "hub"`, never sent to the phone |
+| `fms`, `seq`, `pg.fmsAlert`, `note`, `asset_ack` | `{score}` (0 to 20), `{score}` (1 to 7), `{score, stop}`, `{text}`, the `AssetAck` body | Hub | Console entries (§3.5) and acknowledgements; written by the Hub with the Hub clock and `"scene": "hub"`, never sent to the phone. `pg.fmsAlert` is written right after an `fms` whose score is at or above `pg.fmsStop` (the phone's value from the manifest and snapshot; 4 until the phone declares it); the phone never writes `fms`, `seq` or `pg.fmsAlert` (P2-C09, P2-C17) |
 
 Lane B's spaces log `walk.corner`, `walk.lap` and `walk.closed` (S2 and S4: `{q, corner or laps or corners, flag_m or closure_m, turn_deg}`), `cells.enter` (S3) and `curved.objectScale` (S2); the Lung and FieldFit blades log their own (`fork`, `compass_choice`, `blindspot_*`, `ff.*` and others) under their own scene through `EventLog.LogJson(scene, …)`.
 
@@ -2146,6 +2146,7 @@ WebSocket frames are JSON objects with a member `t`. A frame the Hub cannot serv
 | Console → Hub | `{"t": "scene", "space": "S1", "variant": "klein", "args": {}}` | `SceneCmd` |
 | Console → Hub | `{"t": "op", "cmd": "cue", "args": {}}` | `OperatorCmd` |
 | Console → Hub ✚ | `{"t": "fms", "score": 3}` · `{"t": "note", "text": "…"}` | Comfort score (0–20) and operator note; written to `events.jsonl` |
+| Console → Hub ✚ | `{"t": "seq", "score": 5}` | Single Ease Question (whole number 1–7); written to `events.jsonl` as `seq {score}`. Anything else gets `{"t":"error"}` ✚ (P2-C17) |
 | Console → Hub ✚ | `{"t": "ping"}` | Answered with `{"t": "pong"}` |
 | Hub → Console | `{"t": "manifest", "ver": 3, "params": […], "locked": false}` | The manifest rows of §2.5 with the values the Hub knows; on connect and on change. `ver` counts manifests received |
 | Hub → Console | `{"t": "telemetry", "t_us": …, "seq": …, …}` | One per row; the members are the CSV column names of §5.3 |
@@ -2182,7 +2183,7 @@ takes over.
 |---|---|
 | `perf.csv` | The header of §5.3, then one line per `Telemetry` row, in `seq` order, `\n` line ends, no byte-order mark. Byte for byte the phone's file when no row was lost (test L11) |
 | `state.bin` | §2.12: every `State` received, with the Hub's receive time |
-| `events.jsonl` | One event per line: the phone's object with a member `hub_us` (Hub clock at receipt) added. Hub-made events (`fms`, `note`, `asset_ack`) carry `"scene": "hub"` and the Hub clock in `t_us` |
+| `events.jsonl` | One event per line: the phone's object with a member `hub_us` (Hub clock at receipt) added. Hub-made events (`fms`, `seq`, `pg.fmsAlert`, `note`, `asset_ack`) carry `"scene": "hub"` and the Hub clock in `t_us` |
 | `phone.log` | `<t_us> <level> <msg>` per `Log` |
 | `hub.log` ✚ | `<hub_us> <kind> <JSON>` per line. Kinds: `start`, `stop`, `session`, `join`, `leave`, `bye`, `link`, `cmd`, `param`, `param.ignored`, `preset`, `lock`, `job`, `forge`, `perf` |
 | `manifest.json` ✚ | The last `ParamManifest` body, indented |
