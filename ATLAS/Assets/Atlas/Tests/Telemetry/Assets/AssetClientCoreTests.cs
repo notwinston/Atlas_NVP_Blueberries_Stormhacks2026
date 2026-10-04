@@ -195,7 +195,10 @@ namespace Atlas.Telemetry.Tests
             Assert.That(meta["dims"][1].AsFloat(), Is.EqualTo(0.85f));
             Assert.That(meta["dims"][2].AsFloat(), Is.EqualTo(0.9f));
             Assert.That(meta.GetFloat("yaw"), Is.EqualTo(-0.6f));
-            Assert.That(meta.GetInt("triTarget"), Is.EqualTo(5000));
+            // The three boxes are so large that each takes the ceiling of 15,000 (120000 * area / total area is
+            // 37,485, 17,523 and 64,990 before the clamp); the light target is 60000 / 3 = 20000, held to 5,000.
+            Assert.That(meta.GetInt("triTarget"), Is.EqualTo(15000));
+            Assert.That(meta.GetInt("triTargetLight"), Is.EqualTo(5000), "the room's light target, as the photo set carried none");
             Assert.That(meta.GetString("backend"), Is.EqualTo("local"));
             Assert.That(meta["views"].Count, Is.EqualTo(3));
             JsonValue view = meta["views"][0];
@@ -230,17 +233,17 @@ namespace Atlas.Telemetry.Tests
         // ---- The budget: twenty objects, largest first, triangle targets ---------------------------------------
 
         [Test]
-        public void Asset_Budget_AtMostTwentyObjectsLargestFirst()
+        public void Asset_Budget_AtMostThirtyTwoObjectsLargestFirst()
         {
-            var objects = new RoomObject[25];
+            var objects = new RoomObject[40];
             // Volumes in a scrambled order, so that the order sent is the client's and not the array's.
-            for (int i = 0; i < 25; i++)
+            for (int i = 0; i < 40; i++)
             {
-                float side = 0.3f + 0.02f * ((i * 7) % 25);
+                float side = 0.3f + 0.02f * ((i * 7) % 40);
                 objects[i] = Box(i + 1, ObjectCategory.Storage, side, side, side);
             }
             RoomModel room = RoomOf("room_big", objects);
-            // Lane C picks twenty; a RoomModel that names more is still held to twenty.
+            // The room names 40 targets by hand; a RoomModel that names more than 32 is still held to 32.
             foreach (RoomObject o in room.Objects) o.TriTarget = 3000;
 
             var rig = new Rig();
@@ -249,42 +252,77 @@ namespace Atlas.Telemetry.Tests
             // Photos arrive in the array's order; the client still serves the largest box first.
             foreach (RoomObject o in room.Objects) rig.Core.Submit(Photos(o));
             rig.Core.EndRoom();
-            Assert.That(rig.Core.ObjectCount, Is.EqualTo(20));
-            rig.Run(8.0);
+            Assert.That(rig.Core.ObjectCount, Is.EqualTo(32));
+            rig.Run(20.0);
 
             List<RoomObject> order = LargestFirst(room);
-            Assert.That(rig.Forge.Jobs.Count, Is.EqualTo(20));
-            for (int k = 0; k < 20; k++)
+            Assert.That(rig.Forge.Jobs.Count, Is.EqualTo(32));
+            for (int k = 0; k < 32; k++)
             {
                 Assert.That(rig.Forge.Jobs[k].BoxId, Is.EqualTo(order[k].Id), "upload " + k);
                 Assert.That(rig.Core.ObjectIdAt(k), Is.EqualTo(order[k].Id));
                 Assert.That(rig.Forge.Jobs[k].TriTarget, Is.EqualTo(3000));
                 Assert.That(rig.Core.TriTarget(order[k].Id), Is.EqualTo(3000));
             }
-            for (int k = 20; k < 25; k++)
+            for (int k = 32; k < 40; k++)
             {
-                // Beyond the twenty: no Forge job, but the first shape like every other object.
+                // Beyond the 32: no Forge job, but the first shape like every other object.
                 Assert.That(rig.Core.GetState(order[k].Id), Is.EqualTo(ObjectAssetState.BuiltIn));
                 Assert.That(rig.Core.TriTarget(order[k].Id), Is.EqualTo(0));
                 Assert.That(rig.Room.ShownFor(order[k].Id), Is.EqualTo("builtin"));
             }
         }
 
-        [TestCase(1, 5000)]
-        [TestCase(12, 5000)]
-        [TestCase(13, 4615)]
-        [TestCase(15, 4000)]
-        [TestCase(20, 3000)]
-        public void Asset_Budget_TriangleTargetIsSixtyThousandOverN(int n, int target)
+        // Expected numbers are the test vectors of the brief (S5), worked by hand. Five 1 m cubes: 120000 / 5 is
+        // 24,000, held to 15,000; light 60000 / 5 = 12,000, held to 5,000. Twelve boxes of 1.8 x 0.8 x 0.9 are equal,
+        // so 120000 / 12 = 10,000 each; light 60000 / 12 = 5,000. Eight 1.5 x 1 x 1 boxes (area 8,000,000 mm2 each) and
+        // twenty-four 0.2 m cubes (240,000 mm2 each): the total is 69,760,000, so the big ones get 13,761 and the small
+        // 412, held to 3,000; the sum 182,088 is over 120,000, so the part above 3,000 is scaled by
+        // (120000 - 32 * 3000) / (8 * 10,761) = 24,000 / 86,088, which gives 6,000 and 3,000. Light: 60000 / 32 = 1,875.
+        [Test]
+        public void Asset_Budget_EqualBoxesShareTheTriangles()
         {
-            var objects = new RoomObject[n];
-            for (int i = 0; i < n; i++) objects[i] = Box(i + 1, ObjectCategory.Chair, 0.5f, 0.9f, 0.5f);
+            AssertTargets(Cubes(5, 1f, 1f, 1f), 15000, 5000);
+            AssertTargets(Cubes(12, 1.8f, 0.8f, 0.9f), 10000, 5000);
+        }
+
+        [Test]
+        public void Asset_Budget_UnequalBoxesGetTheirOwnTargets()
+        {
+            var objects = new RoomObject[32];
+            for (int i = 0; i < 8; i++) objects[i] = Box(i + 1, ObjectCategory.Storage, 1.5f, 1.0f, 1.0f);
+            for (int i = 8; i < 32; i++) objects[i] = Box(i + 1, ObjectCategory.Storage, 0.2f, 0.2f, 0.2f);
             var rig = new Rig();
             rig.Scan(RoomOf("room_n", objects));
-            rig.Run(0.5 * n + 2.0);
+            rig.Run(0.5 * 32 + 4.0);
+            Assert.That(rig.Forge.Jobs.Count, Is.EqualTo(32));
+            foreach (FakeForge.Job job in rig.Forge.Jobs)
+            {
+                Assert.That(job.TriTarget, Is.EqualTo(job.BoxId <= 8 ? 6000 : 3000), "box " + job.BoxId);
+                Assert.That(job.Meta.GetInt("triTargetLight"), Is.EqualTo(1875), "the room's light target");
+                Assert.That(rig.Core.TriTarget(job.BoxId), Is.EqualTo(job.TriTarget));
+            }
+        }
+
+        static RoomObject[] Cubes(int n, float w, float h, float d)
+        {
+            var objects = new RoomObject[n];
+            for (int i = 0; i < n; i++) objects[i] = Box(i + 1, ObjectCategory.Storage, w, h, d);
+            return objects;
+        }
+
+        static void AssertTargets(RoomObject[] objects, int full, int light)
+        {
+            int n = objects.Length;
+            var rig = new Rig();
+            rig.Scan(RoomOf("room_n", objects));
+            rig.Run(0.5 * n + 4.0);
             Assert.That(rig.Forge.Jobs.Count, Is.EqualTo(n));
-            foreach (FakeForge.Job job in rig.Forge.Jobs) Assert.That(job.TriTarget, Is.EqualTo(target));
-            Assert.That(n * target, Is.LessThanOrEqualTo(60000));
+            foreach (FakeForge.Job job in rig.Forge.Jobs)
+            {
+                Assert.That(job.TriTarget, Is.EqualTo(full), n + " boxes");
+                Assert.That(job.Meta.GetInt("triTargetLight"), Is.EqualTo(light), n + " boxes");
+            }
         }
 
         [Test]
@@ -863,6 +901,162 @@ namespace Atlas.Telemetry.Tests
             Assert.That(rig.Forge.JobOf(Chair).TriTarget, Is.EqualTo(4000));
             Assert.That(rig.Forge.JobOf(Couch).TriTarget, Is.EqualTo(15000));
             Assert.That(rig.Core.TriTarget(Chair), Is.EqualTo(4000));
+        }
+
+        // ---- The light copy -------------------------------------------------------------------------------------
+
+        // One box the size of TestGlb's files: the full target is 15,000 and the room's light target 5,000.
+        static RoomModel LightRoom() { return RoomOf("room_l", Box(1, ObjectCategory.Storage, 1.0f, 0.5f, 1.0f)); }
+
+        static Rig LightRig(byte[] full, byte[] light, string claimedLightSha = null, bool run = true)
+        {
+            var rig = new Rig();
+            rig.Scan(LightRoom());
+            rig.Run(2.0);
+            rig.Forge.FinishWithLight(1, full, light, claimedLightSha);
+            if (run) rig.Run(6.0);
+            return rig;
+        }
+
+        static void AssertFullStillShown(Rig rig)
+        {
+            Assert.That(rig.Core.GetState(1), Is.EqualTo(ObjectAssetState.Ready));
+            Assert.That(rig.Room.ShownFor(1), Is.EqualTo("generated"));
+            Assert.That(rig.Room.GeneratedLight, Is.Empty, "no light mesh was handed over");
+            Assert.That(rig.Core.PlacedCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Asset_LightCopy_IsFetchedAfterTheFullOneAndHandedOverOnce()
+        {
+            byte[] full = TestGlb.Make(6000), light = TestGlb.Make(2000);
+            Rig rig = LightRig(full, light);
+            string fullSha = rig.Forge.JobOf(1).Sha, lightSha = rig.Forge.JobOf(1).LightSha;
+
+            Assert.That(rig.Core.GetState(1), Is.EqualTo(ObjectAssetState.Ready));
+            Assert.That(rig.Room.ShownFor(1), Is.EqualTo("generated"));
+            Assert.That(rig.Room.Generated[1], Is.EqualTo(fullSha));
+            Assert.That(rig.Room.GeneratedTriangles[1], Is.EqualTo(6000));
+            Assert.That(rig.Room.GeneratedLight[1], Is.EqualTo(lightSha));
+            Assert.That(rig.Room.GeneratedLightTriangles[1], Is.EqualTo(2000));
+            Assert.That(rig.Room.Calls.FindAll(c => c.StartsWith("light:")).Count, Is.EqualTo(1));
+            Assert.That(rig.Room.Calls.IndexOf("generated:1"), Is.LessThan(rig.Room.Calls.IndexOf("light:1")), "full first");
+
+            Assert.That(rig.Forge.Requests.IndexOf("GET /assets/" + fullSha + ".glb"), Is.GreaterThanOrEqualTo(0));
+            Assert.That(rig.Forge.Requests.IndexOf("GET /assets/" + fullSha + ".glb"),
+                Is.LessThan(rig.Forge.Requests.IndexOf("GET /assets/" + lightSha + ".glb")), "two downloads, in order");
+            Assert.That(rig.Forge.CountOf("GET /assets/"), Is.EqualTo(2));
+            Assert.That(rig.Cache.Contains(fullSha), Is.True);
+            Assert.That(rig.Cache.Contains(lightSha), Is.True, "the light copy is cached by its hash");
+            Assert.That(rig.Events.CountOf("light_placed", 1), Is.EqualTo(1));
+            Assert.That(rig.Acks.Count, Is.EqualTo(1), "only the full copy is acknowledged");
+            Assert.That(rig.Core.PendingCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void Asset_NoLightFields_MeansNoSecondDownload()
+        {
+            var rig = new Rig();
+            rig.Scan(LightRoom());
+            rig.Run(2.0);
+            rig.Forge.Finish(1, TestGlb.Make(6000));
+            rig.Run(6.0);
+            AssertFullStillShown(rig);
+            Assert.That(rig.Forge.CountOf("GET /assets/"), Is.EqualTo(1));
+            Assert.That(rig.Events.CountOf("light_placed"), Is.EqualTo(0));
+            Assert.That(rig.Events.CountOf("light_dropped"), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void Asset_LightCopy_WithAWrongHash_IsDroppedAndTheFullMeshStays()
+        {
+            string claimed = new string('e', 64);
+            Rig rig = LightRig(TestGlb.Make(6000), TestGlb.Make(2000), claimed);
+            AssertFullStillShown(rig);
+            Assert.That(rig.Events.Last("light_dropped", 1).GetString("reason"), Is.EqualTo("hash_mismatch"));
+            Assert.That(rig.Forge.CountOf("GET /assets/" + claimed), Is.EqualTo(1), "a rejected file is not fetched again");
+            Assert.That(rig.Cache.Contains(claimed), Is.False);
+            Assert.That(rig.Events.CountOf("rejected"), Is.EqualTo(0), "the full copy's record is untouched");
+            Assert.That(rig.Acks.Count, Is.EqualTo(1));
+            Assert.That(rig.Acks[0].Ok, Is.True);
+        }
+
+        [Test]
+        public void Asset_LightCopy_OverItsLevelsLimit_IsDroppedAndTheFullMeshStays()
+        {
+            // 5,001 triangles pass the full copy's limit (15,000) but not the light one's (5,000).
+            Rig rig = LightRig(TestGlb.Make(6000), TestGlb.Make(5001));
+            AssertFullStillShown(rig);
+            Assert.That(rig.Events.Last("light_dropped", 1).GetString("reason"), Is.EqualTo("validate:tris_max"));
+        }
+
+        [Test]
+        public void Asset_LightCopy_OverTheRoomsLightTarget_IsDroppedAndTheFullMeshStays()
+        {
+            // 13 objects: the light target is 60000 / 13 = 4,615. Box 1 is the largest of equal boxes.
+            var objects = new RoomObject[13];
+            for (int i = 0; i < 13; i++) objects[i] = Box(i + 1, ObjectCategory.Storage, 1.0f, 0.5f, 1.0f);
+            var rig = new Rig();
+            rig.Scan(RoomOf("room_13", objects));
+            rig.Run(10.0);
+            Assert.That(rig.Forge.JobOf(1).Meta.GetInt("triTargetLight"), Is.EqualTo(4615));
+            rig.Forge.FinishWithLight(1, TestGlb.Make(6000), TestGlb.Make(4616));
+            rig.Run(6.0);
+            Assert.That(rig.Core.GetState(1), Is.EqualTo(ObjectAssetState.Ready));
+            Assert.That(rig.Room.GeneratedLight, Is.Empty);
+            Assert.That(rig.Events.Last("light_dropped", 1).GetString("reason"), Is.EqualTo("validate:tris_target"));
+        }
+
+        [Test]
+        public void Asset_LightCopy_ThatCannotBeDownloaded_IsDroppedAfterTheUsualRetries()
+        {
+            Rig rig = LightRig(TestGlb.Make(6000), TestGlb.Make(2000), null, false);
+            rig.Forge.Assets.Remove(rig.Forge.JobOf(1).LightSha);          // the Forge answers 404
+            rig.Run(10.0);
+            AssertFullStillShown(rig);
+            Assert.That(rig.Forge.CountOf("GET /assets/" + rig.Forge.JobOf(1).LightSha), Is.EqualTo(AssetClientCore.MaxAttempts));
+            Assert.That(rig.Events.Last("light_dropped", 1).GetString("reason"), Is.EqualTo("download_failed"));
+        }
+
+        [Test]
+        public void Asset_LightCopy_TheRoomContentRefuses_IsDroppedAndTheFullMeshStays()
+        {
+            var rig = new Rig();
+            rig.Room.RefuseLight = true;
+            rig.Scan(LightRoom());
+            rig.Run(2.0);
+            rig.Forge.FinishWithLight(1, TestGlb.Make(6000), TestGlb.Make(2000));
+            rig.Run(6.0);
+            AssertFullStillShown(rig);
+            Assert.That(rig.Events.Last("light_dropped", 1).GetString("reason"), Is.EqualTo("load_failed"));
+        }
+
+        [Test]
+        public void Asset_LightCopy_ARoomBuiltAgainMidDownload_HandsNoStaleMeshOver()
+        {
+            var rig = new Rig();
+            RoomModel room = LightRoom();
+            rig.Scan(room);
+            rig.Run(2.0);
+            rig.Forge.Latency = 1.0;
+            rig.Forge.FinishWithLight(1, TestGlb.Make(6000), TestGlb.Make(2000));
+            string lightSha = rig.Forge.JobOf(1).LightSha;
+            // Run until the light copy is on the wire.
+            for (int i = 0; i < 400 && rig.Forge.CountOf("GET /assets/" + lightSha) == 0; i++) rig.Run(0.05);
+            Assert.That(rig.Forge.CountOf("GET /assets/" + lightSha), Is.EqualTo(1));
+            Assert.That(rig.Room.GeneratedLight, Is.Empty);
+
+            // The room content builds its views again: the generated mesh and anything meant for it are gone.
+            rig.Room.Shown.Clear();
+            rig.Room.Calls.Clear();
+            rig.Core.RoomBuilt(room);
+            rig.Run(0.2);
+            Assert.That(rig.Room.Calls, Does.Not.Contain("light:1"), "nothing is handed to views that have no full mesh");
+            rig.Run(8.0);
+            Assert.That(rig.Room.ShownFor(1), Is.EqualTo("generated"));
+            Assert.That(rig.Room.Calls.FindAll(c => c.StartsWith("light:")).Count, Is.EqualTo(1), "the light copy follows the full one again");
+            Assert.That(rig.Room.Calls.IndexOf("generated:1"), Is.LessThan(rig.Room.Calls.IndexOf("light:1")));
+            Assert.That(rig.Room.GeneratedLight[1], Is.EqualTo(lightSha));
         }
 
         [Test]

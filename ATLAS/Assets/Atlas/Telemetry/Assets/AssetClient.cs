@@ -151,6 +151,15 @@ namespace Atlas.Telemetry
             return true;
         }
 
+        bool IAssetRoom.PlaceGeneratedLight(int objectId, MeshData data, string sha256)
+        {
+            if (_content == null || data == null || data.TriangleCount == 0) return false;
+            Mesh mesh = CreateMesh(data, "Forge Object (light) " + objectId);
+            // The room content owns a light mesh from here on, as it owns the full one.
+            if (!_content.SetGeneratedLightMesh(objectId, mesh, sha256)) { DestroyMesh(mesh); return false; }
+            return true;
+        }
+
         bool IAssetRoom.PlaceBuiltIn(int objectId, MeshData data)
         {
             if (_content == null || data == null || data.TriangleCount == 0) return false;
@@ -214,6 +223,7 @@ namespace Atlas.Telemetry
             public IAssetRoom Target;
             public bool SetRequested(int objectId) { return Target != null && Target.SetRequested(objectId); }
             public bool PlaceGenerated(int objectId, MeshData mesh, string sha256) { return Target != null && Target.PlaceGenerated(objectId, mesh, sha256); }
+            public bool PlaceGeneratedLight(int objectId, MeshData mesh, string sha256) { return Target != null && Target.PlaceGeneratedLight(objectId, mesh, sha256); }
             public bool PlaceBuiltIn(int objectId, MeshData mesh) { return Target != null && Target.PlaceBuiltIn(objectId, mesh); }
         }
     }

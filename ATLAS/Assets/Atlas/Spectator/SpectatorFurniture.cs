@@ -145,6 +145,10 @@ namespace Atlas.Spectator
             return true;
         }
 
+        // The Spectator stays at the full level: it never downloads a light copy (SpectatorAssetsCore ignores the
+        // light fields of AssetReady) and sets no furniture level, so there is nothing to place here.
+        bool IAssetRoom.PlaceGeneratedLight(int objectId, MeshData data, string sha256) { return false; }
+
         bool IAssetRoom.PlaceBuiltIn(int objectId, MeshData data)
         {
             if (!_content.IsBuilt || data == null || data.TriangleCount == 0) return false;

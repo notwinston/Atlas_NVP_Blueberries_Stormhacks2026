@@ -32,6 +32,8 @@ namespace Atlas.Telemetry
         bool SetRequested(int objectId);
         /// <summary>The generated mesh, in the box-local frame. The data is only valid during the call.</summary>
         bool PlaceGenerated(int objectId, MeshData mesh, string sha256);
+        /// <summary>The light copy of an object's generated mesh. False when the object has no generated mesh or cannot take it.</summary>
+        bool PlaceGeneratedLight(int objectId, MeshData mesh, string sha256);
         /// <summary>The built-in mesh at the box's size. The data is only valid during the call.</summary>
         bool PlaceBuiltIn(int objectId, MeshData mesh);
     }
@@ -79,7 +81,8 @@ namespace Atlas.Telemetry
         static readonly UTF8Encoding s_utf8 = new UTF8Encoding(false);
 
         /// <summary>The <c>meta</c> field of POST /rooms/{roomId}/objects.</summary>
-        public static JsonValue Meta(ObjectPhotoSet photos, int triTarget, string backend)
+        /// <param name="triTargetLight">The room's light target, sent when the photo set carries none; 0 sends none.</param>
+        public static JsonValue Meta(ObjectPhotoSet photos, int triTarget, string backend, int triTargetLight = 0)
         {
             JsonValue views = JsonValue.Array();
             int count = ViewCount(photos);
@@ -106,7 +109,8 @@ namespace Atlas.Telemetry
                 .Set("backend", backend)
                 .Set("views", views);
             // Both are optional: a Forge that does not know them works as before for the job.
-            if (photos.TriTargetLight > 0) meta.Set("triTargetLight", photos.TriTargetLight);
+            int light = photos.TriTargetLight > 0 ? photos.TriTargetLight : triTargetLight;
+            if (light > 0) meta.Set("triTargetLight", light);
             if (photos.Profile != null) meta.Set("profile", Convert.ToBase64String(photos.Profile));
             return meta;
         }
@@ -121,12 +125,12 @@ namespace Atlas.Telemetry
         }
 
         /// <summary>The multipart body of POST /rooms/{roomId}/objects: the field <c>meta</c>, then the files.</summary>
-        public static byte[] ObjectBody(ObjectPhotoSet photos, int triTarget, string backend)
+        public static byte[] ObjectBody(ObjectPhotoSet photos, int triTarget, string backend, int triTargetLight = 0)
         {
             int count = ViewCount(photos);
             var heads = new byte[count + 1][];
             heads[0] = s_utf8.GetBytes("--" + Boundary + "\r\nContent-Disposition: form-data; name=\"meta\"\r\n\r\n"
-                + Meta(photos, triTarget, backend).ToJson() + "\r\n");
+                + Meta(photos, triTarget, backend, triTargetLight).ToJson() + "\r\n");
             int total = heads[0].Length;
             for (int i = 0; i < count; i++)
             {

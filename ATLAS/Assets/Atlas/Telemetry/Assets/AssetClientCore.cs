@@ -60,6 +60,10 @@ namespace Atlas.Telemetry
             public string BuiltInReason;
             public ObjectPhotoSet Photos;
             public string JobId = string.Empty, Sha = string.Empty, Url = string.Empty;
+            /// <summary>The light copy the Forge announced (or a saved room names); "" for none.</summary>
+            public string LightSha = string.Empty, LightUrl = string.Empty;
+            /// <summary>A light copy is known and not yet handed over, dropped or on its way.</summary>
+            public bool LightPending;
             public bool AckPending;
             public double AckAt;
             public float LoadMs, WorstFrameMs;
@@ -107,6 +111,8 @@ namespace Atlas.Telemetry
 
         DownloadPhase _downloadPhase;
         Entry _download;
+        // The download in flight is the light copy of _download (the full copy of the object is in place).
+        bool _downloadLight;
         int _downloadHandle, _downloadAttempts;
         double _downloadNextAt, _downloadDoneAt, _workStartedAt;
         Work _work = new Work();
@@ -221,12 +227,16 @@ namespace Atlas.Telemetry
             _built = true;
             _builtAt = _now;
             _graceDone = false;
+            // A light mesh on its way was meant for the views that are gone.
+            if (_downloadLight) EndDownload();
             for (int i = 0; i < _extras.Length; i++) FirstShapeDue(_extras[i]);
             for (int i = 0; i < _entries.Length; i++)
             {
                 Entry e = _entries[i];
                 // The views are new: whatever was shown is a placeholder box again, and the first shape is due.
                 FirstShapeDue(e);
+                // The views are new, so the light mesh is gone with them; it follows the full one again.
+                e.LightPending = e.LightSha.Length > 0;
                 if (e.State == ObjectAssetState.Ready || (e.State == ObjectAssetState.Placeholder && e.Sha.Length > 0))
                 {
                     // From the cache: the pre-scan path needs no Station, and no job waits for an answer.
@@ -310,14 +320,14 @@ namespace Atlas.Telemetry
         {
             if (status == null || status.RoomId != _roomId) return;
             _lastJobNews = _now;
-            if (status.State == "failed") ApplyJob(status.JobId, status.BoxId, status.State, status.Error, null, null);
+            if (status.State == "failed") ApplyJob(status.JobId, status.BoxId, status.State, status.Error, null, null, null, null);
         }
 
         public void OnAssetReady(AssetReadyMessage ready)
         {
             if (ready == null || ready.RoomId != _roomId) return;
             _lastJobNews = _now;
-            ApplyJob(ready.JobId, ready.BoxId, "ready", string.Empty, ready.Sha256, ready.Url);
+            ApplyJob(ready.JobId, ready.BoxId, "ready", string.Empty, ready.Sha256, ready.Url, ready.LightSha256, ready.LightUrl);
         }
 
         /// <summary>DELETE /rooms/{roomId} and removal of this room's cached GLBs (Master Plan section 13.5).</summary>
@@ -404,6 +414,7 @@ namespace Atlas.Telemetry
                 var e = new Entry { Id = o.Id, Category = o.Category, Size = o.Size, Yaw = o.Yaw, Profile = o.Profile, TriTarget = o.TriTarget };
                 // A saved room names the mesh it had; it comes back from the cache.
                 if (ForgeProtocol.IsSha256(o.AssetHash)) e.Sha = o.AssetHash;
+                if (e.Sha.Length > 0 && ForgeProtocol.IsSha256(o.AssetHashLight)) { e.LightSha = o.AssetHashLight; e.LightPending = true; }
                 _entries[i] = e;
             }
             _extras = new Entry[rest];
@@ -609,7 +620,7 @@ namespace Atlas.Telemetry
                     _uploadStep = UploadStep.Object;
                     int target = next.TriTarget;
                     _uploadHandle = _transport.Begin("POST", _forgeUrl + "/rooms/" + _roomId + "/objects",
-                        ForgeProtocol.ObjectBody(next.Photos, target, _backend), ForgeProtocol.MultipartContentType, ObjectTimeout);
+                        ForgeProtocol.ObjectBody(next.Photos, target, _backend, ObjectMeshRules.LightTarget(_entries.Length)), ForgeProtocol.MultipartContentType, ObjectTimeout);
                     LogStep("upload", next, JsonValue.Object().Set("attempt", _attempts + 1).Set("triTarget", target)
                         .Set("views", ForgeProtocol.ViewCount(next.Photos)));
                     break;
@@ -668,6 +679,7 @@ namespace Atlas.Telemetry
             {
                 LogStep("cached", e, JsonValue.Object().Set("jobId", e.JobId).Set("sha256", sha));
                 BeginDownload(e, sha, ForgeProtocol.AssetPath(sha));
+                NoteLight(e, answer.GetString("lightSha256", null), answer.GetString("lightUrl", null));
                 return;
             }
             if (e.JobId.Length == 0)
@@ -761,7 +773,8 @@ namespace Atlas.Telemetry
                 JsonValue job = jobs[i];
                 if (!job.IsObject || job.GetString("roomId", _roomId) != _roomId) continue;
                 ApplyJob(job.GetString("jobId", string.Empty), job.GetInt("boxId"), job.GetString("state", string.Empty),
-                    job.GetString("error", string.Empty), job.GetString("sha256", null), job.GetString("url", null));
+                    job.GetString("error", string.Empty), job.GetString("sha256", null), job.GetString("url", null),
+                    job.GetString("lightSha256", null), job.GetString("lightUrl", null));
             }
             // A job the Forge no longer lists will never finish.
             for (int i = 0; i < _entries.Length; i++)
@@ -776,7 +789,7 @@ namespace Atlas.Telemetry
             }
         }
 
-        void ApplyJob(string jobId, int boxId, string state, string error, string sha, string url)
+        void ApplyJob(string jobId, int boxId, string state, string error, string sha, string url, string lightSha, string lightUrl)
         {
             Entry e = Find(boxId);
             if (e == null || e.State != ObjectAssetState.Requested) return;
@@ -791,6 +804,7 @@ namespace Atlas.Telemetry
                 }
                 LogStep("ready", e, JsonValue.Object().Set("jobId", e.JobId).Set("sha256", sha));
                 BeginDownload(e, sha, string.IsNullOrEmpty(url) ? ForgeProtocol.AssetPath(sha) : url);
+                NoteLight(e, lightSha, lightUrl);
             }
             else if (state == "failed")
             {
@@ -806,6 +820,15 @@ namespace Atlas.Telemetry
 
         // ---- Download, validate, load, place -------------------------------------------------------------------
 
+        // The Forge announced a light copy: it is fetched after the full one is in place. Anything else is no light copy.
+        void NoteLight(Entry e, string lightSha, string lightUrl)
+        {
+            if (!ForgeProtocol.IsSha256(lightSha)) return;
+            e.LightSha = lightSha;
+            e.LightUrl = string.IsNullOrEmpty(lightUrl) ? ForgeProtocol.AssetPath(lightSha) : lightUrl;
+            e.LightPending = true;
+        }
+
         void BeginDownload(Entry e, string sha, string url)
         {
             e.Sha = sha;
@@ -819,6 +842,7 @@ namespace Atlas.Telemetry
             // A worker that is still busy keeps its buffers; the next download gets fresh ones.
             if (_downloadPhase == DownloadPhase.Work && !_work.Done) _work = new Work();
             _download = null;
+            _downloadLight = false;
             _downloadPhase = DownloadPhase.Idle;
         }
 
@@ -828,6 +852,14 @@ namespace Atlas.Telemetry
             {
                 for (int i = 0; i < _entries.Length && _download == null; i++)
                     if (_entries[i].State == ObjectAssetState.Downloading) _download = _entries[i];
+                _downloadLight = false;
+                // Only when no full copy waits: the walker is in Home, which shows the full ones.
+                for (int i = 0; _download == null && _built && i < _entries.Length; i++)
+                {
+                    if (_entries[i].State != ObjectAssetState.Ready || !_entries[i].LightPending) continue;
+                    _download = _entries[i];
+                    _downloadLight = true;
+                }
                 if (_download == null) return;
                 _downloadAttempts = 0;
                 _downloadDoneAt = _now;
@@ -839,22 +871,23 @@ namespace Atlas.Telemetry
                 case DownloadPhase.Work:
                     if (!_work.Done)
                     {
-                        if (_now - _workStartedAt > WorkTimeout) Reject(e, "load_failed");
+                        if (_now - _workStartedAt > WorkTimeout) Fail(e, "load_failed");
                         return;
                     }
-                    if (_work.Outcome == WorkOutcome.Rejected) { Reject(e, _work.Reason); return; }
+                    if (_work.Outcome == WorkOutcome.Rejected) { Fail(e, _work.Reason); return; }
                     if (_work.Outcome == WorkOutcome.NeedDownload)
                     {
                         if (_reach == Reach.Unreachable || _backend == BackendOff || _forgeUrl.Length == 0)
                         {
                             // A saved room whose mesh is not in the cache, and no Forge to ask.
-                            ToBuiltIn(e, "no_cache", false);
+                            if (_downloadLight) DropLight(e, "no_cache");
+                            else ToBuiltIn(e, "no_cache", false);
                             return;
                         }
                         StartHttp(e);
                         return;
                     }
-                    e.State = ObjectAssetState.Loading;
+                    if (!_downloadLight) e.State = ObjectAssetState.Loading;
                     _downloadPhase = DownloadPhase.Place;
                     goto case DownloadPhase.Place;
 
@@ -870,7 +903,7 @@ namespace Atlas.Telemetry
                         return;
                     }
                     _downloadAttempts++;
-                    if (_downloadAttempts >= MaxAttempts) { Reject(e, "download_failed"); return; }
+                    if (_downloadAttempts >= MaxAttempts) { Fail(e, "download_failed"); return; }
                     _downloadNextAt = _now + s_retryWaits[_downloadAttempts - 1];
                     _downloadPhase = DownloadPhase.HttpWait;
                     return;
@@ -881,6 +914,11 @@ namespace Atlas.Telemetry
 
                 case DownloadPhase.Place:
                     if (!_built) return;            // the boxes are not there yet
+                    if (_downloadLight)
+                    {
+                        PlaceLight(e);
+                        return;
+                    }
                     if (!_roomView.PlaceGenerated(e.Id, _work.Mesh, e.Sha)) { Reject(e, "load_failed"); return; }
                     e.State = ObjectAssetState.Ready;
                     e.ShowsBuiltIn = false;
@@ -900,8 +938,9 @@ namespace Atlas.Telemetry
 
         void StartHttp(Entry e)
         {
-            string url = e.Url.StartsWith("http://", StringComparison.Ordinal) || e.Url.StartsWith("https://", StringComparison.Ordinal)
-                ? e.Url : _forgeUrl + (e.Url.Length > 0 ? e.Url : ForgeProtocol.AssetPath(e.Sha));
+            string sha = _downloadLight ? e.LightSha : e.Sha, path = _downloadLight ? e.LightUrl : e.Url;
+            string url = path.StartsWith("http://", StringComparison.Ordinal) || path.StartsWith("https://", StringComparison.Ordinal)
+                ? path : _forgeUrl + (path.Length > 0 ? path : ForgeProtocol.AssetPath(sha));
             _downloadPhase = DownloadPhase.Http;
             _downloadHandle = _transport.Begin("GET", url, null, null, DownloadTimeout);
         }
@@ -910,14 +949,17 @@ namespace Atlas.Telemetry
         {
             Entry e = _download;
             Work work = _work;
+            string sha = _downloadLight ? e.LightSha : e.Sha;
             work.Cache = _cache;
-            work.Sha = e.Sha;
+            work.Sha = sha;
             work.Bytes = downloaded;
             work.Expect = new GlbExpectation
             {
                 DimX = e.Size.x, DimY = e.Size.y, DimZ = e.Size.z,
-                TriTarget = e.TriTarget,
-                Sha256 = e.Sha
+                // The full copy meets the object's own target; the light copy the room's light target.
+                TriTarget = _downloadLight ? ObjectMeshRules.LightTarget(_entries.Length) : e.TriTarget,
+                Level = _downloadLight ? GlbLevel.Light : GlbLevel.Full,
+                Sha256 = sha
             };
             work.Done = false;
             _workStartedAt = _now;
@@ -976,11 +1018,37 @@ namespace Atlas.Telemetry
             }
         }
 
+        // A copy that fails ends the object's full copy (Reject) or, for a light copy, only itself.
+        void Fail(Entry e, string reason)
+        {
+            if (_downloadLight) DropLight(e, reason);
+            else Reject(e, reason);
+        }
+
+        // The light copy is given up: logged, never counted against the object, which keeps its full mesh.
+        void DropLight(Entry e, string reason)
+        {
+            LogStep("light_dropped", e, JsonValue.Object().Set("sha256", e.LightSha).Set("reason", reason ?? string.Empty));
+            e.LightPending = false;
+            EndDownload();
+        }
+
+        void PlaceLight(Entry e)
+        {
+            if (!_roomView.PlaceGeneratedLight(e.Id, _work.Mesh, e.LightSha)) { DropLight(e, "load_failed"); return; }
+            e.LightPending = false;
+            LogStep("light_placed", e, JsonValue.Object().Set("sha256", e.LightSha).Set("tris", _work.Mesh.TriangleCount));
+            _download = null;
+            _downloadLight = false;
+            _downloadPhase = DownloadPhase.Idle;
+        }
+
         void Reject(Entry e, string reason)
         {
             LogStep("rejected", e, JsonValue.Object().Set("sha256", e.Sha).Set("reason", reason ?? string.Empty));
             SendAck(e, false, reason);
             e.Sha = string.Empty;
+            e.LightPending = false;
             ToBuiltIn(e, "rejected", true);
         }
 
