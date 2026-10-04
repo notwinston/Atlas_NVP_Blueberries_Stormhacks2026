@@ -333,7 +333,8 @@ class Forge:
                 raise NotFound(room_id)
             del self._rooms[room_id]
             mine = [j for j in self._jobs.values() if j.roomId == room_id]
-            others = {sha for j in self._jobs.values() if j.roomId != room_id for sha in (j.sha256, j.lightSha256) if sha}
+            others = {sha for j in self._jobs.values() if j.roomId != room_id
+                      for sha in (j.sha256, j.lightSha256) if sha}
             for job in mine:
                 del self._jobs[job.jobId]
                 self._crops.pop(job.jobId, None)

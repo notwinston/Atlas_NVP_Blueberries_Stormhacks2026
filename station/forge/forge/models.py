@@ -145,8 +145,11 @@ class JobStatus(BaseModel):
     lightUrl: Optional[str] = None
     lightBytes: Optional[int] = None
     lightTris: Optional[int] = None
-    # The fit to the scanned profile: the score, the quarter turn (degrees) and the up axis that were chosen,
-    # and how many generations the object took.
+    # How clean-up turned the generated mesh. `fitUp`: the axis of the generator's own frame that was taken as
+    # up (Y, Z or X). `fitYaw`: the turn about that axis as a yaw in Unity's box frame, 0, 90, 180 or 270 degrees
+    # (positive turns +Z towards +X): the azimuth of the box at which the mesh's own +Z side stands.
+    # `fit`: how far the turned mesh is from the scanned profile, 0 a perfect match; absent for a job with no
+    # profile. `attempts`: the generations made for the object, failed ones included; absent for a cached answer.
     fit: Optional[float] = None
     fitYaw: Optional[int] = None
     fitUp: Optional[str] = None

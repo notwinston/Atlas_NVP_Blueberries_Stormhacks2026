@@ -96,6 +96,23 @@ def test_a_tie_is_broken_by_the_generators_known_front(prefer, yaw):
     assert [c["fit"] for c in report.candidates[:4]] == [0.0] * 4  # the four yaws tie
 
 
+def test_a_mesh_that_fits_the_box_no_way_is_still_turned_the_better_way_round():
+    # The armchair fills a cube; the box is half as deep. No orientation is within the stretch limit, so the
+    # bounds choose as before, and the fit only chooses between that orientation and the same turned by a half.
+    v, f = armchair()
+    dims = (1.0, 1.0, 0.5)
+    scan = profile.of_mesh(v * [1.0, 1.0, 0.5], f, dims)
+    for half_turns in (0, 1):
+        report = clean(turned(v, 2 * half_turns), f, dims, 5000, scan=scan).report
+        assert [(c["up"], c["yawDegrees"]) for c in sorted(report.candidates, key=lambda c: c["yawDegrees"])] == [
+            ("Y", 0), ("Y", 180)]
+        assert all(c["stretch"] > 0.15 for c in report.candidates)
+        assert report.yaw_degrees == 180 * half_turns
+        assert report.fit == pytest.approx(report.candidates[0]["fit"], abs=1e-4) and report.fit < 0.15
+        assert report.candidates[1]["fit"] > report.fit + cleanup.FIT_TIE
+        assert any(fault.startswith("[frame.bounds]") for fault in report.violations)  # and the report says so
+
+
 def test_another_up_axis_must_fit_clearly_better_to_be_taken():
     # A cube with a plinth: on its side it fits a scan of its flat top a hair better, which means nothing.
     dims = (0.5, 0.5, 0.5)
@@ -173,9 +190,25 @@ def test_what_the_setting_says_of_the_front():
         centre = turned(post[0], turns).mean(axis=0) * [-1.0, 1.0, 1.0]  # in Unity's box frame
         assert centre[0] * x + centre[2] * z > 0.7
 
+    # A camera that cannot be one gives no colour view; a matted view with a sound camera does.
+    from PIL import Image
+
+    from forge.imaging import MattedView
+
+    crop = Image.new("RGB", (64, 64), (200, 60, 40))
+    matted = {0: MattedView(crop, Image.new("L", (64, 64), 255), "rembg"),
+              1: MattedView(crop, Image.new("L", (64, 64), 255), "none")}
+    sound = {"intrinsics": [60.0, 60.0, 32.0, 32.0], "camToBox": camera(0.0, 2.0)[0]["camToBox"]}
+    assert len(attempts.colour_views(matted, [sound, sound])) == 1  # view 1 is not matted
+    for broken in ({**sound, "intrinsics": [0.0, 60.0, 32.0, 32.0]}, {**sound, "camToBox": [0.0] * 16},
+                   {**sound, "intrinsics": None}, {"intrinsics": sound["intrinsics"]}, {}):
+        assert attempts.colour_views(matted, [broken]) == []
+    assert attempts.colour_views(matted, []) == []
+
     settings = Settings()
     settings.triposg_up, settings.triposg_front = "Z", "canonical"
-    assert attempts.up_axes_for("triposg", settings) == ("Z",) and attempts.front_for("triposg", settings) == "canonical"
+    assert attempts.up_axes_for("triposg", settings) == ("Z",)
+    assert attempts.front_for("triposg", settings) == "canonical"
     # The two settings describe TripoSG's meshes; another generator's are oriented with nothing assumed.
     assert attempts.up_axes_for("procedural", settings) is None and attempts.front_for("hosted", settings) == "unknown"
     assert attempts.in_order_of_fit([0.3, 0.1, 0.1]) == [1, 2, 0] and attempts.in_order_of_fit([None, None]) == [0, 1]
@@ -232,7 +265,8 @@ def test_no_usable_photo_leaves_one_cell_from_the_dominant_colour():
     away = clean(v, f, dims, 5000, BLUE.rgb, views=[ColourView(rgb, alpha, k, m)])
     assert away.glb == plain.glb
     # The same input gives the same bytes, colours included.
-    assert clean(v, f, dims, 5000, RED.rgb, views=[view]).glb == clean(v.copy(), f.copy(), dims, 5000, RED.rgb, views=[view]).glb
+    again = clean(v.copy(), f.copy(), dims, 5000, RED.rgb, views=[view])
+    assert clean(v, f, dims, 5000, RED.rgb, views=[view]).glb == again.glb
 
 
 def test_the_colours_follow_the_mesh_when_the_fit_turns_it():
@@ -267,7 +301,8 @@ def test_both_copies_validate_at_their_levels_and_the_light_one_meets_its_target
     assert full.to_dict()["light"]["triangles"] == light.triangles and "light" not in light.to_dict()
     # The two copies fill the same box, are turned the same way and have the same colour.
     assert np.allclose(light.size, full.size, atol=1e-4)
-    assert (light.up_axis, light.yaw_degrees, light.palette_index) == (full.up_axis, full.yaw_degrees, full.palette_index)
+    assert (light.up_axis, light.yaw_degrees) == (full.up_axis, full.yaw_degrees)
+    assert light.palette_index == full.palette_index
     assert any("reduced from the full copy" in note for note in light.notes)
     # A light target above the contract's 5,000 is held to it.
     assert clean(v, f, dims, 15000, tri_target_light=9000).light_report.triangles <= 5000
@@ -300,6 +335,12 @@ def test_a_light_copy_that_cannot_be_made_leaves_the_full_one(monkeypatch):
     monkeypatch.setattr(cleanup, "_lighter", stuck)
     failed = clean(v, f, dims, 5000, tri_target_light=1500)
     assert failed.glb == full and failed.light_glb is None and "keeps every edge" in failed.report.light["error"]
+
+    # A light copy that is made but does not meet its level is not published either: here it was not reduced.
+    monkeypatch.setattr(cleanup, "_lighter", lambda v, f, target, limit: (v, f))
+    over = clean(v, f, dims, 5000, tri_target_light=1500)
+    assert over.glb == full and over.light_glb is None and over.light_report is None
+    assert over.report.light["error"].startswith("asset contract: [triangles.target]") and not over.report.violations
 
 
 def test_orient_then_finish_is_clean():

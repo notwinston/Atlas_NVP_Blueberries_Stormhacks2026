@@ -103,7 +103,8 @@ def test_the_numbers_of_m1_and_m2(record, tmp_path, capsys):
     # The front of each mesh, read from the mesh by the phone's own profile rule.
     assert by_id[1]["job"]["meshFront"] == "+Z" and by_id[1]["job"]["meshFacingRight"] is True
     assert by_id[2]["job"]["meshFront"] == "+Z" and by_id[2]["job"]["meshFacingRight"] is False  # the truth is +X
-    assert by_id[3]["job"]["meshFront"] is None and by_id[3]["job"]["meshFacingRight"] is None  # a cupboard: flat on top
+    # A cupboard is flat on top: the rule cannot read its front, and it is not judged.
+    assert by_id[3]["job"]["meshFront"] is None and by_id[3]["job"]["meshFacingRight"] is None
     assert by_id[4]["job"]["meshFacingRight"] is None
 
     m1 = {item["check"]: item for item in result["checks"]["M1"]}

@@ -164,7 +164,8 @@ def read_record(data: Path, room_id: str, truth: Optional[dict]) -> dict:
             mesh_front = None
             if full is not None and full["ok"]:
                 try:
-                    mesh_front = front_by_profile(glb_profile((data / "assets" / f"{job['sha256']}.glb").read_bytes(), dims))
+                    published = (data / "assets" / f"{job['sha256']}.glb").read_bytes()
+                    mesh_front = front_by_profile(glb_profile(published, dims))
                 except GlbError:
                     mesh_front = None
             item["job"] = {
@@ -229,7 +230,8 @@ def totals(record: dict, poor_fit: float = POOR_FIT) -> dict:
         line("every wall-backed object faces right", None if walls == 0 else walls_right == walls,
              f"{walls_right} of {walls}" + ("" if record["truth"] else "; no truth.json")),
         line("facing by the rule that answered", None,
-             ", ".join(f"{rule}: {right} of {total}" for rule, (right, total) in sorted(by_rule.items())) or "nothing to judge"),
+             ", ".join(f"{rule}: {right} of {total}" for rule, (right, total) in sorted(by_rule.items()))
+             or "nothing to judge"),
         line("plain boxes with no profile", None,
              ", ".join(o["name"] for o in objects if o["plainBox"] and not o["profile"]) or "none"),
     ]
@@ -242,7 +244,8 @@ def totals(record: dict, poor_fit: float = POOR_FIT) -> dict:
     slow = [f"{o['name']} view {a['view']} ({a['seconds']:.0f} s)" for o in objects if o["job"]
             for a in o["job"]["attempts"] if a["seconds"] is not None and a["seconds"] > SECONDS_PER_ATTEMPT]
     timed = sum(1 for o in objects if o["job"] for a in o["job"]["attempts"] if a["seconds"] is not None)
-    fits = [o["job"]["fit"] for o in objects if o["job"] and o["job"]["state"] == "ready" and o["job"]["fit"] is not None]
+    fits = [o["job"]["fit"] for o in objects
+            if o["job"] and o["job"]["state"] == "ready" and o["job"]["fit"] is not None]
     median = statistics.median(fits) if fits else None
     fronted = [o for o in objects if o["job"] and o["job"]["meshFacingRight"] is not None]
     undecided = [o["name"] for o in objects if o["job"] and o["truth"] in SIDES and o["job"]["meshFront"] is None

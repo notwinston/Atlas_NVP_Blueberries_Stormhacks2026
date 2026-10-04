@@ -78,7 +78,9 @@ def colour_views(matted: Mapping[int, MattedView], views: Sequence[Mapping]) -> 
     A view is usable when it is matted and the phone sent its camera: the crop
     at the resolution its ``intrinsics`` describe, and ``camToBox``. Without a
     matte nothing tells the object from the room behind it, so such a view
-    gives no colour and the object keeps one cell, as before.
+    gives no colour and the object keeps one cell, as before. A camera that
+    cannot be one (a focal length that is not positive, a matrix that cannot
+    be inverted) is left out the same way.
     """
     usable = []
     for index in sorted(matted):
@@ -86,11 +88,16 @@ def colour_views(matted: Mapping[int, MattedView], views: Sequence[Mapping]) -> 
         meta = views[index] if index < len(views) else {}
         if view.method == "none" or not meta.get("intrinsics") or not meta.get("camToBox"):
             continue
+        intrinsics = tuple(float(k) for k in meta["intrinsics"])
+        cam_to_box = np.asarray(meta["camToBox"], dtype=np.float64).reshape(4, 4)
+        if not (np.isfinite(intrinsics).all() and intrinsics[0] > 0 and intrinsics[1] > 0
+                and np.isfinite(cam_to_box).all() and abs(np.linalg.det(cam_to_box)) > 1e-9):
+            continue
         usable.append(ColourView(
             rgb=np.asarray(view.crop.convert("RGB"), dtype=np.uint8),
             alpha=np.asarray(view.matte, dtype=np.uint8),
-            intrinsics=tuple(float(k) for k in meta["intrinsics"]),
-            cam_to_box=np.asarray(meta["camToBox"], dtype=np.float64).reshape(4, 4),
+            intrinsics=intrinsics,
+            cam_to_box=cam_to_box,
         ))
     return usable
 

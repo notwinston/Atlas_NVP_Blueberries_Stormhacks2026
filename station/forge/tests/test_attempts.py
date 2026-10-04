@@ -129,6 +129,20 @@ def test_the_poor_fit_line_is_a_setting(tmp_path):
     assert status["attempts"] == 1 and 0.4 < status["fit"] <= 0.5
 
 
+def test_a_third_party_is_not_sent_more_photos_for_a_poor_fit(tmp_path):
+    class Elsewhere(Scripted):
+        source = "hosted"  # as the hosted service when it is the Forge's one generator
+
+    generator = Elsewhere("storage", "chair", "chair")
+    status, job, _ = run(tmp_path, generator)
+    assert status["state"] == "ready" and status["source"] == "hosted"
+    assert status["attempts"] == 1 and generator.views() == [0] and status["fit"] > 0.4
+    # A failure is still tried once more with the next view, as before.
+    generator = Elsewhere("fail", "storage", "chair")
+    status, job, _ = run(tmp_path, generator, name="retry")
+    assert status["attempts"] == 2 and generator.views() == [0, 1] and status["fit"] > 0.4
+
+
 def test_a_failed_generation_counts_as_one_of_the_three(tmp_path):
     # View 0 fails, view 1 is poor, view 2 fits.
     generator = Scripted("fail", "toilet", "chair")
@@ -165,6 +179,28 @@ def test_a_raw_mesh_clean_up_cannot_use_is_a_failed_generation(tmp_path):
     status, job, _ = run(tmp_path, generator)
     assert status["state"] == "ready" and status["attempts"] == 2 and generator.views() == [0, 1]
     assert job.attemptLog[0]["error"].startswith("clean-up: the generator returned no usable triangles")
+
+
+def test_a_mesh_that_does_not_meet_the_asset_contract_is_not_published(tmp_path):
+    class Cube(Scripted):
+        """Whatever the box, a cube: it cannot fill a long box within the stretch limit."""
+
+        def generate(self, request):
+            self.photos.append(dominant_colour(request.image))
+            v, f = build_furniture("other", (1.0, 1.0, 1.0))
+            return RawMesh(vertices=v - [0.0, 0.5, 0.0], faces=f)
+
+    generator = Cube()
+    app = create_app(make_settings(tmp_path / "data"), generator)
+    with TestClient(app) as client:
+        model = room_model("long", [(2.0, 0.5, 0.5)], ["couch"])
+        client.post("/rooms", json=model)
+        meta = meta_for(model["objects"][0], 15000)
+        meta["views"] = meta["views"] * 2
+        status = wait_for(client, post_object(client, "long", meta, [jpeg(seed=1), jpeg(seed=2)]).json()["jobId"])
+        assert status["state"] == "failed" and status["error"].startswith("asset contract: [frame.bounds]")
+        assert "sha256" not in status and len(generator.photos) == 1  # no profile: one generation, and no asset
+        assert [p.name for p in (tmp_path / "data" / "assets").iterdir()] == []
 
 
 def test_the_next_best_attempt_is_published_when_the_best_cannot_be_finished(tmp_path, monkeypatch):
