@@ -208,7 +208,7 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             Assert.AreEqual(0.5 * Math.PI, fog.Min, 1e-6);
             Assert.AreEqual(0.8 * Math.PI, fog.Max, 1e-6);
             Assert.AreEqual(0.8 * Math.PI, fog.Float, 1e-6);
-            Assert.AreEqual(SmallPlanetConstants.KitRadius, radius.Float, 1e-6, "the PlanetKit tiles' R0: a lower bound, so the props are not stretched");
+            Assert.AreEqual(SmallPlanetCore.DefaultRadiusM, radius.Float, 1e-6, "a lower bound, a little under the PlanetKit tiles' R0");
             Assert.AreEqual(0.0, radius.Min, 0.0, "0 leaves the radius to the room");
             Assert.IsTrue(radius.OnRelease);
 
@@ -319,14 +319,15 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             WalkEvents.Emit(null, rig.Core.Walk, LapEvent.Closed);   // no log published: nothing happens
         }
 
-        // planet.R's default is the PlanetKit tiles' R0 (2.29 m), a lower bound: a room with a smaller loop-fit radius
-        // walks the kit's planet, a room with a larger one keeps its own.
+        // planet.R's default (2.0 m, a little under the PlanetKit tiles' R0) is a lower bound: a room with a smaller
+        // loop-fit radius walks the default planet, a room with a larger one keeps its own.
         [Test]
-        public void Radius_DefaultsToTheKitRadius_AsALowerBound()
+        public void Radius_DefaultsToTheDefaultRadius_AsALowerBound()
         {
             var rig = new Rig(RoomFixtures.Sample3x3, double2.zero, roomRadius: false);
-            Assert.Less(SmallPlanetCore.RadiusFor(rig.Room, false), SmallPlanetConstants.KitRadius, "the 3 x 3 room's own planet is smaller");
-            Assert.AreEqual(SmallPlanetConstants.KitRadius, rig.Core.R, 1e-6);
+            Assert.Less(SmallPlanetCore.RadiusFor(rig.Room, false), SmallPlanetCore.DefaultRadiusM, "the 3 x 3 room's own planet is smaller");
+            Assert.Less(SmallPlanetCore.DefaultRadiusM, SmallPlanetConstants.KitRadius, "smaller than the kit's planet");
+            Assert.AreEqual(SmallPlanetCore.DefaultRadiusM, rig.Core.R, 1e-6);
             Assert.AreEqual(rig.Core.R, rig.Kernel.MetresPerUnit, 0.0);
             Assert.AreEqual(3.0, SmallPlanetCore.RadiusFor(rig.Room, false, 3.0), 0.0, "still only a lower bound");
         }
