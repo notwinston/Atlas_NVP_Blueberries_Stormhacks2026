@@ -176,18 +176,24 @@ namespace Atlas.Spaces.AlignedCells
         {
             if (!MazeFound)
             {
+                // The crossings found it already when the duck's tile was entered on the way; this covers the walker standing on it.
                 MazeElapsed = now - runStart;
-                if (!Walker.Frame.Tile.Equals(Maze.DuckTile)) return false;
-                MazeFound = true; MazeFoundTime = now;
-                if (Events != null)
-                    Events.LogJson(EventMazeFound, "{\"steps\":" + I(MazeSteps) + ",\"walls\":" + I(MazeWallsCrossed)
-                        + ",\"seconds\":" + MazeElapsed.ToString("0.###", CultureInfo.InvariantCulture) + "}");
+                if (Walker.Frame.Tile.Equals(Maze.DuckTile)) Found();
                 return false;
             }
             if (now - MazeFoundTime < RestartSeconds) return false;
             StartRun(headXZ);
             FlushPending();
             return true;
+        }
+
+        // The duck's tile reached: the run's steps, walls and clock stop here, and the phone logs maze.found once.
+        void Found()
+        {
+            MazeFound = true; MazeFoundTime = now; MazeElapsed = now - runStart;
+            if (Events != null)
+                Events.LogJson(EventMazeFound, "{\"steps\":" + I(MazeSteps) + ",\"walls\":" + I(MazeWallsCrossed)
+                    + ",\"seconds\":" + MazeElapsed.ToString("0.###", CultureInfo.InvariantCulture) + "}");
         }
 
         // A new maze run: tile zero, turn 0, in the cell under the head; the seed is cells.mazeSeed, or a fresh one when it is 0.
@@ -323,7 +329,7 @@ namespace Atlas.Spaces.AlignedCells
             Walker.LastCrossing(i, out int2 from, out int dir, out CellFrame entered);
             Crossings++;
             bool loop = Loops.Cross(from, dir, entered);
-            if (MazeMode && Maze != null) OnMazeCrossing(i, dir);
+            if (MazeMode && Maze != null) OnMazeCrossing(i, dir, in entered);
             if (Events == null) return;
             int2 to = from + (dir == 0 ? new int2(1, 0) : dir == 1 ? new int2(0, 1) : dir == 2 ? new int2(-1, 0) : new int2(0, -1));
             Events.LogJson(EventCross, "{\"cell\":" + I(to.y * Grid.CountX + to.x) + ",\"dir\":" + I(dir) + ",\"crossings\":" + I(Crossings)
@@ -335,15 +341,21 @@ namespace Atlas.Spaces.AlignedCells
         }
 
         // Duck maze: crossing i of this frame is a step of the run; through a wall of the tile left it is counted and logged.
-        void OnMazeCrossing(int i, int dir)
+        // A crossing that enters the duck's tile is the find, even when the same frame walks on (a diagonal past a post corner);
+        // after the find the run's counts stand still until the next maze.
+        void OnMazeCrossing(int i, int dir, in CellFrame entered)
         {
+            if (MazeFound) return;
             CellFrame left = before;
             if (i > 0) Walker.LastCrossing(i - 1, out _, out _, out left);
             MazeSteps++;
             int edge = left.TileEdge(dir);
-            if (!Maze.IsWall(left.Tile, edge)) return;
-            MazeWallsCrossed++;
-            if (Events != null) Events.LogJson(EventMazeWall, "{\"tile\":\"" + left.Tile + "\",\"edge\":" + I(edge) + "}");
+            if (Maze.IsWall(left.Tile, edge))
+            {
+                MazeWallsCrossed++;
+                if (Events != null) Events.LogJson(EventMazeWall, "{\"tile\":\"" + left.Tile + "\",\"edge\":" + I(edge) + "}");
+            }
+            if (entered.Tile.Equals(Maze.DuckTile)) Found();
         }
 
         static string I(int v) => v.ToString(CultureInfo.InvariantCulture);

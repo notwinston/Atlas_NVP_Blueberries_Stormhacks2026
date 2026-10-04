@@ -50,6 +50,25 @@ namespace Atlas.Spaces.AlignedCells.Tests
         { Id = id, Category = ObjectCategory.Other, Base = new float3(px, 0, pz), Size = new float3(sx, sy, sz), Yaw = yaw, Mesh = MeshState.Placeholder, TriTarget = triangles };
     }
 
+    /// <summary>Keeps what S3 logged (cells.*, maze.*): the event names and their data, in order. Touches no engine object.</summary>
+    sealed class RecordingLog : IEventLog
+    {
+        public readonly List<string> Events = new List<string>(), Data = new List<string>();
+        public void Log(string ev) { Events.Add(ev); Data.Add(""); }
+        public void Log(string ev, string key, double value) { Events.Add(ev); Data.Add(key); }
+        public void Log(string ev, string key, string value) { Events.Add(ev); Data.Add(key); }
+        public void Log(string ev, string key1, double value1, string key2, double value2) { Events.Add(ev); Data.Add(key1); }
+        public void LogJson(string ev, string dataJson) { Events.Add(ev); Data.Add(dataJson); }
+        public int Count(string ev) { int n = 0; foreach (string e in Events) if (e == ev) n++; return n; }
+        public List<string> DataOf(string ev)
+        {
+            var list = new List<string>();
+            for (int i = 0; i < Events.Count; i++) if (Events[i] == ev) list.Add(Data[i]);
+            return list;
+        }
+        public string Last(string ev) { for (int i = Events.Count - 1; i >= 0; i--) if (Events[i] == ev) return Data[i]; return null; }
+    }
+
     // What S3 asks of the room content, recorded; no engine object. The shell's triangle counts are the real shell builder's.
     sealed class FakeRoomContent : IRoomContent
     {
