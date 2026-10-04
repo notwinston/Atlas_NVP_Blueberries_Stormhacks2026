@@ -180,12 +180,15 @@ namespace Atlas.Kernel.Tests
             Add(1, new double2(0.25, 0)); jump[jump.Count - 1] = true;
             Add(240, double2.zero, true, 2e-4);
 
-            double tauTest = 0, prevK = h.Rig.Curvature; int reached = -1, expected = -1;
+            double tauTest = 0, prevK = h.Rig.Curvature; int reached = -1, expected = -1, fast = 0;
             for (int f = 0; f < pos.Count; f++)
             {
                 double before = h.Rig.Curvature;
                 var r = h.Rig.Step(f, Sample(f, new double3(pos[f].x, 1.6, pos[f].y), normal[f]));
                 double after = h.Rig.Curvature;
+                // True speed from the scripted positions, independent of the rig's own Speed (§9.5.6 "never while head speed > 0.1 m/s").
+                double trueSpeed = f == 0 ? 0 : math.length(pos[f] - pos[f - 1]) * 60.0;
+                if (trueSpeed > 0.1) { fast++; Assert.AreEqual(BitConverter.DoubleToInt64Bits(before), BitConverter.DoubleToInt64Bits(after), $"true speed {trueSpeed:F3} m/s, frame {f}"); }
                 if (r.Speed > 0.1 || double.IsNaN(r.Speed) || !normal[f] || jump[f])
                     Assert.AreEqual(BitConverter.DoubleToInt64Bits(before), BitConverter.DoubleToInt64Bits(after), $"frame {f}");
                 if (!r.Still) Assert.IsFalse(r.CurvatureChanged, $"frame {f}");
@@ -195,6 +198,8 @@ namespace Atlas.Kernel.Tests
                 if (reached < 0 && after == target) reached = f;
             }
             TestContext.WriteLine($"ramp reached target at frame {reached}, expected {expected}");
+            Assert.GreaterOrEqual(fast, 120); // the 0.6 m/s walk and the 0.12 m/s segment were all checked
+            Assert.AreEqual(481, reached); // 59 + 60 + 60 still frames before the jump, then 61 jitter frames
             Assert.GreaterOrEqual(reached, 0);
             Assert.LessOrEqual(Math.Abs(reached - expected), 1);
             Assert.AreEqual(target, h.Rig.Curvature);
@@ -244,9 +249,24 @@ namespace Atlas.Kernel.Tests
                 if (res.Crossings > 0) { hit = f; Assert.AreEqual(edge, res.LastEdge); }
             }
             TestContext.WriteLine($"edge {edge}: crossing at {hit * 0.01:F3} m, threshold {thr:F4} m, Klein half-width {HolonomyRig.KleinHalfWidth:F6}");
+            Assert.AreEqual(0.4859, HolonomyRig.KleinHalfWidth, 5e-5);  // A.3
+            Assert.AreEqual(0.5306, r, 5e-5);                            // A.3
             Assert.Greater(hit * 0.01, thr);
             Assert.LessOrEqual((hit - 1) * 0.01, thr);
             Assert.AreEqual((TileId.Zero, edge), h.Calls[0]);
+        }
+
+        // Frame-gap accounting (§4.6 stale-pose guard).
+        [Test]
+        public void Rig_MissedFrames_CountsGaps()
+        {
+            var h = new Harness();
+            h.Start(double2.zero, -1, L);
+            h.Rig.Step(0, Sample(0, P(double2.zero)));
+            h.Rig.Step(1, Sample(1, P(double2.zero)));
+            Assert.AreEqual(0, h.Rig.MissedFrames);
+            h.Rig.Step(5, Sample(5, P(double2.zero)));
+            Assert.AreEqual(3, h.Rig.MissedFrames);
         }
 
         [Test]
