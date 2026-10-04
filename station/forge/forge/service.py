@@ -4,19 +4,20 @@ One worker thread owns the generator and takes one job at a time, the largest
 box first. Everything the service knows is kept under the data folder:
 
     rooms/<roomId>/room.json, room.meta.json, mesh.bin
-    jobs/<jobId>/job.json            (and view<i>.jpg only under FORGE_DEBUG_KEEP=1)
+    jobs/<jobId>/job.json            (and view<i>.jpg, raw_view<i>.npz only under FORGE_DEBUG_KEEP=1)
     assets/<sha256>.glb, <sha256>.json
     cache/<key>.json
 
 Files are written to a temporary name and renamed, so a crash never leaves a
-half-written record, and the folder is read back at start-up. Crops live in
-memory only and are dropped when their job ends (section 7.4, Privacy), so a
-job that was waiting or running when the service stopped is marked failed and
-the phone sends it again.
+half-written record, and the folder is read back at start-up. Crops, and the
+mattes made from them, live in memory only and are dropped when their job ends
+(section 7.4, Privacy), so a job that was waiting or running when the service
+stopped is marked failed and the phone sends it again.
 """
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import logging
 import os
@@ -32,12 +33,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from . import PIPELINE_VER
-from .budget import box_volume, plan_room
+import numpy as np
+
+from . import PIPELINE_VER, imaging
+from .budget import MAX_GENERATED_PER_ROOM, box_volume, plan_room
 from .cleanup import CleanupError, clean
 from .config import Settings
 from .generators import GenerationRequest, Generator, GeneratorError, HostedGenerator, make_generator
-from .imaging import ImageError, decode_crop, dominant_colour, remove_background
+from .imaging import ImageError, MattedView, decode_crop, dominant_colour, frame_for_generator
 from .models import ObjectMeta, RoomModel
 from .validator import validate_glb
 
@@ -96,10 +99,14 @@ class Job:
     triTarget: int  # the target clean-up works to: never above the one that was sent
     requestedTriTarget: int
     backend: str
+    triTargetLight: int = 0  # the same for the light copy; the room's own figure when the phone sent none
+    requestedTriTargetLight: int = 0  # 0: an older phone, which sends no light target
+    profile: str = ""  # the object profile as it was sent (base64 of 256 bytes), or empty
     state: str = "queued"
     source: str = "local"
     error: str = ""
     generator: str = ""
+    decoder: str = ""
     cached: bool = False
     seq: int = 0
     volume: float = 0.0
@@ -116,6 +123,14 @@ class Job:
     maxEdge: float = 0.0
     bounds: list[float] = field(default_factory=list)
     palette: int = 0
+    # The light copy and the fit (mesh design section 5.3). Empty and None until clean-up makes them.
+    lightSha256: str = ""
+    lightBytes: int = 0
+    lightTris: int = 0
+    fit: Optional[float] = None
+    fitYaw: Optional[int] = None
+    fitUp: str = ""
+    attempts: int = 0
     report: Optional[dict] = None
 
     @classmethod
@@ -137,6 +152,10 @@ class Forge:
         self._jobs: dict[str, Job] = {}
         self._rooms: dict[str, dict] = {}
         self._crops: dict[str, list[bytes]] = {}
+        # Each view of the running job, decoded and matted: the crop and its matte (section 5.1).
+        self._views: dict[str, dict[int, MattedView]] = {}
+        # Why the matting model could not be loaded at start-up, when the generator needs one.
+        self._matting_error = ""
         self._cancelled: set[str] = set()
         self._active: Optional[str] = None
         self._seq = 0
@@ -189,6 +208,13 @@ class Forge:
             try:
                 meta = _read_json(path)
                 if (path.parent / "room.json").is_file():
+                    if "triTargets" not in meta or "triTargetLight" not in meta:
+                        # Written before the furniture budget of the mesh design: plan the room again.
+                        room = RoomModel.model_validate_json((path.parent / "room.json").read_bytes())
+                        meta.update(self._plan(room))
+                        _write_json(path, meta)
+                    # JSON has no integer keys.
+                    meta["triTargets"] = {int(k): int(v) for k, v in meta["triTargets"].items()}
                     self._rooms[meta["roomId"]] = meta
             except (OSError, ValueError, KeyError) as exc:
                 log.warning("ignoring unreadable room record %s: %s", path, exc)
@@ -242,15 +268,25 @@ class Forge:
 
     # ------------------------------------------------------------------ rooms
 
+    @staticmethod
+    def _plan(room: RoomModel) -> dict:
+        """Which boxes of the room receive meshes and their triangle targets (mesh design section 5.4)."""
+        plan = plan_room((o.id, o.size) for o in room.objects)
+        return {
+            "generated": plan.generated,
+            "placeholders": plan.placeholders,
+            # The largest full target, for a reader that knows one figure per room.
+            "triTarget": plan.largest,
+            "triTargets": plan.targets,
+            "triTargetLight": plan.light,
+        }
+
     def put_room(self, room: RoomModel, raw: bytes) -> dict:
         """Store a RoomModel and work out which of its boxes receive meshes (section 4.5)."""
-        generated, placeholders, target = plan_room((o.id, o.size) for o in room.objects)
         meta = {
             "roomId": room.id,
             "roomHash": hashlib.sha256(raw).hexdigest(),
-            "generated": generated,
-            "placeholders": placeholders,
-            "triTarget": target,
+            **self._plan(room),
             "createdUtc": _now(),
         }
         with self._lock:
@@ -284,6 +320,7 @@ class Forge:
             for job in mine:
                 del self._jobs[job.jobId]
                 self._crops.pop(job.jobId, None)
+                self._views.pop(job.jobId, None)
                 if job.jobId == self._active:
                     self._cancelled.add(job.jobId)
                 shutil.rmtree(self._job_dir(job.jobId), ignore_errors=True)
@@ -327,7 +364,7 @@ class Forge:
         """Create the job for one object. Returns ``(job, created)``.
 
         ``created`` is False when the answer is already known: a cache hit, a box
-        beyond the room's 20 that stays a placeholder, or a job for the same box
+        beyond the room's 32 that receives no mesh, or a job for the same box
         that is still waiting or running.
         """
         with self._wake:
@@ -340,6 +377,10 @@ class Forge:
                 if existing.roomId == room_id and existing.boxId == meta.boxId and existing.state not in TERMINAL_STATES:
                     return existing, False
 
+            # The room's own budget wins when the phone asks for more than it allows; a smaller
+            # target from the phone wins over the room's. The same for the light copy.
+            own = room["triTargets"].get(meta.boxId, 0)
+            light = room["triTargetLight"]
             job = Job(
                 jobId=uuid.uuid4().hex[:16],
                 roomId=room_id,
@@ -347,9 +388,11 @@ class Forge:
                 category=meta.category,
                 dims=[float(d) for d in meta.dims],
                 yaw=meta.yaw,
-                # The room's own budget wins when the phone asks for more than it allows.
-                triTarget=min(meta.triTarget, room["triTarget"] or meta.triTarget),
+                triTarget=min(meta.triTarget, own or meta.triTarget),
                 requestedTriTarget=meta.triTarget,
+                triTargetLight=min(meta.triTargetLight, light) if meta.triTargetLight else light,
+                requestedTriTargetLight=meta.triTargetLight or 0,
+                profile=meta.profile or "",
                 backend=meta.backend,
                 source="hosted" if meta.backend == "hosted" else ("cache" if meta.backend == "cache" else "local"),
                 seq=self._seq,
@@ -363,7 +406,8 @@ class Forge:
 
             if meta.boxId in room["placeholders"]:
                 job.state = "placeholder"
-                job.error = "beyond the 20 largest boxes of the room; it keeps its placeholder box"
+                job.error = (f"beyond the {MAX_GENERATED_PER_ROOM} largest boxes of the room; "
+                             "it receives no mesh and keeps its first shape")
                 self._save(job)
                 return job, False
 
@@ -429,15 +473,24 @@ class Forge:
                 "cached": job.cached,
                 "generator": job.generator,
             }
+            if job.triTargetLight:
+                out["triTargetLight"] = job.triTargetLight
+            if job.decoder:
+                out["decoder"] = job.decoder
             if job.state == "queued":
                 out["queuePosition"] = [j.jobId for j in self.queued()].index(job.jobId)
             if job.state == "ready":
                 out.update(self._asset_fields(job))
+                if job.fit is not None:
+                    out.update({"fit": job.fit, "fitYaw": job.fitYaw, "fitUp": job.fitUp})
+                if job.attempts:
+                    out["attempts"] = job.attempts
                 out["report"] = job.report
             return out
 
     def _asset_fields(self, job: Job) -> dict:
-        return {
+        """The members of `AssetReady`; those of the light copy only when the job has one."""
+        fields = {
             "sha256": job.sha256,
             "url": f"{self.settings.public_url}/assets/{job.sha256}.glb",
             "bytes": job.bytes,
@@ -446,11 +499,20 @@ class Forge:
             "bounds": list(job.bounds),
             "palette": job.palette,
         }
+        if job.lightSha256:
+            fields.update({
+                "lightSha256": job.lightSha256,
+                "lightUrl": f"{self.settings.public_url}/assets/{job.lightSha256}.glb",
+                "lightBytes": job.lightBytes,
+                "lightTris": job.lightTris,
+            })
+        return fields
 
     def _fill_from_asset(self, job: Job, info: dict) -> None:
         job.sha256, job.bytes, job.tris = info["sha256"], info["bytes"], info["tris"]
         job.maxEdge, job.bounds, job.palette = info["maxEdge"], info["bounds"], info["palette"]
         job.report, job.generator = info.get("report"), info.get("generator", "")
+        job.decoder = info.get("decoder", "")
 
     def asset(self, sha: str) -> Optional[bytes]:
         if not SHA_PATTERN.match(sha):
@@ -492,7 +554,38 @@ class Forge:
 
     # ------------------------------------------------------------------ the worker
 
+    def generator_status(self) -> tuple[bool, str]:
+        """`generatorReady` and `generatorNote` of GET /health; never blocks."""
+        ready, note = self.generator.availability()
+        if ready and self._matting_error:
+            return False, self._matting_error
+        return ready, note
+
+    def _warm_up(self) -> None:
+        """Load the matting model and the generator's model before the first job.
+
+        The first job would otherwise pay for both inside its own time-outs. A model
+        that cannot be loaded is no reason to stop: GET /health reports why, cached
+        assets are still served, and each job tries the load again.
+        """
+        if imaging.matting_method() != "none":
+            try:
+                imaging.load_matting()
+            except Exception as exc:
+                log.warning("the matting model could not be loaded: %s", exc)
+                # Without a matte the colour is read from the plain crop; only a generator
+                # that takes matted pictures alone cannot work.
+                if getattr(self.generator, "needs_matting", False):
+                    self._matting_error = f"the matting model could not be loaded: {exc}"
+        try:
+            self.generator.warm_up()
+        except GeneratorError as exc:
+            log.warning("the %s generator is not ready: %s", self.generator.name, exc)
+        except Exception as exc:  # model code raises anything; the worker must reach its queue
+            log.exception("the %s generator failed to load: %s", self.generator.name, exc)
+
     def _work(self) -> None:
+        self._warm_up()
         while True:
             with self._wake:
                 while not self._stop and (self._paused or not self.queued()):
@@ -513,6 +606,7 @@ class Forge:
                     self._active = None
                     self._cancelled.discard(job.jobId)
                     self._crops.pop(job.jobId, None)
+                    self._views.pop(job.jobId, None)
 
     def _enter(self, job: Job, state: str) -> None:
         with self._lock:
@@ -550,26 +644,64 @@ class Forge:
             raise box["error"]
         return box["value"]
 
-    def _matte(self, crop: bytes):
-        image = decode_crop(crop)
+    def _view(self, job: Job, crops: list[bytes], index: int) -> MattedView:
+        """View ``index`` of the job, decoded and matted. Kept in memory until the job ends."""
+        views = self._views.setdefault(job.jobId, {})
+        if index not in views:
+            crop = decode_crop(crops[index])
+            note = ""
+            try:
+                cutout, method = self._timed(
+                    "matting", self.settings.matting_timeout_s, lambda: imaging.remove_background(crop)
+                )
+                if method != "none":
+                    self._matting_error = ""
+            except StageTimeout:
+                raise
+            except Exception as exc:
+                # The colour can still be read from the plain crop; a generator that needs
+                # a matted picture is not given this view (`_picture`).
+                log.warning("background removal failed on view %d, the crop stays as it is: %s", index, exc)
+                cutout, method, note = crop.convert("RGBA"), "none", f"background removal failed: {exc}"
+            views[index] = MattedView(crop=crop, matte=cutout.getchannel("A"), method=method, note=note)
+        return views[index]
+
+    @staticmethod
+    def _picture(generator: Generator, view: MattedView, index: int):
+        """What ``generator`` is given of a view: the matted crop, or the picture framed for it."""
+        if not getattr(generator, "needs_matting", False):
+            return view.cutout
+        if view.method == "none":
+            # Never an unmatted room photo (mesh design section 5.1).
+            raise ImageError(f"view {index}: {view.note or imaging.MATTING_MISSING}; "
+                             f"{generator.name} is given matted pictures only")
         try:
-            return self._timed("matting", self.settings.matting_timeout_s, lambda: remove_background(image))
-        except StageTimeout:
-            raise
-        except Exception as exc:
-            # Matting helps the generator but is not required: carry on with the plain crop.
-            log.warning("background removal failed, using the crop as it is: %s", exc)
-            return image.convert("RGBA"), "none"
+            return frame_for_generator(view.crop, view.matte)
+        except ImageError as exc:
+            raise ImageError(f"view {index}: {exc}") from exc
 
-    def _generate(self, generator: Generator, image, job: Job, seconds: float):
-        request = GenerationRequest(image=image, category=job.category, dims=job.dims,
-                                    seed=self.settings.triposg_seed)
-
+    def _generate(self, generator: Generator, view: MattedView, index: int, job: Job, seconds: float):
         def run():
             with self._gpu_lock:
+                # The model, when the load at start-up did not get it; a generator that cannot run says so here.
+                generator.warm_up()
+                request = GenerationRequest(image=self._picture(generator, view, index), category=job.category,
+                                            dims=job.dims, seed=self.settings.triposg_seed)
                 return generator.generate(request)
 
         return self._timed(f"generation ({generator.name})", seconds, run)
+
+    def _keep_raw(self, job: Job, index: int, raw) -> None:
+        """Under FORGE_DEBUG_KEEP=1: the generator's output as it came, before clean-up touches it.
+
+        With it clean-up can be run again without the GPU, and the generator's own frame can be
+        read (mesh design sections 5.1 and 5.6).
+        """
+        packed = io.BytesIO()
+        np.savez_compressed(packed, vertices=np.asarray(raw.vertices, dtype=np.float32),
+                            faces=np.asarray(raw.faces, dtype=np.int32),
+                            decoder=np.array(getattr(raw, "decoder", "")))
+        _write_atomic(self._job_dir(job.jobId) / f"raw_view{index}.npz", packed.getvalue())
 
     def _process(self, job: Job) -> None:
         settings = self.settings
@@ -587,31 +719,30 @@ class Forge:
         # matting ---------------------------------------------------------------
         self._enter(job, "matting")
         try:
-            image, job.matting = self._matte(crops[0])
+            first = self._view(job, crops, 0)
         except (ImageError, StageTimeout, IndexError) as exc:
             self._fail(job, f"view 0: {exc}")
             return
+        job.matting = first.method
         job.timings["matting"] = round(time.monotonic() - started, 3)
 
         # generating ------------------------------------------------------------
         self._enter(job, "generating")
         mark = time.monotonic()
-        raw, errors, used = None, [], None
-        attempts: list[tuple[Generator, Any, float]] = []
+        raw, errors, used, used_view = None, [], None, 0
+        attempts: list[tuple[Generator, int, float]] = []  # the generator, the view it is given, the time-out
         if job.backend == "hosted":
-            attempts.append((self.hosted, image, settings.hosted_timeout_s))
+            attempts.append((self.hosted, 0, settings.hosted_timeout_s))
         else:
-            attempts.append((self.generator, image, settings.generate_timeout_s))
+            attempts.append((self.generator, 0, settings.generate_timeout_s))
             if len(crops) > 1:
                 attempts.append((self.generator, 1, settings.generate_timeout_s))  # one retry with view 1
             if self.generator.source != "hosted" and self.hosted.availability()[0]:
-                attempts.append((self.hosted, image, settings.hosted_timeout_s))
-        for generator, picture, seconds in attempts:
+                attempts.append((self.hosted, 0, settings.hosted_timeout_s))
+        for generator, index, seconds in attempts:
             try:
-                if isinstance(picture, int):
-                    picture, _ = self._matte(crops[picture])
-                raw = self._generate(generator, picture, job, seconds)
-                used = generator
+                raw = self._generate(generator, self._view(job, crops, index), index, job, seconds)
+                used, used_view = generator, index
                 break
             except (GeneratorError, StageTimeout, ImageError) as exc:
                 errors.append(str(exc))
@@ -624,13 +755,18 @@ class Forge:
             self._fail(job, "; ".join(errors) or "no generator produced a mesh")
             return
         job.generator, job.source = used.name, used.source
+        job.decoder = getattr(raw, "decoder", "")
         job.timings["generating"] = round(time.monotonic() - mark, 3)
+        if settings.debug_keep:
+            with self._lock:
+                if job.jobId in self._jobs:
+                    self._keep_raw(job, used_view, raw)
 
         # cleaning --------------------------------------------------------------
         self._enter(job, "cleaning")
         mark = time.monotonic()
         try:
-            colour = dominant_colour(image)
+            colour = dominant_colour(first.cutout)
             result = self._timed(
                 "clean-up",
                 settings.cleaning_timeout_s,
@@ -640,7 +776,7 @@ class Forge:
         except (CleanupError, StageTimeout) as exc:
             self._fail(job, f"clean-up: {exc}")
             return
-        verdict = validate_glb(result.glb, tri_target=job.triTarget, box=job.dims)
+        verdict = validate_glb(result.glb, tri_target=job.triTarget, box=job.dims, level="full")
         if not verdict.ok:
             self._fail(job, "asset contract: " + "; ".join(f"[{v.code}] {v.message}" for v in verdict.violations))
             return
@@ -656,6 +792,7 @@ class Forge:
             "palette": report.palette_index,
             "report": report.to_dict(),
             "generator": used.name,
+            "decoder": job.decoder,
         }
         with self._lock:
             if job.jobId in self._cancelled or job.jobId not in self._jobs:

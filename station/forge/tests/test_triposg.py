@@ -1,0 +1,608 @@
+"""The TripoSG adapter, driven by a fake pipeline: no test here imports PyTorch, and none runs TripoSG."""
+import importlib.util
+import sys
+import threading
+import time
+from contextlib import contextmanager
+from pathlib import Path
+from types import SimpleNamespace
+
+import numpy as np
+import pytest
+from fastapi.testclient import TestClient
+from PIL import Image
+
+from conftest import jpeg, make_settings, meta_for, post_object, room_model, wait_for
+from forge import imaging
+from forge.app import create_app
+from forge.generators import GenerationRequest, GeneratorError, GeneratorUnavailable, TripoSGGenerator
+from forge.generators.procedural import build_furniture
+
+NONE_TYPE = "'NoneType' object has no attribute 'astype'"
+
+
+# --------------------------------------------------------------------------- fakes
+
+
+class FakeTorch:
+    """The few names of `torch` the adapter touches."""
+
+    float16, float32 = "float16", "float32"
+
+    def __init__(self, cuda=True):
+        self.emptied = 0
+        self.cuda = SimpleNamespace(
+            is_available=lambda: cuda,
+            get_device_name=lambda index: "Fake RTX 5070",
+            empty_cache=self._empty,
+        )
+
+    def _empty(self):
+        self.emptied += 1
+
+    @contextmanager
+    def no_grad(self):
+        yield
+
+    def Generator(self, device=None):  # noqa: N802  (torch's own spelling)
+        made = SimpleNamespace(device=device, seed=None)
+        made.manual_seed = lambda seed: (setattr(made, "seed", seed), made)[1]
+        return made
+
+
+def unit_mesh():
+    """What an image-to-3D model returns: a mesh of no particular scale about the origin."""
+    v, f = build_furniture("storage", (0.6, 0.6, 0.6))
+    lo, hi = v.min(axis=0), v.max(axis=0)
+    return ((v - (lo + hi) * 0.5) / (hi - lo).max()).astype(np.float32), f
+
+
+class FakePipe:
+    """Stands in for `TripoSGPipeline`. ``flash`` and ``hierarchical`` say how each decoder behaves:
+    "ok", "empty" (the pipeline hands back no mesh), "none" (upstream's crash on its own empty
+    result) or "boom" (any other failure)."""
+
+    device = "cuda"
+
+    def __init__(self, flash="ok", hierarchical="ok"):
+        self.behaviour = {"flash": flash, "hierarchical": hierarchical}
+        self.calls = []
+        self.moved = None
+
+    def to(self, device, dtype):
+        self.moved = (device, dtype)
+        return self
+
+    def __call__(self, **kwargs):
+        self.calls.append(kwargs)
+        decoder = "flash" if kwargs.get("use_flash_decoder", True) else "hierarchical"
+        outcome = self.behaviour[decoder]
+        if outcome == "none":
+            raise AttributeError(NONE_TYPE)
+        if outcome == "boom":
+            raise RuntimeError("CUDA error: invalid argument")
+        if outcome == "empty":
+            return SimpleNamespace(samples=[(None, None)])
+        if outcome == "no faces":
+            return SimpleNamespace(samples=[(np.zeros((4, 3), np.float32), np.zeros((0, 3), np.int64))])
+        return SimpleNamespace(samples=[unit_mesh()])
+
+    @property
+    def decoders(self):
+        return ["flash" if c.get("use_flash_decoder", True) else "hierarchical" for c in self.calls]
+
+
+class FakeRuntime:
+    """PyTorch, diso, the TripoSG checkout and the hub, all made of nothing."""
+
+    def __init__(self, pipe=None, modules=("torch", "diso"), cuda=True, diso_error=None, load_error=None,
+                 download="complete", gate=None):
+        self.pipe = pipe or FakePipe()
+        self.modules = set(modules)
+        self.fake_torch = FakeTorch(cuda)
+        self.diso_error, self.load_error, self.download_result, self.gate = diso_error, load_error, download, gate
+        self.downloads, self.loads, self.repos = [], [], []
+
+    def installed(self, module):
+        return module in self.modules
+
+    def torch(self):
+        return self.fake_torch
+
+    def check_diso(self):
+        if self.diso_error:
+            raise ImportError(self.diso_error)
+
+    def pipeline_class(self, repo):
+        self.repos.append(repo)
+        return self
+
+    def from_pretrained(self, weights):
+        self.loads.append(weights)
+        if self.gate is not None:
+            assert self.gate.wait(20), "the test never let the load finish"
+        if self.load_error:
+            error, self.load_error = self.load_error, None  # the next load works
+            raise OSError(error)
+        return self.pipe
+
+    def download(self, weights):
+        self.downloads.append(weights)
+        if self.download_result == "fails":
+            raise ConnectionError("no route to huggingface.co")
+        Path(weights).mkdir(parents=True, exist_ok=True)
+        if self.download_result == "complete":
+            (Path(weights) / "model_index.json").write_text("{}")
+
+
+def station(tmp_path, weights="complete", **overrides):
+    """Settings for a Station with a TripoSG checkout; ``weights`` is "complete", "partial" or "absent"."""
+    repo = tmp_path / "TripoSG"
+    (repo / "triposg").mkdir(parents=True)
+    folder = repo / "pretrained_weights" / "TripoSG"
+    if weights != "absent":
+        folder.mkdir(parents=True)
+        (folder / "vae").mkdir()  # what a download that stopped half-way leaves
+    if weights == "complete":
+        (folder / "model_index.json").write_text("{}")
+    return make_settings(tmp_path / "data", generator="triposg", triposg_repo=str(repo), **overrides)
+
+
+def object_alpha(image: Image.Image) -> Image.Image:
+    """A matte for the test crops of conftest.jpeg: whatever is not the grey background."""
+    pixels = np.asarray(image.convert("RGB")).astype(np.int16)
+    return Image.fromarray(((np.abs(pixels - 96).max(axis=2) > 24) * 255).astype(np.uint8))
+
+
+@pytest.fixture
+def matting(monkeypatch):
+    """A matting model is installed: stands in for rembg, which the tests do not have."""
+    state = SimpleNamespace(calls=0, fail_on=set(), empty=False, load_error=None)
+
+    def remove(image):
+        state.calls += 1
+        if state.calls in state.fail_on:
+            raise RuntimeError("onnxruntime ran out of memory")
+        cut = image.convert("RGBA")
+        cut.putalpha(Image.new("L", image.size, 0) if state.empty else object_alpha(image))
+        return cut, "rembg"
+
+    def load():
+        if state.load_error:
+            raise OSError(state.load_error)
+        return "rembg"
+
+    monkeypatch.setattr(imaging, "matting_method", lambda: "rembg")
+    monkeypatch.setattr(imaging, "load_matting", load)
+    monkeypatch.setattr(imaging, "remove_background", remove)
+    return state
+
+
+@pytest.fixture
+def no_matting(monkeypatch):
+    """No matting model is installed, whatever this machine has."""
+    monkeypatch.setattr(imaging, "matting_method", lambda: "none")
+
+
+def picture(size=64, colour=(200, 60, 40)) -> Image.Image:
+    return Image.new("RGB", (size, size), colour)
+
+
+def request(image=None, seed=42):
+    return GenerationRequest(image=image or picture(), category="chair", dims=(0.5, 0.9, 0.5), seed=seed)
+
+
+def wait_until(condition, timeout=10.0):
+    deadline = time.monotonic() + timeout
+    while not condition():
+        assert time.monotonic() < deadline, "timed out waiting"
+        time.sleep(0.01)
+
+
+# --------------------------------------------------------------------------- availability
+
+
+def test_on_a_machine_with_nothing_installed_everything_missing_is_named(tmp_path, no_matting):
+    generator = TripoSGGenerator(make_settings(tmp_path / "data", generator="triposg"), FakeRuntime(modules=()))
+    ready, note = generator.availability()
+    assert ready is False and generator.gpu() is None
+    for word in ("PyTorch is not installed", "FORGE_TRIPOSG_REPO", "diso is not installed", "no matting model"):
+        assert word in note
+    with pytest.raises(GeneratorUnavailable, match="TripoSG cannot run: PyTorch is not installed"):
+        generator.warm_up()
+    with pytest.raises(GeneratorUnavailable, match="TripoSG cannot run"):
+        generator.generate(request())
+
+
+def test_each_missing_piece_is_reported(tmp_path, matting):
+    settings = station(tmp_path)
+    no_torch = TripoSGGenerator(settings, FakeRuntime(modules=("diso",)))
+    assert no_torch.availability() == (False, "PyTorch is not installed")
+    ready, note = TripoSGGenerator(settings, FakeRuntime(modules=("torch",))).availability()
+    assert ready is False and note.startswith("diso is not installed")
+    nowhere = make_settings(tmp_path / "data", generator="triposg", triposg_repo=str(tmp_path / "nowhere"))
+    assert "FORGE_TRIPOSG_REPO" in TripoSGGenerator(nowhere, FakeRuntime()).availability()[1]
+    # Everything installed: not usable until the model is loaded.
+    assert TripoSGGenerator(settings, FakeRuntime()).availability() == (False, "the model is not loaded yet")
+
+
+def test_the_real_runtime_finds_what_is_installed_without_importing_it(tmp_path):
+    from forge.generators.triposg import _Runtime
+
+    runtime = _Runtime()
+    assert runtime.installed("numpy") is True and runtime.installed("no_such_module_anywhere") is False
+    # The adapter of a service that was only created has imported nothing.
+    before = set(sys.modules)
+    TripoSGGenerator(make_settings(tmp_path / "data", generator="triposg")).availability()
+    assert not {"torch", "diso", "triposg"} & (set(sys.modules) - before)
+
+
+def test_matting_is_required(tmp_path, no_matting):
+    # No matting model on this machine: TripoSG says so and never loads.
+    runtime = FakeRuntime()
+    generator = TripoSGGenerator(station(tmp_path), runtime)
+    assert generator.needs_matting is True
+    ready, note = generator.availability()
+    assert ready is False and note == imaging.MATTING_MISSING and "rembg" in note
+    with pytest.raises(GeneratorUnavailable, match="TripoSG cannot run: no matting model is installed"):
+        generator.generate(request())
+    assert runtime.loads == [] and runtime.pipe.calls == []
+
+
+def test_no_cuda_is_found_at_the_load(tmp_path, matting):
+    generator = TripoSGGenerator(station(tmp_path), FakeRuntime(cuda=False))
+    with pytest.raises(GeneratorUnavailable, match="CUDA is not available to PyTorch"):
+        generator.warm_up()
+    assert generator.availability() == (False, "CUDA is not available to PyTorch") and generator.gpu() is None
+
+
+def test_diso_that_is_installed_but_does_not_load(tmp_path, matting):
+    runtime = FakeRuntime(diso_error="DLL load failed while importing _C")
+    generator = TripoSGGenerator(station(tmp_path), runtime)
+    assert generator.availability() == (False, "the model is not loaded yet")  # finding it is not enough
+    with pytest.raises(GeneratorUnavailable, match="diso cannot be imported: DLL load failed"):
+        generator.warm_up()
+    assert generator.availability() == (False, "diso cannot be imported: DLL load failed while importing _C")
+    assert generator.gpu() == "Fake RTX 5070"  # the card is there, the generator is not
+    assert runtime.loads == []
+
+
+# --------------------------------------------------------------------------- the weights
+
+
+def test_complete_weights_are_loaded_without_a_download(tmp_path, matting):
+    settings = station(tmp_path)
+    runtime = FakeRuntime()
+    generator = TripoSGGenerator(settings, runtime)
+    generator.warm_up()
+    weights = str(Path(settings.triposg_repo) / "pretrained_weights" / "TripoSG")
+    assert runtime.downloads == [] and runtime.loads == [weights]
+    assert runtime.repos == [str(Path(settings.triposg_repo).resolve())]
+    assert runtime.pipe.moved == ("cuda", "float16")
+    assert generator.availability() == (True, "") and generator.gpu() == "Fake RTX 5070"
+    generator.warm_up()  # loaded once
+    assert runtime.loads == [weights]
+
+
+@pytest.mark.parametrize("weights", ["partial", "absent"])
+def test_a_folder_without_model_index_is_incomplete_and_downloaded_again(tmp_path, matting, weights):
+    settings = station(tmp_path, weights=weights)
+    runtime = FakeRuntime()
+    generator = TripoSGGenerator(settings, runtime)
+    ready, note = generator.availability()
+    assert ready is False and "model_index.json" in note and "downloaded first" in note
+    generator.warm_up()
+    folder = str(Path(settings.triposg_repo) / "pretrained_weights" / "TripoSG")
+    assert runtime.downloads == [folder] and runtime.loads == [folder]
+    assert generator.availability() == (True, "")
+
+
+def test_weights_setting_and_full_precision(tmp_path, matting):
+    elsewhere = tmp_path / "weights"
+    settings = station(tmp_path, triposg_weights=str(elsewhere), triposg_half_precision=False)
+    runtime = FakeRuntime()
+    TripoSGGenerator(settings, runtime).warm_up()
+    assert runtime.downloads == [str(elsewhere)] and runtime.loads == [str(elsewhere)]
+    assert runtime.pipe.moved == ("cuda", "float32")
+
+
+def test_a_download_that_fails_or_stays_incomplete(tmp_path, matting):
+    generator = TripoSGGenerator(station(tmp_path, weights="partial"), FakeRuntime(download="fails"))
+    with pytest.raises(GeneratorUnavailable, match="the weights could not be downloaded"):
+        generator.warm_up()
+    assert "no route to huggingface.co" in generator.availability()[1]
+
+    runtime = FakeRuntime(download="partial")
+    generator = TripoSGGenerator(station(tmp_path / "second", weights="partial"), runtime)
+    with pytest.raises(GeneratorUnavailable, match="the download left no model_index.json"):
+        generator.warm_up()
+    assert runtime.loads == []
+
+
+def test_a_failed_load_is_reported_and_tried_again_by_the_next_job(tmp_path, matting):
+    runtime = FakeRuntime(load_error="CUDA out of memory")
+    generator = TripoSGGenerator(station(tmp_path), runtime)
+    with pytest.raises(GeneratorUnavailable, match="the model could not be loaded"):
+        generator.warm_up()
+    ready, note = generator.availability()
+    assert ready is False and "CUDA out of memory" in note
+    assert generator.generate(request()).decoder == "flash"
+    assert generator.availability() == (True, "") and len(runtime.loads) == 2
+
+
+def test_availability_answers_while_the_model_loads(tmp_path, matting):
+    gate = threading.Event()
+    generator = TripoSGGenerator(station(tmp_path), FakeRuntime(gate=gate))
+    loader = threading.Thread(target=generator.warm_up, daemon=True)
+    loader.start()
+    try:
+        wait_until(lambda: generator.availability()[1] == "the model is being loaded")
+        started = time.monotonic()
+        assert generator.availability() == (False, "the model is being loaded")
+        assert generator.gpu() == "Fake RTX 5070"
+        assert time.monotonic() - started < 0.5  # neither call waits for the load
+        assert loader.is_alive()
+    finally:
+        gate.set()
+    loader.join(10)
+    assert generator.availability() == (True, "")
+
+
+# --------------------------------------------------------------------------- the decoders
+
+
+def loaded(tmp_path, pipe, **overrides):
+    runtime = FakeRuntime(pipe=pipe)
+    generator = TripoSGGenerator(station(tmp_path, **overrides), runtime)
+    generator.warm_up()
+    return generator, runtime
+
+
+def test_the_default_call_is_upstreams_own(tmp_path, matting):
+    pipe = FakePipe()
+    generator, runtime = loaded(tmp_path, pipe, triposg_steps=30, triposg_guidance=6.5)
+    framed = picture(120)
+    mesh = generator.generate(request(framed, seed=7))
+    assert mesh.decoder == "flash" and mesh.vertices.shape[1] == 3 and mesh.faces.dtype == np.int64
+    assert mesh.vertices.dtype == np.float64 and len(mesh.faces) > 0
+    (call,) = pipe.calls
+    assert set(call) == {"image", "generator", "num_inference_steps", "guidance_scale"}  # no decoder is named
+    assert call["image"] is framed  # the framed picture goes in as it is
+    assert call["num_inference_steps"] == 30 and call["guidance_scale"] == 6.5
+    assert call["generator"].seed == 7 and call["generator"].device == "cuda"
+    assert runtime.fake_torch.emptied == 1
+
+
+def test_a_matted_crop_is_put_on_white(tmp_path, matting):
+    pipe = FakePipe()
+    generator, _ = loaded(tmp_path, pipe)
+    rgba = Image.new("RGBA", (40, 40), (10, 20, 30, 0))
+    rgba.paste((200, 60, 40, 255), (10, 10, 30, 30))
+    generator.generate(request(rgba))
+    sent = pipe.calls[0]["image"]
+    assert sent.mode == "RGB" and sent.getpixel((0, 0)) == (255, 255, 255) and sent.getpixel((20, 20)) == (200, 60, 40)
+
+
+@pytest.mark.parametrize("failure", ["none", "boom", "empty", "no faces"])
+def test_a_failed_default_decoder_is_tried_once_more_without_it(tmp_path, matting, failure):
+    pipe = FakePipe(flash=failure)
+    generator, runtime = loaded(tmp_path, pipe)
+    mesh = generator.generate(request())
+    assert mesh.decoder == "hierarchical" and len(mesh.faces) > 0
+    assert pipe.decoders == ["flash", "hierarchical"]
+    assert pipe.calls[1]["use_flash_decoder"] is False and "use_flash_decoder" not in pipe.calls[0]
+    assert runtime.fake_torch.emptied == 1
+
+
+def test_the_fallback_can_be_switched_off(tmp_path, matting):
+    pipe = FakePipe(flash="none")
+    generator, runtime = loaded(tmp_path, pipe, triposg_fallback_decoder=False)
+    with pytest.raises(GeneratorError) as raised:
+        generator.generate(request())
+    assert "TripoSG inference failed: flash decoder: " + NONE_TYPE == str(raised.value)
+    assert pipe.decoders == ["flash"] and runtime.fake_torch.emptied == 1
+
+    # A pipeline that hands back nothing, instead of crashing on it, is named for what it is.
+    for k, empty in enumerate(("empty", "no faces")):
+        generator, _ = loaded(tmp_path / str(k), FakePipe(flash=empty), triposg_fallback_decoder=False)
+        with pytest.raises(GeneratorError) as raised:
+            generator.generate(request())
+        assert str(raised.value) == "TripoSG inference failed: flash decoder: it returned no mesh"
+
+
+def test_both_decoders_failing_fails_the_generation_with_both_reasons(tmp_path, matting):
+    pipe = FakePipe(flash="none", hierarchical="boom")
+    generator, _ = loaded(tmp_path, pipe)
+    with pytest.raises(GeneratorError) as raised:
+        generator.generate(request())
+    assert not isinstance(raised.value, GeneratorUnavailable)
+    assert str(raised.value) == (f"TripoSG inference failed: flash decoder: {NONE_TYPE}; "
+                                 "hierarchical decoder: CUDA error: invalid argument")
+    assert pipe.decoders == ["flash", "hierarchical"]
+
+
+def test_a_decoder_that_keeps_failing_is_no_longer_tried_first(tmp_path, matting):
+    pipe = FakePipe(flash="none")
+    generator, _ = loaded(tmp_path, pipe)
+    assert [generator.generate(request()).decoder for _ in range(3)] == ["hierarchical"] * 3
+    # Two objects paid for both decoders; the third went to the working one at once.
+    assert pipe.decoders == ["flash", "hierarchical", "flash", "hierarchical", "hierarchical"]
+
+    # One failure followed by a success does not switch.
+    pipe = FakePipe(flash="none")
+    generator, _ = loaded(tmp_path / "second", pipe)
+    generator.generate(request())
+    pipe.behaviour["flash"] = "ok"
+    assert generator.generate(request()).decoder == "flash"
+    pipe.behaviour["flash"] = "none"
+    generator.generate(request())
+    assert pipe.decoders == ["flash", "hierarchical", "flash", "flash", "hierarchical"]
+
+
+# --------------------------------------------------------------------------- inside the service
+
+
+def served(tmp_path, runtime, **overrides):
+    settings = station(tmp_path, **overrides)
+    return create_app(settings, TripoSGGenerator(settings, runtime)), settings
+
+
+def one_job(client, room="triposg", views=None):
+    model = room_model(room, [(0.6, 0.6, 0.6)])
+    assert client.post("/rooms", json=model).status_code == 201
+    return post_object(client, room, meta_for(model["objects"][0], 15000), views or [jpeg()]).json()["jobId"]
+
+
+def test_the_model_is_loaded_when_the_service_starts_and_a_job_gets_a_framed_picture(tmp_path, matting):
+    runtime = FakeRuntime()
+    app, _ = served(tmp_path, runtime)
+    with TestClient(app) as client:
+        wait_until(lambda: client.get("/health").json()["generatorReady"])  # no job was needed
+        health = client.get("/health").json()
+        assert health["generator"] == "triposg" and health["generatorNote"] == "" and health["matting"] == "rembg"
+        assert health["gpu"] is True and health["gpuName"] == "Fake RTX 5070"
+        assert len(runtime.loads) == 1 and runtime.pipe.calls == []
+
+        status = wait_for(client, one_job(client))
+        assert status["state"] == "ready", status
+        assert status["generator"] == "triposg" and status["decoder"] == "flash" and status["source"] == "local"
+        assert len(runtime.loads) == 1
+
+        # What the model saw: the object of the crop (a block of 172 pixels in a 256-pixel crop) cut to
+        # its matte, on white, in a square with a tenth of margin; nothing of the grey room is left.
+        (call,) = runtime.pipe.calls
+        sent = call["image"]
+        assert sent.mode == "RGB" and sent.size[0] == sent.size[1]
+        pixels = np.asarray(sent).astype(np.int16)
+        block = np.abs(pixels - [150, 112, 70]).max(axis=2) < 40
+        rows, columns = np.flatnonzero(block.any(axis=1)), np.flatnonzero(block.any(axis=0))
+        long_side = max(len(rows), len(columns))
+        assert 165 <= long_side <= 180 and abs(sent.size[0] - (long_side + 2 * int(long_side * 0.1))) <= 4
+        assert abs(rows[0] - (sent.size[1] - 1 - rows[-1])) <= 2  # centred, top to bottom
+        assert abs(columns[0] - (sent.size[0] - 1 - columns[-1])) <= 2  # and left to right
+        assert (pixels[0] == 255).all() and (pixels[-1] == 255).all() and (pixels[:, 0] == 255).all()
+        assert not (np.abs(pixels - 96).max(axis=2) < 12).any()  # no grey background anywhere
+
+        # The crop and its matte were held for the job and are dropped with it.
+        assert app.state.forge._views == {} and app.state.forge._crops == {}
+
+
+def test_health_answers_and_jobs_wait_while_the_model_loads(tmp_path, matting):
+    gate = threading.Event()
+    runtime = FakeRuntime(gate=gate)
+    app, _ = served(tmp_path, runtime)
+    with TestClient(app) as client:
+        try:
+            wait_until(lambda: client.get("/health").json()["generatorNote"] == "the model is being loaded")
+            started = time.monotonic()
+            health = client.get("/health").json()
+            assert time.monotonic() - started < 1.0 and health["ok"] is True and health["generatorReady"] is False
+            job_id = one_job(client)
+            time.sleep(0.2)
+            assert client.get(f"/jobs/{job_id}").json()["state"] == "queued" and runtime.pipe.calls == []
+        finally:
+            gate.set()
+        assert wait_for(client, job_id)["state"] == "ready"
+        assert client.get("/health").json()["generatorReady"] is True
+
+
+def test_without_a_matting_model_the_service_says_so_and_no_photo_reaches_the_model(tmp_path, no_matting):
+    runtime = FakeRuntime()  # PyTorch, CUDA, diso, the checkout and the weights are all there
+    app, _ = served(tmp_path, runtime)
+    with TestClient(app) as client:
+        health = client.get("/health").json()
+        assert health["generatorReady"] is False and health["matting"] == "none"
+        assert health["generatorNote"] == "no matting model is installed (rembg; pip install -r requirements-gpu.txt)"
+        status = wait_for(client, one_job(client, views=[jpeg(seed=1), jpeg(seed=2)]))
+        assert status["state"] == "failed"
+        assert "TripoSG cannot run: no matting model is installed" in status["error"]
+        assert runtime.loads == [] and runtime.pipe.calls == []
+        assert client.get("/health").json()["queue"] == 0  # the worker goes on
+
+
+def test_a_view_whose_matting_fails_is_not_sent_and_the_next_view_is(tmp_path, matting):
+    runtime = FakeRuntime()
+    app, _ = served(tmp_path, runtime)
+    with TestClient(app) as client:
+        wait_until(lambda: client.get("/health").json()["generatorReady"])
+        matting.fail_on = {1}
+        status = wait_for(client, one_job(client, "second", [jpeg(seed=1), jpeg((40, 54, 92), seed=2)]))
+        assert status["state"] == "ready", status
+        (call,) = runtime.pipe.calls  # view 0 never reached the model
+        centre = call["image"].getpixel((call["image"].size[0] // 2,) * 2)
+        assert max(abs(a - b) for a, b in zip(centre, (40, 54, 92))) < 30  # the picture is view 1's
+
+        matting.fail_on = {matting.calls + 1}
+        status = wait_for(client, one_job(client, "only"))
+        assert status["state"] == "failed" and len(runtime.pipe.calls) == 1
+        assert status["error"] == ("view 0: background removal failed: onnxruntime ran out of memory; "
+                                   "triposg is given matted pictures only")
+
+
+def test_an_empty_matte_is_not_sent(tmp_path, matting):
+    runtime = FakeRuntime()
+    app, _ = served(tmp_path, runtime)
+    with TestClient(app) as client:
+        matting.empty = True
+        status = wait_for(client, one_job(client))
+        assert status["state"] == "failed" and "view 0: the matte is empty" in status["error"]
+        assert runtime.pipe.calls == []
+
+
+def test_a_matting_model_that_cannot_be_loaded_is_reported(tmp_path, matting):
+    matting.load_error = "u2net.onnx could not be downloaded"
+    app, _ = served(tmp_path, FakeRuntime())
+    with TestClient(app) as client:
+        wait_until(lambda: "matting model could not be loaded" in client.get("/health").json()["generatorNote"])
+        health = client.get("/health").json()
+        assert health["generatorReady"] is False and "u2net.onnx" in health["generatorNote"]
+        # A picture that mattes after all clears it.
+        assert wait_for(client, one_job(client))["state"] == "ready"
+        assert client.get("/health").json()["generatorReady"] is True
+
+
+def test_the_matting_model_is_loaded_at_the_start_for_any_generator(tmp_path, matting):
+    loads = []
+    real_load = imaging.load_matting
+    imaging.load_matting = lambda: loads.append(1) or real_load()  # the fixture restores it
+    try:
+        with TestClient(create_app(make_settings(tmp_path / "a"))) as client:  # the procedural generator
+            wait_until(lambda: loads)
+            assert client.get("/health").json()["generatorReady"] is True
+        # A matting model that cannot be loaded stops only a generator that needs it.
+        matting.load_error = "u2net.onnx could not be downloaded"
+        with TestClient(create_app(make_settings(tmp_path / "b"))) as client:
+            wait_until(lambda: len(loads) == 2)
+            health = client.get("/health").json()
+            assert health["generatorReady"] is True and health["generatorNote"] == ""
+    finally:
+        imaging.load_matting = real_load
+
+
+def test_the_job_reports_the_decoder_that_made_its_mesh(tmp_path, matting):
+    runtime = FakeRuntime(pipe=FakePipe(flash="none"))
+    app, settings = served(tmp_path, runtime)
+    with TestClient(app) as client:
+        photo = jpeg(seed=5)
+        status = wait_for(client, one_job(client, views=[photo]))
+        assert status["state"] == "ready" and status["decoder"] == "hierarchical"
+        assert runtime.pipe.decoders == ["flash", "hierarchical"]
+        # The asset remembers it, so an answer from the cache says the same.
+        model = room_model("triposg", [(0.6, 0.6, 0.6)])
+        again = post_object(client, "triposg", meta_for(model["objects"][0], 15000), [photo]).json()
+        assert again["cached"] is True
+        assert client.get(f"/jobs/{again['jobId']}").json()["decoder"] == "hierarchical"
+
+    # Both decoders failing fails the job with both reasons, and the worker goes on.
+    runtime = FakeRuntime(pipe=FakePipe(flash="none", hierarchical="boom"))
+    app, _ = served(tmp_path / "second", runtime)
+    with TestClient(app) as client:
+        status = wait_for(client, one_job(client))
+        assert status["state"] == "failed" and "flash decoder" in status["error"]
+        assert "hierarchical decoder: CUDA error" in status["error"] and "decoder" not in status
+
+
+@pytest.mark.skipif(importlib.util.find_spec("torch") is not None,
+                    reason="PyTorch is installed here: the service's own start-up may load it")
+def test_no_test_imported_pytorch():
+    assert "torch" not in sys.modules and "diso" not in sys.modules and "rembg" not in sys.modules

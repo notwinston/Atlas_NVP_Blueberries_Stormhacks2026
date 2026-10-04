@@ -1,0 +1,70 @@
+# Station only: what TripoSG needs, with the Forge's own pins for Python 3.11 on Windows.
+#
+# NEVER INSTALLED ON WINDOWS OR WITH CUDA. The list was resolved with `uv pip compile` for
+# Python 3.11 on Windows (x86_64-pc-windows-msvc) against PyPI and the cu128 PyTorch index on
+# 4 October 2026, together with requirements.lock and requirements-gpu.txt, and every pin below
+# has a wheel for that platform except antlr4-python3-runtime, which is pure Python and built
+# by pip. It was installed once on macOS with PyTorch 2.7.1 for the processor: there TripoSG's
+# package imports (with diso replaced by a stub) and the Forge's tests pass. TripoSG was not
+# run with it. README, "First run on the Station", gives the order of the commands; write what
+# was really installed into docs/versions.md.
+#
+# Why not TripoSG's own requirements.txt (commit fc5c409 of 18 April 2025):
+#   - it pins numpy==1.22.3, which has no build for Python 3.11. The Forge keeps the numpy of
+#     requirements.lock;
+#   - it leaves transformers open, and 4.57.0 cannot load the model (TripoSG issue 61). 4.49.0
+#     is what the official demo pins;
+#   - it lists diso, which pip cannot build in its isolated build environment, because diso's
+#     setup.py imports torch. It is installed by its own command (below);
+#   - it lists opencv-python and pymeshlab, which only TripoSG's scripts use. The Forge frames
+#     the picture and reduces the mesh itself, so neither is installed.
+#
+# Install after requirements.lock and after PyTorch:
+#
+#   pip install -r requirements.lock
+#   pip install torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu128
+#   pip install -r requirements-triposg.txt
+#   pip install setuptools wheel
+#   pip install --no-build-isolation diso==0.1.4
+#   pip install -r requirements-gpu.txt
+#
+# diso==0.1.4 is TripoSG's default decoder (CC BY-NC 4.0). PyPI has only its source: it is
+# compiled on the Station against the installed PyTorch, which needs the Microsoft C++ build
+# tools and the CUDA toolkit 12.8 with CUDA_HOME set. Without CUDA_HOME it builds without its
+# CUDA part and reports no error.
+
+# What the `triposg` package imports. The versions of diffusers and the packages around it are
+# the newest of 18 April 2025, the date of TripoSG's last commit.
+diffusers==0.33.1
+transformers==4.49.0
+einops==0.8.1
+huggingface-hub==0.30.2
+jaxtyping==0.3.1
+omegaconf==2.3.0
+safetensors==0.5.3
+scikit-image==0.25.2
+scipy==1.15.2
+tqdm==4.67.1
+typeguard==4.4.2
+# In TripoSG's list; diffusers uses it when it is installed.
+peft==0.15.2
+
+# What those bring with them, pinned so that two installs are the same install.
+accelerate==1.6.0
+antlr4-python3-runtime==4.9.3
+charset-normalizer==3.5.2
+imageio==2.38.0
+importlib-metadata==9.0.1
+lazy-loader==0.6
+psutil==7.2.2
+regex==2024.11.6
+requests==2.32.3
+tifffile==2026.3.3
+tokenizers==0.21.1
+urllib3==2.8.0
+wadler-lindig==0.1.5
+zipp==4.1.1
+
+# Not pinned here, on purpose: numpy, pillow, packaging, pyyaml, typing-extensions, certifi and
+# idna come from requirements.lock; filelock, fsspec, jinja2, markupsafe, mpmath, networkx and
+# sympy come with PyTorch, in the versions that PyTorch build asks for.

@@ -1,15 +1,30 @@
 """Request and response bodies of the Forge HTTP interface (Master Plan Appendix B.4)."""
 from __future__ import annotations
 
+import base64
+import binascii
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .budget import VALIDATOR_MAX_TRIANGLES, VALIDATOR_MIN_TRIANGLES
+from .budget import VALIDATOR_MAX_TRIANGLES, VALIDATOR_MAX_TRIANGLES_LIGHT, VALIDATOR_MIN_TRIANGLES
 
 Vec3 = tuple[float, float, float]
 
 ROOM_ID_PATTERN = r"^[A-Za-z0-9_]{1,40}$"
+# The object profile of lane C: 16 x 16 heights of the scanned surface inside the box, one byte each.
+PROFILE_BYTES = 256
+
+
+def decode_profile(text: str) -> bytes:
+    """The 256 bytes of a profile sent as standard base64 with padding; ValueError for anything else."""
+    try:
+        raw = base64.b64decode(text, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError(f"profile is not standard base64: {exc}") from None
+    if len(raw) != PROFILE_BYTES:
+        raise ValueError(f"profile decodes to {len(raw)} bytes; exactly {PROFILE_BYTES} are required")
+    return raw
 
 
 class RoomObject(BaseModel):
@@ -51,8 +66,19 @@ class ObjectMeta(BaseModel):
     dims: Vec3
     yaw: float = 0.0
     triTarget: int = Field(ge=VALIDATOR_MIN_TRIANGLES, le=VALIDATOR_MAX_TRIANGLES)
+    # The target of the light copy. An older phone does not send it; the Forge then uses its own figure for the room.
+    triTargetLight: Optional[int] = Field(default=None, ge=VALIDATOR_MIN_TRIANGLES, le=VALIDATOR_MAX_TRIANGLES_LIGHT)
+    # The object profile as the RoomModel holds it (`objects[k].profile`). Absent when the scan gave none.
+    profile: Optional[str] = None
     backend: Literal["local", "hosted", "cache"] = "local"
     views: list[ViewMeta] = Field(default_factory=list, max_length=3)
+
+    @field_validator("profile")
+    @classmethod
+    def _profile_is_256_bytes(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None:
+            decode_profile(value)
+        return value
 
 
 class Health(BaseModel):
@@ -77,7 +103,11 @@ class RoomCreated(BaseModel):
     roomHash: str
     generated: list[int]
     placeholders: list[int]
+    # The largest full target of the room: what a reader that knows one figure per room may ask for.
     triTarget: int
+    # The full target of every box, 0 for a box that receives no mesh; and the room's light target.
+    triTargets: dict[int, int]
+    triTargetLight: int
 
 
 class JobCreated(BaseModel):
@@ -97,8 +127,11 @@ class JobStatus(BaseModel):
     source: Literal["local", "hosted", "cache"]
     error: str = ""
     triTarget: int
+    triTargetLight: Optional[int] = None
     cached: bool = False
     generator: str = ""
+    # Which of TripoSG's decoders produced the mesh: "flash" or "hierarchical".
+    decoder: Optional[str] = None
     queuePosition: Optional[int] = None
     sha256: Optional[str] = None
     url: Optional[str] = None
@@ -107,6 +140,17 @@ class JobStatus(BaseModel):
     maxEdge: Optional[float] = None
     bounds: Optional[Vec3] = None
     palette: Optional[int] = None
+    # The light copy (mesh design section 5.3); absent when the job has none.
+    lightSha256: Optional[str] = None
+    lightUrl: Optional[str] = None
+    lightBytes: Optional[int] = None
+    lightTris: Optional[int] = None
+    # The fit to the scanned profile: the score, the quarter turn (degrees) and the up axis that were chosen,
+    # and how many generations the object took.
+    fit: Optional[float] = None
+    fitYaw: Optional[int] = None
+    fitUp: Optional[str] = None
+    attempts: Optional[int] = None
     report: Optional[dict[str, Any]] = None
 
 
