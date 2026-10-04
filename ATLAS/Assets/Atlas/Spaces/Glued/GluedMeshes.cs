@@ -1,5 +1,6 @@
 using System;
 using Atlas.Rendering;
+using Atlas.World;
 using Unity.Mathematics;
 
 namespace Atlas.Spaces.Glued
@@ -58,8 +59,11 @@ namespace Atlas.Spaces.Glued
             return new float3(LandmarkStepRadius * cos, LandmarkFirstStep + LandmarkRise * k, LandmarkStepRadius * sin);
         }
 
-        /// <summary>Appends the cell for this cell size.</summary>
-        public static void Build(float sizeX, float sizeZ, AtlasMeshBuilder data)
+        /// <summary>
+        /// Appends the cell for this cell size. With a kit landmark (a piece modelled in Blender, foot at its
+        /// origin) the piece stands at <see cref="LandmarkBase"/> in place of the built-in stair.
+        /// </summary>
+        public static void Build(float sizeX, float sizeZ, AtlasMeshBuilder data, MeshData landmark = null)
         {
             if (data == null) throw new ArgumentNullException(nameof(data));
             if (!(sizeX > 0f) || !(sizeZ > 0f)) throw new ArgumentOutOfRangeException(nameof(sizeX), "A cell needs a size");
@@ -85,9 +89,14 @@ namespace Atlas.Spaces.Glued
             }
 
             // The landmark: a pole with a spiral stair and a pennant. A spiral has a hand, so a mirrored cell
-            // shows at a glance that it is mirrored.
+            // shows at a glance that it is mirrored. A kit landmark has a hand of its own.
             float2 foot = LandmarkBase(sizeX, sizeZ);
             float3 pole = new float3(foot.x, 0f, foot.y);
+            if (landmark != null)
+            {
+                data.Append(landmark, pole);
+                return;
+            }
             data.AddPost(pole, LandmarkPoleRadius, LandmarkPoleHeight, post, 6, true, 0, 4f, 0.6f);
             float2 tread = AtlasPalette.Uv(AtlasPalette.Landmark);
             for (int k = 0; k < LandmarkSteps; k++)
@@ -116,9 +125,15 @@ namespace Atlas.Spaces.Glued
         public const float HeadBack = 0.08f;
         public const int HeadSegments = 10, HeadRings = 6;
 
-        public static void Build(AtlasMeshBuilder data)
+        /// <summary>Appends the avatar; a kit avatar (a piece modelled in Blender, same frame) is copied instead.</summary>
+        public static void Build(AtlasMeshBuilder data, MeshData kit = null)
         {
             if (data == null) throw new ArgumentNullException(nameof(data));
+            if (kit != null)
+            {
+                data.Append(kit, float3.zero);
+                return;
+            }
             float2 body = AtlasPalette.Uv(AtlasPalette.AvatarBody);
             float2 left = AtlasPalette.Uv(AtlasPalette.AvatarLeft);
             float2 right = AtlasPalette.Uv(AtlasPalette.AvatarRight);
