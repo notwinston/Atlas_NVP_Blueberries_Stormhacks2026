@@ -38,8 +38,12 @@ or step by step, when the outputs are only known after the work::
 Notes
 - Stamps live outside the package, in ``<out>/work/<id>/stamps/<step>.json`` (paths.stamp_path), so
   that ``<out>/cases/<id>/`` holds package files only.
-- Output paths are stored relative to the stamp's ``root`` (default: the stamp's directory) when
-  they are inside it, otherwise absolute.
+- Output paths are stored relative to the stamp's ``root`` (default: the stamp's directory), with
+  ``..`` segments when the output lies outside it (``../../../cases/<id>/chest.glb`` for a package
+  file). So an ``--out`` tree that is moved or copied as a whole keeps fresh stamps: the stamp and
+  its outputs keep their relative position. An output that shares no directory with the root (only
+  the filesystem root, or another drive) is stored absolute. Stamps written before this rule hold
+  absolute paths for outputs outside the root; they are still read and stay fresh in place.
 - A directory given as an input is hashed recursively (sorted relative paths + contents); a
   directory given as an output likewise.
 - Hashing reads the files: about 1 GB per 2 s. Large inputs (the DICOM cache) can instead be
@@ -109,7 +113,9 @@ def compute_key(code_version: str, params: Any = None, inputs: Iterable[Path | s
     """The cache key: SHA-256 over code version, parameters and input contents.
 
     Inputs are identified by their position in ``inputs`` and their base name, not by their
-    absolute path, so moving the ``--out`` / ``--cache`` directory does not invalidate a stamp.
+    absolute path, so the key itself does not change when the ``--out`` / ``--cache`` directory is
+    moved (as long as the step puts no absolute path into ``params``). Whether the stamp is still
+    fresh after a move also depends on how its outputs were recorded: see ``StepCache._rel``.
     A missing input raises FileNotFoundError.
     """
     h = hashlib.sha256()
@@ -138,11 +144,26 @@ class StepCache:
 
     # -- stamp ---------------------------------------------------------------------------
     def _rel(self, path: Path) -> str:
+        """How an output is named in the stamp: relative to ``root`` (``..`` segments allowed) when
+        the two share a directory other than the filesystem root, else the absolute path."""
         path = Path(path).resolve()
+        root = self.root.resolve()
         try:
-            return path.relative_to(self.root.resolve()).as_posix()
-        except ValueError:
+            common = Path(os.path.commonpath([path, root]))
+        except ValueError:  # different drives
             return path.as_posix()
+        if common == Path(common.anchor):
+            return path.as_posix()
+        return Path(os.path.relpath(path, root)).as_posix()
+
+    def _recorded_name(self, path: Path, recorded: dict) -> str | None:
+        """The key under which ``path`` is recorded: its relative name, or its absolute path (stamps
+        written before outputs outside the root were stored relative). None when it is not recorded."""
+        rel = self._rel(path)
+        if rel in recorded:
+            return rel
+        absolute = Path(path).resolve().as_posix()
+        return absolute if absolute in recorded else None
 
     def _abs(self, rel: str) -> Path:
         p = Path(rel)
@@ -174,7 +195,7 @@ class StepCache:
         recorded: dict = data.get("outputs", {})
         if outputs is not None:
             for p in outputs:
-                if self._rel(Path(p)) not in recorded:
+                if self._recorded_name(Path(p), recorded) is None:
                     return False
         for rel, meta in recorded.items():
             p = self._abs(rel)

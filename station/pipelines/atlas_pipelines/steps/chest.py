@@ -22,7 +22,7 @@ from .. import cache, chest, contract, masks, paths
 from ..cli import StepError
 
 NAME = "chest"
-HELP = "lungs, heart and trachea with 10 blend shapes -> chest.glb (<= 40k triangles)"
+HELP = "lungs, heart and trachea with 10 blend shapes -> chest.glb (about 36k triangles, limit 40k)"
 CODE_VERSION = "chest-step/1+" + chest.VERSION
 REPORT_NAME = "chest_report.json"
 REPORT_SCHEMA = "atlas.chest_report/1"
@@ -52,7 +52,7 @@ def build_report(case: str, cache_dir, meshes, origin_mm, frame_kind: str) -> di
     rep["lungs_contour_volume_l"] = [float(p["contour_volume_l"]) for p in s["lungs"]]
     rep.update({"schema": REPORT_SCHEMA, "id": case, "frame": frame_kind,
                 "origin_mm": [float(v) for v in origin_mm], "M": float(contract.M_DISPLAY),
-                "max_triangles": chest.MAX_TRIS_TOTAL,
+                "max_triangles": chest.MAX_TRIS_TOTAL, "target_triangles": chest.TARGET_TRIS_TOTAL,
                 "method": {"sigma_mm": float(chest.SIGMA_MM), "registration_iters": chest.REG_ITERS,
                            "registration_sigma_vox": float(chest.REG_SIGMA_VOX),
                            "registration_subsample": chest.REG_SUBSAMPLE, "newton_iters": chest.NEWTON_ITERS,
@@ -107,7 +107,7 @@ def run(args) -> int:
     )
     rep = contract.read_json(report)
     print(f"chest: {'built' if ran else 'up to date (cached)'} {out}")
-    print(f"chest: {rep['triangles']} triangles (budget {chest.MAX_TRIS_TOTAL}), frame: {rep['frame']}")
+    print(f"chest: {rep['triangles']} triangles (built to {chest.TARGET_TRIS_TOTAL}, limit {chest.MAX_TRIS_TOTAL}), frame: {rep['frame']}")
     for k in (0, 5):
         print(f"chest: lungs at phase {k}: mesh {rep['lungs_mesh_volume_l'][k]:.4f} L, "
               f"mask {rep['lungs_mask_volume_l'][k]:.4f} L, contour area x slice {rep['lungs_contour_volume_l'][k]:.4f} L")

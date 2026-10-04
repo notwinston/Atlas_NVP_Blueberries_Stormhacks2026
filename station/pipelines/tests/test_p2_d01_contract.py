@@ -396,13 +396,13 @@ def test_build_manifest_labels_real_case(tmp_path):
 # =============================================================================================
 def test_label_strings_are_exact():
     assert labels.LABEL_REAL == "Public research data: TCIA 4D-Lung, CC BY 3.0. Meshes derived by ATLAS."
-    assert labels.LABEL_TWIN == "Illustrative model."
+    assert labels.LABEL_TWIN == "Illustrative model"  # plan 10.2.1: no trailing full stop
     assert labels.LABEL_RIGID == "Simplified: rigid shape"
     assert labels.AIRWAY_NODE_SOURCE == "model"
     assert labels.FOOTER == "Education and research visualisation. Not for clinical use."
     assert labels.OBJECT_NOUN == {"real": "target lesion", "illustrative": "nodule"}
     assert labels.case_label("real") == labels.LABEL_REAL and labels.case_label("illustrative") == labels.LABEL_TWIN
-    assert all(labels.label_for("illustrative", p) == "Illustrative model." for p in ("tube4d.bin", "tube4d_rigid.bin"))
+    assert all(labels.label_for("illustrative", p) == "Illustrative model" for p in ("tube4d.bin", "tube4d_rigid.bin"))
     assert paths.REAL_CASE == "lung101" and paths.TWIN_CASE == "twin"
     assert contract.M_DISPLAY == 15.0 and contract.LAMBDA_M == 1.5 and contract.PHASES == 10
 

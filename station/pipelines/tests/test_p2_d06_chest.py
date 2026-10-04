@@ -8,6 +8,10 @@ Acceptance (Master Plan 10.2.8, row P2-D06), asserted exactly:
 The reference values are contour area x 3 mm slice spacing (R2_rt_lung.py). The test prints the mesh
 volume next to the mask volume and the contour-area volume.
 
+The file is built to 36,000 triangles (13,500 + 13,500 + 5,400 + 3,600), 10 % under the limit, so the
+limit is not met by a hair. The largest-piece rule drops one piece of the left-lung ROI at phases 6 and
+7; `test_what_is_dropped_from_the_left_lung_is_right_lung` checks on the masks what that piece is.
+
 The chest needs the display frame of the case (out/work/lung101/frame.json, written by `atlas case
 tube4d`). When that file exists in the real output root the chest is built there (and cached there).
 When it does not exist yet, the chest is built in a temporary output root with `--provisional-frame`
@@ -27,6 +31,7 @@ from atlas_pipelines import chest, contract, glb, labels, masks, paths, tubelib
 
 # --- the plan's numbers (P2-D06) ---------------------------------------------------------------
 MAX_TRIANGLES = 40_000
+BUILT_TRIANGLES = {"lung_r": 13_500, "lung_l": 13_500, "heart": 5_400, "trachea": 3_600}  # 15 : 15 : 6 : 4
 LUNG_VOLUME_L = {0: 4.42, 5: 3.87}  # phase index -> litres (phase 5 is the 50 % bin)
 LUNG_TOLERANCE = 0.03
 M = 15.0
@@ -78,6 +83,19 @@ def test_acceptance_triangle_budget(chest_pkg):
     print(f"\nchest.glb: {n} triangles (budget {MAX_TRIANGLES})")
     assert n == sum(len(faces(m)) for m in chest_pkg.meshes.values())
     assert n <= MAX_TRIANGLES
+
+
+def test_triangle_headroom_and_proportions(chest_pkg):
+    """Not the acceptance: the file is built to 36,000 triangles, in the proportions 15 : 15 : 6 : 4,
+    which leaves 10 % of the limit unused."""
+    got = {name: len(faces(m)) for name, m in chest_pkg.meshes.items()}
+    print(f"\nchest.glb parts: {got}, total {sum(got.values())}")
+    assert sum(BUILT_TRIANGLES.values()) == 36_000 == chest.TARGET_TRIS_TOTAL
+    assert {p.name: p.max_tris for p in chest.PARTS} == BUILT_TRIANGLES
+    for name, budget in BUILT_TRIANGLES.items():
+        assert 0.98 * budget <= got[name] <= budget, name
+    assert sum(got.values()) <= 0.9 * MAX_TRIANGLES
+    assert chest_pkg.report["max_triangles"] == MAX_TRIANGLES and chest_pkg.report["target_triangles"] == 36_000
 
 
 @pytest.mark.parametrize("phase", [0, 5])
@@ -154,6 +172,42 @@ def test_nothing_dropped_from_the_lungs_at_the_acceptance_phases(chest_pkg):
     for name in LUNGS:
         d = chest_pkg.report["parts"][name]["dropped_cm3"]
         assert d[0] < 0.1 and d[5] < 0.1, (name, d)
+
+
+def test_what_is_dropped_from_the_left_lung_is_right_lung(chest_pkg, tcia_101):
+    """The pieces of the left-lung ROI that the largest-piece rule drops at phases 6 and 7 (81 and
+    38 cm3) are right-lung contours filed under the left-lung ROI: every voxel of them is inside the
+    right-lung mask of the same phase, on the patient's right. They are therefore already in lung_r,
+    and adding them to lung_l would count that volume twice. Measured on the masks, not assumed."""
+    from scipy import ndimage
+
+    dropped = chest_pkg.report["parts"]["lung_l"]["dropped_cm3"]
+    assert [k for k, d in enumerate(dropped) if d > 1.0] == [6, 7]
+    assert dropped[6] == pytest.approx(81.4, abs=0.1) and dropped[7] == pytest.approx(37.7, abs=0.1)
+    assert max(chest_pkg.report["parts"]["lung_r"]["dropped_cm3"]) < 0.1
+    want_slices = {6: 2, 7: 1}
+    for k in (6, 7):
+        left, lo, sp = masks.load_mask(tcia_101.case, "llung", k, cache=tcia_101.cache)
+        right, ro, _ = masks.load_mask(tcia_101.case, "rlung", k, cache=tcia_101.cache)
+        lab, n = ndimage.label(left)
+        size = np.bincount(lab.ravel())
+        size[0] = 0
+        stray = (lab != 0) & (lab != int(size.argmax()))
+        idx = np.argwhere(stray)
+        # the same voxels in the right-lung crop (both crops are cuts of one CT grid)
+        j = idx + np.rint((lo - ro) / sp).astype(int)
+        ok = np.all((j >= 0) & (j < np.array(right.shape)), axis=1)
+        in_right = np.zeros(len(idx), bool)
+        in_right[ok] = right[tuple(j[ok].T)]
+        x = lo[0] + idx[:, 0] * sp[0]
+        main_x = lo[0] + np.argwhere(lab == int(size.argmax()))[:, 0].mean() * sp[0]
+        big = idx[np.isin(lab[tuple(idx.T)], np.flatnonzero(size > 100))]
+        print(f"\nphase {k}: dropped {stray.sum() * np.prod(sp) / 1000:.1f} cm3 on {len(np.unique(big[:, 2]))} slice(s) "
+              f"z = {np.unique(lo[2] + big[:, 2] * sp[2]).tolist()} mm, x {x.min():.1f} .. {x.max():.1f} mm "
+              f"(left lung centroid x {main_x:.1f}), inside the right-lung mask: {100 * in_right.mean():.1f} %")
+        assert in_right.all()
+        assert x.max() < 0.0 < main_x  # +x is the patient's left
+        assert len(np.unique(big[:, 2])) == want_slices[k]
 
 
 def test_vertices_lie_on_the_phase_surface(chest_pkg):

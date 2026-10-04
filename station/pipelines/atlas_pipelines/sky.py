@@ -57,6 +57,8 @@ import numpy as np
 from . import contract, labels
 from . import masks as masklib
 
+VERSION = "sky/1"  #: bump when this module changes what it writes (the sky step puts it in its cache key)
+
 # ---- the plan's numbers ------------------------------------------------------------------------
 NSIDE = 64
 NPIX = 12 * NSIDE * NSIDE  # 49,152

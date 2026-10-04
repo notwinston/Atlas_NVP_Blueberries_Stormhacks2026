@@ -18,7 +18,8 @@ from .. import sky as skylib
 
 NAME = "sky"
 HELP = "needle sky: clearance maps per phase and the robust map over the sphere of directions (real case)"
-CODE_VERSION = "sky/1"
+#: The key depends on the modules this step calls: the sky computation and the mask rasteriser.
+CODE_VERSION = "sky-step/1+" + skylib.VERSION + "+" + masklib.CODE_VERSION
 
 PARAMS = {
     "nside": skylib.NSIDE,

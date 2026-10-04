@@ -158,7 +158,12 @@ def test_sky_json_states_the_plan_numbers_and_the_mappings(sky_dir, meta):
     assert meta["threshold_mm"] == THRESHOLD_MM
     assert meta["threshold_label"] == "Teaching threshold" == labels.LABEL_TEACHING_THRESHOLD
     assert set(meta["organs"]) == ORGANS
+    # one label per asset: the file's own label is the real-data label (the maps are derived from the
+    # real contours), the same string the manifest gives every sky file; "Teaching threshold" labels
+    # the 5 mm value only, in threshold_label
     assert meta["label"] == "Public research data: TCIA 4D-Lung, CC BY 3.0. Meshes derived by ATLAS."
+    assert all(labels.label_for(labels.KIND_REAL, "sky/" + n) == meta["label"] for n in SKY_FILES)
+    assert meta["label"] != meta["threshold_label"]
     enc = meta["encoding"]
     assert enc["type"] == "u8" and enc["rounding"] == "floor"
     assert enc["clearance_max_mm"] == pytest.approx(255 * enc["mm_per_count"])

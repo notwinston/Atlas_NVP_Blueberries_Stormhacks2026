@@ -8,6 +8,10 @@ Checks, for each package: manifest.json parses (strict atlas.case/1); every list
 the recorded size and SHA-256; no unlisted file is present (dot-files aside). Prints one line per
 file and exits 1 if any check fails. A package whose manifest records missing expected files
 (``extra.complete = false``) still verifies if its hashes match; it is reported as INCOMPLETE.
+
+What OK means: the files are the files that were packed. It does not mean that the package is complete
+(see ``extra.complete``, which means "every expected file is present") or that its files pass their
+acceptance tests; those are the tests in ``tests/``.
 """
 
 from __future__ import annotations

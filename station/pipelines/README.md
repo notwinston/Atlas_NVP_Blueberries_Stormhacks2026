@@ -41,7 +41,8 @@ On a machine without ICU libraries, `dotnet` needs `DOTNET_SYSTEM_GLOBALIZATION_
 | `out/cases/<id>/` | the case package | no |
 | `out/work/<id>/` | scratch: `frame.json`, cache stamps | no |
 
-Every step is idempotent and cached by input hash: running it again without changes does nothing.
+Every step is idempotent and cached by input hash: running it again without changes does nothing. A stamp records its
+outputs relative to itself, so an `out/` tree moved or copied as a whole stays fresh.
 DICOM is never committed.
 
 ## Running the whole pipeline
@@ -78,11 +79,11 @@ except `fetch` (use `atlas case fetch --force` to download again). The same thin
 0.8 GB of DICOM on disk, about 0.3 GB over the wire) into `.cache/tcia/`, 4 parallel downloads, resumable; the whole
 `.cache/` is about 0.8 GB after `masks`. The download time depends on the TCIA server and the line and was not
 measured on a cold cache for this README. Once the data and `out/` are built, `atlas case all` takes under one second
-(every step reports "up to date"; measured 0.4 s).
+(every step reports "up to date"; measured 0.6 s).
 
 **Expected outputs** (`out/cases/<id>/`, listed by `atlas case info --case <id>`), from the run of 4 Oct 2026:
 
-| `lung101` (24 files + `manifest.json`, 6.3 MB) | `twin` (9 files + `manifest.json`, 1.1 MB) |
+| `lung101` (24 files + `manifest.json`, 6.0 MB) | `twin` (9 files + `manifest.json`, 1.1 MB) |
 |---|---|
 | `tube4d.bin`, `tube4d_rigid.bin`, `phases.glb` | `tube4d.bin`, `tube4d_rigid.bin`, `phases.glb` |
 | `itv.glb`, `core.glb`, `rho50.glb`, `occ.r8`, `table.json` | `itv.glb`, `core.glb`, `rho50.glb`, `occ.r8`, `table.json` |
@@ -97,27 +98,60 @@ a package silently: expected files that are absent are printed (`pack: INCOMPLET
 `manifest.json` under `extra.missing` with `extra.complete = false`; `--strict` turns that into exit 1. A DICOM file in a
 package stops `pack`. `verify` re-hashes every file against the manifest (and refuses an unlisted file) and exits 1 on
 any mismatch; an incomplete package that matches its hashes still verifies and is reported as INCOMPLETE.
+`extra.complete = true` means "every expected file is present" and nothing more; it is not a statement that the files
+pass their acceptance tests, and the fixed text `extra.note` in every manifest says so.
 
 **Labels** (exact strings, `atlas_pipelines/labels.py`): the real case's files carry "Public research data: TCIA
 4D-Lung, CC BY 3.0. Meshes derived by ATLAS."; `tube4d_rigid.bin` carries "Simplified: rigid shape"; `airway/*` carry
-"Model-generated airway"; `sky/robust.r8` and `sky/sky.json` (the 5 mm clearance threshold) carry "Teaching threshold";
-every twin file carries "Illustrative model.". The footer "Education and research visualisation. Not for clinical use."
+"Model-generated airway"; every twin file carries "Illustrative model" (no full stop, as in the plan's table). One
+label per file: all of `sky/` carries the real-data label (the maps are derived from the real contours), in the
+manifest and in `sky/sky.json` alike; "Teaching threshold" labels the 5 mm value, in the field `threshold_label` of
+`sky/sky.json`, not a file. The footer "Education and research visualisation. Not for clinical use."
 is in every manifest and every `CREDITS.txt`.
 
 **Deferred to Phase 1** (needs the phone, the Hub or the app build; not done here): the two packages inside the app
 build, the Hub route `/cases/<id>/...` that serves them, and the 2-second load test with the network off on the phone
 (P2-D09 acceptance, "Phone in hand, Station"). Station-side, `out/cases/<id>/` is the delivery directory.
 
-## Known failing acceptance tests (4 Oct 2026)
+## Acceptance status (4 Oct 2026)
 
-Three acceptance numbers of Master Plan section 10.2.8 are not met on the real case. The tests assert the plan's
-numbers unchanged and fail; `atlas case all` still builds and packs the files. These need a decision from the plan owner.
+After `atlas case all --force` (both cases rebuilt, 5 min 43 s, then a second run with every step "up to date"),
+`.venv/bin/python -m pytest tests -q` gives **254 passed**, none failed, none skipped (8 min 28 s, .NET present).
+Nothing fails. Two acceptance numbers of Master Plan section 10.2.8 are **not met as the plan wrote them** and are
+tested under a documented deviation instead; the full text, with every measured value and the plan rows to update, is
+section 13 of [`docs/case_contract.md`](../../docs/case_contract.md).
 
-| Work package | Plan | Measured | Why |
-|---|---|---|---|
-| P2-D04 | slice at each phase within 1 mm Hausdorff of that phase's contour mesh | 2.9 to 7.2 mm (mean distance 0.22 to 0.34 mm) | phase shapes differ by more than 1 mm; one 600-triangle mean-shape template cannot reach lobes only one phase has |
-| P2-D05 | ITV 47.4 cm3 within 5 % | 43.98 cm3 (-7.2 %); raw-mask union 47.29 cm3 | 47.4 was measured on raw masks; the plan's sigma = 1 mm smoothing of 3 mm slices shrinks the union. Core passes (16.99 against 17.2) |
-| P2-D07 | exactly 1 Two Compasses fork on the 4-fork route | 0 | with 37 degrees / 90 degrees the Euclidean compass is never wrong on a route that ends at generation 4 |
+**Passes as the plan wrote it**
+
+| Work package | Plan (10.2.8) | Measured |
+|---|---|---|
+| P2-D01 | 2-tet fixture round-trips Python to C# byte-identical | passes |
+| P2-D02 | GTV 0.52 cm3 within 3 %; ITV pinned and held within 3 %; core 0 | GTV 0.523 cm3 (table), 0.512 cm3 (shipped phase meshes); ITV 2.136 cm3; core 0 |
+| P2-D03 | 20 series; centroid range 3.1 / 3.1 / 6.8 mm within 1 mm | 3.13 / 3.09 / 6.85 mm |
+| P2-D04 (part) | 18,000 tets; every interior face shared by exactly 2 tets | 18,000; 35,400 faces shared by 2, none by more |
+| P2-D05 (part) | core 17.2 cm3 within 5 % | 16.985 cm3 (-1.25 %) |
+| P2-D06 | at most 40k triangles; lungs 4.42 L at 0 % and 3.87 L at 50 % within 3 % | 36,000 triangles; 4.3905 L (-0.67 %) and 3.8331 L (-0.95 %) |
+| P2-D07 | 16 generations addressable; diameter ratio 0.794 +/- 0.08; exactly 1 Two Compasses fork on the 4-fork route | 65,536 addresses resolve; ratios 0.714 to 0.873; 1 fork (target `RRRL`, fork `""`, margin 0.142) |
+| P2-D08 | `robust.r8` equals the AND of the 10 phase maps; HEALPix indices match astropy-healpix | 0 differing pixels; passes |
+| P2-D09 (Station part) | hash check passes for every file | `lung101` 24 files, `twin` 9 files, 0 problems |
+
+P2-D07 passes as written only because the generator departs from the plan's fixed angles (next table).
+
+**Passes under a documented deviation**
+
+| Work package | Plan | Tested instead | Measured | Contract |
+|---|---|---|---|---|
+| P2-D04 | slice at each phase within 1 mm Hausdorff of that phase's contour mesh | per phase and per direction, mean distance at most 0.5 mm and 95th percentile at most 1.5 mm; Hausdorff reported, not asserted | mean at most 0.313 mm, 95th percentile at most 1.011 mm; **Hausdorff 1.7 to 5.9 mm, the plan's 1 mm is not met** | 13.2 |
+| P2-D04 | template reaches each phase by Newton projection | real case: demons registration, then the projection | 0 self-intersections (10 with projection alone) | 13.1 |
+| P2-D05 | ITV 47.4 cm3 within 5 % | raw-mask union 47.4 cm3 within 5 %; `itv_cm3` equals the volume of `itv.glb` within 1 % | raw union 47.293 cm3 (-0.22 %); **`itv_cm3` 43.978 cm3, 7.2 % below 47.4**; `itv.glb` encloses 43.907 cm3 (-0.16 %) | 13.3 |
+| P2-D07 | angle 37 degrees, plane rotation 90 degrees | angle follows the fork's diameter ratios (mean 36.3, range 11.6 to 49.2 degrees); rotation normal, mean 90, sd 41.6 degrees | with the fixed values no route has a Two Compasses fork | 13.4, 13.5 |
+| P2-D06 | lungs from the contours | two right-lung contours filed under the left-lung ROI (81.4 and 37.7 cm3, phases 6 and 7) are left out of the left lung | nothing dropped at the acceptance phases beyond 0.02 cm3 | 13.7 |
+| P2-D09 | "Teaching threshold" as a label | `sky/*` carry the real-data label; "Teaching threshold" labels the 5 mm value in `sky/sky.json` | label set of `lung101` has 3 strings | 13.8 |
+
+**Still failing:** nothing in this suite.
+
+**Not tested here:** the phone half of P2-D09 (package loads from the app build in 2 s with the network off; Hub route),
+see "Deferred to Phase 1" above.
 
 ## Running the whole test suite
 

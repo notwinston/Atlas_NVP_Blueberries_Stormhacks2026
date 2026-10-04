@@ -8,12 +8,14 @@ Wording rule: "target lesion" for the real case, "nodule" only for the illustrat
 
 from __future__ import annotations
 
+VERSION = "labels/2"  #: bump when a string or the per-file rule changes (pack puts it in its cache key)
+
 # --- footer on every screen of the use case -------------------------------------------------
 FOOTER = "Education and research visualisation. Not for clinical use."
 
 # --- on-screen labels: each asset carries exactly one ----------------------------------------
 LABEL_REAL = "Public research data: TCIA 4D-Lung, CC BY 3.0. Meshes derived by ATLAS."
-LABEL_TWIN = "Illustrative model."
+LABEL_TWIN = "Illustrative model"  # no full stop: plan 10.2.1 writes it so, and the app shows exactly this string
 LABEL_RIGID = "Simplified: rigid shape"
 LABEL_AIRWAY = "Model-generated airway"
 LABEL_TEACHING_THRESHOLD = "Teaching threshold"
@@ -92,8 +94,11 @@ def label_for(kind: str, rel_path: str) -> str:
     """The one label of a package file (the manifest's per-file label map).
 
     Real case: ``tube4d_rigid.bin`` is "Simplified: rigid shape"; everything under ``airway/`` is
-    "Model-generated airway"; every other file carries the real-data label.
-    Illustrative twin: every file is "Illustrative model." (the twin has no airway, chest or sky).
+    "Model-generated airway"; every other file carries the real-data label. That includes all of
+    ``sky/``: the clearance maps are derived from the real contours, so ``sky/robust.r8`` and
+    ``sky/sky.json`` carry the real-data label too. The 5 mm threshold is not a file; its label
+    "Teaching threshold" travels in the field ``threshold_label`` of ``sky/sky.json``.
+    Illustrative twin: every file is "Illustrative model" (the twin has no airway, chest or sky).
     """
     if kind == KIND_ILLUSTRATIVE:
         return LABEL_TWIN

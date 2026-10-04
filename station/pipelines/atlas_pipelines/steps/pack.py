@@ -7,8 +7,9 @@ Master Plan 10.2.4 step 9, work package P2-D09 (Station half).
 Hashes every file that is present in ``<out>/cases/<id>/``, writes ``CREDITS.txt`` and then
 ``manifest.json`` (atlas.case/1, docs/case_contract.md section 6). Nothing is silently completed:
 the expected files that are absent are listed on stdout and recorded in the manifest as
-``extra.missing`` with ``extra.complete = false``. ``--strict`` makes an incomplete package a failure
-(exit 1). Files that are not part of the package layout are packed, recorded as ``extra.unexpected`` and
+``extra.missing`` with ``extra.complete = false``. ``extra.complete`` means "every expected file is
+present" and nothing more: it is not a statement that the files pass their acceptance tests (the note
+``extra.note`` in the manifest says so). ``--strict`` makes an incomplete package a failure (exit 1). Files that are not part of the package layout are packed, recorded as ``extra.unexpected`` and
 reported; a DICOM file is never packed (the step stops).
 
 Run ``atlas case verify`` afterwards to re-hash the package against its manifest.
@@ -23,7 +24,13 @@ from .. import cache, contract, labels, paths
 
 NAME = "pack"
 HELP = "hash a package and write manifest.json and CREDITS.txt (records missing expected files)"
-CODE_VERSION = "pack/1"
+#: The key depends on the modules this step calls: the label strings and per-file rule (labels.VERSION)
+#: and the manifest schema and number format of contract.py (which has no code-version constant).
+CODE_VERSION = f"pack/2+{labels.VERSION}+{contract.SCHEMA_CASE}+float{contract.FLOAT_DECIMALS}"
+
+#: ``extra.note`` of every manifest: what ``extra.complete`` does and does not say.
+BUILD_NOTE = ("Build note: complete means only that every expected file of the package layout is present. "
+              "It is not a statement that the files meet their acceptance tests.")
 
 CREDITS_NAME = "CREDITS.txt"
 
@@ -42,10 +49,6 @@ EXPECTED = {
 }
 CASE_KIND = {paths.REAL_CASE: labels.KIND_REAL, paths.TWIN_CASE: labels.KIND_ILLUSTRATIVE}
 
-#: Files whose whole content is the 5 mm clearance threshold of the needle sky (plan 10.2.1, last row).
-TEACHING_THRESHOLD_FILES = ("sky/robust.r8", "sky/sky.json")
-
-
 def kind_of(case: str) -> str:
     try:
         return CASE_KIND[case]
@@ -55,10 +58,10 @@ def kind_of(case: str) -> str:
 
 
 def file_label(kind: str, rel_path: str) -> str:
-    """The one label of a package file: labels.label_for, with the needle sky's 5 mm threshold
-    (``sky/robust.r8``, ``sky/sky.json``) marked "Teaching threshold" as in plan 10.2.1."""
-    if kind == labels.KIND_REAL and rel_path in TEACHING_THRESHOLD_FILES:
-        return labels.LABEL_TEACHING_THRESHOLD
+    """The one label of a package file: ``labels.label_for``, with no exception. The sky files are
+    derived from the real contours and carry the real-data label, the same string as the ``label``
+    key inside ``sky/sky.json``; "Teaching threshold" labels the 5 mm value (``threshold_label`` in
+    ``sky/sky.json``), not a file."""
     return labels.label_for(kind, rel_path)
 
 
@@ -125,7 +128,7 @@ def credits_text(kind: str, rels: list[str]) -> str:
         if any(r.startswith("sky/") for r in present):
             L += [
                 f"The 5 mm clearance threshold of the needle sky is a teaching value ({labels.LABEL_TEACHING_THRESHOLD}). "
-                "The sky is a geometric clearance map for education.",
+                "The sky is a geometric clearance map for education, derived from the contours of this case.",
             ]
         if "tube4d_rigid.bin" in present:
             L += [f"tube4d_rigid.bin is a simplified shape ({labels.LABEL_RIGID}): the shape of phase 0 moved "
@@ -214,6 +217,7 @@ def pack_case(case: str, out: Path, force: bool = False) -> tuple[bool, list[str
         "credits_sha256": hashlib.sha256(text.encode("ascii")).hexdigest(),
         "labels": {r: file_label(kind, r) for r in present + [CREDITS_NAME]},
         "origin_mm": [float(v) for v in origin],
+        "note": BUILD_NOTE,
         "texts": [labels.FOOTER, labels.case_label(kind), labels.licence(kind), labels.credit(kind),
                   list(labels.citations(kind))],
     }
@@ -222,7 +226,7 @@ def pack_case(case: str, out: Path, force: bool = False) -> tuple[bool, list[str
         credits_path.write_bytes(text.encode("ascii"))
         m = contract.build_manifest(case_dir, case, kind, origin,
                                     extra={"complete": not missing, "missing": list(missing),
-                                           "unexpected": list(unexpected)})
+                                           "note": BUILD_NOTE, "unexpected": list(unexpected)})
         m.labels = {r: file_label(kind, r) for r in m.labels}
         contract.write_manifest(manifest_path, m)
 
@@ -245,7 +249,7 @@ def run(args) -> int:
         for r in missing:
             print(f"pack:   missing {r}")
     else:
-        print("pack: complete: every expected file is present")
+        print("pack: complete: every expected file is present (this says nothing about acceptance tests)")
     for r in unexpected:
         print(f"pack: WARNING unexpected file {r} (packed and recorded in extra.unexpected)")
     if missing and args.strict:

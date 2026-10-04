@@ -7,10 +7,19 @@ morph target (a displacement from the base), in the display frame of docs/case_c
 Method (all in patient LPS millimetres; the display frame is applied only when the file is written)
 
     1. Mask: the rasterised contour mask of each phase (``atlas_pipelines.masks``), reduced to its
-       largest connected piece. (In lung101 the left-lung ROI of phases 6 and 7 holds one stray
-       single-slice contour on the patient's right side, 81 and 38 cm3; ``dropped_cm3`` in the report
-       lists what was left out per phase. Nothing is dropped from either lung at phases 0 and 5 beyond
-       a speck of 8 voxels.)
+       largest connected piece. What that leaves out in lung101 (``dropped_cm3`` in the report lists
+       it per phase), measured on the masks:
+         - left-lung ROI, phase 6: one piece of 81.4 cm3 on CT slices 33 and 34 of the left-lung crop
+           (z = -76.5 and -73.5 mm), x from -118.5 to -2.3 mm, that is on the patient's RIGHT side,
+           centroid (-62.7, 1.8, -75.0) mm against the left lung's (62.2, 2.8, -45.6) mm;
+         - left-lung ROI, phase 7: one piece of 37.7 cm3 on slice 40 (z = -55.5 mm), x from -115.6 to
+           -5.2 mm, centroid (-62.7, 1.8, -55.5) mm, and a single voxel.
+       Every voxel of both pieces (100.0 %) is also inside the RIGHT-lung mask of the same phase, and
+       their area on those slices (135.8, 135.4 and 125.7 cm2) is the right lung's (136.4, 136.0 and
+       127.2 cm2): they are right-lung contours filed under the left-lung ROI in the RTSTRUCT. They
+       are lung, but they are already part of ``lung_r``; keeping them in ``lung_l`` would count that
+       volume twice and put a slab of left lung on the patient's right. So they stay dropped.
+       Nothing is dropped from either lung at phases 0 and 5 beyond a speck of 8 voxels (0.02 cm3).
     2. Field: mask -> signed distance (anisotropic Euclidean transform on the CT grid, negative inside)
        -> resampled trilinearly onto one isotropic grid common to the 10 phases -> Gaussian of SIGMA_MM.
        This is ``tubelib.sdf_from_mask``, the field construction of the lesion tube, on a coarser grid
@@ -50,10 +59,11 @@ from scipy import ndimage
 from . import contract, glb, masks, tubelib
 from .tubelib import FieldSampler, Grid
 
-VERSION = "chest/1"
+VERSION = "chest/2"  #: bump when this module changes what it writes (the chest step puts it in its cache key)
 
 PHASES = contract.PHASES
-MAX_TRIS_TOTAL = 40_000  #: plan 10.2.5 / P2-D06
+MAX_TRIS_TOTAL = 40_000  #: the limit: plan 10.2.5 / P2-D06
+TARGET_TRIS_TOTAL = 36_000  #: what the parts are budgeted to: 10 % headroom under the limit
 SIGMA_MM = 1.0  #: Gaussian on the distance field, as for the tube (R2 D.2)
 MARGIN_MM = 8.0  #: grid margin round the union of the 10 masks
 REG_SUBSAMPLE = 2  #: the registration runs on every 2nd voxel of the field grid
@@ -74,13 +84,14 @@ class Part:
     voxel_mm: float  #: spacing of the isotropic field grid
 
 
-#: The parts, in file order. The budgets add up to MAX_TRIS_TOTAL.
+#: The parts, in file order. The budgets add up to TARGET_TRIS_TOTAL, in the proportions 15 : 15 : 6 : 4.
 PARTS: tuple[Part, ...] = (
-    Part("lung_r", "rlung", 15_000, 2.0),
-    Part("lung_l", "llung", 15_000, 2.0),
-    Part("heart", "heart", 6_000, 2.0),
-    Part("trachea", "trachea", 4_000, 1.0),
+    Part("lung_r", "rlung", 13_500, 2.0),
+    Part("lung_l", "llung", 13_500, 2.0),
+    Part("heart", "heart", 5_400, 2.0),
+    Part("trachea", "trachea", 3_600, 1.0),
 )
+assert sum(p.max_tris for p in PARTS) == TARGET_TRIS_TOTAL <= MAX_TRIS_TOTAL
 LUNG_PARTS = ("lung_r", "lung_l")
 
 

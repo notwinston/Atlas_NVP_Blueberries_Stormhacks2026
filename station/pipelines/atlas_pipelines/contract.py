@@ -68,7 +68,12 @@ def format_float(v: float) -> str:
     v = float(v)
     if not math.isfinite(v):
         raise ContractError("NaN and infinity cannot be written to canonical JSON")
-    q = round(v * 1e6)  # Python's round() on a float is round-half-to-even and returns an int
+    scaled = v * 1e6
+    # Test the range before round(): v * 1e6 is infinite for |v| > about 1.8e302, and round(inf)
+    # raises OverflowError, which is not the error a reader of this module catches.
+    if not math.isfinite(scaled) or abs(scaled) >= _MAX_MICRO + 1:
+        raise ContractError(f"float {v!r} is outside the canonical range (|v| < 2^53 / 1e6)")
+    q = round(scaled)  # Python's round() on a float is round-half-to-even and returns an int
     if abs(q) >= _MAX_MICRO:
         raise ContractError(f"float {v!r} is outside the canonical range (|v| < 2^53 / 1e6)")
     sign = "-" if q < 0 else ""
@@ -253,6 +258,13 @@ def _check_keys(obj: dict, required: Iterable[str], optional: Iterable[str], wha
         raise ContractError(f"{what}: missing keys {sorted(missing)}")
     if unknown:
         raise ContractError(f"{what}: unknown keys {sorted(unknown)} (put additions under \"extra\")")
+
+
+def _check_extra(obj: dict, what: str) -> None:
+    """``extra`` is optional, but when the key is present its value must be an object: ``"extra": null``
+    is rejected, as the C# reader does (CanonicalJson.AsObject). Leave the key out instead."""
+    if "extra" in obj and not isinstance(obj["extra"], dict):
+        raise ContractError(f"{what}: extra must be an object (omit the key when there is nothing to add)")
 
 
 # --------------------------------------------------------------------------------------------
@@ -550,6 +562,7 @@ class Table:
     @staticmethod
     def from_obj(o: dict) -> "Table":
         _check_keys(o, _TABLE_REQUIRED, ("extra",), "table.json")
+        _check_extra(o, "table.json")
         if o["schema"] != SCHEMA_TABLE:
             raise ContractError(f"table.json: schema must be {SCHEMA_TABLE!r}")
         occ = o["occ"]
@@ -681,6 +694,7 @@ class Manifest:
     @staticmethod
     def from_obj(o: dict) -> "Manifest":
         _check_keys(o, _MANIFEST_REQUIRED, ("extra",), "manifest.json")
+        _check_extra(o, "manifest.json")
         if o["schema"] != SCHEMA_CASE:
             raise ContractError(f"manifest.json: schema must be {SCHEMA_CASE!r}")
         if not isinstance(o["files"], list):
