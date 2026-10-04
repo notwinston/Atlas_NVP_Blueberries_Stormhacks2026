@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Atlas.Hands;
 using Atlas.Input;
 using Atlas.Kernel;
 using Atlas.Link;
@@ -95,6 +96,8 @@ namespace Atlas.App
         const int PortalMaskLayer = 6, HudLayer = 7, SpectatorLayer = 23;
 
         bool _shutDown;
+        /// <summary>Step 2 of the frame; kept so the hands can report a depth mask that threw.</summary>
+        BumpGuardStep _guardStep;
         AppParams.SpaceBinding _spaceParam;
 
         public AtlasBootContext Boot { get; private set; }
@@ -141,6 +144,8 @@ namespace Atlas.App
         public IOnboardingFlow Onboarding { get; private set; }
         public IAppMenu Menu { get; private set; }
         public IPerfTour PerfTour { get; private set; }
+        /// <summary>The walker's tracked hands (documents/ATLAS_Hands_Design.md). Never null; off until hands.enabled is set.</summary>
+        public HandsSystem Hands { get; private set; }
 
         AtlasApp() { }
 
@@ -234,13 +239,37 @@ namespace Atlas.App
             ScanSystems.Publish(Loop);
             ScanSettings = new ScanSettings();
             RemoteWalk = new RemoteWalkInput();
+            // Tracked hands. Their sense step runs after the pose pipeline's and before input's, so a touch or a
+            // pinch reaches this frame's input snapshot. Bump Guard, the event log and the space host are built
+            // later and are reached lazily (documents/ATLAS_Hands_Design.md section 3.7).
+            ArSessionRig handsRig = Pose.Rig;
+            Hands = HandsInstaller.Install(new HandsPorts
+            {
+                Parent = boot.Systems,
+                Head = boot.Head,
+                Pool = Pool,
+                Rig = Display,
+                Input = InputService,
+                Pipeline = Pose.Pipeline,
+                TrackedCamera = boot.TrackedCamera,
+                SessionSpace = () => handsRig != null && handsRig.Origin != null ? handsRig.Origin.TrackablesParent : null,
+                NativeSession = () => handsRig != null && handsRig.HasAr && handsRig.Session != null && handsRig.Session.subsystem != null
+                    ? handsRig.Session.subsystem.nativePtr : IntPtr.Zero,
+                Warning = () => Guard != null && Guard.Level != BumpLevel.Clear,
+                IsDevice = boot.IsDevice,
+                RecordFolder = logs,
+                MaskFaults = () => _guardStep != null ? _guardStep.MaskFaults : 0,
+            });
+            Loop.AddSense(Hands.Sense);
             Loop.AddSense(new InputSenseStep(InputService, Pose.Pipeline, RemoteWalk));
 
             // 12  Bump Guard and its cue: step 2 of every frame from the first.
             try
             {
                 Guard = SafetyInstaller.Install(boot, HeadLockedMaterial());
-                Loop.SetGuard(new BumpGuardStep(Guard, Pose.Pipeline));
+                // The guard step hands Bump Guard the depth mask of the walker's own hands (section 7.1).
+                _guardStep = new BumpGuardStep(Guard, Pose.Pipeline, Hands.Mask);
+                Loop.SetGuard(_guardStep);
                 // clear(p) of section 4.10 for the code that plans a walk round the room's obstacles.
                 AtlasServices.Register<IClearanceQuery>(Guard);
                 GuardInstalled = true;
@@ -259,6 +288,7 @@ namespace Atlas.App
             // 14  Upload hooks of the platform: the look's globals, then the eyes' prediction.
             Loop.AddUpload(new LookUploadStep(WalkerKernel));
             Loop.AddUpload(new RigUploadStep(Rig, Pose.Pipeline));
+            Loop.AddUpload(Hands.Upload);
 
             // 15  The quality ladder.
             Ladder = new QualityLadder(new QualityApplier(Eyes));
@@ -336,6 +366,8 @@ namespace Atlas.App
             if (pointerInput != null) pointerInput.PointerBlocked = p => overlay.Covers(p.x, p.y);
             Rig.ModeChanged += mode => Overlay.Refresh();
             DeclareDevParams();
+            // The hands' parameters last, so that no existing parameter changes its wire id.
+            Hands.DeclareParams(Registry);
 
             // 19  The on-device menu, onboarding and the perf tour, when their folders are in the build.
             Menu = AppHooks.CreateMenu();
@@ -350,6 +382,7 @@ namespace Atlas.App
             // 20  The tail of the frame after lane D's hooks: the ladder, the flow, the hand-over, the
             //     SpaceLab actions of the action map, then SpaceLab, which so starts a switch in the frame
             //     that asked for it.
+            Loop.AddAfterFrame(Hands.AfterFrame);
             Loop.AddAfterFrame(Ladder);
             Loop.AddAfterFrame(Flow);
             Loop.AddAfterFrame(HandOver);
@@ -485,6 +518,7 @@ namespace Atlas.App
             Safely(() => { if (TelemetrySystems != null) TelemetrySystems.Shutdown(); });
             // Key frames of a scan in progress and crops not yet handed over are let go.
             Safely(() => { if (ScanSystems != null && ScanSystems.Photos != null) ScanSystems.Photos.Cancel(); });
+            Safely(() => { if (Hands != null) Hands.Shutdown(); });
             Safely(() => { if (Pose != null) Pose.Dispose(); });
             Safely(() => { if (RoomContent != null) RoomContent.Dispose(); });
 

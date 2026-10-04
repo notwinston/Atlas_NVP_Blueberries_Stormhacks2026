@@ -594,6 +594,7 @@ namespace Atlas.Hands
             hand.PalmCentre = centre;
             hand.PalmNormal = turn.c1;
             hand.PalmVelocity = velocity;
+            hand.Predicted = offset;
             hand.EdgeMargin = t.EdgeMargin;
             hand.PinchRatio = t.PinchRatio;
             hand.PalmDistance = t.PalmDistance;

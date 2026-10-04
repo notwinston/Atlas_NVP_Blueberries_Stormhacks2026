@@ -139,8 +139,11 @@ namespace Atlas.Hands
         public const float ReachFollowSeconds = 0.5f;
         /// <summary>The anchor eases to its new place over this long, seconds.</summary>
         public const float ReachEaseSeconds = 0.3f;
-        /// <summary>The anchor never moves while a fingertip is this close to it, metres.</summary>
-        public const float ReachFreezeMetres = 0.15f;
+        /// <summary>
+        /// The anchor never moves while a fingertip is this close to it, metres. It covers the whole grid of near
+        /// slots: at scale 0.75 the farthest target of the open menu is 0.225 m from the anchor.
+        /// </summary>
+        public const float ReachFreezeMetres = 0.26f;
 
         // ---- World touch (section 6.5) ----
 

@@ -56,6 +56,12 @@ namespace Atlas.Hands
         public float3 PalmNormal;
         /// <summary>World, metres per second, filtered.</summary>
         public float3 PalmVelocity;
+        /// <summary>
+        /// World: how far every joint was moved along the palm's velocity for this frame. World minus this is
+        /// the filtered pose with no prediction: what a touch presses with, because a predicted fingertip runs
+        /// on through a face the real one stopped short of.
+        /// </summary>
+        public float3 Predicted;
         /// <summary>From the last detection (see ObservedHand).</summary>
         public float EdgeMargin;
         public float PinchRatio;

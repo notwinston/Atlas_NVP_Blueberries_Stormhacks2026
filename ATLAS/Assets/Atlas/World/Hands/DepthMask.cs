@@ -44,6 +44,12 @@ namespace Atlas.World
         public DepthMaskRegion Region0, Region1;
         /// <summary>DepthFrame.Sequence of the image the mask was built for. It is ignored for any other image.</summary>
         public int DepthSequence;
+        /// <summary>
+        /// 1 while a hands session is running (the detector is active), whether or not a hand is in view; 0
+        /// otherwise. In a hands session Bump Guard holds a new return nearer than its hands range as pending until
+        /// it is seen again, so that a hand entering the view is masked before it can raise the cue (decision H17).
+        /// </summary>
+        public int Session;
 
         public bool IsEmpty { get { return Count <= 0; } }
 

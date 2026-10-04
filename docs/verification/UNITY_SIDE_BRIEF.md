@@ -933,7 +933,7 @@ The script exports the Xcode project to `ATLAS/Build/iOS` in append mode, builds
 
 | Key | Value |
 |---|---|
-| `NSCameraUsageDescription` | "ATLAS uses the camera to track your position, scan your room and photograph objects." |
+| `NSCameraUsageDescription` | "ATLAS uses the camera to track your position, scan your room, photograph objects and see your hands." |
 | `NSLocalNetworkUsageDescription` | "ATLAS connects to the Station on your local network for tuning and telemetry." |
 | `NSAppTransportSecurity` > `NSAllowsLocalNetworking` | true |
 | `UIFileSharingEnabled` | true |

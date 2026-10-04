@@ -124,7 +124,7 @@ namespace Atlas.Hands
         public int ImageWidth, ImageHeight;
         /// <summary>0 when the frame had no depth.</summary>
         public int DepthWidth, DepthHeight;
-        /// <summary>Timer ticks the detector skipped since its previous result.</summary>
+        /// <summary>Ticks since its previous result at which a detection was due while the last request was still running.</summary>
         public int Skipped;
         /// <summary>Pinhole intrinsics of the captured image, pixels; Cx, Cy from the top-left corner.</summary>
         public float Fx, Fy, Cx, Cy;
