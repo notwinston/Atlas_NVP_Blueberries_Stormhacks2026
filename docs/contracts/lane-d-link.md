@@ -299,7 +299,7 @@ registry.DeclareFloat(AppParams.Ipd, "render", StereoRig.MinIpd, StereoRig.MaxIp
 ## 1.4 Names declared in this build
 
 In the order of a full boot of the phone app: `AppParams` (lane A §8.2 step 16), the spaces, lane D's
-installers (step 18), then the dev rows, the tracked hands' rows and the perf tour's. The wire id follows that order
+installers (step 18), then the dev rows, the perf tour's and, last of all, the tracked hands' rows. The wire id follows that order
 but is read from the manifest, never from this table. **R** = `onRelease`. **K** = kill switch (1.5). Names, ranges and defaults of
 lane A's rows are those of lane A §9.6 and §14.
 
@@ -358,6 +358,9 @@ lane A's rows are those of lane A §9.6 and §14.
 | `hud.visible` | Bool | | false | – | | `hud` | `TelemetryInstaller` · HUD |
 | `dev.room` | Enum | `none`, then the fixture rooms | by start options | – | R | `dev` | `AppParams.DeclareDev` · the rehearsal flow |
 | `dev.overlay` | Bool | | on in the Editor and in a development build | – | | `dev` | `AppParams.DeclareDev` |
+| `perf.run` | Enum | `off`, `tour`, `soak`, `soakNoDepth`, `ladder` | 0 | – | R | `perf` | the perf tour (`App/PerfTour`) |
+| `perf.visitSeconds`, `perf.soakMinutes`, `perf.soakIntervalSeconds` | Int | 5 … 120, 1 … 30, 15 … 300 | by start options | s, min, s | R | `perf` | the perf tour |
+| `perf.pose` | Enum | `auto`, `tracked`, `replay`, `synthetic` | by start options | – | R | `perf` | the perf tour |
 | `hands.enabled` | Bool | | false | – | K | `hands` | `HandsSystem.DeclareParams` · `HandsRuntime.Enabled`: the kill switch of the tracked hands. Off, the hands' gate is closed (event `hands.off`, reason `param`): no detector, no hand drawn, no touch, no mask, and the panels stand where they always have |
 | `hands.rate` | Enum | `auto`, `30`, `15` | 0 (`auto`) | – | | `hands` | the same · `HandsRuntime.RateOverride` (0, 30, 15 detections a second). `auto` follows the tier (30 at Nominal and High, 15 at Fair) with the self-governor and the idle stop; 30 and 15 fix the rate and switch both off. For the bench |
 | `hands.reach` | Float | 0.40 … 0.60 | 0.48 | m | | `hands` | the same · `HandsRuntime.Reach`: how far from the rear camera the near anchor stands, where panels come to in a hands session |
@@ -366,9 +369,6 @@ lane A's rows are those of lane A §9.6 and §14.
 | `hands.editor` | Bool | | false | – | | `hands` | the same · `EditorHandsSource.Enabled`: the Editor's mouse-and-keys hands (verification brief, step 3i). Nothing happens on a phone or where there is no tracked camera: no such source is made there |
 | `hands.bench` | Bool | | false | – | | `hands` | the same · `HandsRuntime.Bench`: one `hands.bench` event a second while a session runs (§2.6) |
 | `hands.record` | Bool | | false | – | | `hands` | the same · `HandsRuntime.Record`: writes the detections to `hands_<UTC time>.handlog` in the phone's `logs` folder (`recordings/README.md`) |
-| `perf.run` | Enum | `off`, `tour`, `soak`, `soakNoDepth`, `ladder` | 0 | – | R | `perf` | the perf tour (`App/PerfTour`) |
-| `perf.visitSeconds`, `perf.soakMinutes`, `perf.soakIntervalSeconds` | Int | 5 … 120, 1 … 30, 15 … 300 | by start options | s, min, s | R | `perf` | the perf tour |
-| `perf.pose` | Enum | `auto`, `tracked`, `replay`, `synthetic` | by start options | – | R | `perf` | the perf tour |
 
 Notes:
 
@@ -390,9 +390,9 @@ Notes:
 - `pose.gyroPredict` is the on/off switch of §12.4 and `pose.gyroLeadMs` the lead; lane C's page writes the
   lead as one number.
 - The eight `hands.*` entries are declared in the order of the table by `HandsSystem.DeclareParams`. `AtlasApp` calls
-  it after `AppParams`, the spaces, lane D's installers and `DeclareDev`, and before the menu, onboarding and the perf
-  tour are installed at row 19 of lane A §8.2: the hands take the eight wire ids that follow the dev rows, and the
-  `perf.*` rows, which the tour declares when it is installed, come after them.
+  it last of all, after the menu, onboarding and the perf tour are installed at row 19 of lane A §8.2: the `perf.*`
+  rows, which the tour declares when it is installed, keep the wire ids they had before the hands existed, and the
+  hands take the eight that follow. The menu reads the registry when it is opened, so it lists them all the same.
 - `hands.enabled` is off at the start (decision R8 of the hands brief): a build with the tracked hands does nothing
   different until it is switched on, from the Console or from the on-device menu. Under the demo lock the Station
   cannot change it, so in a locked demo it is changed from the menu (1.5). `hands.editor`, `hands.bench` and
@@ -4001,7 +4001,3 @@ L22 of §7.6.
 14. **The kill-switch list and the two new parameters.** `scan.wallBridge` and `render.furniture` are on the menu's
     Parameters page and in the Console but not in the 22 names of §1.5. Whether they belong on the menu's Quality page
     is a change to §1.5, to `MenuModel.KillSwitchIds` and to `MenuModelTests` together.
-15. **The last `hands.stats` of a session is lost.** `AtlasApp.Shutdown` shuts the telemetry down, which stops the event
-    log's writer thread and closes its files, before it shuts the hands down, so the `hands.stats` that the hands log
-    when the app stops during a session is queued to a log nothing writes any more, and the link has said goodbye. The
-    one that follows `hands.off` is not affected. Reorder the two calls, or have the hands log it first.

@@ -352,8 +352,8 @@ The order as the composition root sets it (`App/AtlasApp.cs`):
 | Bump Guard | `new BumpGuardStep(Guard, Pose.Pipeline, Hands.Mask)` | `AtlasApp.cs:274-275` |
 | Upload | `LookUploadStep`, `RigUploadStep`, `Hands.Upload`; later the tile statistics and the signs | `AtlasApp.cs:292-294`; `:335`; `:404` |
 | After frame | Lane D's hooks, the menu, onboarding and the perf tour as they install; then `Hands.AfterFrame`, the ladder, the flow, the hand-over, the space actions, the signs, SpaceLab | `AtlasApp.cs:330`; `:383-385`; `:392-406` |
-| Parameters | `Hands.DeclareParams(Registry)`, after every other declaration, so that no existing parameter changes its wire id | `AtlasApp.cs:377` |
-| Shutdown | `Hands.Shutdown()` just before `Pose.Dispose()` | `AtlasApp.cs:529-530` |
+| Parameters | `Hands.DeclareParams(Registry)`, after every other declaration (the perf tour's included), so that no existing parameter changes its wire id | `AtlasApp.cs:386` |
+| Shutdown | `Hands.Shutdown()` before the telemetry is shut down (so the last `hands.stats` is written) and before `Pose.Dispose()` | `AtlasApp.cs:527-529` |
 
 Input and rendering therefore see the same hands in the same frame, and Bump Guard sees the mask that belongs to the depth image it is about to read.
 

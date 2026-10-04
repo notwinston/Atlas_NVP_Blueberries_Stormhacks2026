@@ -373,8 +373,6 @@ namespace Atlas.App
             if (pointerInput != null) pointerInput.PointerBlocked = p => overlay.Covers(p.x, p.y);
             Rig.ModeChanged += mode => Overlay.Refresh();
             DeclareDevParams();
-            // The hands' parameters last, so that no existing parameter changes its wire id.
-            Hands.DeclareParams(Registry);
 
             // 19  The on-device menu, onboarding and the perf tour, when their folders are in the build.
             Menu = AppHooks.CreateMenu();
@@ -383,6 +381,9 @@ namespace Atlas.App
             Menu.Install(this);
             Onboarding.Install(this);
             PerfTour.Install(this);
+            // The hands' parameters last of all, after the perf tour's, so that no existing parameter changes its
+            // wire id. The menu reads the registry when it is opened, so it still lists them.
+            Hands.DeclareParams(Registry);
             Flow.OwnsFlow = !Onboarding.OwnsFlow;
             HandOver.AutoEnter = !Onboarding.OwnsFlow;
 
@@ -523,10 +524,11 @@ namespace Atlas.App
             Safely(() => { if (Flow != null) Flow.LeaveHeadset(); });
             Safely(() => { if (Spaces != null) Spaces.Shutdown(); });
             Safely(() => { if (Transition != null) Transition.Dispose(); });
+            // The hands stop before the telemetry does: their last hands.stats must reach an event log that still writes.
+            Safely(() => { if (Hands != null) Hands.Shutdown(); });
             Safely(() => { if (TelemetrySystems != null) TelemetrySystems.Shutdown(); });
             // Key frames of a scan in progress and crops not yet handed over are let go.
             Safely(() => { if (ScanSystems != null && ScanSystems.Photos != null) ScanSystems.Photos.Cancel(); });
-            Safely(() => { if (Hands != null) Hands.Shutdown(); });
             Safely(() => { if (Pose != null) Pose.Dispose(); });
             Safely(() => { if (RoomContent != null) RoomContent.Dispose(); });
 
