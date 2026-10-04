@@ -426,6 +426,37 @@ namespace Atlas.Link.Tests
         }
 
         [Test]
+        public void AssetReady_carries_the_four_light_fields_only_when_there_is_a_light_copy()
+        {
+            string light = new string('d', 64);
+            AssertJsonGolden(
+                new AssetReadyMessage
+                {
+                    JobId = "j-12", RoomId = "room_7", BoxId = 4, Sha256 = "ab12", Url = "/assets/ab12.glb",
+                    Bytes = 412345, Tris = 9000, MaxEdge = 0.24f, BoundsX = 0.8f, BoundsY = 0.75f, BoundsZ = 0.6f, Palette = 5,
+                    LightSha256 = light, LightUrl = "/assets/" + light + ".glb", LightBytes = 150000, LightTris = 3000
+                },
+                new AssetReadyMessage(),
+                "{\"jobId\":\"j-12\",\"roomId\":\"room_7\",\"boxId\":4,\"sha256\":\"ab12\",\"url\":\"/assets/ab12.glb\"," +
+                "\"bytes\":412345,\"tris\":9000,\"maxEdge\":0.24,\"bounds\":[0.8,0.75,0.6],\"palette\":5," +
+                "\"lightSha256\":\"" + light + "\",\"lightUrl\":\"/assets/" + light + ".glb\",\"lightBytes\":150000,\"lightTris\":3000}");
+
+            // Without a light hash nothing of the four is written, whatever the other three hold: the bytes are today's.
+            var plain = new AssetReadyMessage { JobId = "j-12", RoomId = "room_7", BoxId = 4, Sha256 = "ab12", Url = "/assets/ab12.glb", LightTris = 3000 };
+            string text = Encoding.UTF8.GetString(plain.ToBytes(), 1, plain.ToBytes().Length - 1);
+            Assert.That(text, Does.Not.Contain("light"));
+
+            // A message from before the fields reads as their defaults.
+            byte[] old = JsonMessage.Encode(MessageId.AssetReady, AtlasJson.Parse("{\"jobId\":\"j-1\",\"boxId\":2,\"sha256\":\"ab\",\"url\":\"/u\",\"bytes\":10,\"tris\":1500}"));
+            var read = new AssetReadyMessage { LightSha256 = "left over", LightUrl = "left over", LightBytes = 5, LightTris = 5 };
+            Assert.That(read.ReadFrom(old, 0, old.Length), Is.True);
+            Assert.That(read.LightSha256, Is.EqualTo(string.Empty));
+            Assert.That(read.LightUrl, Is.EqualTo(string.Empty));
+            Assert.That(read.LightBytes, Is.EqualTo(0L));
+            Assert.That(read.LightTris, Is.EqualTo(0));
+        }
+
+        [Test]
         public void Json_messages_tolerate_missing_and_unknown_members()
         {
             byte[] packet = JsonMessage.Encode(MessageId.Welcome, AtlasJson.Parse("{\"sessionId\":\"s1\",\"futureField\":[1,2,3]}"));

@@ -132,8 +132,10 @@ namespace Atlas.Telemetry.Tests
             {
                 Assert.That(rig.Core.GetState(id), Is.EqualTo(ObjectAssetState.Requested));
                 Assert.That(rig.Room.Requested.Contains(id), Is.True);
-                Assert.That(rig.Room.ShownFor(id), Is.EqualTo("box"));
+                Assert.That(rig.Room.ShownFor(id), Is.EqualTo("builtin"), "the first shape stands in while the Forge works");
+                Assert.That(rig.Core.ShowsBuiltIn(id), Is.True);
             }
+            Assert.That(rig.Core.BuiltInCount, Is.EqualTo(3));
 
             FinishAll(rig);
             rig.Run(4.0);
@@ -148,7 +150,7 @@ namespace Atlas.Telemetry.Tests
             Assert.That(rig.Core.PlacedCount, Is.EqualTo(3));
             Assert.That(rig.Core.PendingCount, Is.EqualTo(0));
             Assert.That(rig.Core.BuiltInCount, Is.EqualTo(0));
-            Assert.That(rig.Room.BuiltInTriangles, Is.Empty);
+            Assert.That(rig.Room.BuiltInTriangles.Count, Is.EqualTo(3), "only the first shapes were ever placed");
 
             // One AssetAck per mesh, half a second after it was handed over, with the worst frame of that window.
             Assert.That(rig.Acks.Count, Is.EqualTo(3));
@@ -166,7 +168,9 @@ namespace Atlas.Telemetry.Tests
             foreach (int id in new[] { Table, Chair, Couch })
                 foreach (string step in new[] { "upload", "requested", "ready", "placed" })
                     Assert.That(rig.Events.CountOf(step, id), Is.EqualTo(1), step + " " + id);
-            Assert.That(rig.Events.CountOf("builtin"), Is.EqualTo(0));
+            Assert.That(rig.Events.CountOf("builtin"), Is.EqualTo(3), "one first shape each, and no fall-back");
+            foreach (int id in new[] { Table, Chair, Couch })
+                Assert.That(rig.Events.Last("builtin", id).GetString("reason"), Is.EqualTo(AssetClientCore.FirstShapeReason));
             Assert.That(rig.Events.CountOf("failed") + rig.Events.CountOf("rejected"), Is.EqualTo(0));
         }
 
@@ -259,9 +263,10 @@ namespace Atlas.Telemetry.Tests
             }
             for (int k = 20; k < 25; k++)
             {
-                Assert.That(rig.Core.GetState(order[k].Id), Is.EqualTo(ObjectAssetState.Placeholder));
+                // Beyond the twenty: no Forge job, but the first shape like every other object.
+                Assert.That(rig.Core.GetState(order[k].Id), Is.EqualTo(ObjectAssetState.BuiltIn));
                 Assert.That(rig.Core.TriTarget(order[k].Id), Is.EqualTo(0));
-                Assert.That(rig.Room.ShownFor(order[k].Id), Is.EqualTo("box"));
+                Assert.That(rig.Room.ShownFor(order[k].Id), Is.EqualTo("builtin"));
             }
         }
 
@@ -305,7 +310,8 @@ namespace Atlas.Telemetry.Tests
             rig.Forge.Up = false;
             rig.Scan(FixtureRoom());
             rig.Run(8.9);
-            Assert.That(rig.Core.BuiltInCount, Is.EqualTo(0), "three attempts are made first: 2 + 1 + 2 + 2 + 2 s");
+            Assert.That(rig.Core.BuiltInCount, Is.EqualTo(3), "the first shapes are there at once; the Forge is not given up on yet");
+            Assert.That(rig.Core.GetState(Table), Is.Not.EqualTo(ObjectAssetState.BuiltIn), "three attempts are made first: 2 + 1 + 2 + 2 + 2 s");
             rig.Run(1.1);                                       // 10 s after entering Home
 
             Assert.That(rig.Core.ForgeReachable, Is.False);
@@ -572,9 +578,12 @@ namespace Atlas.Telemetry.Tests
             rig.Forge.Latency = 0.0;
             rig.Core.RoomBuilt(FixtureRoom());                  // a fixture or a saved room: no scan announces itself
             rig.Run(1.9);
-            Assert.That(rig.Core.BuiltInCount, Is.EqualTo(0));
+            Assert.That(rig.Core.BuiltInCount, Is.EqualTo(3), "the first shapes come with the room, whatever the Forge");
+            Assert.That(rig.Core.GetState(Couch), Is.EqualTo(ObjectAssetState.Placeholder));
+            Assert.That(rig.Events.Last("builtin", Couch).GetString("reason"), Is.EqualTo(AssetClientCore.FirstShapeReason));
             rig.Run(0.3);
             Assert.That(rig.Core.BuiltInCount, Is.EqualTo(3));
+            Assert.That(rig.Core.GetState(Couch), Is.EqualTo(ObjectAssetState.BuiltIn));
             Assert.That(rig.Events.Last("builtin", Couch).GetString("reason"), Is.EqualTo("no_scan"));
             Assert.That(rig.Forge.CountOf("POST"), Is.EqualTo(0));
         }
@@ -739,6 +748,121 @@ namespace Atlas.Telemetry.Tests
             Assert.That(rig.Forge.Rooms, Is.Empty);
             Assert.That(rig.Cache.Count, Is.EqualTo(0));
             Assert.That(rig.Core.ObjectCount, Is.EqualTo(0));
+        }
+
+        // ---- First shapes ---------------------------------------------------------------------------------------
+
+        static byte[] ProfileOf(int value)
+        {
+            var profile = new byte[256];
+            for (int i = 0; i < 256; i++) profile[i] = (byte)value;
+            return profile;
+        }
+
+        [Test]
+        public void Asset_FirstShapes_AreShownAtOnceWithTheForgeReachable()
+        {
+            RoomObject unknown = Box(4, ObjectCategory.Unknown, 0.6f, 0.5f, 0.6f);
+            unknown.Profile = ProfileOf(200);
+            RoomObject other = Box(5, ObjectCategory.Other, 0.6f, 0.5f, 0.6f);          // no profile, no template: the box
+            RoomObject lamp = Box(6, ObjectCategory.Lamp, 0.3f, 1.5f, 0.3f);
+            RoomObject chair = Box(7, ObjectCategory.Chair, 0.5f, 0.9f, 0.5f);
+            chair.Profile = ProfileOf(130);
+            RoomModel room = RoomOf("room_first", unknown, other, lamp, chair, Box(8, ObjectCategory.Table, 1.2f, 0.75f, 0.8f));
+            lamp.TriTarget = 0;                                                         // beyond the meshed objects
+
+            var rig = new Rig();
+            rig.Scan(room);
+            rig.Run(1.0);
+            Assert.That(rig.Core.ForgeReachable, Is.True);
+            Assert.That(rig.Core.GetState(unknown.Id), Is.EqualTo(ObjectAssetState.Requested), "the Forge is working on it");
+
+            Assert.That(rig.Room.ShownFor(8), Is.EqualTo("builtin"), "a template");
+            Assert.That(rig.Room.ShownFor(7), Is.EqualTo("builtin"), "a fitted template");
+            Assert.That(rig.Room.ShownFor(4), Is.EqualTo("builtin"), "cut from the scan");
+            Assert.That(rig.Room.ShownFor(6), Is.EqualTo("builtin"), "an object with no triangle target has one as well");
+            Assert.That(rig.Room.ShownFor(5), Is.EqualTo("box"), "no template and no profile: the only box left");
+            Assert.That(rig.Events.Last("builtin", 8).GetString("shape"), Is.EqualTo("template"));
+            Assert.That(rig.Events.Last("builtin", 7).GetString("shape"), Is.EqualTo("fitted"));
+            Assert.That(rig.Events.Last("builtin", 4).GetString("shape"), Is.EqualTo("scancut"));
+            Assert.That(rig.Events.Last("builtin", 4).GetString("reason"), Is.EqualTo(AssetClientCore.FirstShapeReason));
+            Assert.That(rig.Events.Last("builtin", 5).GetBool("placed"), Is.False);
+            Assert.That(rig.Events.Last("builtin", 5).GetString("kept"), Is.EqualTo("no_template"));
+            foreach (int id in new[] { 4, 6, 7, 8 }) Assert.That(rig.Room.BuiltInTriangles[id], Is.InRange(1, 1500));
+            Assert.That(rig.Core.BuiltInCount, Is.EqualTo(4));
+            Assert.That(rig.Core.TriTarget(6), Is.EqualTo(0));
+            Assert.That(rig.Forge.Jobs.Count, Is.EqualTo(4), "the lamp has no job");
+
+            // The generated mesh replaces the first shape when it arrives.
+            rig.Forge.Finish(8, AssetFixtures.Glb("forge_table"));
+            rig.Run(3.0);
+            Assert.That(rig.Core.GetState(8), Is.EqualTo(ObjectAssetState.Ready));
+            Assert.That(rig.Room.ShownFor(8), Is.EqualTo("generated"));
+            Assert.That(rig.Core.ShowsBuiltIn(8), Is.False);
+            Assert.That(rig.Room.ShownFor(6), Is.EqualTo("builtin"), "the lamp keeps its first shape");
+        }
+
+        [Test]
+        public void Asset_FirstShapes_AreBuiltAgainWhenTheRoomContentIsBuiltAgain()
+        {
+            var rig = new Rig();
+            RoomModel room = FixtureRoom();
+            rig.Scan(room);
+            rig.Run(2.0);
+            FinishAll(rig);
+            rig.Run(4.0);
+            Assert.That(rig.Core.PlacedCount, Is.EqualTo(3));
+
+            // The views are new; the cached meshes come back, and a first shape stands in until they do.
+            rig.Room.Shown.Clear();
+            rig.Core.RoomBuilt(room);
+            rig.Run(0.2);
+            Assert.That(rig.Room.ShownFor(Table), Is.Not.EqualTo("box"));
+            rig.Run(2.0);
+            foreach (int id in new[] { Table, Chair, Couch }) Assert.That(rig.Room.ShownFor(id), Is.EqualTo("generated"), "object " + id);
+        }
+
+        [Test]
+        public void Asset_Meta_CarriesTheProfileAndTheLightTargetOnlyWhenThereAreOnes()
+        {
+            RoomObject chair = Box(Chair, ObjectCategory.Chair, 0.5f, 0.9f, 0.5f);
+            chair.TriTarget = 9000;
+            ObjectPhotoSet photos = Photos(chair);
+            JsonValue plain = ForgeProtocol.Meta(photos, 9000, "local");
+            Assert.That(plain.Has("profile"), Is.False);
+            Assert.That(plain.Has("triTargetLight"), Is.False);
+            Assert.That(plain.GetInt("triTarget"), Is.EqualTo(9000));
+
+            photos.TriTargetLight = 3000;
+            photos.Profile = ProfileOf(77);
+            JsonValue meta = ForgeProtocol.Meta(photos, 9000, "local");
+            Assert.That(meta.GetInt("triTargetLight"), Is.EqualTo(3000));
+            byte[] decoded = System.Convert.FromBase64String(meta.GetString("profile"));
+            Assert.That(decoded, Is.EqualTo(photos.Profile));
+            Assert.That(meta.GetString("profile").Length, Is.EqualTo(344));
+            // The rest of the meta is what it was.
+            Assert.That(meta.GetInt("boxId"), Is.EqualTo(Chair));
+            Assert.That(meta["views"].Count, Is.EqualTo(1));
+
+            photos.TriTargetLight = 0;
+            Assert.That(ForgeProtocol.Meta(photos, 9000, "local").Has("triTargetLight"), Is.False);
+        }
+
+        [Test]
+        public void Asset_ThePhonesOwnTargetIsSentAndExpected()
+        {
+            // The target is the object's own (design section 5.4), not a function of how many objects there are.
+            RoomModel room = FixtureRoom();
+            room.Objects[0].TriTarget = 7000;
+            room.Objects[1].TriTarget = 4000;
+            room.Objects[2].TriTarget = 15000;
+            var rig = new Rig();
+            rig.Scan(room);
+            rig.Run(2.0);
+            Assert.That(rig.Forge.JobOf(Table).TriTarget, Is.EqualTo(7000));
+            Assert.That(rig.Forge.JobOf(Chair).TriTarget, Is.EqualTo(4000));
+            Assert.That(rig.Forge.JobOf(Couch).TriTarget, Is.EqualTo(15000));
+            Assert.That(rig.Core.TriTarget(Chair), Is.EqualTo(4000));
         }
 
         [Test]

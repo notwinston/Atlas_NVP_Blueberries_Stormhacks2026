@@ -120,5 +120,42 @@ namespace Atlas.Station.Tests
                 await t.PostJson("/internal/job", "not json", 400);
             }
         }
+
+        [Test]
+        public async Task ForgeJob_LightCopyFields_ArePassedThroughUnchanged()
+        {
+            await using (TestHub t = await TestHub.StartAsync())
+            using (var phone = new TestClient(LinkRole.Phone, t.Hub.UdpPort))
+            using (var spectator = new TestClient(LinkRole.Spectator, t.Hub.UdpPort))
+            {
+                Wait.Ready(phone);
+                Wait.Ready(spectator);
+
+                string light = new string('c', 64);
+                await t.PostJson("/internal/job",
+                    "{\"jobId\":\"j1\",\"roomId\":\"r1\",\"boxId\":3,\"sha256\":\"abc123\",\"url\":\"/assets/abc123.glb\",\"bytes\":1000,\"tris\":9000,"
+                    + "\"lightSha256\":\"" + light + "\",\"lightUrl\":\"/assets/" + light + ".glb\",\"lightBytes\":400,\"lightTris\":3000}", 204);
+                await t.PostJson("/internal/job",
+                    "{\"jobId\":\"j2\",\"roomId\":\"r1\",\"boxId\":4,\"sha256\":\"def456\",\"url\":\"/assets/def456.glb\",\"bytes\":1000,\"tris\":3000}", 204);
+
+                Wait.Until(() => phone.Readies.Count == 2 && spectator.Readies.Count == 2, "both AssetReady messages to be relayed");
+                foreach (TestClient receiver in new[] { phone, spectator })
+                {
+                    AssetReadyMessage[] ready = receiver.Readies.ToArray();
+                    Assert.That(ready[0].Sha256, Is.EqualTo("abc123"));
+                    Assert.That(ready[0].Tris, Is.EqualTo(9000));
+                    Assert.That(ready[0].LightSha256, Is.EqualTo(light));
+                    Assert.That(ready[0].LightUrl, Is.EqualTo("/assets/" + light + ".glb"));
+                    Assert.That(ready[0].LightBytes, Is.EqualTo(400));
+                    Assert.That(ready[0].LightTris, Is.EqualTo(3000));
+                    // A job with no light copy still reads as before.
+                    Assert.That(ready[1].Sha256, Is.EqualTo("def456"));
+                    Assert.That(ready[1].LightSha256, Is.EqualTo(string.Empty));
+                    Assert.That(ready[1].LightUrl, Is.EqualTo(string.Empty));
+                    Assert.That(ready[1].LightBytes, Is.EqualTo(0));
+                    Assert.That(ready[1].LightTris, Is.EqualTo(0));
+                }
+            }
+        }
     }
 }
