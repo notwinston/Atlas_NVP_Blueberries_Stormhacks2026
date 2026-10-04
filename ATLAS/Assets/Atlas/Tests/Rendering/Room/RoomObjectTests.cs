@@ -133,7 +133,8 @@ namespace Atlas.Rendering.Tests.Room
                     }
                 }
             }
-            Assert.That(checkedObjects, Is.EqualTo(13));
+            // One table, the twelve of budget_room and the twenty-four of budget_room_120k.
+            Assert.That(checkedObjects, Is.EqualTo(37));
         }
 
         [Test]
