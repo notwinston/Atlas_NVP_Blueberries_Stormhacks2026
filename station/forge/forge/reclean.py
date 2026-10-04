@@ -102,9 +102,10 @@ def reclean(folder: Path, settings: Optional[Settings] = None) -> Recleaned:
         line = {"view": index, "generator": generator, "fit": None, "error": "", "published": False}
         lines.append(line)
         try:
+            metas = job.get("views", [])
             oriented = attempts.orient_attempt(
                 vertices, faces, dims=job["dims"], tri_target=job["triTarget"], profile_text=job.get("profile", ""),
-                views=job.get("views", []), generator_name=generator, settings=settings)
+                view=metas[index] if index < len(metas) else None, generator_name=generator, settings=settings)
         except CleanupError as exc:
             line["error"] = f"clean-up: {exc}"
             continue

@@ -244,9 +244,17 @@ def test_request_errors(client):
     assert client.post("/rooms", content=json.dumps(twice)).status_code == 422
     assert client.post("/rooms", content=b" " * (3 * 1024 * 1024)).status_code == 413
 
+    # A box has three sides above zero: one without is refused, not planned (the rule divides by the areas).
+    for size in ((0, 0, 0), (0.5, 0.0, 0.5), (0.5, 0.9, -0.5)):
+        assert client.post("/rooms", content=json.dumps(room_model("flat", [size]))).status_code == 422, size
+    mixed = room_model("flat", [(0.5, 0.9, 0.5), (0.0, 0.0, 0.0)])
+    assert client.post("/rooms", content=json.dumps(mixed)).status_code == 422
+    assert client.get("/rooms/flat").status_code == 404
+
     model = room_model("errors", [(0.6, 0.6, 0.6)])
     upload_room(client, model)
     obj = model["objects"][0]
+    assert post_object(client, "errors", {**meta_for(obj, 5000), "dims": [0.6, 0.0, 0.6]}, [jpeg()]).status_code == 422
     assert post_object(client, "nowhere", meta_for(obj, 5000), [jpeg()]).status_code == 404
     assert post_object(client, "errors", {**meta_for(obj, 5000), "boxId": 9}, [jpeg()]).status_code == 404
     assert post_object(client, "errors", {**meta_for(obj, 5000), "triTarget": 15001}, [jpeg()]).status_code == 422

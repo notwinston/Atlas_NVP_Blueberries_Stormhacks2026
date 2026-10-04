@@ -254,6 +254,17 @@ def measure_glb(glb: bytes) -> dict:
     }
 
 
+def plain_generation(job: dict, generator: str) -> bool:
+    """What a ready job of the fixture rooms must say of how its mesh was made.
+
+    One generation, and no fit, since the fixtures carry no profile. And an up axis: `Y` from the
+    procedural generator, whose shapes are built upright; from TripoSG whichever of the three
+    `FORGE_TRIPOSG_UP` was measured as on that Station.
+    """
+    ups = ("Y",) if generator == "procedural" else ("Y", "Z", "X")
+    return job.get("attempts") == 1 and job.get("fitUp") in ups and "fit" not in job
+
+
 def live_forge(forge: str, hub: str, work: Path, forge_dir: Path) -> None:
     print("Forge: fixture rooms, their object jobs, the meshes")
     status, health = get_json(forge + "/health")
@@ -318,7 +329,8 @@ def live_forge(forge: str, hub: str, work: Path, forge_dir: Path) -> None:
         if not check(bool(done), f"{room_name}: every job ended, {waited:.1f} s after the first upload (L15: at most 60 s each)"):
             continue
         check(all(j["state"] == "ready" for j in done), f"{room_name}: every job is ready: " + ", ".join(sorted({j['state'] for j in done})))
-        check(all(j.get("attempts") == 1 and j.get("fitUp") == "Y" and "fit" not in j for j in done if j["state"] == "ready"),
+        generator = (health or {}).get("generator", "")
+        check(all(plain_generation(j, generator) for j in done if j["state"] == "ready"),
               f"{room_name}: one generation per object, and no fit, since these fixtures carry no profile")
 
         import subprocess

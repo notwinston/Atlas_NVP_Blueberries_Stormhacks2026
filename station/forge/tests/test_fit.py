@@ -173,7 +173,7 @@ def test_without_a_profile_the_known_front_decides_and_without_either_the_bounds
 
 def test_what_the_setting_says_of_the_front():
     def camera(x, z):
-        return [{"camToBox": [1, 0, 0, x, 0, 1, 0, 1.0, 0, 0, 1, z, 0, 0, 0, 1]}]
+        return {"camToBox": [1, 0, 0, x, 0, 1, 0, 1.0, 0, 0, 1, z, 0, 0, 0, 1]}
 
     assert attempts.preferred_turns("canonical", camera(2.0, 0.0)) == 0
     assert attempts.preferred_turns("unknown", camera(2.0, 0.0)) is None
@@ -182,7 +182,7 @@ def test_what_the_setting_says_of_the_front():
     assert attempts.preferred_turns("view", camera(2.0, 0.1)) == 3  # on Unity's +X
     assert attempts.preferred_turns("view", camera(0.0, -2.0)) == 2  # behind
     assert attempts.preferred_turns("view", camera(-2.0, 0.1)) == 1  # on Unity's -X
-    assert attempts.preferred_turns("view", []) is None and attempts.preferred_turns("view", [{}]) is None
+    assert attempts.preferred_turns("view", None) is None and attempts.preferred_turns("view", {}) is None
     # And that turn does put the mesh's +Z side where the camera stood: a post on the mesh's +Z.
     post = glb_box((-0.1, 0.0, 0.3), (0.1, 1.0, 0.5))
     for x, z in ((0.0, 2.0), (2.0, 0.1), (0.0, -2.0), (-2.0, 0.1)):
@@ -198,7 +198,7 @@ def test_what_the_setting_says_of_the_front():
     crop = Image.new("RGB", (64, 64), (200, 60, 40))
     matted = {0: MattedView(crop, Image.new("L", (64, 64), 255), "rembg"),
               1: MattedView(crop, Image.new("L", (64, 64), 255), "none")}
-    sound = {"intrinsics": [60.0, 60.0, 32.0, 32.0], "camToBox": camera(0.0, 2.0)[0]["camToBox"]}
+    sound = {"intrinsics": [60.0, 60.0, 32.0, 32.0], "camToBox": camera(0.0, 2.0)["camToBox"]}
     assert len(attempts.colour_views(matted, [sound, sound])) == 1  # view 1 is not matted
     for broken in ({**sound, "intrinsics": [0.0, 60.0, 32.0, 32.0]}, {**sound, "camToBox": [0.0] * 16},
                    {**sound, "intrinsics": None}, {"intrinsics": sound["intrinsics"]}, {}):

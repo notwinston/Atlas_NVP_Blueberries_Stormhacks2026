@@ -5,6 +5,8 @@ import base64
 import binascii
 from typing import Any, Literal, Optional
 
+import math
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .budget import VALIDATOR_MAX_TRIANGLES, VALIDATOR_MAX_TRIANGLES_LIGHT, VALIDATOR_MIN_TRIANGLES
@@ -27,6 +29,13 @@ def decode_profile(text: str) -> bytes:
     return raw
 
 
+def _above_zero(value: Vec3) -> Vec3:
+    """A box has three sides above zero: the furniture budget shares triangles by its surface."""
+    if not all(math.isfinite(side) and side > 0.0 for side in value):
+        raise ValueError(f"the three sides of a box must be above zero, not {list(value)}")
+    return value
+
+
 class RoomObject(BaseModel):
     """The fields of a RoomModel object the Forge reads; the rest is kept untouched."""
 
@@ -35,6 +44,8 @@ class RoomObject(BaseModel):
     id: int = Field(ge=1, le=255)
     category: str = "unknown"
     size: Vec3
+
+    _size_is_a_box = field_validator("size")(_above_zero)
 
 
 class RoomModel(BaseModel):
@@ -72,6 +83,8 @@ class ObjectMeta(BaseModel):
     profile: Optional[str] = None
     backend: Literal["local", "hosted", "cache"] = "local"
     views: list[ViewMeta] = Field(default_factory=list, max_length=3)
+
+    _dims_are_a_box = field_validator("dims")(_above_zero)
 
     @field_validator("profile")
     @classmethod
@@ -151,10 +164,13 @@ class JobStatus(BaseModel):
     lightBytes: Optional[int] = None
     lightTris: Optional[int] = None
     # How clean-up turned the generated mesh. `fitUp`: the axis of the generator's own frame that was taken as
-    # up (Y, Z or X). `fitYaw`: the turn about that axis as a yaw in Unity's box frame, 0, 90, 180 or 270 degrees
-    # (positive turns +Z towards +X): the azimuth of the box at which the mesh's own +Z side stands.
+    # up (Y, Z or X); clean-up first turns the mesh so that this axis is +Y. `fitYaw`: the turn it then gave
+    # the mesh about +Y, as a yaw in Unity's box frame, 0, 90, 180 or 270 degrees (positive turns +Z towards
+    # +X): the azimuth of the box at which the +Z side of the uprighted mesh stands. That side is the
+    # generator's own +Z for `fitUp` Y and X, and its -Y for `fitUp` Z.
     # `fit`: how far the turned mesh is from the scanned profile, 0 a perfect match; absent for a job with no
-    # profile. `attempts`: the generations made for the object, failed ones included; absent for a cached answer.
+    # profile, or with one that saw under a tenth of the box. `attempts`: the generations made for the object,
+    # failed ones included; absent for a cached answer.
     fit: Optional[float] = None
     fitYaw: Optional[int] = None
     fitUp: Optional[str] = None

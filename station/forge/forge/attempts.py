@@ -24,29 +24,36 @@ MAX_GENERATIONS = 3
 # After this many failed generations with no mesh, the generator is given up for the object:
 # one retry, as before the attempts existed.
 MAX_FAILURES = 2
+# A profile that covers less of the box than this is no profile for the fit. The score is a mean over
+# the cells the scan saw: over a handful of cells one cell that differs makes a fit poor, sends two more
+# photos to the generator and outvotes what is known of the generator's front. (The phone's 0.30 is
+# another question: whether a profile may decide the facing.)
+MIN_FIT_COVERAGE = 0.10
 
 
 def scan_of(profile_text: str) -> Optional[np.ndarray]:
-    """The object profile a job carries, or None when it has none or the scan saw nothing of the object."""
+    """The object profile a job is fitted to, or None: no profile, or one that saw under a tenth of the box."""
     if not profile_text:
         return None
     scan = scan_profile.decode(profile_text)
-    return scan if scan.any() else None
+    return scan if scan_profile.coverage(scan) >= MIN_FIT_COVERAGE else None
 
 
-def preferred_turns(front: str, views: Sequence[Mapping]) -> Optional[int]:
+def preferred_turns(front: str, view: Optional[Mapping]) -> Optional[int]:
     """What `FORGE_TRIPOSG_FRONT` says of where a generated mesh's front is, as quarter turns of clean-up.
 
-    ``canonical``: the front is on the mesh's own +Z, so no turn. ``view``: the
-    mesh's +Z side is the one the camera of view 0 saw; with the camera on side
-    k of the box (`profile.view_quarter_turn`) that takes (4 - k) % 4 turns of
-    `_YAW90` in the GLB frame. ``unknown``, or ``view`` without a camera pose:
-    None, nothing is preferred.
+    ``view`` is the view the mesh was generated from, which for a second or
+    third attempt is not view 0: its camera may stand on another side of the
+    box. ``canonical``: the front is on the mesh's own +Z, so no turn.
+    ``view``: the mesh's +Z side is the one that camera saw; with the camera on
+    side k of the box (`profile.view_quarter_turn`) that takes (4 - k) % 4
+    turns of `_YAW90` in the GLB frame. ``unknown``, or ``view`` without a
+    camera pose: None, nothing is preferred.
     """
     if front == "canonical":
         return 0
-    if front == "view" and views and views[0].get("camToBox"):
-        return (4 - scan_profile.view_quarter_turn(views[0]["camToBox"])) % 4
+    if front == "view" and view and view.get("camToBox"):
+        return (4 - scan_profile.view_quarter_turn(view["camToBox"])) % 4
     return None
 
 
@@ -61,12 +68,15 @@ def front_for(generator_name: str, settings: Settings) -> str:
 
 
 def orient_attempt(vertices: np.ndarray, faces: np.ndarray, *, dims: Sequence[float], tri_target: int,
-                   profile_text: str, views: Sequence[Mapping], generator_name: str, settings: Settings) -> Oriented:
-    """Steps 1 to 3 of clean-up for one generated mesh of a job; its fit to the scan is in the result."""
+                   profile_text: str, view: Optional[Mapping], generator_name: str, settings: Settings) -> Oriented:
+    """Steps 1 to 3 of clean-up for one generated mesh of a job; its fit to the scan is in the result.
+
+    ``view`` is the meta of the view the mesh was generated from (None when the phone sent none).
+    """
     return orient(
         vertices, faces, dims, tri_target,
         scan=scan_of(profile_text),
-        prefer_turns=preferred_turns(front_for(generator_name, settings), views),
+        prefer_turns=preferred_turns(front_for(generator_name, settings), view),
         up_axes=up_axes_for(generator_name, settings),
         max_anisotropy=settings.max_anisotropy,
     )

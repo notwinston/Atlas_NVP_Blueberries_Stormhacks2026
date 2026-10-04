@@ -154,14 +154,18 @@ def weights() -> str:
     from forge.config import Settings
     from forge.generators import TripoSGGenerator
 
-    folder = TripoSGGenerator(Settings.from_env()).weights_dir()
-    if not (folder / "model_index.json").is_file():
-        raise Note(f"no model_index.json in {folder}: the service downloads the weights (7.95 GB) when it "
+    generator = TripoSGGenerator(Settings.from_env())
+    folder = generator.weights_dir()
+    gap = generator.weights_gap()
+    if gap:
+        raise Note(f"{gap}: the service downloads what is missing of the weights (7.95 GB in all) when it "
                    "starts, and is not ready until they are there")
-    size = sum(p.stat().st_size for p in folder.rglob("*") if p.is_file()) / 2**30
+    # The files in their places only: what a download left half-way lies under .cache and does not count.
+    size = sum(p.stat().st_size for p in folder.rglob("*") if p.is_file() and ".cache" not in p.parts) / 2**30
     VERSIONS.append(("TripoSG weights", f"{folder}, {size:.2f} GB"))
     if size < 7.0:
-        raise RuntimeError(f"{folder} holds {size:.2f} GB; the whole model is 7.95 GB: the download is not complete")
+        raise Note(f"{folder} holds {size:.2f} GB; the whole model is 7.95 GB. A download stopped before it "
+                   "was whole; the service fetches the rest when it starts")
     return f"{folder}, {size:.2f} GB"
 
 

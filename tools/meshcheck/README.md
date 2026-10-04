@@ -35,7 +35,7 @@ the Station and never enters git (`station/forge/.gitignore` leaves `data/` out)
    for the front. So stand where you face the real object's front and look at its first shape in the headset
    or on the Spectator. Write the side of the shape that you see: its front `+Z`, its own right-hand side `+X`,
    its back `-Z`, its own left-hand side `-X`. An object with no front (a table, a lamp, a plant) is `none`.
-   An object left out is not judged.
+   An object left out is not judged, and it then stands between its line and a verdict: leave none out.
 
 What the folder then holds:
 
@@ -74,17 +74,33 @@ station\forge\.venv\Scripts\python tools\meshcheck\check.py --data C:\atlas\reco
 
 | Line | From | Passes when |
 |---|---|---|
-| M1 · no object with a profile is a plain box | The RoomModel: a plain box is an `unknown` or `other` object whose profile covers under 0.30 of its box | None is |
-| M1 · chairs and couches face right | `truth.json`: the phone's facing is right when the truth is `+Z` | At least 90 % |
-| M1 · every wall-backed object faces right | The same, for the categories whose rule is the free floor (storage, screen, refrigerator, oven, dishwasher, washerDryer, stove, fireplace, sink, bathtub) | All |
+| M1 · no object with a profile is a plain box | The RoomModel: a plain box is an `unknown` or `other` object whose profile covers under 0.30 of its box | None is, and at least one object has a profile |
+| M1 · chairs and couches face right | `truth.json`: the phone's facing is right when the truth is `+Z` | At least 90 % of the room's chairs and couches are in the truth and right |
+| M1 · every wall-backed object faces right | The same, for the categories whose rule is the free floor (storage, screen, refrigerator, oven, dishwasher, washerDryer, stove, fireplace, sink, bathtub) | All are in the truth and right |
 | M1 · facing by the rule that answered | Right and total per `objects[].facing` | Not judged: for tuning the rule lists |
 | M2 · each meshed object has a full and a light copy that pass the validator | `forge.validator` on both files, at their levels and targets | All of the room's meshed objects (at most 32) |
-| M2 · generation takes 60 s or less per attempt | `attemptLog[].seconds` of each job | Every attempt |
-| M2 · the median fit is 0.12 or better | The published fit of every object that has one | Median ≤ 0.12 |
-| M2 · generated meshes of objects with a front face right | The front of each published mesh, read from the mesh by the phone's own profile rule (its back is the side whose edge strip is highest), against the truth | At least 90 % of those it can read |
+| M2 · generation takes 60 s or less per attempt | `attemptLog[].seconds` of each meshed object's job | Every attempt, and every meshed object has a timed one that made a mesh |
+| M2 · the median fit is 0.12 or better | The published fit of every meshed object that has one (none without a profile, or with one that saw under a tenth of the box) | Median ≤ 0.12 whatever the others would have scored |
+| M2 · generated meshes of objects with a front face right | The front of each published mesh, read from the mesh by the phone's own profile rule (its back is the side whose edge strip is highest), against the truth | At least 90 % of the meshes are read, in the truth and right |
 | M2 · objects above the poor-fit line after their attempts | Published fit above 0.20 | Not judged: listed by name |
 
-The exit code is 0 when no line that could be judged failed, 1 when one did, 2 when the record cannot be read.
+A line has a verdict only when the record settles it. An object that could not be judged counts against a
+pass and against a fail alike, and is named in the line: one that `truth.json` leaves out, a mesh whose front
+cannot be read, an object with no fit, one with no timed generation. So "chairs and couches face right" passes
+only if at least 90 % of all the room's chairs and couches are known to be right, fails only if under 90 %
+would be right even with every unjudged one right, and has no mark otherwise. The median passes or fails only
+if it does so whatever the objects without a fit would have scored. A room in which no object has a profile
+has no verdict on plain boxes.
+
+A box is judged by the last job that generated its mesh. An answer from the cache (the phone sends a box
+again whenever the app is started on the same room) holds no generation and stands in only when the box has
+no other job; the line on seconds then says how many meshed objects have no timed attempt that made a mesh.
+An attempt that failed counts when it ran over the time, and never towards a pass: one that broke off early
+does not show how long the object's generation takes.
+
+The last line counts the lines that pass, fail and are not settled. The exit code is 0 only when every line
+that asks for something passes, 1 when one fails, 3 when none fails but one is not settled (not a pass: the
+record does not show it), 2 when the record cannot be read.
 
 What the script cannot see, and a person must:
 

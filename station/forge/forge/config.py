@@ -93,6 +93,9 @@ class Settings:
     # TripoSG's output frame; "Y" and "unknown" until it has been measured on the Station.
     triposg_up: str = "Y"
     triposg_front: str = "unknown"
+    # Set when TripoSG's faces turn out to be wound clockwise seen from outside: the adapter then
+    # reverses them. Clean-up, the colours and the baked shade all take the winding on trust.
+    triposg_inside_out: bool = False
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -125,4 +128,5 @@ class Settings:
         s.triposg_fallback_decoder = _flag("FORGE_TRIPOSG_FALLBACK_DECODER", True)
         s.triposg_up = _choice("FORGE_TRIPOSG_UP", s.triposg_up, TRIPOSG_UP)
         s.triposg_front = _choice("FORGE_TRIPOSG_FRONT", s.triposg_front, TRIPOSG_FRONT)
+        s.triposg_inside_out = _flag("FORGE_TRIPOSG_INSIDE_OUT")
         return s

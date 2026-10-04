@@ -66,7 +66,8 @@ One process only: it owns the GPU. Start it from `station/forge`.
 | `FORGE_TRIPOSG_STEPS`, `_GUIDANCE`, `_SEED`, `_FP16` | 50, 7.0, 42, on | Inference settings |
 | `FORGE_TRIPOSG_FALLBACK_DECODER` | on | When TripoSG's default decoder fails, generate once more with `use_flash_decoder=False` |
 | `FORGE_TRIPOSG_UP` | `Y` | Which axis of TripoSG's own frame is up: `Y`, `Z` or `X`. The only up axis clean-up tries for a TripoSG mesh. Measured on the Station (below) |
-| `FORGE_TRIPOSG_FRONT` | `unknown` | Where the front of a TripoSG mesh is: `canonical` (on its own +Z), `view` (towards the photo's camera) or `unknown`. Breaks a tie of the fit, and decides alone when a job has no profile. Measured on the Station (below) |
+| `FORGE_TRIPOSG_FRONT` | `unknown` | Where the front of a TripoSG mesh is: `canonical` (on its own +Z), `view` (towards the camera of the photo it was generated from) or `unknown`. Breaks a tie of the fit, and decides alone when a job has no profile. Measured on the Station (below) |
+| `FORGE_TRIPOSG_INSIDE_OUT` | off | `1` when TripoSG's faces are wound clockwise seen from outside: the adapter then reverses them. Measured on the Station (below) |
 | `FORGE_POOR_FIT` | 0.20 | A fit to the scanned profile above this is poor, in fractions of the box height: the next photo is then tried |
 | `FORGE_MATTING_TIMEOUT_S`, `FORGE_GENERATE_TIMEOUT_S`, `FORGE_HOSTED_TIMEOUT_S`, `FORGE_CLEANING_TIMEOUT_S` | 10, 90, 120, 60 | Stage time-outs (§7.4) |
 | `FORGE_MAX_ANISOTROPY` | 0.15 | Stretch allowed per axis when fitting a mesh to its box |
@@ -81,7 +82,7 @@ The port and host are uvicorn's own arguments. `forge/config.py` holds every set
 | Route | Request | Response |
 |---|---|---|
 | `GET /health` | – | `{ok, gpu, queue, pipelineVer, debugKeep}` and `gpuName`, `generator`, `generatorReady`, `generatorNote`, `hosted` (and the same flag as `hostedEnabled`), `matting`. Answers at once, also while the model loads |
-| `POST /rooms` | RoomModel JSON | 201 `{roomId, roomHash, generated, placeholders, triTarget, triTargets, triTargetLight}`. `roomId` is the RoomModel's `id`. `triTargets` maps every object id to its full target (0 for a box that receives no mesh); `triTarget` is the largest of them; `triTargetLight` is the room's light target |
+| `POST /rooms` | RoomModel JSON | 201 `{roomId, roomHash, generated, placeholders, triTarget, triTargets, triTargetLight}`. `roomId` is the RoomModel's `id`. `triTargets` maps every object id to its full target (0 for a box that receives no mesh); `triTarget` is the largest of them; `triTargetLight` is the room's light target. 422 for an object whose `size` has a side that is not above zero |
 | `PUT /rooms/{roomId}/mesh` | binary, ≤ 2 MB | 204 |
 | `GET /rooms/{roomId}` | – | The RoomModel as uploaded |
 | `DELETE /rooms/{roomId}` | – | 204. Removes the room, its mesh, its jobs and the GLBs made for it |
@@ -107,8 +108,8 @@ TripoSG). When ready it also holds:
 |---|---|
 | `sha256`, `url`, `bytes`, `tris`, `maxEdge`, `bounds`, `palette` | The full copy, as `AssetReady` carries it. `palette` is the cell that covers the most surface |
 | `lightSha256`, `lightUrl`, `lightBytes`, `lightTris` | The light copy, an asset of its own under its own hash. Absent when none could be made (the report says why). The same file as the full copy when that is already within the light target |
-| `fitUp`, `fitYaw` | How clean-up turned the mesh: the axis of the generator's frame taken as up, and the turn about it as a yaw in Unity's box frame (0, 90, 180 or 270; positive turns +Z towards +X): the mesh's own +Z side stands at that azimuth of the box |
-| `fit` | How far the turned mesh is from the scanned profile: the mean difference of heights over the cells the scan saw, in fractions of the box height; 0 is a perfect match. Absent for a job with no profile |
+| `fitUp`, `fitYaw` | How clean-up turned the mesh. `fitUp`: the axis of the generator's frame taken as up; clean-up first turns the mesh so that this axis is +Y. `fitYaw`: the turn it then gave the mesh about +Y, as a yaw in Unity's box frame (0, 90, 180 or 270; positive turns +Z towards +X): the +Z side of the uprighted mesh stands at that azimuth of the box. That side is the generator's own +Z for `fitUp` `Y` and `X`, and its −Y for `Z` |
+| `fit` | How far the turned mesh is from the scanned profile: the mean difference of heights over the cells the scan saw, in fractions of the box height; 0 is a perfect match. Absent for a job with no profile, or with one that saw under a tenth of the box |
 | `attempts` | The generations made for the object, failed ones included. Absent for an answer from the cache |
 | `report` | The clean-up report of the full copy |
 
@@ -157,8 +158,14 @@ What the `triposg` generator does around the model (mesh design §5.1):
   `generatorReady` is true only once that load has succeeded; until then `generatorNote` says what is missing
   or going on (`the model is being loaded`, `the weights are being downloaded to …`). Jobs wait in the queue
   meanwhile. A load that failed is tried again by the next job.
-- **The weights** are complete when their folder holds `model_index.json`. A folder without it is what a
-  download that stopped leaves behind, and is downloaded again.
+- **The weights.** The download puts each file in place when it is whole: `model_index.json` within seconds,
+  the weights minutes later. So a download that stopped leaves the marker and no weights, and the marker
+  alone says nothing. A folder is downloaded (the download resumes what it has) when it has no
+  `model_index.json`, or when `.cache/huggingface/download` under it holds a file that was left half-way. A
+  folder that shows neither and still does not load is fetched once and read again, before the load is given
+  up: that is the folder of a download that stopped before one of its files was begun. A download that came
+  back without an error is followed by the load whatever lies in that folder: a half-way file can be the
+  leftover of an older revision, which no download finishes, and must not keep whole weights from loading.
 - **Matting is required.** TripoSG is never given a picture that is not matted. With no matting model
   installed, `generatorReady` is false and a job fails with `TripoSG cannot run: no matting model is installed`.
   A view whose matting fails, or whose matte is empty, is not sent; the next view is tried.
@@ -191,10 +198,12 @@ Clean-up (`forge/cleanup.py`) follows mesh design §5.3. The same input gives th
 four quarter turns, keeping those whose bounds fill the box within the stretch limit. Each is scaled to the box
 and its own profile is made with the phone's rays (`forge/profile.py`); the score is the mean difference from
 the scanned profile. The lowest score wins. Scores within 0.02 of the best are a tie: `FORGE_TRIPOSG_FRONT`
-breaks it (`canonical`: no turn; `view`: the turn that puts the mesh's own +Z side where the camera of view 0
-stood), then the generator's own up axis is kept, then the lower score. Without a profile,
-`FORGE_TRIPOSG_FRONT` alone decides among the turns the bounds allow, and with `unknown` it is the bounds
-alone. Every candidate and its score is in the report (`candidates`).
+breaks it (`canonical`: no turn; `view`: the turn that puts the mesh's own +Z side where the camera stood of
+the view that mesh was generated from, which for a second or third attempt is not view 0), then the
+generator's own up axis is kept, then the lower score. Without a profile, `FORGE_TRIPOSG_FRONT` alone decides
+among the turns the bounds allow, and with `unknown` it is the bounds alone. A profile that saw under a tenth
+of the box (26 of its 256 cells) is no profile for the fit: over a handful of cells one cell that differs
+would make a fit poor and outvote the setting. Every candidate and its score is in the report (`candidates`).
 
 Turns, in both frames: one quarter turn of clean-up is a right-handed +90° about +Y in the GLB frame
 (x′ = z, z′ = −x), which is a yaw of −90° in Unity's box frame. The report's `yawDegrees` counts the turn the
@@ -314,7 +323,8 @@ huggingface-cli download VAST-AI/TripoSG --local-dir C:\atlas\TripoSG\pretrained
   without it the build leaves out the CUDA part and reports no error, and the decoder fails later.
 - The checkout is pinned to the commit the adapter was read against.
 - The last line fetches the weights now, with a progress bar. Without it the service fetches them when it
-  starts, and is not ready until they are there.
+  starts, and is not ready until they are there. If the download stops, run the line again or just start the
+  service: either resumes it.
 
 ### 3 · Check the install
 
@@ -333,6 +343,7 @@ downloads the matting model, about 170 MB, the first time).
 | the pinned packages | Something replaced `transformers` 4.49.0: install `requirements-triposg.txt` again |
 | diso, TripoSG's decoder | It was built without `CUDA_HOME`, or without the compiler on the path: `pip uninstall diso`, then the three `diso` lines of step 2 again. If it still fails on the card, this is the fault of TripoSG issue 63; the Forge then uses the other decoder for every object (step 5) |
 | rembg, the matting model | `requirements-gpu.txt` is not installed, or the model could not be downloaded |
+| the weights (a `NOTE`, not a failure) | No `model_index.json`, a file left half-way, or under 7 GB in place: the download did not finish. The service fetches the rest when it starts |
 | the TripoSG checkout | `FORGE_TRIPOSG_REPO` is not set in this prompt, or the package does not import: the message names the module that is missing |
 
 ### 4 · Start the service
@@ -359,7 +370,9 @@ curl http://127.0.0.1:8000/health
 | `PyTorch is not installed`, `diso is not installed …`, `no matting model is installed …`, `FORGE_TRIPOSG_REPO does not point at a TripoSG checkout` | That step of the install is missing in this environment, or the variable is not set in this prompt |
 | `CUDA is not available to PyTorch` | Step 2's check line |
 | `diso cannot be imported: …` | The build of `diso`; see step 3 |
-| `the model could not be loaded from …: …` | The rest of the line is PyTorch's or diffusers' own error. Out of memory: close whatever else uses the card |
+| `the model is not loaded yet, and the weights are not complete (…): they are downloaded first` | No job has come yet. The first one downloads what is missing, then loads |
+| `the weights could not be downloaded to …: …` | The network, or the disk. The next job tries again and resumes what is there |
+| `the model could not be loaded from …: …` | The rest of the line is PyTorch's or diffusers' own error. Out of memory: close whatever else uses the card. `no file named …`, with `a download into … stopped before it was whole` behind it: the weights are not all there and the Station could not reach the hub (without a network the library hands the folder back as it is); give it a network and send a job |
 | `the matting model could not be loaded: …` | `rembg` could not fetch or start its model |
 
 ### 5 · Send one object and read the job report
@@ -460,8 +473,19 @@ only when the job ended `ready`. To look at the mesh yourself, open `first_run\a
 that shows the axes: +Y is up, and the GLB's z is the box's z (its x is the box's −x). The tool sends no
 profile and no camera, so clean-up orients this one mesh by its bounds and by the two settings as they stand.
 
-Set the two variables in the prompt that starts the service, restart it, and then make them the defaults in
-`forge/config.py` (`triposg_up`, `triposg_front`) and in the table of "Running" above, in a commit.
+**Winding** (`FORGE_TRIPOSG_INSIDE_OUT`). Clean-up, the colours and the baked shade all take it on trust
+that a generated mesh's faces are wound counter-clockwise seen from outside. The tool reads it from the same
+mesh, by the sign of the volume the faces enclose:
+
+| The tool says | Means | Do |
+|---|---|---|
+| `the faces are wound outwards` | As clean-up expects | Nothing |
+| `the faces are wound INWARDS` | The mesh is inside out. On the phone it would have one colour (no face turns to any camera) and its shade the wrong way round, dark above and light below | `set FORGE_TRIPOSG_INSIDE_OUT=1`, restart the service, run the tool again: it must now say outwards. Note which decoder made the mesh (`decoder` in the answer): the two decoders are different code, and if a mesh of the other one reads the other way, one flag cannot serve both. Report that |
+| `it cannot be read from this mesh` | The mesh is not closed, or its faces are wound both ways | Look at `first_run\asset.glb` in a viewer with back faces hidden; keep `raw_view0.npz` and report it |
+
+Set the variables in the prompt that starts the service, restart it, and then make them the defaults in
+`forge/config.py` (`triposg_up`, `triposg_front`, `triposg_inside_out`) and in the table of "Running" above,
+in a commit.
 
 ### 7 · Write into `docs/versions.md`
 
@@ -473,7 +497,8 @@ Set the two variables in the prompt that starts the service, restart it, and the
 - `transformers`, `diffusers`, `huggingface-hub`, numpy; `rembg` and `onnxruntime` with its providers.
 - The TripoSG commit; the weights folder and its size.
 - Every pin that had to change in `requirements-triposg.txt` or `requirements-gpu.txt`, and why.
-- `FORGE_TRIPOSG_UP` and `FORGE_TRIPOSG_FRONT` as measured, with the front azimuth of both photos.
+- `FORGE_TRIPOSG_UP` and `FORGE_TRIPOSG_FRONT` as measured, with the front azimuth of both photos; the
+  winding the tool read, and for which decoder.
 - The decoder that made the mesh; seconds for `matting`, `generating` and `cleaning`; the peak memory on the card;
   `sourceTriangles`.
 - Anything in this section that was wrong.
@@ -499,6 +524,11 @@ Then move "TripoSG on the RTX 5070" out of that page's "Not yet verified" list.
   fit behaves on a real generated mesh against a real scan (thin coverage, a profile from a noisy LiDAR mesh,
   a generated shape that only resembles the object) is not known; the thresholds 0.02 and 0.20 are starting
   values.
+- **Winding.** Whether TripoSG's faces are wound outwards is not known, for either of its decoders. The first
+  run reads it; `FORGE_TRIPOSG_INSIDE_OUT` is there in case they are not.
+- **The weights download.** How the pinned `huggingface_hub` leaves a folder when a download stops was read in
+  its source and seen once with a small public repository. The adapter's handling of it is tested with a fake;
+  the 7.95 GB download itself was never made.
 - **Up.** A scan seen from above cannot tell an object from the same object standing on its head, and no
   negative up axis is among the candidates. For TripoSG only `FORGE_TRIPOSG_UP` is tried, `Y` until measured.
 - **On the phone**: glTFast loading the file with no material, and the palette cell and shade arriving as lane A's

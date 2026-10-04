@@ -142,6 +142,8 @@ def object_matte(matte: Image.Image) -> tuple[np.ndarray, tuple[int, int, int, i
     specks = names[counts < SPECK_SHARE * solid.sum()]
     if len(specks):
         solid &= ~np.isin(label, specks)
+    if not solid.any():
+        raise ImageError("the matte holds only specks: no object was found in the crop")
     rows, columns = np.flatnonzero(solid.any(axis=1)), np.flatnonzero(solid.any(axis=0))
     x0, x1, y0, y1 = int(columns[0]), int(columns[-1]) + 1, int(rows[0]), int(rows[-1]) + 1
     if max(x1 - x0, y1 - y0) < _MIN_OBJECT_PIXELS:
