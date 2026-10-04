@@ -44,3 +44,29 @@ Asmdef: `Atlas.Blades.FieldFit` now references Unity.Mathematics, Unity.Burst, U
 | DV-B02-c | For Morph 0 < t < 1 the job calls `LensMath.Inverse` (64-step bisection, exact) as a stand-in; P3-B04 swaps in `LensRadialTable` (DV16). |
 | DV-B02-d | `FieldFitRig.cs` ships only `QualityRung` and `IFieldFitRig` (needed by the `FakeRig` double); P3-B03 appends `PlaceholderRigBinding`. |
 | DV-B02-e | Tests written together with the implementation after a compile-red run (the red phase was a compile failure only). Test-first red for each assertion was not run. |
+
+## Wide source render and composed final blit (P3-B03)
+
+Files (all `Assets/Atlas/Blades/FieldFit/`): `FieldFitFeature.cs` (`FieldFitFeature`, `FieldFitShaderIDs`), `FieldFitSettings.cs` + `.asset`,
+`FieldFitRig.cs` (`PlaceholderRigBinding`, the only file naming lane A), `LensParamBinding.cs` (the only file naming lane D),
+`LensGuard.cs` and `LensBadge.cs` (stubs, B05 fills them), `Shaders/FieldFitBlit.shader`, `Scenes/Blade_FieldFit.unity`.
+
+- `FieldFitFeature` is a MonoBehaviour. `OnEnable` builds the adapters, `Init(rig, src, ev)` does Brief §8 "Enable" (stage A, ten source
+  RTs for the five rungs, the lookup, the material from `settings.blitShader`, the badge, `Application.onBeforeRender`).
+- Integration at lane A / lane D: call `LensParamBinding.BindRegistry(registry)` once at boot (DV-B03-f). Without it, or without
+  `lens.*` registered by P3-D02, the feature logs one error and stays disabled (the ordinary path is untouched).
+- Measured (Editor, CPU mirror of the shader, identity and D_test, 3.2 M interior pixels): max displacement 0.539 px vs the ordinary blit (limit 1 px; the brief expected about 0.45).
+  Evidence: `docs/laneB/evidence/P3-B03/lens_off_displacement.txt`.
+- Tests: `FieldFitFeatureTests` (9), `FieldFitBlitTests` (1 CPU, 1 GPU ignored on `-nographics`).
+
+| Id | Note |
+|---|---|
+| DV-B03-a | `FieldFitSettings` has no `badgeFont` (TextMeshPro is not in the manifest). `LensBadge.Create(left, right, lut)` therefore takes no font; B05 needs a lead decision. |
+| DV-B03-b | R5 (frustum): the placeholder `StereoRig` exposes no frustum; the adapter derives (l, r, b, t) from `Camera.projectionMatrix` of the public `LeftEye` / `RightEye`, once at enable. |
+| DV-B03-c | R7 (rung): the placeholder has no ladder; the adapter maps `AtlasThermal.State` 0..3 to Nominal..Last. High is never produced until lane A's ladder exists. |
+| DV-B03-d | R6 (override): the placeholder `OverrideEyeTargets(left, right, vFovDeg)` has no lateral offset and keeps its explicit camera aspect. The adapter moves each eye camera's local x to the requested offset, calls `Camera.ResetAspect()` for the square source, and restores both on clear. Lane A's real R6 must do this itself. |
+| DV-B03-e | R3 (eye screen size): `Screen.width / 2` x `Screen.height`, 1398 x 1290 when no screen. |
+| DV-B03-f | Registry hand-over by the public static `LensParamBinding.BindRegistry` (the placeholder `SpaceLab` has no static accessor). |
+| DV-B03-g | GPU tests need a graphics device. The shared runner passes `-nographics`, so they call `Assert.Ignore` there instead of failing (Brief §2 says fail); the CPU mirror `BlitReference` of the shader runs the same criterion everywhere. Run `FieldFitBlitTests` once without `-nographics` before G13. |
+| DV-B03-h | `lens.on` handling: if the lookup was never built (invalid parameters on activation) the rig is left on the ordinary path. |
+| DV-B03-i | Tests are written together with the implementation; the red phase was a compile failure (missing types), as in B02. |

@@ -155,3 +155,10 @@ Steps:
 Record: sweep count, the 3 noted pairs, the share shown, the angle sum, frame p95 and max, thermal state.
 
 Graphics sign-off (Editor with a graphics device, not -nographics): run `B10_Shader_RawOrientation_GpuOnly` and `B10_Textures_R8_Linear_PointClamp_Once` (both Inconclusive headless), and check the console for NeedleSky.shader compile errors.
+
+## P3-B03 Wide source render and composed final blit (deferred: phone in the headset not needed for the < 1 px test; fusion needs headset)
+
+- Scene: `Assets/Atlas/Blades/FieldFit/Scenes/Blade_FieldFit.unity` over `Space_Home` (S0), `budget_room`.
+- Editor GPU test (run once on a machine with a graphics device, not `-nographics`):
+  `FieldFitBlitTests.LensOff_RealShader_MatchesReference_GPU`. Expected: max uv difference vs the CPU mirror < 2e-3; top-row green > 0.5.
+- Headset: checklist items 1-3. Expected: no jump or flip with None; black at about 10 deg; one fused image in 3 of 3 testers (else `centreEyeSource` = true).
