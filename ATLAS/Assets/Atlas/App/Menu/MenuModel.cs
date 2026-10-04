@@ -147,6 +147,8 @@ namespace Atlas.App.Menu
 
         // Resetting space.id would walk the wearer out of the space they are standing in.
         const string SpaceParam = "space.id";
+        /// <summary>The tracked hands' switch, shown at the top of the Spaces page as "Hands".</summary>
+        public const string HandsEnabled = "hands.enabled";
 
         static readonly string[] s_pageNames = { "Spaces", "Quality", "Parameters", "Session" };
 
@@ -310,6 +312,10 @@ namespace Atlas.App.Menu
         void BuildSpaces()
         {
             if (_spaces == null) return;
+            // The tracked hands' switch first, where the menu opens: hands.enabled itself, so it stays in step
+            // with the kill switch on the Quality page and with the Station.
+            ParamEntry hands = _registry.Find(HandsEnabled);
+            if (hands != null) _rows.Add(new MenuRow { Kind = MenuRowKind.Param, Entry = hands, Label = "Hands" });
             for (int i = 0; i < SpaceIds.Count; i++)
             {
                 var id = (SpaceId)i;

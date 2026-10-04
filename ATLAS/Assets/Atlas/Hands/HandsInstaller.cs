@@ -73,7 +73,8 @@ namespace Atlas.Hands
             if (registry == null) return;
             HandsRuntime runtime = Runtime;
             EditorHandsSource editor = Editor;
-            registry.DeclareBool(ParamEnabled, Group, false, on => runtime.Enabled = on);
+            // On by default; the menu's Hands row (Spaces page) and the kill switch turn it off.
+            registry.DeclareBool(ParamEnabled, Group, true, on => runtime.Enabled = on);
             registry.DeclareEnum(ParamRate, Group, s_rates, 0, index => runtime.RateOverride = index == 1 ? 30 : index == 2 ? 15 : 0);
             registry.DeclareFloat(ParamReach, Group, HandsConstants.ReachMinMetres, HandsConstants.ReachMaxMetres,
                 HandsConstants.ReachMetres, metres => runtime.Reach = metres);
