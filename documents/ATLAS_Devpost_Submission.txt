@@ -57,7 +57,6 @@ Each session logs the head pose, space, exact tile and walker state 60 times a s
 - **Curved space you walk, not watch.** We work in H²×R and S²×R: only the floor is curved, height stays ordinary. Carrying a direction round a closed loop turns it by the loop's area over L² (Gauss-Bonnet), and that turn is what the walker feels as "the wrong room".
 - **Hyperbolic networks.** The Network Atlas follows Krioukov et al., *Hyperbolic Geometry of Complex Networks* (2010): nodes scattered in a hyperbolic disc and linked by hyperbolic distance give the hubs-and-rim structure of real networks, and greedy routing works on them.
 - **Image-to-3D diffusion.** The Forge uses *TripoSG: High-Fidelity 3D Shape Synthesis using Large-Scale Rectified Flow Models* (arXiv 2502.06608, 2025).
-- **4D medical data.** The lung use case is built on the public TCIA 4D-Lung dataset (Hugo et al., 2016, CC BY 3.0).
 
 ### What we measured
 
@@ -204,10 +203,6 @@ This is the question the project was built to answer. We want to put the headset
 **Numbers from the device**
 
 Everything we measured so far was off the phone. Next come frame rate, heat, scan accuracy against a tape measure, and Bump Guard's lead time on real approaches with a spotter.
-
-**A breathing lung as a 4D object**
-
-Using a public 4D CT dataset, a chest scanned across ten breathing phases becomes a 4D tube that the Slicer can cut, with time as the fourth axis. The airway becomes a tree in hyperbolic tiles, where every branch gets a full-size room. The data pipeline is built; it is not in the headset yet. It is for education, not clinical use.
 
 **FieldFit**
 
