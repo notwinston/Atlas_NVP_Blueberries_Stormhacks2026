@@ -172,6 +172,11 @@ namespace Atlas.Hands.Tests
             float2 wristsSide = new float2(math.clamp(end.x, 0f, Scene.Width - 1f), math.clamp(end.y, 0f, Scene.Height - 1f));
             Assert.That(r.Contains(wristsSide.x, wristsSide.y, z), Is.True, "the border on the wrist's side");
             Assert.That(r.Contains(wristsSide.x, wristsSide.y, z + 0.30f), Is.False, "and the gate still holds there");
+            // There the strip lies outside the box, and its own gate holds: 0.05 m behind the palm, not 0.20 m.
+            bool inTheBox = wristsSide.x >= r.MinU && wristsSide.x <= r.MaxU && wristsSide.y >= r.MinV && wristsSide.y <= r.MaxV;
+            Assert.That(inTheBox, Is.False, "the border on the wrist's side is beyond the box");
+            Assert.That(r.Contains(wristsSide.x, wristsSide.y, z + 0.04f), Is.True, "just inside the strip's gate");
+            Assert.That(r.Contains(wristsSide.x, wristsSide.y, z + 0.06f), Is.False, "just outside it, though inside the box's gate");
             for (int k = 0; k < 8; k++)
             {
                 float along = 8f + k * 32f;
@@ -268,6 +273,62 @@ namespace Atlas.Hands.Tests
             Assert.That(mask.Contains(at.x, at.y, gate + 0.01f), Is.False, "just outside it");
             Assert.That(mask.Contains(at.x, at.y, 0.805f), Is.False, "never beyond 0.80 m, whatever the palm");
             Assert.That(mask.Contains(at.x, at.y, 2f), Is.False);
+        }
+
+        [TestCase(0.40f, 0.45f)]
+        [TestCase(0.48f, 0.53f)]
+        [TestCase(0.60f, 0.65f)]
+        [TestCase(0.74f, 0.79f)]
+        [TestCase(0.78f, 0.80f)]
+        [TestCase(0.85f, 0.80f)]
+        public void Hands_Mask_Geometry_TheStripsOwnGateIsThePalmPlusFiveCentimetresAndNeverBeyondEighty(float palmDepth, float gate)
+        {
+            // Decision R14. The forearm is no deeper than the palm, so the strip outside the hand's box is gated
+            // 0.05 m behind the palm; the box keeps its 0.20 m. Neither is ever beyond 0.80 m.
+            Assert.That(HandsMaskBuilder.ArmBehindPalmMetres, Is.EqualTo(0.05f));
+            DepthFrame frame = Scene.Frame();
+            // The hand is held high, so that the strip runs a long way below its box.
+            JointSet cam = Scene.Hand(HandSide.Right, new float3(0.02f, 0.04f, palmDepth));
+            DepthMask mask = BuildOne(frame, Scene.Tracked(frame, cam));
+            Assert.That(mask.Count, Is.EqualTo(1));
+            DepthMaskRegion r = mask.Region0;
+            Assert.That(Scene.PalmDepth(cam), Is.EqualTo(palmDepth).Within(1e-4f), "a flat hand: the palm is as deep as the wrist");
+            Assert.That(r.ArmMaxDepth, Is.EqualTo(gate).Within(1e-3f));
+            float boxGate = math.min(palmDepth + HandsConstants.MaskBehindPalmMetres, HandsConstants.MaskMaxDepthMetres);
+            Assert.That(r.MaxDepth, Is.EqualTo(boxGate).Within(1e-3f), "the box keeps the palm plus 0.20 m");
+            Assert.That(r.ArmMaxDepth, Is.LessThanOrEqualTo(r.MaxDepth));
+
+            // A sample in the strip, well below the box.
+            Assert.That(r.ArmHalfWidth, Is.GreaterThan(0f));
+            float u = r.ArmU1, v = Scene.Height - 6f;
+            Assert.That(v, Is.GreaterThan(r.MaxV + 2f), "the sample is below the box");
+            Assert.That(mask.Contains(u, v, gate - 0.01f), Is.True, "just inside the strip's gate");
+            Assert.That(mask.Contains(u, v, gate + 0.01f), Is.False, "just outside it");
+            Assert.That(mask.Contains(u, v, 0.805f), Is.False, "never beyond 0.80 m, whatever the palm");
+            // The same depths on the palm, inside the box: the box's own gate decides there.
+            float2 palm = Scene.Pixel(frame, Scene.PalmCentre(cam));
+            Assert.That(mask.Contains(palm.x, palm.y, boxGate - 0.01f), Is.True);
+            Assert.That(mask.Contains(palm.x, palm.y, boxGate + 0.01f), Is.False);
+            if (boxGate > gate + 0.02f)
+                Assert.That(mask.Contains(palm.x, palm.y, gate + 0.01f), Is.True, "deeper than the strip's gate, on the palm: still the hand's");
+        }
+
+        [Test]
+        public void Hands_Mask_Geometry_ARegionWithNoStripGateOfItsOwnUsesTheBoxs()
+        {
+            // The shared type's rule, which a mask from before the strip had its own gate relies on: 0, a negative
+            // number or one that is not a number means the box's gate.
+            DepthFrame frame = Scene.Frame();
+            JointSet cam = Scene.Hand(HandSide.Right, new float3(0.02f, 0.04f, Reach));
+            DepthMaskRegion r = RegionOf(frame, Scene.Tracked(frame, cam));
+            float u = r.ArmU1, v = Scene.Height - 6f;
+            Assert.That(r.Contains(u, v, Reach + 0.10f), Is.False, "behind the forearm, beyond the strip's gate");
+            foreach (float none in new[] { 0f, -0.3f, float.NaN })
+            {
+                r.ArmMaxDepth = none;
+                Assert.That(r.Contains(u, v, Reach + 0.10f), Is.True, "arm gate " + none + ": the box's gate, 0.20 m behind the palm");
+                Assert.That(r.Contains(u, v, Reach + 0.21f), Is.False, "arm gate " + none);
+            }
         }
 
         [Test]
@@ -605,6 +666,50 @@ namespace Atlas.Hands.Tests
         }
 
         [Test]
+        public void Hands_Mask_SizeLimit_TheStripCountsOnlyWhatIsInsideItsOwnGate()
+        {
+            // One hand held high, and something flat behind it that fills the picture. 0.10 m behind the palm it
+            // is inside the box's gate and beyond the strip's: the builder counts the samples of the box and no
+            // more, and the mask is kept. 0.03 m behind the palm it is inside both gates: the strip's samples are
+            // counted too, which takes this mask over the limit.
+            JointSet cam = Scene.Hand(HandSide.Right, new float3(0.02f, 0.04f, Reach));
+            var builder = new HandsMaskBuilder();
+            DepthFrame frame = Scene.Frame(wall: Reach + 0.10f);
+            DepthMask mask = builder.Build(10.0, frame, default(TrackedHand), Scene.Tracked(frame, cam));
+            Assert.That(mask.Count, Is.EqualTo(1), "0.10 m behind the palm: only the box hides it");
+            DepthMaskRegion r = mask.Region0;
+
+            // Counted here from the region's own numbers, not with its Contains: Bump Guard's samples in the box,
+            // and those outside the box within the strip's half width of its segment.
+            int inBox = 0, inStripOnly = 0, total = 0;
+            for (int v = 2; v < Scene.Height; v += 4)
+                for (int u = 2; u < Scene.Width; u += 4)
+                {
+                    total++;
+                    if (u >= r.MinU && u <= r.MaxU && v >= r.MinV && v <= r.MaxV) inBox++;
+                    else if (DistanceToSegment(new float2(u, v), new float2(r.ArmU0, r.ArmV0), new float2(r.ArmU1, r.ArmV1)) <= r.ArmHalfWidth) inStripOnly++;
+                }
+            Assert.That(inBox, Is.GreaterThan(100));
+            Assert.That(inStripOnly, Is.GreaterThan(100), "the strip runs well below the box");
+            float boxShare = inBox / (float)total, bothShare = (inBox + inStripOnly) / (float)total;
+            Assert.That(boxShare, Is.LessThan(HandsConstants.MaskMaxImageShare));
+            Assert.That(bothShare, Is.GreaterThan(HandsConstants.MaskMaxImageShare), "the scene tells the two counts apart by the limit");
+
+            Assert.That(builder.LastMaskedShare, Is.EqualTo(boxShare).Within(1e-5f), "the strip's samples are beyond its gate: not counted");
+            Assert.That(Scene.MaskedShare(frame, mask), Is.EqualTo(boxShare).Within(1e-5f), "and not hidden: the builder counts what the mask hides");
+            // With one gate for both, as before, the strip's samples would have been hidden, and counted.
+            DepthMask oneGate = mask;
+            oneGate.Region0.ArmMaxDepth = 0f;
+            Assert.That(Scene.MaskedShare(frame, oneGate), Is.EqualTo(bothShare).Within(1e-5f));
+
+            // 0.03 m behind the palm: inside the strip's gate too.
+            Scene.Fill(frame, Reach + 0.03f);
+            DepthMask near = builder.Build(10.0, frame, default(TrackedHand), Scene.Tracked(frame, cam));
+            Assert.That(builder.LastMaskedShare, Is.EqualTo(bothShare).Within(1e-5f), "box and strip are both counted");
+            Assert.That(near.IsEmpty, Is.True, "and that is over the limit: the mask is dropped whole");
+        }
+
+        [Test]
         public void Hands_Mask_SizeLimit_SamplesBeyondTheGateAreNotCounted()
         {
             // The same huge hand, with the whole picture 1 m away: nothing is inside the gate, nothing is hidden.
@@ -768,6 +873,15 @@ namespace Atlas.Hands.Tests
         }
 
         // ================================================================== helpers
+
+        /// <summary>Distance from a point to a segment, pixels.</summary>
+        static float DistanceToSegment(float2 p, float2 a, float2 b)
+        {
+            float2 ab = b - a;
+            float lengthSq = math.lengthsq(ab);
+            float t = lengthSq > 1e-6f ? math.saturate(math.dot(p - a, ab) / lengthSq) : 0f;
+            return math.distance(p, a + ab * t);
+        }
 
         /// <summary>How fast the palm moves in the picture, pixels per second, by finite difference of its projection.</summary>
         static float PixelSpeed(in DepthFrame frame, in JointSet cam, float3 cameraVelocity)

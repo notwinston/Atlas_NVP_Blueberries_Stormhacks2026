@@ -48,7 +48,8 @@ namespace Atlas.Safety
         public bool MapTrusted;
         /// <summary>
         /// The walker's own hands in this image, or the empty mask (the default). A sample it covers counts as
-        /// no return. The kernel holds the mask to the limits of <see cref="BumpConstants"/> itself.
+        /// no return. The kernel holds the mask to the limits of <see cref="BumpConstants"/> itself. The mask
+        /// also says whether the image belongs to a hands session (<see cref="DepthKernelMask.Session"/>).
         /// </summary>
         public DepthKernelMask Mask;
     }
@@ -139,6 +140,13 @@ namespace Atlas.Safety
     /// rescan check as if they had no return, and the cells a hand stamped before it was recognised are
     /// forgotten (<see cref="DynamicLayer.ForgetIfYoung"/>). With the empty mask every result is bit for bit
     /// what it was before the kernel knew of masks.</para>
+    /// <para>In a hands session (the mask says so, with or without a region) a near return must be seen twice
+    /// (decision R13): the cell it stamps is pending until a hit that comes
+    /// <see cref="BumpConstants.PendingSeconds"/> or more after its first, so that a hand is masked before it
+    /// can count. Returns at <see cref="BumpConstants.PendingNearMetres"/> or beyond stamp as they always did,
+    /// the static map is never pending, and the sectors of the head-frame fallback and the rescan check, which
+    /// read no dynamic cell, are filled as outside a session. Outside a session every result and every cell
+    /// is bit for bit what it was before the rule.</para>
     /// </summary>
     public static unsafe class BumpDepthKernel
     {
@@ -199,6 +207,8 @@ namespace Atlas.Safety
                 maskGate = input.Mask.Gate;
                 masking = MaskWithinItsShare(depth, input, stride, first, maskGate, out result.MaskRefused);
             }
+            // A hands session: a cell that a near return makes is pending until it is seen again.
+            bool session = input.Mask.Session != 0;
 
             for (int v = first; v < input.Height; v += stride)
             {
@@ -244,7 +254,8 @@ namespace Atlas.Safety
 
                     if (NearerThanStatic(sdf, grid, hit, rel, flat))
                     {
-                        if (DynamicLayer.Stamp(dynamic, hit.xz, hit.y, input.Time)) result.Stamped++;
+                        bool near = session;
+                        if (DynamicLayer.Stamp(dynamic, hit.xz, hit.y, input.Time, near)) result.Stamped++;
                     }
 
                     if (hit.y >= BumpConstants.WallBandMinHeight)

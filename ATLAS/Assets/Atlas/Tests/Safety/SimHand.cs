@@ -24,6 +24,8 @@ namespace Atlas.Safety.Tests
         public const float Grow = 0.35f;
         public const float ArmPalmWidths = 1.2f;
         public const float BehindPalm = 0.20f;
+        /// <summary>The forearm strip's own gate behind the palm, metres (decision R14).</summary>
+        public const float ArmBehindPalm = 0.05f;
         public const float MaxDepth = 0.80f;
 
         /// <summary>Centre of the plate in camera space (+x right, +y up, +z ahead), metres; z is the palm's depth.</summary>
@@ -55,7 +57,8 @@ namespace Atlas.Safety.Tests
         /// <summary>
         /// This hand's region of the depth mask: the box of the hand in the image grown by 35 % of its longer
         /// side on every side, a strip from the wrist straight down to the image's lower border as wide as 1.2
-        /// palm widths plus the same growth, and a gate 0.20 m behind the palm, never beyond 0.80 m.
+        /// palm widths plus the same growth, a gate 0.20 m behind the palm for the box and 0.05 m behind it for
+        /// the strip outside the box, neither beyond 0.80 m.
         /// </summary>
         public DepthMaskRegion Region(in DepthIntrinsics k, int imageHeight)
         {
@@ -74,7 +77,8 @@ namespace Atlas.Safety.Tests
                 ArmU1 = u,
                 ArmV1 = imageHeight,
                 ArmHalfWidth = 0.5f * ArmPalmWidths * PalmWidth * scale + grow,
-                MaxDepth = math.min(Palm.z + BehindPalm, MaxDepth)
+                MaxDepth = math.min(Palm.z + BehindPalm, MaxDepth),
+                ArmMaxDepth = math.min(Palm.z + ArmBehindPalm, MaxDepth)
             };
         }
 

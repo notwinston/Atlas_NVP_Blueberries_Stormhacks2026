@@ -10,8 +10,9 @@ namespace Atlas.Hands
     ///
     /// Each qualifying hand gives one region: the box round its 21 joints, projected into the depth image with that
     /// image's own pose and intrinsics, and a strip along the forearm from the wrist to the border of the image,
-    /// both grown for the hand's motion, with a depth gate behind the palm. The mask is only a claim about where a
-    /// hand is: Bump Guard enforces every limit of it again on its own side (decision R4), whatever is built here.
+    /// both grown for the hand's motion, each with a depth gate behind the palm: 0.20 m for the box, and for the
+    /// strip outside the box its own, 0.05 m (decision R14). The mask is only a claim about where a hand is: Bump
+    /// Guard enforces every limit of it again on its own side (decision R4), whatever is built here.
     ///
     /// Pixel coordinates in the mask are sample indices, as in <see cref="DepthFrame.Unproject"/>: the centre of the
     /// sample in column u and row v is at (u, v), so projecting is that method's inverse.
@@ -33,6 +34,14 @@ namespace Atlas.Hands
 
         /// <summary>The wrist and the middle knuckle closer than this in the picture, pixels, have no direction: the hand points at the camera and its forearm is behind it.</summary>
         internal const float MinArmDirectionPixels = 0.5f;
+
+        /// <summary>
+        /// The forearm strip's own gate lies this far behind the palm, metres (decision R14). The forearm runs from
+        /// the wrist back towards the body and is no deeper than the palm, so a gate as deep as the hand's
+        /// (<see cref="HandsConstants.MaskBehindPalmMetres"/>) would hide whatever stands behind the forearm along
+        /// the whole strip. Never beyond <see cref="HandsConstants.MaskMaxDepthMetres"/>.
+        /// </summary>
+        internal const float ArmBehindPalmMetres = 0.05f;
 
         /// <summary>A hand's mask lives this long after the hand was last detected, seconds: the grace period of its loss and the linger.</summary>
         const float LifeSeconds = HandsConstants.LossGraceSeconds + HandsConstants.MaskLingerSeconds;
@@ -86,7 +95,8 @@ namespace Atlas.Hands
         ///
         /// The mask is dropped whole when the samples it would hide are more than
         /// <see cref="HandsConstants.MaskMaxImageShare"/> of the samples Bump Guard reads. What counts is the samples
-        /// with a return inside a region and inside its depth gate, not the area of the regions: grown by 35 % on
+        /// with a return inside a region and inside the depth gate that holds there (the box's inside the box, the
+        /// strip's own outside it), not the area of the regions: grown by 35 % on
         /// every side, two open hands at the default reach cover more than the limit by area alone, but they hide
         /// only the hands and the forearms, because the room behind them is deeper than the gate.
         ///
@@ -239,6 +249,8 @@ namespace Atlas.Hands
             region.MinV = minV - grow;
             region.MaxV = maxV + grow;
             region.MaxDepth = math.min(palmDepth + HandsConstants.MaskBehindPalmMetres, HandsConstants.MaskMaxDepthMetres);
+            // The strip outside the box has a nearer gate of its own: the forearm is no deeper than the palm.
+            region.ArmMaxDepth = math.min(palmDepth + ArmBehindPalmMetres, HandsConstants.MaskMaxDepthMetres);
 
             // The forearm: from the wrist, away from the middle knuckle, to where that leaves the image; as wide as
             // MaskArmPalmWidths palm widths (the palm's real width at the palm's depth, so that a hand turned edge-on
@@ -301,14 +313,15 @@ namespace Atlas.Hands
         {
             return math.isfinite(r.MinU) && math.isfinite(r.MaxU) && math.isfinite(r.MinV) && math.isfinite(r.MaxV)
                 && math.isfinite(r.ArmU0) && math.isfinite(r.ArmV0) && math.isfinite(r.ArmU1) && math.isfinite(r.ArmV1)
-                && math.isfinite(r.ArmHalfWidth) && math.isfinite(r.MaxDepth);
+                && math.isfinite(r.ArmHalfWidth) && math.isfinite(r.MaxDepth) && math.isfinite(r.ArmMaxDepth);
         }
 
         // ---- The size limit ----
 
         /// <summary>
-        /// The share of Bump Guard's samples that are returns the mask contains. Only the samples inside the
-        /// rectangle that holds every region are looked at; the denominator is the whole grid.
+        /// The share of Bump Guard's samples that are returns the mask contains, each region's box and strip with
+        /// its own gate. Only the samples inside the rectangle that holds every region are looked at; the
+        /// denominator is the whole grid.
         /// </summary>
         static float MaskedShare(in DepthFrame depth, ref DepthMask mask)
         {
@@ -330,7 +343,8 @@ namespace Atlas.Hands
             int r1 = (int)math.clamp(math.floor((maxV - first) / stride), -1f, rows - 1);
 
             // Most samples are the room behind the hands, deeper than any gate: turned away before the regions are asked.
-            float gate = mask.Count > 1 ? math.max(mask.Region0.MaxDepth, mask.Region1.MaxDepth) : mask.Region0.MaxDepth;
+            float gate = math.max(mask.Region0.MaxDepth, mask.Region0.ArmMaxDepth);
+            if (mask.Count > 1) gate = math.max(gate, math.max(mask.Region1.MaxDepth, mask.Region1.ArmMaxDepth));
             float[] buffer = depth.Depth;
             int masked = 0;
             for (int r = r0; r <= r1; r++)

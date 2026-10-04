@@ -132,6 +132,27 @@ namespace Atlas.Safety
         /// </summary>
         public const float MaskHeightTolerance = 0.15f;
 
+        // ---- Pending cells: in a hands session a near return must be seen twice (decision R13) ----
+        // A hands session is a depth image whose mask says so (DepthKernelMask.Session), with a hand in view or
+        // with none. Outside a session none of these is read.
+
+        /// <summary>
+        /// In a hands session a dynamic cell first stamped by a return nearer than this, metres along the optical
+        /// axis, is pending: it is stored and does not count until it is seen again. As far as a mask may reach
+        /// (<see cref="MaskMaxDepth"/>): the walker's hand is never farther away. A return at this depth or
+        /// beyond counts at once, in a session as outside one.
+        /// </summary>
+        public const float PendingNearMetres = 0.80f;
+        /// <summary>
+        /// A pending cell counts from a hit that comes this long or more after its first hit, seconds. Long
+        /// enough for the hands to be found and masked after they come into view (6 to 9 depth images), short
+        /// enough that someone who steps in half a metre ahead of a walker at 1 m/s is still warned of
+        /// (measured in BumpGuard_Pending: the cue comes 0.15 to 0.17 s after the first image).
+        /// </summary>
+        public const double PendingSeconds = 0.15;
+        /// <summary>A pending cell with no hit for this long starts again, seconds: its next hit is its first.</summary>
+        public const double PendingRestartSeconds = 0.10;
+
         // ---- Rescan check (4.10, "Static map") ----
 
         /// <summary>Median disagreement of live depth and static map that advises a rescan, metres (4.10: "exceeds 0.15 m").</summary>

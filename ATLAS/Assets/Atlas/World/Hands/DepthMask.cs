@@ -2,7 +2,8 @@ namespace Atlas.World
 {
     /// <summary>
     /// One hand in a depth image: a box round the hand and a strip along the forearm, in depth-image pixels
-    /// (column u, row v, row 0 at the top), and the depth beyond which nothing is masked.
+    /// (column u, row v, row 0 at the top), and the depths beyond which nothing is masked: one for the box, one
+    /// for the strip outside it.
     /// </summary>
     public struct DepthMaskRegion
     {
@@ -10,15 +11,25 @@ namespace Atlas.World
         public float MinU, MinV, MaxU, MaxV;
         /// <summary>The forearm: every pixel within ArmHalfWidth of the segment (ArmU0, ArmV0) to (ArmU1, ArmV1). A half width of 0 or less means no strip.</summary>
         public float ArmU0, ArmV0, ArmU1, ArmV1, ArmHalfWidth;
-        /// <summary>Metres. A sample deeper than this is never masked, wherever it is in the picture.</summary>
+        /// <summary>The gate of the box, metres from the camera plane: a sample inside the box and deeper than this is never masked.</summary>
         public float MaxDepth;
+        /// <summary>
+        /// The gate of the strip where it lies outside the box, metres from the camera plane: a sample there and
+        /// deeper than this is never masked. The forearm is no deeper than the palm, so this gate lies nearer than
+        /// the box's. 0, a negative number or one that is not a number means the box's gate.
+        /// </summary>
+        public float ArmMaxDepth;
 
-        /// <summary>True when the sample at pixel (u, v) with this depth belongs to the hand or its forearm.</summary>
+        /// <summary>
+        /// True when the sample at pixel (u, v) with this depth belongs to the hand or its forearm: inside the box
+        /// and no deeper than <see cref="MaxDepth"/>, or outside the box, inside the strip and no deeper than
+        /// <see cref="ArmMaxDepth"/>.
+        /// </summary>
         public bool Contains(float u, float v, float depth)
         {
-            if (!(depth <= MaxDepth)) return false;      // also false for NaN
-            if (u >= MinU && u <= MaxU && v >= MinV && v <= MaxV) return true;
+            if (u >= MinU && u <= MaxU && v >= MinV && v <= MaxV) return depth <= MaxDepth;      // false for NaN
             if (!(ArmHalfWidth > 0f)) return false;
+            if (!(depth <= (ArmMaxDepth > 0f ? ArmMaxDepth : MaxDepth))) return false;           // also false for NaN
             float du = ArmU1 - ArmU0, dv = ArmV1 - ArmV0;
             float lengthSq = du * du + dv * dv;
             float t = lengthSq > 1e-6f ? ((u - ArmU0) * du + (v - ArmV0) * dv) / lengthSq : 0f;
@@ -48,6 +59,8 @@ namespace Atlas.World
         /// 1 while a hands session is running (the detector is active), whether or not a hand is in view; 0
         /// otherwise. In a hands session Bump Guard holds a new return nearer than its hands range as pending until
         /// it is seen again, so that a hand entering the view is masked before it can raise the cue (decision H17).
+        /// The flag belongs to the frame, not to the regions: Bump Guard reads it also when the regions were built
+        /// for another image and are ignored.
         /// </summary>
         public int Session;
 
@@ -65,7 +78,11 @@ namespace Atlas.World
     /// <summary>Who can say where the hands are in a depth image. Implemented by Atlas.Hands; asked by the App's guard step.</summary>
     public interface IDepthMaskSource
     {
-        /// <summary>The mask for the depth image with this sequence number. False (and an empty mask) when there is none.</summary>
+        /// <summary>
+        /// The mask for the depth image with this sequence number. True while a hands session is running, with
+        /// regions or with none: the mask then says so (<see cref="DepthMask.Session"/>). False (and the default
+        /// mask) when there is no session.
+        /// </summary>
         bool TryGetMask(int depthSequence, out DepthMask mask);
     }
 }

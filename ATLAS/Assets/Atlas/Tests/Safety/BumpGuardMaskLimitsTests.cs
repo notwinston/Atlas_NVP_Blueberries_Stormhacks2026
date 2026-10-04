@@ -9,7 +9,8 @@ namespace Atlas.Safety.Tests
     /// <summary>
     /// BumpGuard_Mask_Limits (hands design sections 7.1 and 9.1, as the review decided them): what Bump Guard
     /// holds a depth mask to, whatever built it. No sample deeper than its gate is masked and none beyond
-    /// 0.80 m; a mask built for another depth image is ignored; a mask that would take more than its share of
+    /// 0.80 m, the hand's box and the forearm's strip each with its own gate (decision R14); a mask built for
+    /// another depth image is ignored; a mask that would take more than its share of
     /// the image is ignored; at most two regions are read; the static map is never touched. The scenes are a
     /// walker in a scanned 7 x 7 m room with a level 256 x 192 depth camera, as in BumpGuard_Replay. Hands are
     /// <see cref="SimHand"/> plates that only the synthetic depth sees, with masks built the way the design
@@ -163,9 +164,17 @@ namespace Atlas.Safety.Tests
             for (int k = 0; k < regions; k++)
             {
                 DepthKernelMaskRegion r = k == 0 ? mask.Region0 : mask.Region1;
-                if (float.IsNaN(r.MaxDepth) || d > r.MaxDepth || d > BumpConstants.MaskMaxDepth) continue;
-                if (u >= r.MinU && u <= r.MaxU && v >= r.MinV && v <= r.MaxV) return 1;
+                if (d > BumpConstants.MaskMaxDepth) continue;
+                // Inside the box only the box's gate counts, whatever the strip would say there.
+                if (u >= r.MinU && u <= r.MaxU && v >= r.MinV && v <= r.MaxV)
+                {
+                    if (!float.IsNaN(r.MaxDepth) && d <= r.MaxDepth) return 1;
+                    continue;
+                }
                 if (!(r.ArmHalfWidth > 0f)) continue;
+                // Outside it the strip's own gate; a strip with none (0, negative, not a number) has the box's.
+                float armGate = float.IsNaN(r.ArmMaxDepth) || r.ArmMaxDepth <= 0f ? r.MaxDepth : r.ArmMaxDepth;
+                if (float.IsNaN(armGate) || d > armGate) continue;
                 double edge = DistanceToStrip(r, u, v) - r.ArmHalfWidth;
                 if (edge < -1e-3) return 1;
                 if (edge <= 1e-3) verdict = 0;
@@ -199,6 +208,16 @@ namespace Atlas.Safety.Tests
                 case 4: r.ArmHalfWidth = float.NaN; break;                  // no strip
                 case 5: r.MinU = float.NegativeInfinity; r.MaxU = float.PositiveInfinity; break;
                 case 6: r.MinU = r.MaxU + 1f; break;                        // a box turned inside out
+            }
+            // The strip's own gate: a number of its own nearer or deeper than the box's, none at all (the box's
+            // gate, as a mask from before the strip had one), or nonsense.
+            switch (random.NextInt(0, 8))
+            {
+                case 0: r.ArmMaxDepth = 0f; break;
+                case 1: r.ArmMaxDepth = -0.5f; break;
+                case 2: r.ArmMaxDepth = float.NaN; break;
+                case 3: r.ArmMaxDepth = float.PositiveInfinity; break;
+                default: r.ArmMaxDepth = random.NextFloat(0.25f, 1.3f); break;
             }
             return r;
         }
@@ -301,9 +320,9 @@ namespace Atlas.Safety.Tests
         public void BumpGuard_Mask_Limits_TheKernelsMaskIsTheSharedMaskCutAtTheCap()
         {
             // Bump Guard reads the regions itself. This holds its reading to DepthMask.Contains, the definition
-            // the hands build to, and to the 0.80 m cap that only Bump Guard adds.
+            // the hands build to, box and strip each with its gate, and to the 0.80 m cap that only Bump Guard adds.
             var random = new Unity.Mathematics.Random(77u);
-            int coveredCount = 0, beyondCap = 0;
+            int coveredCount = 0, beyondCap = 0, byTheStripsGate = 0;
             for (int trial = 0; trial < 2000; trial++)
             {
                 DepthKernelMaskRegion a = RandomRegion(ref random), b = RandomRegion(ref random);
@@ -317,10 +336,17 @@ namespace Atlas.Safety.Tests
                     Assert.That(covers, Is.EqualTo(contains && d <= BumpConstants.MaskMaxDepth), "trial " + trial);
                     if (covers) coveredCount++;
                     if (contains && !covers) beyondCap++;
+                    // The same sample under the same regions with one gate each: where the answer differs, the
+                    // strip's own gate decided.
+                    DepthKernelMask oneGate = kernel;
+                    oneGate.Region0.ArmMaxDepth = 0f;
+                    oneGate.Region1.ArmMaxDepth = 0f;
+                    if (oneGate.Covers(u, v, d) != covers) byTheStripsGate++;
                 }
             }
             Assert.That(coveredCount, Is.GreaterThan(1000));
             Assert.That(beyondCap, Is.GreaterThan(100), "the cap was exercised");
+            Assert.That(byTheStripsGate, Is.GreaterThan(500), "the strip's own gate was exercised");
         }
 
         static DepthMaskRegion Shared(in DepthKernelMaskRegion r)
@@ -329,8 +355,131 @@ namespace Atlas.Safety.Tests
             {
                 MinU = r.MinU, MinV = r.MinV, MaxU = r.MaxU, MaxV = r.MaxV,
                 ArmU0 = r.ArmU0, ArmV0 = r.ArmV0, ArmU1 = r.ArmU1, ArmV1 = r.ArmV1, ArmHalfWidth = r.ArmHalfWidth,
-                MaxDepth = r.MaxDepth
+                MaxDepth = r.MaxDepth, ArmMaxDepth = r.ArmMaxDepth
             };
+        }
+
+        // ---- BumpGuard_Mask_Limits: the forearm strip's own gate (decision R14) ----
+
+        [Test]
+        public void BumpGuard_Mask_Limits_TheForearmStripHasItsOwnGate()
+        {
+            // A box over columns 100 to 156 and rows 20 to 110, and a strip from the wrist at its lower edge down
+            // to the border, 20 pixels to each side. The box is masked to 0.65 m, the strip outside it to 0.50 m.
+            var region = new DepthMaskRegion
+            {
+                MinU = 100f, MaxU = 156f, MinV = 20f, MaxV = 110f,
+                ArmU0 = 128f, ArmV0 = 110f, ArmU1 = 128f, ArmV1 = H, ArmHalfWidth = 20f,
+                MaxDepth = 0.65f, ArmMaxDepth = 0.50f
+            };
+            DepthKernelMask kernel = BumpGuard.KernelMask(new DepthMask { Count = 1, Region0 = region, DepthSequence = 4 }, 4);
+            Assert.That(kernel.Region0.ArmMaxDepth, Is.EqualTo(0.50f));
+            // In the box, the box's gate.
+            Assert.That(kernel.Covers(128f, 60f, 0.64f), Is.True);
+            Assert.That(kernel.Covers(128f, 60f, 0.66f), Is.False);
+            // In the strip outside the box, the strip's.
+            Assert.That(kernel.Covers(128f, 150f, 0.49f), Is.True);
+            Assert.That(kernel.Covers(128f, 150f, 0.51f), Is.False);
+            Assert.That(kernel.Covers(128f, 150f, 0.64f), Is.False, "behind the forearm, inside the box's gate: not masked");
+            Assert.That(kernel.Covers(145f, 191f, 0.49f), Is.True, "the strip at the border");
+            // Where the strip runs through the box, the box's gate decides.
+            Assert.That(kernel.Covers(128f, 105f, 0.64f), Is.True);
+            // Outside both, nothing.
+            Assert.That(kernel.Covers(60f, 150f, 0.40f), Is.False);
+            Assert.That(kernel.Gate, Is.EqualTo(0.65f), "the deepest a sample can be covered");
+
+            // No gate of its own (0, a negative number, not a number): the box's, so a mask from an older builder works.
+            foreach (float none in new[] { 0f, -1f, float.NaN, float.NegativeInfinity })
+            {
+                region.ArmMaxDepth = none;
+                var shared = new DepthMask { Count = 1, Region0 = region, DepthSequence = 4 };
+                kernel = BumpGuard.KernelMask(shared, 4);
+                Assert.That(kernel.Covers(128f, 150f, 0.64f), Is.True, "arm gate " + none);
+                Assert.That(kernel.Covers(128f, 150f, 0.66f), Is.False, "arm gate " + none);
+                Assert.That(shared.Contains(128f, 150f, 0.64f), Is.True, "arm gate " + none);
+                Assert.That(shared.Contains(128f, 150f, 0.66f), Is.False, "arm gate " + none);
+                Assert.That(kernel.Gate, Is.EqualTo(0.65f));
+            }
+
+            // Whatever gate the strip asks for, nothing beyond 0.80 m; and a deeper gate for the strip does not
+            // deepen the box.
+            region.ArmMaxDepth = 0.75f;
+            kernel = BumpGuard.KernelMask(new DepthMask { Count = 1, Region0 = region, DepthSequence = 4 }, 4);
+            Assert.That(kernel.Covers(128f, 150f, 0.74f), Is.True);
+            Assert.That(kernel.Covers(128f, 150f, 0.76f), Is.False);
+            Assert.That(kernel.Covers(128f, 60f, 0.70f), Is.False, "in the box");
+            Assert.That(kernel.Gate, Is.EqualTo(0.75f));
+            foreach (float far in new[] { 5f, float.PositiveInfinity })
+            {
+                region.ArmMaxDepth = far;
+                var shared = new DepthMask { Count = 1, Region0 = region, DepthSequence = 4 };
+                kernel = BumpGuard.KernelMask(shared, 4);
+                Assert.That(kernel.Covers(128f, 150f, 0.79f), Is.True);
+                Assert.That(kernel.Covers(128f, 150f, 0.81f), Is.False, "the cap");
+                Assert.That(shared.Contains(128f, 150f, 0.81f), Is.True, "the shared type has no cap: Bump Guard adds it");
+                Assert.That(kernel.Gate, Is.EqualTo(BumpConstants.MaskMaxDepth));
+            }
+            // A region with no strip has no strip gate to speak of.
+            region.ArmHalfWidth = 0f;
+            kernel = BumpGuard.KernelMask(new DepthMask { Count = 1, Region0 = region, DepthSequence = 4 }, 4);
+            Assert.That(kernel.Covers(128f, 150f, 0.40f), Is.False);
+            Assert.That(kernel.Gate, Is.EqualTo(0.65f));
+        }
+
+        [TestCase(0.03f, true)]
+        [TestCase(0.10f, false)]
+        public void BumpGuard_Mask_Limits_WhatStandsBehindTheForearmIsNotMasked(float behindThePalm, bool insideTheStripsGate)
+        {
+            // A hand held high, 0.45 m ahead, and a tray carried below it where only the forearm's strip reaches.
+            // 0.10 m deeper than the palm the tray is beyond the strip's gate and is an obstacle, though it is
+            // inside the box's gate; a mask with one gate for both took it out with the forearm. 0.03 m deeper
+            // than the palm it is inside the strip's gate and is masked either way. The forearm itself, nearer
+            // than the palm, is always masked.
+            var hand = new SimHand(0f, 0.10f, 0.45f, true);
+            var tray = new SimPlate(new float3(0f, -0.20f, 0.45f + behindThePalm), 0.20f, 0.06f);
+            using (var twoGates = new BumpScenario(RoomHalf, RoomHalf))
+            using (var oneGate = new BumpScenario(RoomHalf, RoomHalf))
+            using (var handOnly = new BumpScenario(RoomHalf, RoomHalf))
+            {
+                foreach (BumpScenario sim in new[] { twoGates, oneGate, handOnly })
+                {
+                    hand.AddTo(sim.Body);
+                    if (sim != handOnly) sim.Body.Add(tray);
+                }
+                DepthMask mask = twoGates.MaskFor(hand);
+                Assert.That(mask.Region0.ArmMaxDepth, Is.EqualTo(0.50f).Within(1e-6f), "the palm's depth plus 0.05 m");
+                Assert.That(mask.Region0.MaxDepth, Is.EqualTo(0.65f).Within(1e-6f));
+                // The tray lies below the box, inside the strip.
+                Assert.That(mask.Region0.MaxV, Is.LessThan(150f));
+                twoGates.Mask = handOnly.Mask = mask;
+                DepthMask old = mask;
+                old.Region0.ArmMaxDepth = 0f;
+                oneGate.Mask = old;
+
+                for (int k = 0; k < 20; k++)
+                {
+                    twoGates.StepFrame(Standing);
+                    oneGate.StepFrame(Standing);
+                    handOnly.StepFrame(Standing);
+                }
+                int forearmAndHand = handOnly.Core.LastDepth.Masked;
+                Assert.That(forearmAndHand, Is.GreaterThan(50));
+                Assert.That(handOnly.Core.DynamicCellCount, Is.EqualTo(0), "the hand and its forearm are masked");
+                Assert.That(oneGate.Core.LastDepth.Masked, Is.GreaterThan(forearmAndHand + 20), "one gate takes the tray out with the forearm");
+                Assert.That(oneGate.Core.DynamicCellCount, Is.EqualTo(0));
+                if (insideTheStripsGate)
+                {
+                    Assert.That(twoGates.Core.LastDepth.Masked, Is.EqualTo(oneGate.Core.LastDepth.Masked));
+                    Assert.That(twoGates.Core.DynamicCellCount, Is.EqualTo(0));
+                }
+                else
+                {
+                    Assert.That(twoGates.Core.LastDepth.Masked, Is.EqualTo(forearmAndHand), "the tray is not taken out; the hand and forearm still are");
+                    Assert.That(twoGates.Core.LastDepth.Stamped, Is.GreaterThan(20), "the tray is an obstacle");
+                    Assert.That(twoGates.Core.DynamicCellCount, Is.GreaterThan(2));
+                }
+                Assert.That(twoGates.Core.LastDepth.MaskRefused, Is.False);
+            }
         }
 
         // ---- BumpGuard_Mask_Limits: the share ----

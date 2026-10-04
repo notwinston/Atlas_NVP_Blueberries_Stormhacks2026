@@ -49,7 +49,8 @@ namespace Atlas.Safety.Tests
 
         /// <summary>
         /// What differs between the dynamic layers of the two cores, or null when nothing does: every cell's
-        /// stored height and seen-empty state, the last hit of every occupied cell, and the block counters.
+        /// stored height and seen-empty state, the last hit of every occupied cell and whether it is pending, and
+        /// the block counters.
         /// (The time left in an empty cell by its last tenant is not an output, and is not compared.)
         /// </summary>
         public static string LayerDifference(BumpGuardCore a, BumpGuardCore b)
@@ -62,7 +63,7 @@ namespace Atlas.Safety.Tests
             for (int k = 0; k < cells; k++)
             {
                 if (!SameBits(x.TopHeight[k], y.TopHeight[k]) || x.EmptyState[k] != y.EmptyState[k] ||
-                    (x.TopHeight[k] > 0f && x.LastHit[k] != y.LastHit[k]))
+                    (x.TopHeight[k] > 0f && (x.LastHit[k] != y.LastHit[k] || x.Pending[k] != y.Pending[k])))
                     return "dynamic cell " + k + " (" + (k % x.Spec.Width) + ", " + (k / x.Spec.Width) + ")";
             }
             int blocks = x.BlocksX * x.BlocksZ;
