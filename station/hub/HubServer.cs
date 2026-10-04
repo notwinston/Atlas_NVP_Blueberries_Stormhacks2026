@@ -1052,7 +1052,8 @@ namespace Atlas.Station
 
         /// <summary>
         /// One of the five <c>OperatorCmd</c> commands: <c>home</c>, <c>recentre</c>, <c>quality</c> (args
-        /// <c>{tier}</c>), <c>cue</c> (the STOP button) and <c>lock</c> (args <c>{on}</c>).
+        /// <c>{tier}</c>), <c>cue</c> (the STOP button) and <c>lock</c> (args <c>{on}</c>); or the Map page's
+        /// <c>walk</c> (args <c>{x, y, turn, speed}</c>), which the Console repeats while a key is held.
         /// </summary>
         public HubResult SendOperator(string cmd, JsonValue args)
         {
@@ -1070,14 +1071,23 @@ namespace Atlas.Station
             return Send(command);
         }
 
+        // The last walk input written to hub.log: the repeats of a held key are sent but not logged.
+        OperatorCommand _loggedWalk;
+
         HubResult Send(in OperatorCommand command)
         {
             lock (_gate)
             {
                 bool sent = _host.SendCommand(command);
                 if (command.Kind == OperatorCommandKind.Lock) _lockSettlesUs = _clock.NowUs + LockSettleUs;
-                JsonValue data = command.ToEvent(0, "hub").Data.Set("from", "console").Set("sent", sent);
-                HubLog("cmd", data);
+                bool log = true;
+                if (command.Kind == OperatorCommandKind.Walk)
+                {
+                    log = _loggedWalk.Kind != OperatorCommandKind.Walk || command.MoveX != _loggedWalk.MoveX ||
+                          command.MoveY != _loggedWalk.MoveY || command.Turn != _loggedWalk.Turn || command.Speed != _loggedWalk.Speed;
+                    _loggedWalk = command;
+                }
+                if (log) HubLog("cmd", command.ToEvent(0, "hub").Data.Set("from", "console").Set("sent", sent));
                 if (command.Kind == OperatorCommandKind.Lock && _feed.Count > 0) _feed.Broadcast(LinkJson().ToJson());
                 // The lock is the Hub's state too (it goes out in Welcome), so it succeeds with no phone connected.
                 return sent || command.Kind == OperatorCommandKind.Lock ? HubResult.Ok : HubResult.NoPhone;

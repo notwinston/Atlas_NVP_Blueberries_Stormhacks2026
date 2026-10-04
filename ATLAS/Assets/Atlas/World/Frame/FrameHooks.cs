@@ -41,7 +41,10 @@ namespace Atlas.World
         void ResetWalker(in Atlas.Kernel.WalkerPose pose);
     }
 
-    /// <summary>The six operator commands as local calls (Master Plan section 7.3.2). No link type appears here.</summary>
+    /// <summary>
+    /// The six operator commands as local calls (Master Plan section 7.3.2), and the Map page's walk input. No
+    /// link type appears here.
+    /// </summary>
     public interface IOperatorCommands
     {
         /// <summary>SceneCmd. variant may be null; its meaning is the space's own.</summary>
@@ -53,5 +56,11 @@ namespace Atlas.World
         /// <summary>The Console's STOP button: the warning cue at STRONG.</summary>
         void Cue();
         void SetLock(bool on);
+        /// <summary>
+        /// The walker's input from the Station: move right and forward (-1 to 1, the walker's heading frame),
+        /// turn in degrees per second (positive right), speed in metres per second. Held for a short while
+        /// only; it moves the head while pose.source is the walker.
+        /// </summary>
+        void Walk(float moveX, float moveY, float turnDegreesPerSecond, float speed);
     }
 }

@@ -25,6 +25,11 @@ namespace Atlas.Telemetry.Tests
             public void SetQuality(int tier) { Calls.Add("quality " + tier); }
             public void Cue() { Calls.Add("cue"); }
             public void SetLock(bool on) { Calls.Add("lock " + on); }
+            public void Walk(float moveX, float moveY, float turnDegreesPerSecond, float speed)
+            {
+                Calls.Add(string.Format(System.Globalization.CultureInfo.InvariantCulture, "walk {0} {1} {2} {3}",
+                    moveX, moveY, turnDegreesPerSecond, speed));
+            }
         }
 
         sealed class Rig
@@ -506,6 +511,27 @@ namespace Atlas.Telemetry.Tests
             public void SetQuality(int tier) { }
             public void Cue() { Cues++; }
             public void SetLock(bool on) { }
+            public void Walk(float moveX, float moveY, float turnDegreesPerSecond, float speed) { }
+        }
+
+        [Test]
+        public void A_walk_input_reaches_the_handler_and_only_a_change_of_input_is_logged()
+        {
+            var rig = new Rig();
+            var commands = new Commands();
+            rig.Pump.Commands = commands;
+            rig.Connect();
+
+            // The Map page repeats a held input; then the keys are let go.
+            rig.Host.SendCommand(OperatorCommand.Walk(0f, 1f, 0f, 1f));
+            rig.Host.SendCommand(OperatorCommand.Walk(0f, 1f, 0f, 1f));
+            rig.Host.SendCommand(OperatorCommand.Walk(0f, 1f, 0f, 1f));
+            rig.Host.SendCommand(OperatorCommand.Walk(0f, 0f, 0f, 1f));
+            rig.Run(100);
+
+            Assert.That(commands.Calls, Is.EqualTo(new[] { "walk 0 1 0 1", "walk 0 1 0 1", "walk 0 1 0 1", "walk 0 0 0 1" }));
+            Assert.That(rig.Pump.CommandsApplied, Is.EqualTo(4));
+            Assert.That(rig.Count(LinkEvents.Command), Is.EqualTo(2), "the repeats of a held input are not logged");
         }
 
         [Test]

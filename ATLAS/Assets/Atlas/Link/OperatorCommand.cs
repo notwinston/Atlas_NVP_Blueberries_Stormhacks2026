@@ -2,7 +2,10 @@ using System.Globalization;
 
 namespace Atlas.Link
 {
-    /// <summary>The six operator commands of the Console (Master Plan section 7.3.2). There are exactly six.</summary>
+    /// <summary>
+    /// The six operator commands of the Console (Master Plan section 7.3.2), and the Map page's walk input, a
+    /// development aid that drives the phone's walker head from the Station's keyboard.
+    /// </summary>
     public enum OperatorCommandKind : byte
     {
         None = 0,
@@ -20,7 +23,13 @@ namespace Atlas.Link
         /// </summary>
         Cue = 5,
         /// <summary>Demo lock on or off (<c>OperatorCmd lock</c>): the phone ignores <c>ParamSet</c> while on.</summary>
-        Lock = 6
+        Lock = 6,
+        /// <summary>
+        /// The walker's input from the Map page (<c>OperatorCmd walk</c>, args <c>{x, y, turn, speed}</c>): held
+        /// until the next walk command or for <see cref="OperatorCommand.WalkHoldSeconds"/>, whichever is first.
+        /// Moves the head only while <c>pose.source</c> is the walker.
+        /// </summary>
+        Walk = 7
     }
 
     /// <summary>
@@ -34,10 +43,21 @@ namespace Atlas.Link
         public const string CmdQuality = "quality";
         public const string CmdCue = "cue";
         public const string CmdLock = "lock";
+        public const string CmdWalk = "walk";
 
         /// <summary>Quality tiers: -1 hands the ladder back to automatic, 0-3 are its rungs, 4 is the high tier.</summary>
         public const int TierAuto = -1;
         public const int TierHigh = 4;
+
+        /// <summary>
+        /// Seconds a walk input stays in force with no newer one. The Console repeats a held input well inside
+        /// this, so a lost Console or a dropped link stops the walker instead of leaving it walking.
+        /// </summary>
+        public const float WalkHoldSeconds = 0.6f;
+        /// <summary>Degrees per second: the fastest turn a walk command asks for.</summary>
+        public const float WalkMaxTurn = 360f;
+        /// <summary>Metres per second: the walk speed range.</summary>
+        public const float WalkMinSpeed = 0.1f, WalkMaxSpeed = 4f, WalkDefaultSpeed = 1f;
 
         public OperatorCommandKind Kind;
         /// <summary>Target space 0-6 of <see cref="OperatorCommandKind.SwitchSpace"/>.</summary>
@@ -48,6 +68,12 @@ namespace Atlas.Link
         public int Tier;
         /// <summary>State of <see cref="OperatorCommandKind.Lock"/>.</summary>
         public bool On;
+        /// <summary>Walk: right and forward in the walker's heading frame, -1 to 1 each.</summary>
+        public float MoveX, MoveY;
+        /// <summary>Walk: degrees per second, positive turns right (Unity's yaw sense).</summary>
+        public float Turn;
+        /// <summary>Walk: metres per second at full stick.</summary>
+        public float Speed;
         /// <summary>The command's raw <c>args</c> object, for members this struct does not name. May be null.</summary>
         public JsonValue Args;
 
@@ -70,6 +96,28 @@ namespace Atlas.Link
 
         public static OperatorCommand Lock(bool on) { return new OperatorCommand { Kind = OperatorCommandKind.Lock, On = on }; }
 
+        /// <summary>A walk input, clamped: move -1..1 per axis, turn ±WalkMaxTurn, speed WalkMinSpeed..WalkMaxSpeed. NaN reads as 0.</summary>
+        public static OperatorCommand Walk(float moveX, float moveY, float turn, float speed)
+        {
+            return new OperatorCommand
+            {
+                Kind = OperatorCommandKind.Walk,
+                MoveX = Clamp(moveX, -1f, 1f, 0f),
+                MoveY = Clamp(moveY, -1f, 1f, 0f),
+                Turn = Clamp(turn, -WalkMaxTurn, WalkMaxTurn, 0f),
+                Speed = Clamp(speed, WalkMinSpeed, WalkMaxSpeed, WalkDefaultSpeed)
+            };
+        }
+
+        /// <summary>True for a walk command that asks for no movement and no turn: the walker stops.</summary>
+        public bool IsStill { get { return MoveX == 0f && MoveY == 0f && Turn == 0f; } }
+
+        static float Clamp(float v, float min, float max, float whenNaN)
+        {
+            if (float.IsNaN(v)) return whenNaN;
+            return v < min ? min : (v > max ? max : v);
+        }
+
         /// <summary>The wire message for this command: a <c>SceneCmd</c> or an <c>OperatorCmd</c>; null for None.</summary>
         public JsonMessage ToMessage()
         {
@@ -89,6 +137,8 @@ namespace Atlas.Link
                 case OperatorCommandKind.Cue: return new OperatorCmdMessage { Cmd = CmdCue, Args = Args };
                 case OperatorCommandKind.Lock:
                     return new OperatorCmdMessage { Cmd = CmdLock, Args = JsonValue.Object().Set("on", On) };
+                case OperatorCommandKind.Walk:
+                    return new OperatorCmdMessage { Cmd = CmdWalk, Args = WalkArgs() };
                 default: return null;
             }
         }
@@ -117,6 +167,10 @@ namespace Atlas.Link
                 case CmdQuality: command = Quality(args.GetInt("tier")); break;
                 case CmdCue: command = Stop(); break;
                 case CmdLock: command = Lock(args.GetBool("on")); break;
+                case CmdWalk:
+                    command = Walk(args.GetFloat("x"), args.GetFloat("y"), args.GetFloat("turn"),
+                        args.GetFloat("speed", WalkDefaultSpeed));
+                    break;
                 default: return false;
             }
             command.Args = message.Args;
@@ -136,9 +190,15 @@ namespace Atlas.Link
                     case OperatorCommandKind.Quality: return CmdQuality;
                     case OperatorCommandKind.Cue: return CmdCue;
                     case OperatorCommandKind.Lock: return CmdLock;
+                    case OperatorCommandKind.Walk: return CmdWalk;
                     default: return "none";
                 }
             }
+        }
+
+        JsonValue WalkArgs()
+        {
+            return JsonValue.Object().Set("x", MoveX).Set("y", MoveY).Set("turn", Turn).Set("speed", Speed);
         }
 
         /// <summary>The <c>cmd</c> event the phone logs when it applies this command (L10: every command is logged).</summary>
@@ -148,6 +208,7 @@ namespace Atlas.Link
             if (Kind == OperatorCommandKind.SwitchSpace) data.Set("space", Space).Set("variant", Variant ?? string.Empty);
             else if (Kind == OperatorCommandKind.Quality) data.Set("tier", Tier);
             else if (Kind == OperatorCommandKind.Lock) data.Set("on", On);
+            else if (Kind == OperatorCommandKind.Walk) data.Set("x", MoveX).Set("y", MoveY).Set("turn", Turn).Set("speed", Speed);
             return new EventMessage(timeUs, scene, LinkEvents.Command, data);
         }
     }

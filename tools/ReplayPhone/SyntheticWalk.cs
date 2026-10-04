@@ -24,18 +24,35 @@ namespace Atlas.Tools
         public int QualityTier;
         public ushort WorldVer = 1;
 
+        /// <summary>
+        /// The head follows the Station's walk input (the app's <c>pose.source</c> = walker) instead of the
+        /// track. It takes over where the track left it.
+        /// </summary>
+        public bool Driven;
+
+        bool _wasDriven;
+        double _lastT;
+        double _x, _z, _yaw;
+        OperatorCommand _input;
+        float _holdLeft;
+
+        /// <summary>The Map page's walk input, held as the app holds it (<see cref="OperatorCommand.WalkHoldSeconds"/>).</summary>
+        public void Walk(in OperatorCommand command)
+        {
+            _input = command;
+            _holdLeft = command.IsStill ? 0f : OperatorCommand.WalkHoldSeconds;
+        }
+
         /// <summary>The state at <paramref name="t"/> seconds into the walk. Allocates nothing.</summary>
         public void Fill(ref StateMessage state, double t, ParamRegistry registry, ParamHandle cullRho)
         {
-            // An ellipse of the track's size; angular speed chosen so the ground speed stays near walking pace.
-            double meanRadius = 0.5 * (TrackHalfW + TrackHalfD);
-            double a = t * SpeedMps / meanRadius;
-            float x = (float)(TrackHalfW * Math.Cos(a));
-            float z = (float)(TrackHalfD * Math.Sin(a));
-            // Heading along the tangent; yaw about +Y, measured from +Z towards +X (Unity's convention).
-            double dx = -TrackHalfW * Math.Sin(a);
-            double dz = TrackHalfD * Math.Cos(a);
-            double yaw = Math.Atan2(dx, dz);
+            double dt = Math.Max(0.0, t - _lastT);
+            _lastT = t;
+            if (!Driven || !_wasDriven) Track(t, out _x, out _z, out _yaw);
+            else Step(dt);
+            _wasDriven = Driven;
+            float x = (float)_x, z = (float)_z;
+            double yaw = _yaw;
             float bob = 0.015f * (float)Math.Sin(t * 2.0 * Math.PI * 1.8);   // head bob at step frequency
 
             state = StateMessage.Identity;
@@ -66,6 +83,35 @@ namespace Atlas.Tools
 
             state.SetParam(StateMessage.ParamCullRho, registry.GetFloat(cullRho));
             state.WorldVer = WorldVer;
+        }
+
+        static void Track(double t, out double x, out double z, out double yaw)
+        {
+            // An ellipse of the track's size; angular speed chosen so the ground speed stays near walking pace.
+            double meanRadius = 0.5 * (TrackHalfW + TrackHalfD);
+            double a = t * SpeedMps / meanRadius;
+            x = TrackHalfW * Math.Cos(a);
+            z = TrackHalfD * Math.Sin(a);
+            // Heading along the tangent; yaw about +Y, measured from +Z towards +X (Unity's convention).
+            double dx = -TrackHalfW * Math.Sin(a);
+            double dz = TrackHalfD * Math.Cos(a);
+            yaw = Math.Atan2(dx, dz);
+        }
+
+        // The app's keyboard walker: move in the heading frame, a diagonal no faster, turn at the asked rate.
+        void Step(double dt)
+        {
+            if (_holdLeft <= 0f) return;
+            _holdLeft -= (float)dt;
+            _yaw += _input.Turn * Math.PI / 180.0 * dt;
+            if (_yaw > Math.PI) _yaw -= 2.0 * Math.PI;
+            else if (_yaw < -Math.PI) _yaw += 2.0 * Math.PI;
+            double mx = _input.MoveX, my = _input.MoveY;
+            double length = Math.Sqrt(mx * mx + my * my);
+            if (length > 1.0) { mx /= length; my /= length; }
+            double s = Math.Sin(_yaw), c = Math.Cos(_yaw);
+            _x += (c * mx + s * my) * _input.Speed * dt;
+            _z += (-s * mx + c * my) * _input.Speed * dt;
         }
 
         /// <summary>The room the walk happens in, for the Spectator's outline view.</summary>

@@ -255,6 +255,22 @@ namespace Atlas.Station.Tests
         }
 
         [Test]
+        public async Task TheMapPagesWalkInput_ReachesThePhone_Clamped()
+        {
+            await _t.PostJson("/api/op", "{\"cmd\": \"walk\", \"args\": {\"x\": -1, \"y\": 0.5, \"turn\": 90, \"speed\": 1.5}}");
+            await _t.PostJson("/api/op", "{\"cmd\": \"walk\", \"args\": {\"x\": 3, \"y\": 0, \"turn\": 9999}}");
+            await _t.PostJson("/api/op", "{\"cmd\": \"walk\", \"args\": {}}");
+
+            Wait.Until(() => _phone.Commands.Count == 3, "three walk inputs at the phone");
+            List<OperatorCommand> got = Wait.Drain(_phone.Commands);
+            Assert.That(got[0].Kind, Is.EqualTo(OperatorCommandKind.Walk));
+            Assert.That(new[] { got[0].MoveX, got[0].MoveY, got[0].Turn, got[0].Speed }, Is.EqualTo(new[] { -1f, 0.5f, 90f, 1.5f }));
+            Assert.That(new[] { got[1].MoveX, got[1].Turn, got[1].Speed },
+                Is.EqualTo(new[] { 1f, OperatorCommand.WalkMaxTurn, OperatorCommand.WalkDefaultSpeed }), "clamped, speed defaulted");
+            Assert.That(got[2].IsStill, Is.True, "no args: the walker stops");
+        }
+
+        [Test]
         public async Task Commands_WithNoPhone_AreRefusedWith409()
         {
             await using (TestHub alone = await TestHub.StartAsync())

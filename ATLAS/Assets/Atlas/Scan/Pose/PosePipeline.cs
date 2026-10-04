@@ -233,6 +233,107 @@ namespace Atlas.Scan
 
             PoseLogRecorder recorder = Recorder;
             if (recorder != null && recorder.IsRecording) recorder.Record(in raw);
+
+            DiagPose(time, source, sample, sessionPosition, sessionRotation, anchorTracked, headPosition, rig);
+        }
+
+        // ---- DIAGNOSTICS (branch diag/pose-freeze, not for merge) ----------------------------------------
+        // After a room becomes active on the phone, the head position freezes while rotation keeps updating.
+        // Logs every link in the chain as a "diag.pose" event to the Hub: every frame for 1 s after the room or
+        // anchor changes, then once a second. Allocates; diagnostics only.
+
+        RoomModel _diagRoom;
+        Transform _diagAnchor;
+        double _diagBurstUntil = -1, _diagNext;
+
+        void DiagPose(double time, IPoseSource source, in HeadPose sample, float3 sessionPosition,
+            quaternion sessionRotation, bool anchorTracked, float3 headPosition, ArSessionRig rig)
+        {
+            if (!ReferenceEquals(_diagRoom, _room) || !ReferenceEquals(_diagAnchor, _anchor))
+            {
+                _diagRoom = _room;
+                _diagAnchor = _anchor;
+                _diagBurstUntil = time + 1.0;
+            }
+            if (time < _diagBurstUntil) { }
+            else if (time >= _diagNext) _diagNext = time + 1.0;
+            else return;
+
+            if (!AtlasServices.TryGet(out IEventLog log)) return;
+            var c = System.Globalization.CultureInfo.InvariantCulture;
+            var j = new System.Text.StringBuilder(1024);
+            j.Append('{');
+            Str(j, "src", source != null ? source.Name : "null");
+            Str(j, "trk", sample.Tracking.ToString());
+            j.Append("\"room\":").Append(_room != null ? "true" : "false").Append(',');
+
+            UnityEngine.XR.ARSubsystems.XRSessionSubsystem ss = _session != null ? _session.subsystem : null;
+            Str(j, "arMode", ss != null ? ss.currentTrackingMode.ToString() : "nosub");
+            Str(j, "arReq", ss != null ? ss.requestedTrackingMode.ToString() : "nosub");
+            Str(j, "arState", ss != null ? ss.trackingState.ToString() : "nosub");
+            Str(j, "arReason", ss != null ? ss.notTrackingReason.ToString() : "nosub");
+
+            var driver = rig != null ? rig.Driver : null;
+            j.Append("\"drvOn\":").Append(driver != null && driver.enabled ? "true" : "false").Append(',');
+            UnityEngine.InputSystem.InputAction posAction = driver != null ? driver.positionInput.action : null;
+            if (posAction != null)
+            {
+                V(j, "drvIn", posAction.ReadValue<Vector3>(), c);
+                j.Append("\"drvCtl\":").Append(posAction.controls.Count).Append(',');
+                Str(j, "drvCtl0", posAction.controls.Count > 0 ? posAction.controls[0].path : "none");
+                j.Append("\"drvActOn\":").Append(posAction.enabled ? "true" : "false").Append(',');
+            }
+            Str(j, "drvType", driver != null ? driver.trackingType.ToString() : "none");
+
+            if (_trackedCamera != null)
+            {
+                V(j, "camLocal", _trackedCamera.localPosition, c);
+                V(j, "camWorld", _trackedCamera.position, c);
+                Str(j, "camParent", _trackedCamera.parent != null ? _trackedCamera.parent.name : "none");
+            }
+            if (_sessionSpace != null)
+            {
+                Str(j, "ssName", _sessionSpace.name);
+                V(j, "ssWorld", _sessionSpace.position, c);
+                V(j, "ssLocal", _sessionSpace.localPosition, c);
+            }
+            if (_xrOrigin != null) V(j, "origin", _xrOrigin.position, c);
+            if (_head != null)
+            {
+                Str(j, "headName", _head.name);
+                Str(j, "headParent", _head.parent != null ? _head.parent.name : "none");
+                V(j, "headWorld", _head.position, c);
+                V(j, "headLocal", _head.localPosition, c);
+            }
+            V(j, "sample", sample.Position, c);
+            j.Append("\"sampleYaw\":").Append(RoomFrame.Yaw(sample.Rotation).ToString("0.0000", c)).Append(',');
+            if (_anchor != null)
+            {
+                Str(j, "anchorParent", _anchor.parent != null ? _anchor.parent.name : "none");
+                V(j, "anchorWorld", _anchor.position, c);
+                V(j, "anchorLocal", _anchor.localPosition, c);
+                Str(j, "anchorTrk", _arAnchor != null ? _arAnchor.trackingState.ToString() : "noARAnchor");
+            }
+            j.Append("\"anchorOk\":").Append(anchorTracked ? "true" : "false").Append(',');
+            V(j, "sessionPos", sessionPosition, c);
+            j.Append("\"sessionYaw\":").Append(RoomFrame.Yaw(sessionRotation).ToString("0.0000", c)).Append(',');
+            V(j, "head", headPosition, c);
+            j.Append("\"t\":").Append(time.ToString("0.000", c));
+            j.Append('}');
+            log.LogJson("diag.pose", j.ToString());
+        }
+
+        static void Str(System.Text.StringBuilder j, string key, string value)
+        {
+            j.Append('"').Append(key).Append("\":\"").Append(value.Replace("\"", "'")).Append("\",");
+        }
+
+        static void V(System.Text.StringBuilder j, string key, float3 v, System.IFormatProvider c)
+        {
+            j.Append('"').Append(key).Append("\":[")
+             .Append(v.x.ToString("0.00000", c)).Append(',')
+             .Append(v.y.ToString("0.00000", c)).Append(',')
+             .Append(v.z.ToString("0.00000", c)).Append("],");
         }
 
         // ---- step 3 -------------------------------------------------------------------------------------

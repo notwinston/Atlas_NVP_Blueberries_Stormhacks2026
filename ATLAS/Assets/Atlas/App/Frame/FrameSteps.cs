@@ -12,28 +12,45 @@ namespace Atlas.App
 {
     /// <summary>
     /// Step 1, after the pose pipeline: freezes the input snapshot with this frame's raw head, then hands the
-    /// keyboard walker its input for the next sample (contract README F9). Atlas.Input references no Atlas
-    /// assembly, so the adapter lives here.
+    /// keyboard walker its input for the next sample (contract README F9): the device's own, plus the walk
+    /// input the Station sends from its Map page. Atlas.Input references no Atlas assembly, so the adapter
+    /// lives here.
     /// </summary>
     public sealed class InputSenseStep : ISenseStep
     {
         readonly IAtlasInput _input;
         readonly IPosePipeline _pipeline;
+        readonly RemoteWalkInput _remote;
 
-        public InputSenseStep(IAtlasInput input, IPosePipeline pipeline)
+        /// <param name="remote">The Station's walk input; may be null.</param>
+        public InputSenseStep(IAtlasInput input, IPosePipeline pipeline, RemoteWalkInput remote = null)
         {
             _input = input;
             _pipeline = pipeline;
+            _remote = remote;
         }
 
         public void Sense(ref FrameContext frame)
         {
             _input.Tick(frame.RawHeadPosition, frame.RawHeadRotation, frame.DeltaTime);
+            // The remote hold runs down whatever the source, so an old input never moves a walker chosen later.
+            float2 remoteMove = float2.zero;
+            float remoteYaw = 0f, remoteSpeed = 0f;
+            bool remote = _remote != null && _remote.Take(frame.DeltaTime, out remoteMove, out remoteYaw, out remoteSpeed);
             if (_pipeline == null) return;
             var walker = _pipeline.Source as KeyboardWalkerPoseSource;
             if (walker == null) return;
             WalkerInput w = _input.Walker;
-            walker.SetInput(new float2(w.Move.x, w.Move.y), new float2(w.LookDegrees.x, w.LookDegrees.y), w.Speed);
+            float2 move = new float2(w.Move.x, w.Move.y);
+            float2 look = new float2(w.LookDegrees.x, w.LookDegrees.y);
+            float speed = w.Speed;
+            if (remote)
+            {
+                move = math.clamp(move + remoteMove, -1f, 1f);
+                look.x += remoteYaw;
+                speed = remoteSpeed;
+            }
+            walker.SetInput(move, look, speed);
         }
     }
 

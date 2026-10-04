@@ -124,6 +124,8 @@ namespace Atlas.App
         public QualityLadder Ladder { get; private set; }
         public SpaceLab Spaces { get; private set; }
         public CommandRouter Commands { get; private set; }
+        /// <summary>The walk input of the Station's Map page: the router writes it, the input step feeds it to the walker.</summary>
+        public RemoteWalkInput RemoteWalk { get; private set; }
         /// <summary>Return home, next and previous space and the space menu, from the gamepad or the gaze.</summary>
         public SpaceActions SpaceActions { get; private set; }
         /// <summary>The gaze twins of the four SpaceLab actions: home beacon, previous, next and exhibit sign.</summary>
@@ -229,7 +231,8 @@ namespace Atlas.App
             ScanSystems = ScanSystems.Create(Pose);
             ScanSystems.Publish(Loop);
             ScanSettings = new ScanSettings();
-            Loop.AddSense(new InputSenseStep(InputService, Pose.Pipeline));
+            RemoteWalk = new RemoteWalkInput();
+            Loop.AddSense(new InputSenseStep(InputService, Pose.Pipeline, RemoteWalk));
 
             // 12  Bump Guard and its cue: step 2 of every frame from the first.
             try
@@ -275,7 +278,7 @@ namespace Atlas.App
             SpaceRegistry.DeclareAllParams(Registry);
 
             // 17  Operator commands as local calls.
-            Commands = new CommandRouter(Spaces, Loop, Registry, Pose.Pipeline);
+            Commands = new CommandRouter(Spaces, Loop, Registry, Pose.Pipeline, walk: RemoteWalk);
             AtlasServices.Register<IOperatorCommands>(Commands);
 
             // 18  Link, perf probe, HUD, event log, pairing. The loop is published, so its hooks go in here:
