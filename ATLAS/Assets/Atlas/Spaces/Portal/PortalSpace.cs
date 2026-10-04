@@ -31,6 +31,8 @@ namespace Atlas.Spaces.Portal
         PortalRenderer m_Renderer;
         bool m_OwnsRenderer;
         IEventLog m_Events;
+        IHands m_Hands;
+        IStereoRig m_Rig;
         ISpaceHost m_Host;
         Action<int, int> m_OnRoomChanged;
         Action<int> m_OnObjectChanged;
@@ -66,6 +68,8 @@ namespace Atlas.Spaces.Portal
             AtlasServices.TryGet(out m_Pool);
             AtlasServices.TryGet(out m_Events);
             AtlasServices.TryGet(out m_Host);
+            AtlasServices.TryGet(out m_Hands);
+            AtlasServices.TryGet(out m_Rig);
 
             // The shared renderer when the composition root made one; otherwise one of our own, driven from Upload.
             if (AtlasServices.TryGet(out PortalRenderer shared))
@@ -122,6 +126,39 @@ namespace Atlas.Spaces.Portal
             }
             int depth = m_Core.Depth;
             if (m_Renderer.Depth != depth) m_Renderer.Depth = depth;
+            if (m_Hands != null && EyeInDoorwayMask(in frame)) m_Hands.HideThisFrame();
+        }
+
+        /// <summary>How close to a doorway's plane an eye must be for the doorway's box mask to cover it (metres).</summary>
+        const float DoorMaskReach = 0.10f;
+
+        // O1: true while either eye is within DoorMaskReach of a doorway's plane and inside its outline (plus the reach
+        // sideways). The hands are hidden for those frames rather than missing in one eye only.
+        bool EyeInDoorwayMask(in FrameContext frame)
+        {
+            PortalLayout layout = m_Core.Layout;
+            if (layout == null) return false;
+            float half = 0.5f * (m_Rig != null ? m_Rig.Ipd : 0.064f);
+            float3 right = math.mul(frame.HeadRotation, new float3(1f, 0f, 0f));
+            float3 head = frame.HeadPosition;
+            for (int d = 0; d < layout.Doors.Count; d++)
+            {
+                LayoutDoor door = layout.Doors[d];
+                float2 ab = door.B - door.A;
+                float len = math.length(ab);
+                if (len < 1e-4f) continue;
+                float2 dir = ab / len, normal = new float2(-dir.y, dir.x);
+                for (int e = -1; e <= 1; e += 2)
+                {
+                    float3 eye = head + right * (half * e);
+                    if (eye.y > door.Height + DoorMaskReach) continue;
+                    float2 rel = new float2(eye.x, eye.z) - door.A;
+                    float along = math.dot(rel, dir);
+                    if (along < -DoorMaskReach || along > len + DoorMaskReach) continue;
+                    if (math.abs(math.dot(rel, normal)) < DoorMaskReach) return true;
+                }
+            }
+            return false;
         }
 
         public void Upload(in FrameContext frame)
@@ -145,6 +182,8 @@ namespace Atlas.Spaces.Portal
             m_Pool = null;
             m_Events = null;
             m_Host = null;
+            m_Hands = null;
+            m_Rig = null;
             m_Registry = null;
             m_Room = null;
         }

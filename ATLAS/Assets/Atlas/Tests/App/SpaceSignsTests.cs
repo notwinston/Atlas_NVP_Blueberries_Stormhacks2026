@@ -84,12 +84,56 @@ namespace Atlas.App.Tests
 
         sealed class View : ISpaceSignView
         {
-            public bool Visible;
-            public int Places;
+            public bool Visible, Near;
+            public int Places, Reaches;
+            public float Scale = 1f;
+            public float3 Origin;
+            public quaternion Frame;
             public readonly bool[] Available = new bool[SpaceSignLayout.Count];
             public void SetVisible(bool visible) { Visible = visible; }
             public void SetAvailable(int sign, bool available) { Available[sign] = available; }
-            public void Place(float3 head, quaternion frame) { Places++; }
+            public void Place(float3 origin, quaternion frame) { Places++; Origin = origin; Frame = frame; }
+            public void SetReach(bool near, float scale) { Near = near; Scale = scale; Reaches++; }
+        }
+
+        /// <summary>The near layout as Atlas.Hands publishes it, with every number in the test's hands.</summary>
+        sealed class Reach : IReachLayout
+        {
+            public bool Near { get; set; }
+            public float3 Position { get; set; }
+            public quaternion Rotation { get; set; }
+            public float Scale { get; set; }
+        }
+
+        Reach _reach;
+        IReachLayout _before;
+
+        [SetUp]
+        public void StartWithNoLayout()
+        {
+            // A layout another test left published would move every sign of this one.
+            if (AtlasServices.TryGet(out _before)) AtlasServices.Unregister(_before);
+            _reach = null;
+        }
+
+        [TearDown]
+        public void PutTheLayoutBack()
+        {
+            if (_reach != null) AtlasServices.Unregister<IReachLayout>(_reach);
+            if (_before != null) AtlasServices.Register(_before);
+        }
+
+        /// <summary>
+        /// Publishes the near anchor of a hands session: 0.48 m from the head on a line 25 degrees below the
+        /// horizontal, tilted to face the head (+Z away from the walker, +Y up along the panel).
+        /// </summary>
+        Reach Publish(bool near = true, float scale = 0.75f)
+        {
+            if (_reach != null) AtlasServices.Unregister<IReachLayout>(_reach);
+            quaternion rotation = math.mul(quaternion.RotateY(math.radians(15f)), quaternion.RotateX(math.radians(25f)));
+            _reach = new Reach { Near = near, Scale = scale, Rotation = rotation, Position = Head + math.mul(rotation, new float3(0f, 0f, 0.48f)) };
+            AtlasServices.Register<IReachLayout>(_reach);
+            return _reach;
         }
 
         /// <summary>The frame loop's steps in their order: input at 1, upload at 6, the SpaceLab actions and then the signs at 8b.</summary>
@@ -399,6 +443,280 @@ namespace Atlas.App.Tests
             Assert.That(w.Input.Core.Targets.HasEnabled(AtlasAction.ReturnHome, InputContext.Space), Is.False);
             Assert.That(() => w.Signs.Shutdown(), Throws.Nothing, "twice is harmless");
             Assert.That(() => w.Step(quaternion.identity), Throws.Nothing);
+        }
+
+        // ---- a hands session: the signs come within reach (documents/ATLAS_Hands_Design.md section 6.1) -----
+
+        static readonly quaternion Down = quaternion.RotateX(math.radians(25f));
+
+        static quaternion Toward(float3 target)
+        {
+            return quaternion.LookRotation(math.normalize(target - Head), new float3(0f, 1f, 0f));
+        }
+
+        static GazeTargetData Data(Rig w, int sign)
+        {
+            GazeTargetData data;
+            Assert.That(w.Input.Core.Targets.TryGet(w.Signs.TargetOf(sign), out data), Is.True, "sign " + sign + " is registered");
+            return data;
+        }
+
+        /// <summary>Everything a rig holds about where the signs stand, for comparing two runs number by number.</summary>
+        static List<string> Snapshot(Rig w)
+        {
+            var lines = new List<string>
+            {
+                "visible " + w.View.Visible + " near " + w.View.Near + " scale " + w.View.Scale.ToString("R") + " at " + w.View.Origin + " " + w.View.Frame,
+            };
+            for (int i = 0; i < SpaceSignLayout.Count; i++)
+            {
+                GazeTargetData d = Data(w, i);
+                lines.Add("sign " + i + " " + d.Action + " " + d.Shape + " " + d.Context + " tag " + d.Tag + " at " + d.Centre + " r " + d.Radius.ToString("R")
+                    + " on " + w.Input.Core.Targets.IsEnabled(w.Signs.TargetOf(i)) + " live " + w.Signs.IsLive(i) + " able " + w.View.Available[i]);
+            }
+            return lines;
+        }
+
+        [Test]
+        public void EachSign_HasItsOwnPlaceWithinReach()
+        {
+            Assert.That(SpaceSignLayout.SlotOf(SpaceSignLayout.Home), Is.EqualTo(ReachSlot.SignHome));
+            Assert.That(SpaceSignLayout.SlotOf(SpaceSignLayout.Previous), Is.EqualTo(ReachSlot.SignPrevious));
+            Assert.That(SpaceSignLayout.SlotOf(SpaceSignLayout.Menu), Is.EqualTo(ReachSlot.SignMenu));
+            Assert.That(SpaceSignLayout.SlotOf(SpaceSignLayout.Next), Is.EqualTo(ReachSlot.SignNext));
+
+            // As a metre away: the beacon in the middle, the three signs in a row under it, previous on the left.
+            float3 home = ReachSlots.Centre(ReachSlot.SignHome);
+            Assert.That(ReachSlots.Centre(ReachSlot.SignPrevious).x, Is.LessThan(home.x));
+            Assert.That(ReachSlots.Centre(ReachSlot.SignNext).x, Is.GreaterThan(home.x));
+            for (int i = 1; i < SpaceSignLayout.Count; i++)
+                Assert.That(ReachSlots.Centre(SpaceSignLayout.SlotOf(i)).y, Is.LessThan(home.y), "sign " + i + " is under the beacon");
+
+            // At the usual scale: no sign on another or on the menu chip, each within 20 cm of the anchor to
+            // each side with its board, and none smaller than 3 cm.
+            const float scale = 0.75f;
+            float radius = ReachSlots.TargetHalf(SpaceSignLayout.Radius, scale);
+            Assert.That(2f * radius, Is.GreaterThanOrEqualTo(ReachSlots.MinTargetMetres));
+            float3 chip = ReachSlots.Local(MenuLayout.ChipSlot, scale);
+            float chipRadius = ReachSlots.TargetHalf(MenuLayout.OpenChipRadius, scale);
+            for (int a = 0; a < SpaceSignLayout.Count; a++)
+            {
+                float3 c = ReachSlots.Local(SpaceSignLayout.SlotOf(a), scale);
+                for (int b = a + 1; b < SpaceSignLayout.Count; b++)
+                    Assert.That(math.distance(c, ReachSlots.Local(SpaceSignLayout.SlotOf(b), scale)), Is.GreaterThan(2f * radius + 0.025f),
+                        "signs " + a + " and " + b + " stand a fingertip's margin apart");
+                Assert.That(math.distance(c, chip), Is.GreaterThan(radius + chipRadius + 0.025f), "sign " + a + " clear of the menu chip");
+                Assert.That(math.abs(c.x) + scale * SpaceSignLayout.BoardHalfWidth, Is.LessThanOrEqualTo(0.20f), "sign " + a + " sideways");
+                Assert.That(math.abs(c.y) + radius, Is.LessThanOrEqualTo(0.20f), "sign " + a + " up and down");
+                Assert.That(ReachSlots.HidesWhileMenuOpen(SpaceSignLayout.SlotOf(a)), Is.True);
+            }
+        }
+
+        [Test]
+        public void Near_TheSignsStandAtTheirSlots_InTheAnchorsFrame_TimesTheScale()
+        {
+            Reach reach = Publish();
+            Rig w = Three();
+            w.Settle();
+            w.Step(Down, 2);
+
+            Assert.That(w.View.Visible, Is.True);
+            Assert.That(w.Signs.Near, Is.True);
+            Assert.That(w.View.Near, Is.True, "drawn on the world layer, depth-tested");
+            Assert.That(w.View.Scale, Is.EqualTo(0.75f), "boards and text times the scale");
+            Assert.That(w.View.Origin, Is.EqualTo(reach.Position), "the view stands in the anchor's frame");
+            Assert.That(w.View.Frame, Is.EqualTo(reach.Rotation));
+            for (int i = 0; i < SpaceSignLayout.Count; i++)
+            {
+                float3 slot = ReachSlots.Centre(SpaceSignLayout.SlotOf(i));
+                float3 centre = reach.Position + math.mul(reach.Rotation, 0.75f * new float3(slot.x, slot.y, -slot.z));
+                GazeTargetData d = Data(w, i);
+                Assert.That(math.distance(d.Centre, centre), Is.LessThan(1e-6f), "sign " + i + ": " + d.Centre + " against " + centre);
+                Assert.That(d.Centre, Is.EqualTo(ReachSlots.World(reach.Position, reach.Rotation, 0.75f, SpaceSignLayout.SlotOf(i))));
+                Assert.That(d.Radius, Is.EqualTo(0.75f * SpaceSignLayout.Radius).Within(1e-7f), "its radius times the scale");
+                Assert.That(2f * d.Radius, Is.GreaterThanOrEqualTo(ReachSlots.MinTargetMetres), "no target under 3 cm");
+                Assert.That(d.Action, Is.EqualTo(SpaceSignLayout.ActionOf(i)));
+                Assert.That(d.Tag, Is.EqualTo(i));
+                Assert.That(d.Context, Is.EqualTo(InputContext.Space));
+                Assert.That(w.Signs.IsLive(i), Is.True, "sign " + i + " is live while it is drawn");
+                Assert.That(w.View.Available[i], Is.True);
+            }
+
+            // The anchor moves: the signs and their targets move with it.
+            GazeTargetId id = w.Signs.TargetOf(SpaceSignLayout.Next);
+            reach.Position += new float3(0.1f, -0.05f, 0.2f);
+            w.Step(Down);
+            Assert.That(w.Signs.TargetOf(SpaceSignLayout.Next), Is.EqualTo(id), "moved, not made again");
+            Assert.That(Data(w, SpaceSignLayout.Next).Centre, Is.EqualTo(ReachSlots.World(reach.Position, reach.Rotation, 0.75f, ReachSlot.SignNext)));
+            Assert.That(w.View.Origin, Is.EqualTo(reach.Position));
+
+            // The scale moves: a sphere's radius cannot be changed in place.
+            reach.Scale = 0.9f;
+            w.Step(Down);
+            Assert.That(w.Signs.TargetOf(SpaceSignLayout.Next), Is.Not.EqualTo(id));
+            Assert.That(Data(w, SpaceSignLayout.Next).Radius, Is.EqualTo(0.9f * SpaceSignLayout.Radius).Within(1e-7f));
+            Assert.That(w.View.Scale, Is.EqualTo(0.9f));
+            Assert.That(w.Signs.IsLive(SpaceSignLayout.Next), Is.True, "made again, and live again");
+        }
+
+        [Test]
+        public void Near_EachSign_FiresItsAction_AfterTheDwell_AndNotBefore()
+        {
+            for (int sign = 0; sign < SpaceSignLayout.Count; sign++)
+            {
+                Reach reach = Publish();
+                Rig w = Three();
+                w.Settle();
+                quaternion look = Toward(ReachSlots.World(reach.Position, reach.Rotation, reach.Scale, SpaceSignLayout.SlotOf(sign)));
+
+                w.Step(look, FramesFor(0.6f));
+                Assert.That(w.Host.Calls, Is.Empty, "sign " + sign + " not before the dwell");
+                Assert.That(w.MenuOpened, Is.EqualTo(0));
+                Assert.That(w.Input.Gaze.Focused, Is.EqualTo(w.Signs.TargetOf(sign)), "the gaze is on near sign " + sign);
+
+                w.Step(look, FramesFor(0.25f));
+                switch (sign)
+                {
+                    case SpaceSignLayout.Home:
+                        Assert.That(w.Host.Calls, Is.EqualTo(new[] { "home" }));
+                        break;
+                    case SpaceSignLayout.Next:
+                        Assert.That(w.Host.Calls, Is.EqualTo(new[] { "switch " + SpaceIds.Code(SpaceId.Portal) }));
+                        break;
+                    case SpaceSignLayout.Previous:
+                        Assert.That(w.Host.Calls, Is.EqualTo(new[] { "switch " + SpaceIds.Code(SpaceId.Home) }));
+                        break;
+                    default:
+                        Assert.That(w.Host.Calls, Is.Empty);
+                        Assert.That(w.MenuOpened, Is.EqualTo(1));
+                        break;
+                }
+                Assert.That(w.Input.LastSource(SpaceSignLayout.ActionOf(sign)), Is.EqualTo(InputSource.Gaze));
+            }
+        }
+
+        [Test]
+        public void Near_ASignIsLiveOnlyWhileItIsDrawn()
+        {
+            Publish();
+            Rig w = Three();
+            w.Settle();
+
+            // Level: the signs are not drawn. A metre away nothing can reach a hidden sign; within reach a hand
+            // passing through the anchor would press it, so there the hidden signs are not live.
+            Assert.That(w.View.Visible, Is.False);
+            for (int i = 0; i < SpaceSignLayout.Count; i++)
+            {
+                Assert.That(w.Signs.IsLive(i), Is.False, "hidden: sign " + i);
+                Assert.That(w.Input.Core.Targets.IsEnabled(w.Signs.TargetOf(i)), Is.False, "hidden: sign " + i);
+                Assert.That(w.View.Available[i], Is.True, "it can act, and is drawn so when it shows");
+            }
+
+            w.Step(Down, 2);
+            Assert.That(w.View.Visible, Is.True);
+            for (int i = 0; i < SpaceSignLayout.Count; i++)
+            {
+                Assert.That(w.Signs.IsLive(i), Is.True, "drawn: sign " + i);
+                Assert.That(w.Input.Core.Targets.IsEnabled(w.Signs.TargetOf(i)), Is.True, "drawn: sign " + i);
+            }
+
+            // Drawn, but refused: dim, and not live.
+            w.Registry.Set(CommandRouter.ParamDemoLock, 1f, ParamSource.Remote);
+            w.Step(Down);
+            Assert.That(w.View.Visible, Is.True);
+            for (int i = 0; i < SpaceSignLayout.Count; i++)
+            {
+                Assert.That(w.Signs.IsLive(i), Is.False, "demo lock: sign " + i);
+                Assert.That(w.View.Available[i], Is.False);
+            }
+            w.Registry.Set(CommandRouter.ParamDemoLock, 0f, ParamSource.Remote);
+            w.Step(Down);
+            for (int i = 0; i < SpaceSignLayout.Count; i++) Assert.That(w.Signs.IsLive(i), Is.True, "lock off again: sign " + i);
+
+            w.Step(quaternion.identity, 30);   // past the focus grace of the gaze
+            Assert.That(w.View.Visible, Is.False);
+            for (int i = 0; i < SpaceSignLayout.Count; i++)
+                Assert.That(w.Input.Core.Targets.IsEnabled(w.Signs.TargetOf(i)), Is.False, "hidden again: sign " + i);
+
+            // In a menu the signs stand down, as a metre away.
+            w.Input.PushContext(InputContext.Menu);
+            w.Step(Down, 2);
+            Assert.That(w.View.Visible, Is.False);
+            for (int i = 0; i < SpaceSignLayout.Count; i++) Assert.That(w.Signs.IsLive(i), Is.False, "menu open: sign " + i);
+        }
+
+        /// <summary>A walker who looks level, looks down at the signs, at one of them, and up again.</summary>
+        static void Walk(Rig w, Action between)
+        {
+            w.Settle();
+            w.Step(Down, 4);
+            between();
+            w.Step(w.LookAt(SpaceSignLayout.Home), 12);
+            w.Step(Down, 3);
+            between();
+            w.Step(quaternion.identity, 2);
+        }
+
+        [Test]
+        public void WithNearFalse_EverythingIsExactlyWhereItIsWithNoLayoutAtAll()
+        {
+            Rig none = Three();
+            Walk(none, () => { });
+            List<string> expected = Snapshot(none);
+
+            Publish(near: false);
+            Rig far = Three();
+            Walk(far, () => { });
+            Assert.That(Snapshot(far), Is.EqualTo(expected), "Near false: positions, radii and flags to the last number");
+            Assert.That(far.Signs.Near, Is.False);
+            Assert.That(far.View.Reaches, Is.EqualTo(0), "the view was never asked to change");
+            for (int i = 0; i < SpaceSignLayout.Count; i++)
+                Assert.That(Data(far, i).Centre, Is.EqualTo(Head + math.mul(quaternion.RotateY(0f), SpaceSignLayout.Centre(i))), "sign " + i);
+        }
+
+        [Test]
+        public void SwitchingNearOnAndOff_ReturnsEverythingToItsPlace()
+        {
+            Rig control = Three();
+            Walk(control, () => control.Step(Down, 8));
+            List<string> expected = Snapshot(control);
+
+            Reach reach = Publish(near: false);
+            Rig w = Three();
+            bool everNear = false;
+            Walk(w, () =>
+            {
+                reach.Near = true;
+                w.Step(Down, 5);
+                everNear |= w.View.Near && Data(w, SpaceSignLayout.Home).Radius < SpaceSignLayout.Radius;
+                reach.Near = false;
+                w.Step(Down, 3);
+            });
+            Assert.That(everNear, Is.True, "the signs were within reach in between");
+            Assert.That(Snapshot(w), Is.EqualTo(expected), "back to the last number: centres, radii, flags, the view's frame");
+            Assert.That(w.View.Near, Is.False);
+            Assert.That(w.View.Scale, Is.EqualTo(1f));
+        }
+
+        [Test]
+        public void Near_AFrameAllocatesNothing()
+        {
+            Reach reach = Publish();
+            Rig w = Three();
+            w.Settle();
+            w.Step(Down, 20);   // warm up
+            var f = new FrameContext { DeltaTime = Dt, RawHeadPosition = Head, RawHeadRotation = Down, HeadPosition = Head, HeadRotation = Down };
+
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < 100; i++)
+            {
+                reach.Position += new float3(0.001f, 0f, 0f);
+                w.Signs.Upload(in f);
+                w.Signs.AfterFrame(in f);
+            }
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;   // read before the assertion allocates anything
+            Assert.That(allocated, Is.EqualTo(0L), "bytes allocated by 100 frames within reach");
+            Assert.That(w.View.Near, Is.True);
         }
     }
 }

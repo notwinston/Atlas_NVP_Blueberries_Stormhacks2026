@@ -9,15 +9,19 @@ namespace Atlas.Input
     /// <summary>
     /// The input service (Master Plan section 0.5 rule 5, task P1-C10): a thin adapter that reads the action
     /// map, hands the frame to the engine-free <see cref="AtlasInputCore"/> and draws the reticle. The frame
-    /// loop ticks it once per frame; everything else reads the frozen snapshot.
+    /// loop ticks it once per frame; everything else reads the frozen snapshot. Tracked hands reach it through
+    /// <see cref="IHandsInput"/>, which only this class implements: <see cref="IAtlasInput"/> has no member for
+    /// them.
     /// </summary>
-    public sealed class AtlasInput : IAtlasInput, IDisposable
+    public sealed class AtlasInput : IAtlasInput, IHandsInput, IDisposable
     {
         private readonly AtlasInputCore _core = new AtlasInputCore();
         private readonly AtlasActionMap _actions;
         private readonly GazeReticle _reticle;
         private RawInput _raw;
         private WalkerInput _walker;
+        private ReticleDepth _reticleDepth;
+        private bool _handsSet;
         private Func<Vector2, bool> _pointerBlocked;
         private bool _disposed;
 
@@ -75,13 +79,33 @@ namespace Atlas.Input
         {
             if (_disposed) return;
             _actions.Sample(ref _raw, ref _walker);
+            // The action map fills the devices' fields and leaves the hands' alone: they are this frame's only if
+            // SetHands was called since the last tick, and they never outlive the tick. A fingertip or a pinch
+            // edge left standing would be replayed in every frame the hands module does not run.
+            if (!_handsSet) _raw.Hands = default;
             _core.Tick(in _raw,
                        new float3(headPosition.x, headPosition.y, headPosition.z),
                        new quaternion(headRotation.x, headRotation.y, headRotation.z, headRotation.w),
                        deltaTime);
+            _raw.Hands = default;
+            _handsSet = false;
+
             // Raw calls on purpose: the reticle is the service's own display and must not count as a poll.
-            _reticle?.Set(_core.Context != InputContext.InHand, _core.GazeProgress);
+            bool visible = _core.Context != InputContext.InHand;
+            float metres = visible ? _reticleDepth.Step(_core.GazeDistance, deltaTime) : _reticleDepth.Reset();
+            _reticle?.Set(visible, _core.GazeProgress, metres);
         }
+
+        public void SetHands(in HandsInput hands)
+        {
+            if (_disposed) return;
+            _raw.Hands = hands;
+            _handsSet = true;
+        }
+
+        public ref readonly HandsTouchState HandsTouch => ref _core.HandsTouch;
+        public string LabelOf(GazeTargetId id) => _core.LabelOf(id);
+        public int TagOf(GazeTargetId id) => _core.TagOf(id);
 
         public InputContext Context => _core.Context;
         public void PushContext(InputContext context) => _core.PushContext(context);

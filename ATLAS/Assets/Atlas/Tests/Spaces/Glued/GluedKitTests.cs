@@ -24,7 +24,7 @@ namespace Atlas.Spaces.Tests
         }
 
         // The shipped piece, read as GluedSpace reads it; the test is skipped while the export has not run.
-        static MeshData Shipped(string name)
+        internal static MeshData Shipped(string name)
         {
             string directory = ShippedDirectory();
             if (!File.Exists(Path.Combine(directory, "manifest.json")))
@@ -87,7 +87,7 @@ namespace Atlas.Spaces.Tests
             GluedAvatarMesh.Build(built, kit);
             Assert.That(built.VertexCount, Is.EqualTo(kit.VertexCount));
             Assert.That(built.TriangleCount, Is.EqualTo(kit.TriangleCount));
-            Assert.That(built.TriangleCount, Is.EqualTo(GluedBudget.AvatarTriangles(kit)));
+            Assert.That(built.TriangleCount, Is.EqualTo(GluedBudget.AvatarBodyTriangles(kit)));
             for (int v = 0; v < kit.VertexCount; v++) Assert.That(built.Vertices[v].Position, Is.EqualTo(kit.Vertices[v].Position));
         }
 
@@ -170,15 +170,22 @@ namespace Atlas.Spaces.Tests
         {
             MeshData landmark = Shipped("landmark"), avatar = Shipped("avatar");
             // The largest cell the rule can give, so the bound holds in every room.
-            int cell = GluedBudget.CellTriangles(2.25f, 2.25f, landmark), body = GluedBudget.AvatarTriangles(avatar);
+            int cell = GluedBudget.CellTriangles(2.25f, 2.25f, landmark);
+            // The avatar as every copy is counted: the kit avatar with both hands, which the rig draws at the reduced
+            // level because the kit avatar leaves no room for the full ones (decision R15).
+            int body = GluedBudget.AvatarBodyTriangles(avatar), hands = GluedBudget.AvatarHandsTriangles(avatar);
+            int worn = GluedBudget.AvatarTriangles(avatar);
             int prompt = GluedBudget.PromptTriangles();
             Assert.That(cell, Is.LessThanOrEqualTo(AtlasMeshBudget.GluedCell), "the whole cell, floor and posts with the landmark");
-            Assert.That(body, Is.LessThanOrEqualTo(AtlasMeshBudget.SelfAvatar));
+            Assert.That(body, Is.EqualTo(avatar.TriangleCount));
+            Assert.That(hands, Is.EqualTo(2 * GluedAvatarHands.ReducedTrianglesPerHand), "both hands, at the reduced level");
+            Assert.That(worn, Is.EqualTo(body + hands));
+            Assert.That(worn, Is.LessThanOrEqualTo(AtlasMeshBudget.SelfAvatar));
             foreach (GluedLayout layout in new[] { GluedLayout.Torus, GluedLayout.Klein, GluedLayout.Torus3 })
             {
-                GluedDrawCost cost = GluedBudget.Lattice(layout, 5, cell, body, true, prompt);
+                GluedDrawCost cost = GluedBudget.Lattice(layout, 5, cell, worn, true, prompt);
                 TestContext.Out.WriteLine(layout + ": " + cost.TrianglesPerFrame + " triangles per frame (cell " + cell
-                    + ", avatar " + body + ")");
+                    + ", avatar " + worn + ")");
                 Assert.That(GluedBudget.LatticeFits(layout, in cost), Is.True, layout.ToString());
             }
         }

@@ -6,7 +6,9 @@ namespace Atlas.Input
     /// The gaze dwell (Master Plan section 0.5 rule 5, task P1-C10; lane C contract section 13.2). Engine-free:
     /// it is given the head pose and the frame time and reads no clock (README F2). One target at most is in
     /// focus; looking at it for the dwell time fires it once, and it arms again only after the gaze has been
-    /// away for a while. Allocates nothing.
+    /// away for a while. Tracked hands add two things (documents/ATLAS_Hands_Design.md sections 6.3 and 6.7): the
+    /// dwell on a target waits while a fingertip is near that target, and a pinch fires the focused target at
+    /// once, as the lever does. Allocates nothing.
     /// </summary>
     public sealed class GazeDwell
     {
@@ -38,10 +40,25 @@ namespace Atlas.Input
         private bool _holding;
         private float _progress;
         private float3 _point;
+        private float _distance;
+        private bool _firedByPinch;
+
+        // When each slot's target last fired from here (by dwell, lever or pinch) and when a fingertip last fired
+        // it, on a clock of the frame times given.
+        private readonly double[] _firedAt = new double[GazeRegistry.Capacity];
+        private readonly int[] _firedGeneration = new int[GazeRegistry.Capacity];
+        private readonly double[] _touchedAt = new double[GazeRegistry.Capacity];
+        private readonly int[] _touchedGeneration = new int[GazeRegistry.Capacity];
+        private double _clock;
 
         public GazeDwell(GazeRegistry registry)
         {
             _registry = registry ?? throw new System.ArgumentNullException(nameof(registry));
+            for (int slot = 0; slot < GazeRegistry.Capacity; slot++)
+            {
+                _firedAt[slot] = double.NegativeInfinity;
+                _touchedAt[slot] = double.NegativeInfinity;
+            }
         }
 
         public GazeRegistry Registry => _registry;
@@ -61,6 +78,53 @@ namespace Atlas.Input
 
         /// <summary>World position of the focused target's centre.</summary>
         public float3 Point => _point;
+
+        /// <summary>
+        /// Metres from the head to the focused target along the gaze: where the ray meets a rectangle's plane, the
+        /// distance of a sphere's centre. 0 with nothing in focus, and for a LookDown target, which has no place.
+        /// The reticle stands at this distance while it is nearer than its own (decision R10).
+        /// </summary>
+        public float PointDistance => _focus >= 0 ? _distance : 0f;
+
+        /// <summary>The firing of the last Tick came from a pinch.</summary>
+        internal bool FiredByPinch => _firedByPinch;
+
+        /// <summary>
+        /// Seconds since the target last fired from here, by dwell, lever or pinch; infinity when it never did.
+        /// A touch that arrives just after is the same intent and is swallowed (<see cref="HandsTouch.SwallowSeconds"/>).
+        /// </summary>
+        internal float SecondsSinceFired(GazeTargetId id)
+        {
+            int slot = id.Slot;
+            if (slot < 0 || slot >= GazeRegistry.Capacity || _firedGeneration[slot] != id.Generation) return float.PositiveInfinity;
+            return (float)(_clock - _firedAt[slot]);
+        }
+
+        // Seconds since a fingertip last fired the target; infinity when none did.
+        private float SecondsSinceTouched(GazeTargetId id)
+        {
+            int slot = id.Slot;
+            if (slot < 0 || slot >= GazeRegistry.Capacity || _touchedGeneration[slot] != id.Generation) return float.PositiveInfinity;
+            return (float)(_clock - _touchedAt[slot]);
+        }
+
+        /// <summary>
+        /// A fingertip fired this target (touch is a twin of the dwell). If the gaze rests on it, the dwell starts
+        /// over exactly as after the lever: timers to zero, and a Once target spent until the gaze has been away.
+        /// </summary>
+        internal void NoteFired(GazeTargetId id)
+        {
+            if (!_registry.Contains(id)) return;
+            _touchedAt[id.Slot] = _clock;
+            _touchedGeneration[id.Slot] = id.Generation;
+            if (id.Slot != _focus || id.Generation != _focusGeneration) return;
+            ref GazeTargetData d = ref _registry.DataAt(_focus);
+            ulong bit = 1UL << _focus;
+            _dwell = 0f;
+            _repeat = 0f;
+            if (d.Mode == GazeMode.Once) Disarm(bit);
+            ShowProgress(ref d, bit);
+        }
 
         /// <summary>True from the dwell time until the gaze leaves, on a Hold target.</summary>
         public bool Holding => _holding && _focus >= 0;
@@ -91,14 +155,19 @@ namespace Atlas.Input
 
         /// <summary>
         /// One frame. The gaze ray starts at the head and runs along the head's forward axis. Returns true when
-        /// something fired this frame: the focused target by dwell or by the lever, or Confirm when the lever
-        /// was tapped with nothing under the gaze.
+        /// something fired this frame: the focused target by dwell, by the lever or by a pinch, or Confirm when
+        /// the lever was tapped with nothing under the gaze. waiting: one bit for each slot whose dwell must not
+        /// advance this frame, because a fingertip is near that target (decision R6). pinchTap: a pinch closed;
+        /// it fires the focused target as the lever does but with the source Gaze, fires nothing when nothing is
+        /// under the gaze, and is swallowed when the target fired a moment ago, from here or from a fingertip.
         /// </summary>
         public bool Tick(float3 headPosition, quaternion headRotation, float deltaTime, InputContext context,
-                         bool leverTap, out GazeFiring firing)
+                         bool leverTap, out GazeFiring firing, ulong waiting = 0UL, bool pinchTap = false)
         {
             firing = default;
             float dt = deltaTime > 0f ? deltaTime : 0f;
+            _clock += dt;
+            _firedByPinch = false;
             float3 forward = math.normalizesafe(math.mul(headRotation, new float3(0f, 0f, 1f)), new float3(0f, 0f, 1f));
 
             int hit = FindHit(headPosition, headRotation, forward, context);
@@ -138,18 +207,25 @@ namespace Atlas.Input
 
             ref GazeTargetData d = ref _registry.DataAt(_focus);
             _point = WorldCentre(ref d, headPosition, headRotation, forward);
+            // During a glance away the ray is not on the target: the distance it had is kept.
+            if (hit == _focus) _distance = AlongGaze(ref d, headPosition, headRotation, forward, _point);
             ulong bit = 1UL << _focus;
             bool fired = false;
 
-            if (leverTap)
+            var focused = new GazeTargetId(_focus, _focusGeneration);
+            bool pinch = pinchTap && !leverTap && SecondsSinceFired(focused) >= HandsTouch.SwallowSeconds
+                         && SecondsSinceTouched(focused) >= HandsTouch.SwallowSeconds;
+            if (leverTap || pinch)
             {
-                // The lever fires the target at once, armed or not; the dwell starts over.
-                fired = Fire(ref d, InputSource.Lever, ref firing);
+                // The lever fires the target at once, armed or not; the dwell starts over. A pinch is the lever done
+                // with fingers: it stands in for the dwell, so its firing carries the dwell's source.
+                fired = Fire(ref d, leverTap ? InputSource.Lever : InputSource.Gaze, ref firing);
+                _firedByPinch = fired && !leverTap;
                 _dwell = 0f;
                 _repeat = 0f;
                 if (d.Mode == GazeMode.Once) Disarm(bit);
             }
-            else if (hit == _focus && !justFocused && (_disarmed & bit) == 0)
+            else if (hit == _focus && !justFocused && (_disarmed & bit) == 0 && (waiting & bit) == 0)
             {
                 _dwell += dt;
                 if (!_reached)
@@ -174,15 +250,23 @@ namespace Atlas.Input
                 }
             }
 
+            ShowProgress(ref d, bit);
+            return fired;
+        }
+
+        private void ShowProgress(ref GazeTargetData d, ulong bit)
+        {
             if ((_disarmed & bit) != 0) _progress = 0f;
             else if (!_reached) _progress = math.saturate(_dwell / _dwellSeconds);
             else if (d.Mode == GazeMode.Repeat) _progress = math.saturate(_repeat / d.RepeatSeconds);
             else _progress = 1f;
-            return fired;
         }
 
         private bool Fire(ref GazeTargetData d, InputSource source, ref GazeFiring firing)
         {
+            // Noted for an axis target too: its hold begins here, though nothing fires.
+            _firedAt[_focus] = _clock;
+            _firedGeneration[_focus] = _focusGeneration;
             if (d.Action == AtlasAction.None && d.Callback == null) return false;   // an axis target has nothing to fire
             firing.Id = new GazeTargetId(_focus, _focusGeneration);
             firing.Action = d.Action;
@@ -243,6 +327,23 @@ namespace Atlas.Input
                 case GazeSpace.LookDown: return headPosition + forward;
                 default: return d.Centre;
             }
+        }
+
+        private static float AlongGaze(ref GazeTargetData d, float3 headPosition, quaternion headRotation, float3 forward, float3 centre)
+        {
+            if (d.Space == GazeSpace.LookDown) return 0f;
+            if (d.Shape == GazeShape.Rect)
+            {
+                quaternion rotation = d.Space == GazeSpace.Head ? math.mul(headRotation, d.Rotation) : d.Rotation;
+                float3 normal = math.mul(rotation, new float3(0f, 0f, 1f));
+                float denom = math.dot(forward, normal);
+                if (math.abs(denom) >= 1e-4f)
+                {
+                    float t = math.dot(centre - headPosition, normal) / denom;
+                    if (t > 1e-4f) return t;
+                }
+            }
+            return math.distance(centre, headPosition);
         }
 
         // Picks the target under the gaze. A target the ray really passes through beats one that is only within

@@ -135,7 +135,31 @@ namespace Atlas.App.Tests
             Assert.That(model.Row(1).Kind, Is.EqualTo(MenuRowKind.Info));
             Assert.That(model.Row(1).Info, Is.EqualTo(MenuInfo.Tier));
             Assert.That(RowOf(model, MenuCommand.ResetSwitches), Is.EqualTo(model.RowCount - 1));
-            Assert.That(MenuModel.KillSwitchIds.Length, Is.EqualTo(21), "the 21 switches of lane D's contract, section 1.5");
+            Assert.That(MenuModel.KillSwitchIds.Length, Is.EqualTo(22), "the 21 switches of lane D's contract, section 1.5, and hands.enabled");
+        }
+
+        /// <summary>The kill switch of the tracked hands (documents/ATLAS_Hands_Design.md section 3.7, E11) is on the
+        /// Quality page, so it can be reached in the headset with the Station off.</summary>
+        [Test]
+        public void QualityPage_HoldsTheHandsSwitch_AfterTheOthers()
+        {
+            Assert.That(MenuModel.KillSwitchIds[MenuModel.KillSwitchIds.Length - 1], Is.EqualTo("hands.enabled"), "added at the end: no switch changes its place");
+            Assert.That(MenuModel.KillSwitchIds, Is.Unique);
+
+            ParamRegistry registry = Registry();
+            registry.DeclareBool("hands.enabled", "hands", false);
+            var model = new MenuModel(registry, new FakeHost());
+            model.SetPage(MenuPage.Quality);
+            int row = RowOf(model, "hands.enabled");
+            Assert.That(row, Is.EqualTo(RowOf(model, MenuCommand.ResetSwitches) - 1), "the last switch, above the reset row");
+
+            model.Select(row);
+            model.Confirm();
+            Assert.That(registry.GetBool("hands.enabled"), Is.True, "a bool toggles on Confirm");
+            // Reset: back to its default, which is off.
+            model.Select(RowOf(model, MenuCommand.ResetSwitches));
+            model.Confirm();
+            Assert.That(registry.GetBool("hands.enabled"), Is.False);
         }
 
         [Test]

@@ -22,6 +22,7 @@ export function requestFor(name, args = {}) {
       return { path: '/api/op', body: { cmd: 'quality', args: { tier } } };
     }
     case 'lock': return { path: '/api/op', body: { cmd: 'lock', args: { on: args.on === true } } };
+    case 'hands': return { path: '/api/op', body: { cmd: 'hands', args: { on: args.on === true } } };
     default: return null;
   }
 }
@@ -35,6 +36,7 @@ export function describe(name, args = {}) {
     case 'cue': return 'STOP';
     case 'quality': return 'quality ' + (args.tier === -1 ? 'auto' : 'tier ' + args.tier);
     case 'lock': return args.on ? 'lock on' : 'lock off';
+    case 'hands': return args.on ? 'hands on' : 'hands off';
     default: return name;
   }
 }

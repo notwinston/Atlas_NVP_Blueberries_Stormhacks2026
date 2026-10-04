@@ -23,14 +23,22 @@ namespace Atlas.Input
         /// <summary>Screen pixels.</summary>
         public float2 PointerPosition;
         public bool GamepadPresent;
+        /// <summary>
+        /// The tracked hands of this frame: the fingertips and pinch edges the hands module gave through
+        /// <see cref="IHandsInput.SetHands"/>. Not active by default, and then hands do nothing.
+        /// </summary>
+        public HandsInput Hands;
     }
 
     /// <summary>
     /// The input service without the engine (README F2): turns the raw device state and the head pose of a
     /// frame into the frame's snapshot, i.e. the actions pressed and held, the axes, the gaze focus. Gamepad,
     /// keyboard, gaze dwell and the lever all end in the same <see cref="Fire"/>, which is what makes them twins
-    /// (Master Plan section 0.5 rule 5). Events are raised only from <see cref="Tick"/>, after the snapshot is
-    /// frozen. Allocates nothing per frame.
+    /// (Master Plan section 0.5 rule 5). Tracked hands end there too: a fingertip that presses a gaze target and
+    /// a pinch on the target under the gaze fire that target with the dwell's own source, action, tag and
+    /// callback, so a hand is one more way to fire a target and adds no action and no source
+    /// (documents/ATLAS_Hands_Design.md section 6.7). Events are raised only from <see cref="Tick"/>, after the
+    /// snapshot is frozen. Allocates nothing per frame.
     /// </summary>
     public sealed class AtlasInputCore
     {
@@ -49,6 +57,7 @@ namespace Atlas.Input
 
         private readonly GazeRegistry _targets = new GazeRegistry();
         private readonly GazeDwell _dwell;
+        private readonly HandsTouch _touch;
 
         private readonly InputContext[] _contexts = new InputContext[MaxContextDepth];
         private int _contextDepth;
@@ -84,6 +93,7 @@ namespace Atlas.Input
         public AtlasInputCore()
         {
             _dwell = new GazeDwell(_targets);
+            _touch = new HandsTouch(_targets);
         }
 
         /// <summary>Raised inside Tick, after the frame's snapshot is frozen: action, source, tag.</summary>
@@ -114,6 +124,20 @@ namespace Atlas.Input
         public GazeTargetId GazeFocused => _dwell.Focused;
         public float GazeProgress => _dwell.Progress;
         public float3 GazePoint => _dwell.Point;
+        /// <summary>Metres from the head to the focused target along the gaze; 0 with nothing in focus.</summary>
+        public float GazeDistance => _dwell.PointDistance;
+
+        /// <summary>What touch and pinch did in the last Tick: for each hand the target hovered, pressed and fired.</summary>
+        public ref readonly HandsTouchState HandsTouch => ref _touch.State;
+
+        /// <summary>The touch state machine, for tests.</summary>
+        internal HandsTouch Touch => _touch;
+
+        /// <summary>A target's label, for event logs; null when unknown. A target a hand fired in the last Tick is still known if firing it removed it.</summary>
+        public string LabelOf(GazeTargetId id) => _touch.LabelOf(id);
+
+        /// <summary>A target's tag; 0 when unknown.</summary>
+        public int TagOf(GazeTargetId id) => _touch.TagOf(id);
 
         /// <summary>Contexts nest; the bottom of the stack is InHand.</summary>
         public void PushContext(InputContext context)
@@ -222,7 +246,8 @@ namespace Atlas.Input
         }
 
         /// <summary>
-        /// One frame: freezes the snapshot from the raw device state and the gaze dwell, then raises the events.
+        /// One frame: freezes the snapshot from the raw device state, the hands and the gaze dwell, then raises
+        /// the events.
         /// </summary>
         public void Tick(in RawInput raw, float3 headPosition, quaternion headRotation, float deltaTime)
         {
@@ -258,19 +283,42 @@ namespace Atlas.Input
                 _eastWasDown = (raw.PadDown & BitOf(AtlasAction.Back)) != 0;
                 _homeFired = true;
                 ResetNav();
+                // In the hand the hands hold the phone: nothing is touched.
+                _touch.Step(in raw.Hands, headPosition, headRotation, dt, context, _dwell);
             }
             else
             {
                 Buttons(in raw, live, context, dt);
                 Axes(in raw, context);
 
-                if (_dwell.Tick(headPosition, headRotation, dt, context, lever, out GazeFiring g))
+                // The hands come first: where the fingertips are decides which dwell waits and whose pinch counts.
+                _touch.Step(in raw.Hands, headPosition, headRotation, dt, context, _dwell);
+                bool pinch = _touch.Pinched(in raw.Hands);
+
+                if (_dwell.Tick(headPosition, headRotation, dt, context, lever, out GazeFiring g, _touch.Near, pinch))
+                {
                     Fire(g.Action, g.Source, g.Tag, g.Id, g.Callback);
+                    if (_dwell.FiredByPinch) _touch.NotePinch(g.Id);
+                }
 
                 if (_dwell.TryGetHold(out AtlasAction holdAction, out AtlasAxis holdAxis, out float holdValue))
+                    Hold(holdAction, holdAxis, holdValue);
+
+                // A fingertip fires its target as the dwell would: the same action, source, tag and callback.
+                for (int hand = 0; hand < 2; hand++)
                 {
-                    if (holdAction != AtlasAction.None) _held |= BitOf(holdAction);
-                    else if (math.abs(holdValue) > math.abs(_axes[(int)holdAxis])) _axes[(int)holdAxis] = math.clamp(holdValue, -1f, 1f);
+                    if (_touch.Firing(hand, out int fired))
+                    {
+                        ref GazeTargetData d = ref _targets.DataAt(fired);
+                        var id = new GazeTargetId(fired, _targets.GenerationAt(fired));
+                        Fire(d.Action, InputSource.Gaze, d.Tag, id, d.Callback);
+                        _dwell.NoteFired(id);
+                    }
+                    if (_touch.Holding(hand, out int held))
+                    {
+                        ref GazeTargetData d = ref _targets.DataAt(held);
+                        Hold(d.Action, d.Axis, d.AxisValue);
+                    }
                 }
             }
 
@@ -279,6 +327,14 @@ namespace Atlas.Input
             _prevPointer = raw.PointerDown;
 
             Dispatch();
+        }
+
+        // A Hold target that is being held, by the gaze or by a fingertip: its action counts as held, or its
+        // axis is pushed; of several pushes on one axis the largest wins.
+        private void Hold(AtlasAction action, AtlasAxis axis, float value)
+        {
+            if (action != AtlasAction.None) _held |= BitOf(action);
+            else if (math.abs(value) > math.abs(_axes[(int)axis])) _axes[(int)axis] = math.clamp(value, -1f, 1f);
         }
 
         private bool IsBlocked(float2 point)
@@ -455,8 +511,9 @@ namespace Atlas.Input
 
         private void OnContextChanged()
         {
-            // A dwell or a hold that began in one context must not complete in another.
+            // A dwell or a hold that began in one context must not complete in another, and neither must a press.
             _dwell.Reset();
+            _touch.Reset();
             _polledNow = 0;
             _polledBefore = 0;
             _polledAxesNow = 0;

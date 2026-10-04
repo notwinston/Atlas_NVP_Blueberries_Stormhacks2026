@@ -1,4 +1,6 @@
+using Atlas.Input;
 using Atlas.Rendering;
+using Atlas.World;
 using UnityEngine;
 
 namespace Atlas.Blades.Playground.Shell
@@ -37,23 +39,24 @@ namespace Atlas.Blades.Playground.Shell
         readonly HudPanel m_Panel;
         int m_ShownRevision = -1;
 
-        PromptChipView(PromptChip chip, Transform hud, MaterialPool pool)
+        PromptChipView(PromptChip chip, Transform hud, MaterialPool pool, IAtlasInput input = null)
         {
             m_Chip = chip;
             m_Panel = new HudPanel("PlaygroundPromptChip", hud, pool, CardLayout.PromptCentre, CardLayout.PromptHalfWidth,
-                                   CardLayout.PromptHalfHeight, CardLayout.PromptLineHeight, TextAnchor.MiddleCenter, 0f);
+                                   CardLayout.PromptHalfHeight, CardLayout.PromptLineHeight, TextAnchor.MiddleCenter, 0f, true, input);
         }
 
-        public static PromptChipView Create(PromptChip chip, Transform hud, MaterialPool pool)
+        public static PromptChipView Create(PromptChip chip, Transform hud, MaterialPool pool, IAtlasInput input = null)
         {
             if (chip == null) throw new System.ArgumentNullException(nameof(chip));
             if (hud == null) throw new System.ArgumentNullException(nameof(hud));
-            return new PromptChipView(chip, hud, pool);
+            return new PromptChipView(chip, hud, pool, input);
         }
 
         /// <summary>Once per frame: copies the text when the chip changed.</summary>
         public void Update()
         {
+            m_Panel.PlaceWithin(ReachSlot.PromptChip, CardLayout.PromptCentre);
             if (m_Chip.Revision == m_ShownRevision) return;
             m_ShownRevision = m_Chip.Revision;
             m_Panel.SetText(m_Chip.Text);

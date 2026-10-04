@@ -10,6 +10,12 @@ namespace Atlas.Safety
     /// A plain class: it reads no clock, no link, no parameter and no file, and has no off switch. It works
     /// with no depth image (the static map alone) and with no room (live depth alone, in the head frame).
     /// Tick allocates nothing, except on the one frame a room becomes active again.
+    /// <para>A sensor frame may carry a depth mask: where the walker's own hands are in its depth image
+    /// (documents/ATLAS_Hands_Design.md section 7.1). Bump Guard does not know or ask who made it, and trusts
+    /// none of it: the regions of a mask built for another image are ignored here, and the depth kernel holds
+    /// the rest to the limits in <see cref="BumpConstants"/>. A mask also says whether a hands session is
+    /// running, with or without regions; in a session a near return must be seen twice before it counts
+    /// (decision R13). A frame with no mask and no session is handled exactly as before masks existed.</para>
     /// </summary>
     public sealed unsafe class BumpGuard : IBumpGuard, IClearanceQuery, IDisposable
     {
@@ -66,12 +72,31 @@ namespace Atlas.Safety
 
         /// <summary>
         /// clear(p) of section 4.10 at a floor point of the room frame, as of the last Tick: the smaller of the
-        /// static distance field and the distance to the nearest live dynamic cell. Positive infinity while no
-        /// room is loaded (the map is put away during a rescan too). Reads only; safe on the frame path.
+        /// static distance field and the distance to the nearest live dynamic cell that counts (a cell that is
+        /// pending in a hands session does not). Positive infinity while no room is loaded (the map is put away
+        /// during a rescan too). Reads only; safe on the frame path.
         /// </summary>
         public float Clearance(float2 p)
         {
             return _disposed ? float.PositiveInfinity : _core.ClearAt(p, _time);
+        }
+
+        /// <summary>
+        /// A depth mask as the depth kernel takes it, for the depth image numbered
+        /// <paramref name="depthSequence"/>: plain numbers, at most <see cref="BumpConstants.MaskMaxRegions"/>
+        /// regions, and no region unless the mask was built for exactly that image (its DepthSequence). The
+        /// regions of a mask for an older or a later image would cover the wrong pixels, so they are dropped
+        /// whole. The session flag is the frame's and is kept whatever the image and with no region at all.
+        /// </summary>
+        public static DepthKernelMask KernelMask(in DepthMask mask, int depthSequence)
+        {
+            DepthKernelMask kernel = default;
+            kernel.Session = mask.Session != 0 ? 1 : 0;
+            if (mask.Count <= 0 || mask.DepthSequence != depthSequence) return kernel;
+            kernel.Count = mask.Count < BumpConstants.MaskMaxRegions ? mask.Count : BumpConstants.MaskMaxRegions;
+            kernel.Region0 = KernelRegion(mask.Region0);
+            if (kernel.Count > 1) kernel.Region1 = KernelRegion(mask.Region1);
+            return kernel;
         }
 
         /// <summary>The first call of the frame. Never awaits.</summary>
@@ -136,21 +161,41 @@ namespace Atlas.Safety
 
             var intrinsics = new DepthIntrinsics(sensors.Depth.Fx, sensors.Depth.Fy, sensors.Depth.Cx, sensors.Depth.Cy);
             // The frame's own time, not the image's: the core compares it with the time of Step.
+            DepthKernelInput input = _core.MakeDepthInput(width, height, intrinsics, sensors.Depth.Position,
+                sensors.Depth.Rotation, sensors.Time, trackingNormal, sensors.AnchorTracked);
+            // The walker's hands, if the frame says where they are in this very image, and whether a hands
+            // session is running.
+            input.Mask = KernelMask(sensors.Mask, sensors.Depth.Sequence);
             if (_useBurstJob && count > InlineMaxPixels)
             {
                 if (_runner == null) _runner = new BumpDepthRunner();
-                DepthKernelInput input = _core.MakeDepthInput(width, height, intrinsics, sensors.Depth.Position,
-                    sensors.Depth.Rotation, sensors.Time, trackingNormal, sensors.AnchorTracked);
                 _runner.Run(_core, pixels, input);
             }
             else
             {
                 fixed (float* p = pixels)
                 {
-                    _core.ProcessDepth(p, width, height, intrinsics, sensors.Depth.Position, sensors.Depth.Rotation,
-                        sensors.Time, trackingNormal, sensors.AnchorTracked);
+                    _core.ProcessDepth(p, input);
                 }
             }
+        }
+
+        static DepthKernelMaskRegion KernelRegion(in DepthMaskRegion region)
+        {
+            return new DepthKernelMaskRegion
+            {
+                MinU = region.MinU,
+                MinV = region.MinV,
+                MaxU = region.MaxU,
+                MaxV = region.MaxV,
+                ArmU0 = region.ArmU0,
+                ArmV0 = region.ArmV0,
+                ArmU1 = region.ArmU1,
+                ArmV1 = region.ArmV1,
+                ArmHalfWidth = region.ArmHalfWidth,
+                MaxDepth = region.MaxDepth,
+                ArmMaxDepth = region.ArmMaxDepth
+            };
         }
     }
 }

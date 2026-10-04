@@ -581,7 +581,7 @@ PlayerSettings:
   logObjCUncaughtExceptions: 1
   enableCrashReportAPI: 0
   cameraUsageDescription: ATLAS uses the camera to track your position, scan your
-    room and photograph objects.
+    room, photograph objects and see your hands.
   locationUsageDescription: 
   microphoneUsageDescription: 
   bluetoothUsageDescription: 
