@@ -201,3 +201,11 @@ Steps: after the P3-B06 run press A; the tester keeps the eye on the cross.
 
 Pass: on the device, `river_start.min_r_over_a >= 0.999999` and `river_start.scale_above` in [0.48, 0.52] (read from events.jsonl).
 Also record (qualitative): whether the text visibly parts around an empty region on the temporal side.
+
+## P3-B08 Phone performance pass (deferred: phone in the headset, Station, Xcode)
+
+- Scene: `Assets/Atlas/Blades/FieldFit/Scenes/Blade_FieldFit_Soak.unity` (FieldFit + `FieldFitSettings.asset`), loaded additively over `Space_Home` with `budget_room`; lane A adds it to the build list.
+- Build: Release, Frame Timing Stats on, debugger detached, Metal API Validation off, brightness about 40 %, phone A closed headset, thermal Nominal at start.
+- Steps and the table to fill: checklist items 7-10 in `docs/laneB/checklists/P3-B03-B05-B08_phone.md`.
+- Expected numbers (Master Plan §10.4.8, §11.2 Must): FieldFitBlit < 1 ms (Xcode, mean of 3 frames); GPU p95 <= 9 ms cold; frame time p50/p95/p99 <= 16.7/20/33.3 ms; over 17.2/33.8 ms <= 5 %/0.5 %; CPU main/render p95 <= 8/6 ms; draw calls <= 300, set-pass <= 60, triangles <= 500k; memory <= 1.5 GB; GC <= 1 kB per frame; soak 15 min: no Critical, Serious not before 10 min, hot fps mean >= 45 and never < 30. Reported only: `Atlas.FieldFit.LutRebuild` p95 while `lens.t` is dragged.
+- Overrun: step to 1,280^2 or 2x MSAA, re-measure, record both, change no number.
