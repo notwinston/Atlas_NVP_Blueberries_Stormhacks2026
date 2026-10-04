@@ -94,8 +94,10 @@ namespace Atlas.Scan
             bool swept = _core.Sweeping;
             _core.BeginCapture(room, room.Anchor.Position, room.Anchor.Yaw);
             _wasBusy = _core.Busy;
+            // A warning, not a log line: only warnings reach the Hub's phone.log, and these two lines are what
+            // tells a scan that sent the Forge no photos apart (no key frames, or none that saw the furniture).
             if (swept)
-                Debug.Log(LogPrefix + "object photos: choosing from " + frames + " key frames for " + room.MeshedObjectCount + " objects");
+                Debug.LogWarning(LogPrefix + "object photos: choosing from " + frames + " key frames for " + room.MeshedObjectCount + " objects");
         }
 
         /// <summary>Delivers finished crops, one object per frame.</summary>
@@ -105,8 +107,8 @@ namespace Atlas.Scan
             _core.Tick();
             if (_core.Busy) return;
             _wasBusy = false;
-            Debug.Log(LogPrefix + "object photos: " + _core.Submitted + " objects sent, " + _core.NoPhoto +
-                      " take the built-in mesh; key frames released");
+            Debug.LogWarning(LogPrefix + "object photos: " + _core.Submitted + " objects sent, " + _core.NoPhoto +
+                             " take the built-in mesh; key frames released");
             if (_core.Errors > 0)
                 Debug.LogWarning(LogPrefix + "object photos: " + _core.Errors + " objects failed to crop (" + _core.FirstError + ")");
         }
