@@ -50,6 +50,45 @@ therefore copies stand-ins (`scratchpad/shim/`) into those paths; the third sits
 They are never committed (the two under `Scan/` show as untracked here; do not `git add` them) and must be replaced by lane C's
 real files when Phase 1 of lane C is merged.
 
+## Fit to phase1-integration (lane B's unified kernel)
+
+Lane C is not rebased onto `phase1-integration` and must stay green on its own base (`phase1-acd`) and when merged into
+`phase1-integration`. Checked with `git merge-tree` into a throwaway tree: the only compile break was
+`Shell/HomeBearing.cs` calling `KernelMaps.Log`, which the unified kernel replaced by `Geometry2.Log`. Fixed with a
+lane C-local `KernelHomeBearing.Log` (Appendix A.2, the same formula as `Geometry2.Log`, tested in
+`HomeBearingLogTests`); nothing else in lane C names a kernel type that differs between the bases (`IWalkerKernel`,
+`WalkerPose`, `VisibleTile.Chain`, `Iso2.M10/M00/Position/Inverse/Apply`, `TileId.Origin`, `ITileGraph.CentreSpacing`
+are on both). `KernelHomeBearing` also answers "cannot say" once the graph or the metres per unit changed since
+`MarkStart`, because the unified kernel changes both while a curvature ramp runs and on a tiling swap.
+
+Binding table (port member -> real member on phase1-integration). The adapters can only be written on the integrated
+tree (the real types are not on `phase1-acd`); each is a forwarding class over the type named.
+
+| Port member | Real lane B member | Note |
+|---|---|---|
+| `IDialPort.Q, Set, Next, Prev, Cycle` | `Atlas.Kernel.CurvatureDial` (P1-B09) `Q, Set, Next, Prev, Cycle` | Identical names, return values and range (3 to 6, `ArgumentOutOfRangeException`). Pure logic: the adapter also writes the `curved.q` parameter (`CurvedDialParams`) so the space follows. |
+| `IWalkPort.Armed, Started, Closed, Q, Corners, DistanceToFlagM, WorldTurnDeg, NextBeacon` | `Atlas.Kernel.LapWalk` same names | Same units (m, degrees (-180, 180], NextBeacon 0 / Corners + 1 / -1). |
+| `IWalkPort.Arm(q, kappa, lengthScaleM, sideM)` | `LapWalk.Arm(q, kappa, lengthScaleM, sideM, flagInTileZero)` | Adapter passes `TileZeroPlacement.LapFlag(sideM, kappa, lengthScaleM)` (kappa 0: l = 1). |
+| `IWalkPort.Disarm()` | `LapWalk.Disarm()` | |
+| `IWalkPort.Update(still)` -> `WalkEvent` | `LapWalk.Update(F of tile zero in the walker's tile, kernel.Pose.Local, still)` -> `LapEvent` | `WalkEvent` and `LapEvent` have the same values (None, Started, Corner, Closed). F of tile zero is `Iso2.Identity` at K = 0, else the `VisibleTile.F` of `TileId.Zero` from `kernel.Graph.VisibleSet(Pose.Tile, ...)` (as `CurvedWalkCore.UpdateTileZero`). |
+| `IWalkPort.NextBeaconDistanceM, NextBeaconBearingRad` | computed from `LapWalk.Beacon(NextBeacon)` | `Geometry2.Distance(walker.M.c2, (F0 * Beacon).M.c2, kappa) * L`; bearing from `Geometry2.Log` in the walker's frame. |
+| markers | `LapMarkerView` / `LapMarkerMesh` (Rendering/Tiles) | Drawn by the adapter, not by lane C. |
+| `IModePort.Mode` | param `curved.mode` (`ParamEntry.Int`: 0 = Mode 1, 1 = Mode 2) | `CurvedMode` = `AirwayMode` values (1, 2); index = Mode - 1. |
+| `IModePort.Request(mode)` | `ISpaceHost.RequestSwitch(SpaceId.AlignedCells / SpaceId.CurvedWalk)`; the Console path is setting `curved.mode` | SpaceLab keeps the tile id and frame when the walker stands in the {4,5} world. |
+| `IModePort.Tile` | `IWalkerKernel.Pose.Tile` | |
+| `IHomeBeaconPort.*` | none: no home beacon type exists on phase1-integration (only `AtlasPalette.HomeBeacon` and the Home centre mark in `HomeMarks`) | `KernelDistanceM` = `Geometry2.Distance(...) * L` from the kernel; `ShownDistanceM` has no source until lane B builds the beacon (P1-B10). Lane B request. |
+| `IHomeBearing` (`KernelHomeBearing`) | works on `IWalkerKernel` alone; no binding needed | Uses lane C's `Log`, equal to `Geometry2.Log`. |
+| `ICurvatureRamp.Kappa` | `IDialKernel.CurvatureNow * ConfiguredMetresPerUnit^2` | `CurvatureNow` is 1/m^2 (0 flat, -1/L^2); the port wants kappa in -1..+1. |
+| `ICurvatureRamp.IsFlat` | `CurvatureNow == 0 && CurvatureTarget == 0 && !Ramping` | |
+| `ICurvatureRamp.RampToFlat(seconds)` | `IDialKernel.SetCurvatureTarget(Curvature.Flat, 0)` | The ramp is fixed at 4 s and runs only while the walker stands; `seconds` is ignored (it equals `HomeReturn.RampSeconds`). False at q = 3 or 4: then `IsFlat` already holds or the kernel is not ramping. |
+| `IFloorProjection` | not `FlatFloorProjection`: it decodes `FlatTileGraph` cells, which the {4,5} tiling does not have | After the ramp lands the kernel is at K = 0 and tile zero's chart metres are room metres (MP 4.6): project as `(F of tile zero)^-1 * Pose.Local` position times `MetresPerUnit`, yaw from `M10, M00`. Needs lane B to confirm the units at K = 0 on a tile other than zero. |
+| kernel reset | `IWalkerKernel.ResetToFloor(double2)`, `IDialKernel.ResetToFloorFlat(double2)`; `TileId.Origin` is `TileId.Zero` | Lane C never resets the kernel; `Configure` and `Reset` are lane B's. |
+| `IMiniMapPort` | `FlatTwinHud.Visible` (lane D) | Unchanged. |
+
+Station: `phase1-integration` changes `station/hub` only by adding `Hub.csproj` and `Hub.Tests.csproj` (previously hidden
+by `.gitignore`); lane C changes `HubServer.cs`, `wwwroot` and the tests. No file overlaps, the merge is clean, and
+the Hub builds and its tests pass on the merged tree.
+
 ## Open before G8
 
 1. Done: `PlaygroundDirectorCore`, `Beats.asset` and the composition root (P2-C01); the app still has to call `PlaygroundInstaller.Install` with the lane B ports bound.

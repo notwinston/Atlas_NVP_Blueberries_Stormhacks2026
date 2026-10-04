@@ -9,7 +9,7 @@ namespace Atlas.Blades.Playground.Shell
     // for, named in its comment, and bound at integration by a small adapter; headless tests bind fakes.
 
     /// <summary>
-    /// The curvature dial. Shaped like lane B's <c>CurvatureDial</c> (P1-B09): q is 3, 4, 5 or 6, and a change
+    /// The curvature dial. Shaped exactly like lane B's <c>Atlas.Kernel.CurvatureDial</c> (P1-B09; on phase1-integration the adapter forwards each member): q is 3, 4, 5 or 6, and a change
     /// starts the 4 s curvature ramp, which the holonomy rig runs only while the walker stands (Master Plan
     /// sections 4.6 and 10.1.4).
     /// </summary>
@@ -31,10 +31,10 @@ namespace Atlas.Blades.Playground.Shell
     public enum WalkEvent : byte { None = 0, Started = 1, Corner = 2, Closed = 3 }
 
     /// <summary>
-    /// The 3-4-5 walk tracker and its beacons. Shaped like lane B's <c>LapWalk</c> (P1-B09): "walk s, turn left
-    /// 90 degrees" q times from the flag, corners counted by reach (0.3 m) plus stillness. The adapter feeds the
-    /// kernel's frames to <c>LapWalk.Update</c> and draws the markers with <c>LapMarkerView</c>; this shell only
-    /// reads the numbers and arms the walk.
+    /// The 3-4-5 walk tracker and its beacons. Shaped like lane B's <c>Atlas.Kernel.LapWalk</c> (P1-B09; same member names and units): "walk s, turn left
+    /// 90 degrees" q times from the flag, corners counted by reach (0.3 m) plus stillness. The adapter arms with
+    /// <c>TileZeroPlacement.LapFlag</c>, feeds <c>LapWalk.Update(F of tile zero, Pose.Local, still)</c> from the
+    /// kernel's candidates, and draws the markers with <c>LapMarkerView</c>; this shell only reads the numbers.
     /// </summary>
     public interface IWalkPort
     {
@@ -77,8 +77,9 @@ namespace Atlas.Blades.Playground.Shell
     }
 
     /// <summary>
-    /// The mode switch between S2 and S3. Shaped like the <c>curved.mode</c> parameter lane B registers
-    /// (1 = Mode 1, 2 = Mode 2) and the kernel's walker pose. The switch must keep the walker's tile.
+    /// The mode switch between S2 and S3. Shaped like the <c>curved.mode</c> parameter the app declares
+    /// (an Enum entry, index 0 = Mode 1, 1 = Mode 2, so index = Mode - 1) and the kernel's walker pose; the switch
+    /// itself is <c>ISpaceHost.RequestSwitch(SpaceId.AlignedCells)</c>, which SpaceLab does keeping the tile. The switch must keep the walker's tile.
     /// </summary>
     public interface IModePort
     {
@@ -90,7 +91,8 @@ namespace Atlas.Blades.Playground.Shell
     }
 
     /// <summary>
-    /// The home beacon (P1-B06, P1-B10): a marker that points back to tile zero. Both distances are in metres.
+    /// The home beacon (P1-B06, P1-B10): a marker that points back to tile zero. Lane B has no beacon type on
+    /// phase1-integration yet (only <c>AtlasPalette.HomeBeacon</c> and the Home centre mark); the adapter is lane B's to add. Both distances are in metres.
     /// </summary>
     public interface IHomeBeaconPort
     {
