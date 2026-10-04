@@ -333,6 +333,55 @@ namespace Atlas.World.Tests
             Assert.That(RuleOf(r => r.Objects[0].TriTarget = 15000), Is.Empty);
         }
 
+        [Test]
+        public void Profile_RefusesWhiteSpace()
+        {
+            RoomModel room = RoomModelJson.Read(Sample());
+            room.Objects[0].Profile = new byte[256];
+            string text = RoomModelJson.Write(room);
+            AssertRefused(text.Replace("\"profile\": \"AAAA", "\"profile\": \"AA AA"), "profile");
+            AssertRefused(text.Replace("\"profile\": \"AAAA", "\"profile\": \"AAAA\\n"), "profile");
+        }
+
+        [Test]
+        public void YawOutsideTheReadableRange_IsRefusedByR16()
+        {
+            Assert.That(YawErrors(3.141593f), Does.Contain("R16 object 1: yaw"));
+            Assert.That(YawErrors((float)Math.PI), Does.Contain("R16 object 1: yaw"));
+            Assert.That(YawErrors(-3.1415928f), Does.Contain("R16 object 1: yaw"));
+            Assert.That(YawErrors(float.NaN), Does.Contain("R16 object 1: yaw"));
+            Assert.That(YawErrors(3.141592f), Is.Empty);
+            Assert.That(YawErrors(-3.141592f), Is.Empty);
+        }
+
+        [Test]
+        public void EveryRoomThatValidates_SurvivesWriteThenRead()
+        {
+            var rooms = new List<RoomModel>();
+            foreach (string name in RoomFixtures.All) rooms.Add(RoomFixtures.LoadFromProject(name));
+            foreach (float yaw in new[] { 3.141592f, -3.141592f, 0f })
+            {
+                RoomModel room = RoomModelJson.Read(Sample());
+                room.Objects[0].Base.y = 2.5f;      // above the reach of R18, so turning it cannot trip the footprint rule
+                room.Objects[0].Yaw = yaw;
+                rooms.Add(room);
+            }
+            foreach (float yaw in new[] { 3.141593f, 3.1415925f, (float)Math.PI, -3.1415928f, -3.141593f, 3.2f })
+            {
+                RoomModel room = RoomModelJson.Read(Sample());
+                room.Objects[0].Base.y = 2.5f;      // above the reach of R18, so turning it cannot trip the footprint rule
+                room.Objects[0].Yaw = yaw;
+                Assert.That(RoomModelValidator.Errors(room), Is.Not.Empty, "yaw " + yaw);
+            }
+            foreach (RoomModel room in rooms)
+            {
+                Assert.That(RoomModelValidator.Errors(room), Is.Empty, room.Id);
+                string text = RoomModelJson.Write(room);
+                Assert.That(RoomModelJson.TryRead(text, out RoomModel again, out string error), Is.True, room.Id + ": " + error);
+                Assert.That(RoomModelJson.Write(again), Is.EqualTo(text));
+            }
+        }
+
         static RoomObject Box(int id, float w, float h, float d)
         {
             return new RoomObject { Id = id, Size = new float3(w, h, d) };
@@ -407,6 +456,11 @@ namespace Atlas.World.Tests
         {
             var e = Assert.Throws<RoomModelFormatException>(() => RoomModelJson.Read(json));
             Assert.That(e.Message, Does.Contain(named));
+        }
+
+        static string YawErrors(float yaw)
+        {
+            return RuleOf(r => { r.Objects[0].Base.y = 2.5f; r.Objects[0].Yaw = yaw; });
         }
 
         static string RuleOf(Action<RoomModel> damage)
