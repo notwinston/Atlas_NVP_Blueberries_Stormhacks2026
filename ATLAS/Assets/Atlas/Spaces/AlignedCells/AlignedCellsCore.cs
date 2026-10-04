@@ -56,7 +56,7 @@ namespace Atlas.Spaces.AlignedCells
         public IEventLog Events { get; set; }
 
         public DuckMaze Maze { get; private set; }             // null when not in maze mode (on the Station: until a State brings one)
-        public bool MazeMode { get; private set; }             // cells.maze on and the floor big enough for the 4 x 4 grid
+        public bool MazeMode { get; private set; }             // cells.maze on and the floor big enough for the 4 x 4 (or 3 x 3) grid
         public bool MazeFound { get; private set; }
         public double MazeFoundTime { get; private set; }      // core time (seconds) of the find
         public double MazeElapsed { get; private set; }        // seconds since the run started, frozen at the find
@@ -88,7 +88,7 @@ namespace Atlas.Spaces.AlignedCells
                 mazeParam = registry.Find(ParamMaze);
                 mazeSeedParam = registry.Find(ParamMazeSeed);
             }
-            // The duck maze's 4 x 4 grid when cells.maze is on; a floor too small for it runs today's S3 (maze.unavailable).
+            // The duck maze's 4 x 4 grid (3 x 3 on a 1.2 to 1.6 m floor) when cells.maze is on; a floor too small for it runs today's S3 (maze.unavailable).
             this.room = room;
             mazeRequested = mazeParam != null && mazeParam.Bool;
             mazeGrid = CellGrid.Maze(room);

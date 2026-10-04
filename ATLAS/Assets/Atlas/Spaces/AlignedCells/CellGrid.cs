@@ -9,7 +9,8 @@ namespace Atlas.Spaces.AlignedCells
     public sealed class CellGrid
     {
         public const double MinSide = 0.4;        // below this the flat cell mesh cannot be built (TileMeshSpec)
-        public const int MazeCount = 4;           // S3 duck maze: a fixed 4 x 4 grid of small cells
+        public const int MazeCount = 4;           // S3 duck maze: a 4 x 4 grid of small cells,
+        public const int MazeMinCount = 3;        // or 3 x 3 on a floor whose short side is 1.2 to 1.6 m
 
         public int CountX { get; }
         public int CountZ { get; }
@@ -43,12 +44,18 @@ namespace Atlas.Spaces.AlignedCells
             return new CellGrid(xShort ? a.N : a.M, xShort ? a.M : a.N, a.G, a.N < CellGridRules.AlignedMinN);
         }
 
-        // The duck maze grid: 4 x 4 cells of side min(Wf, Df) / 4 centred on the anchor; null when that side is below MinSide.
+        // The duck maze grid: n x n cells of side min(Wf, Df) / n centred on the anchor, n = 4, else 3 when min / 4 is below MinSide
+        // (a 1.2 to 1.6 m floor); null when min / 3 is below MinSide too.
         public static CellGrid Maze(RoomModel room)
         {
             if (room == null) throw new ArgumentNullException(nameof(room));
-            double side = Math.Round(Math.Min(room.FreeRect.Wf, room.FreeRect.Df), 6) / MazeCount;
-            return side >= MinSide ? new CellGrid(MazeCount, MazeCount, side, false) : null;
+            double shortSide = Math.Round(Math.Min(room.FreeRect.Wf, room.FreeRect.Df), 6);
+            for (int n = MazeCount; n >= MazeMinCount; n--)
+            {
+                double side = shortSide / n;
+                if (side >= MinSide) return new CellGrid(n, n, side, false);
+            }
+            return null;
         }
 
         public bool Contains(int2 cell) => cell.x >= 0 && cell.x < CountX && cell.y >= 0 && cell.y < CountZ;

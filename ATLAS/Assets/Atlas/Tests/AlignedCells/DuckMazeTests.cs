@@ -8,6 +8,7 @@ namespace Atlas.Spaces.AlignedCells.Tests
     public class DuckMazeTests
     {
         static CellGrid Grid4() => CellGrid.FromAligned(new Atlas.World.AlignedGrid { N = 4, M = 4, G = 0.5 }, true);
+        static CellGrid Grid3() => CellGrid.FromAligned(new Atlas.World.AlignedGrid { N = 3, M = 3, G = 0.5 }, true);
         static readonly int2[] Step = { new int2(1, 0), new int2(0, 1), new int2(-1, 0), new int2(0, -1) };
 
         [Test]
@@ -44,6 +45,23 @@ namespace Atlas.Spaces.AlignedCells.Tests
                 Assert.That(maze.SolutionDirections().Length, Is.EqualTo(maze.DuckDepth));
                 if (maze.DuckDepth >= DuckMaze.MinDuckDepth && maze.DuckDepth <= DuckMaze.MaxDuckDepth) inWindow++;
             }
+            Assert.That(inWindow, Is.GreaterThanOrEqualTo(950));
+        }
+
+        // The 3 x 3 grid of a 1.2 to 1.6 m floor: the duck depth window holds as on 4 x 4.
+        [Test]
+        public void DuckMaze_ThreeByThree()
+        {
+            var grid = Grid3(); var graph = new TileGraph(5);
+            var hist = new SortedDictionary<int, int>();
+            for (int seed = 1; seed <= 1000; seed++)
+            {
+                var maze = DuckMaze.Generate(grid, graph, new int2(seed % 3, (seed / 3) % 3), seed);
+                hist.TryGetValue(maze.DuckDepth, out int h); hist[maze.DuckDepth] = h + 1;
+            }
+            // measured: 8:134 9:181 10:215 11:240 12:230, every seed in the window
+            int inWindow = 0;
+            foreach (var kv in hist) if (kv.Key >= DuckMaze.MinDuckDepth && kv.Key <= DuckMaze.MaxDuckDepth) inWindow += kv.Value;
             Assert.That(inWindow, Is.GreaterThanOrEqualTo(950));
         }
 

@@ -73,8 +73,9 @@ namespace Atlas.Spaces.AlignedCells.Tests
         [Test]
         public void Maze_TooSmallFloorFallsBack()
         {
-            RoomModel room = Fixtures.Rectangle(1.5f, 1.5f);
-            Assert.IsNull(CellGrid.Maze(room), "1.5 m / 4 = 0.375 m, below MinSide");
+            Assert.AreEqual(3, CellGrid.Maze(Fixtures.Rectangle(1.4f, 1.4f)).CountX, "1.4 m / 4 = 0.35 m, below MinSide: 3 x 3");
+            RoomModel room = Fixtures.Rectangle(1.1f, 1.1f);
+            Assert.IsNull(CellGrid.Maze(room), "1.1 m / 3 = 0.367 m, below MinSide");
             var run = new Run(room, start: new int2(0, 0));
             Assert.IsFalse(run.Core.MazeMode);
             Assert.IsNull(run.Core.Maze);
