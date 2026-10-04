@@ -303,6 +303,37 @@ namespace Atlas.Scan.Tests.Routes
         }
 
         [Test]
+        public void AScanThroughTheFlow_EndsWithItsObjectsFaced()
+        {
+            // The flow as the scan session drives it, with the sensors' snapshot in place of the AR session.
+            FloorGridInput input = RoomWithChair(3).Build();
+            var flow = new ScanFlow(() => ScanTestRooms.Snapshot(input), false);
+            var clock = new DateTime(2026, 10, 4, 9, 30, 15, DateTimeKind.Utc);
+            var head = new float3(2.4f, 1.4f, 1.6f);
+            flow.Begin(ScanOptions.Default, clock);
+            flow.Tick(1f / 60f, TrackingState.Normal, head);        // Starting -> Sweeping
+            flow.EndSweep();
+            flow.Tick(1f / 60f, TrackingState.Normal, head);        // Processing -> AwaitingConfirm
+            Assert.That(flow.State, Is.EqualTo(ScanState.AwaitingConfirm));
+
+            // The room the walker is asked to confirm already has the chair turned.
+            RoomObject proposed = flow.Proposal.Preview.Objects[0];
+            Assert.That(proposed.Facing, Is.EqualTo(ObjectFacingRule.Profile));
+            AssertChairProfile(proposed.Profile, "proposed");
+
+            flow.Confirm();
+            flow.CompleteFinalise("anchor", clock.AddSeconds(30));
+            Assert.That(flow.State, Is.EqualTo(ScanState.Done));
+            RoomModel room = flow.Result;
+            RoomObject chair = room.Objects[0];
+            Assert.That(chair.Category, Is.EqualTo(ObjectCategory.Chair));
+            Assert.That(chair.Facing, Is.EqualTo(ObjectFacingRule.Profile));
+            AssertChairProfile(chair.Profile, "final");
+            Assert.That(math.dot(Front(chair.Yaw + room.Anchor.Yaw), Front(ChairYaw)), Is.GreaterThan(0.99999f));
+            AssertValid(room);
+        }
+
+        [Test]
         public void TheBuilder_WithNoSnapshot_LeavesTheObjectsAsTheyAre()
         {
             // Build as the fixture tests call it, with no scan: the clearance rule alone would turn this cupboard.
