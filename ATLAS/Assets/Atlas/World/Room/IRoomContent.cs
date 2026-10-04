@@ -94,6 +94,14 @@ namespace Atlas.World
         bool SetGeneratedLightMesh(int objectId, Mesh mesh, string assetHashLight);
 
         /// <summary>
+        /// True while the mesh is on a renderer of the room or is about to be: the mesh an object shows, its light
+        /// copy, the mesh that is fading out and a mesh waiting for its swap. A client that owns a mesh the room
+        /// content never destroys (a first shape) asks this before destroying it once it has been replaced.
+        /// False after Clear.
+        /// </summary>
+        bool IsMeshDrawn(Mesh mesh);
+
+        /// <summary>
         /// The asset client's call when a first shape or a built-in fallback mesh takes the object's place (state
         /// BuiltIn). The mesh belongs to the caller, which builds one per object and destroys it, and is never
         /// destroyed here; `scale` fits it to the box and is put on the mesh's own transform. Sets

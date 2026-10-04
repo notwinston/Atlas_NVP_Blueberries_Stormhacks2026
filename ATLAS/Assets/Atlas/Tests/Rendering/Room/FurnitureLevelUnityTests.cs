@@ -129,6 +129,83 @@ namespace Atlas.Rendering.Tests.Room
             content.Clear();
             Assert.That(light2 == null, Is.True);
         }
+
+        // ---- with a frame loop: swaps wait their turn and cross-fade (Instant off) -------------------------------
+
+        [Test]
+        public void LightCopy_ArrivingWhileItsFullCopyIsStillQueued_WaitsWithIt()
+        {
+            content.Instant = false;
+            content.Tick(0.016f);
+            var full1 = MeshOfTriangles(30, "full 1");
+            var full2 = MeshOfTriangles(20, "full 2");
+            var light2 = MeshOfTriangles(8, "light 2");
+            Assert.That(content.SetGeneratedMesh(1, full1, "aa"), Is.True);      // begins at once: one swap per frame
+            Assert.That(content.SetGeneratedMesh(2, full2, "cc"), Is.True);      // queued behind it
+            content.TryGetObject(2, out IRoomObjectView two);
+            Assert.That(content.IsMeshDrawn(full2), Is.True, "waiting for its swap counts as drawn");
+
+            Assert.That(content.SetGeneratedLightMesh(2, light2, "dd"), Is.True, "accepted while its full copy waits");
+            Assert.That(two.Data.AssetHashLight, Is.EqualTo(""), "written with the swap");
+            Assert.That(two.Shown, Is.Not.EqualTo(MeshState.Ready));
+
+            content.FurnitureLevel = FurnitureLevel.Light;
+            content.Tick(0.016f);                                                 // the queued swap begins
+            Assert.That(two.Shown, Is.EqualTo(MeshState.Ready));
+            Assert.That(two.Data.AssetHashLight, Is.EqualTo("dd"));
+            Assert.That(two.TriangleCount, Is.EqualTo(8), "drawn at Light as soon as the swap has begun");
+            Assert.That(content.IsMeshDrawn(light2), Is.True);
+        }
+
+        [Test]
+        public void CrossFade_WhileTheLightCopyIsDrawn_FadesThatCopyOut_AndDestroysTheOtherAtOnce()
+        {
+            var full = MeshOfTriangles(30, "full");
+            var light = MeshOfTriangles(10, "light");
+            content.SetGeneratedMesh(1, full, "aa");
+            content.SetGeneratedLightMesh(1, light, "bb");
+            content.FurnitureLevel = FurnitureLevel.Light;
+            content.TryGetObject(1, out IRoomObjectView one);
+            Assert.That(one.TriangleCount, Is.EqualTo(10));
+
+            content.Instant = false;
+            content.Tick(0.016f);
+            var next = MeshOfTriangles(40, "next full");
+            Assert.That(content.SetGeneratedMesh(1, next, "cc", 0.3f), Is.True);
+
+            Assert.That(full == null, Is.True, "the copy that was not drawn goes at once");
+            Assert.That(light == null, Is.False, "the drawn copy fades out");
+            Assert.That(content.IsMeshDrawn(light), Is.True);
+            Assert.That(one.TriangleCount, Is.EqualTo(40), "the new full copy: its light copy has not come");
+            Assert.That(one.Data.AssetHashLight, Is.EqualTo(""));
+
+            content.Tick(0.1f);
+            Assert.That(light == null, Is.False);
+            content.Tick(0.3f);
+            Assert.That(light == null, Is.True, "destroyed once the fade has ended");
+            Assert.That(content.IsMeshDrawn(light), Is.False);
+            content.Clear();
+            Assert.That(next == null, Is.True, "Clear releases the rest");
+        }
+
+        [Test]
+        public void ClearWithSwapsPending_ReleasesEveryOwnedMeshOnce_AndDrawsNothing()
+        {
+            content.Instant = false;
+            content.Tick(0.016f);
+            var full1 = MeshOfTriangles(30, "full 1");
+            var light1 = MeshOfTriangles(10, "light 1");
+            var full2 = MeshOfTriangles(20, "full 2");
+            var light2 = MeshOfTriangles(8, "light 2");
+            content.SetGeneratedMesh(1, full1, "aa");
+            content.SetGeneratedLightMesh(1, light1, "bb");
+            content.SetGeneratedMesh(2, full2, "cc");        // queued
+            content.SetGeneratedLightMesh(2, light2, "dd");
+            content.Clear();
+            Assert.That(full1 == null && light1 == null && full2 == null && light2 == null, Is.True);
+            Assert.That(content.IsMeshDrawn(full1), Is.False);
+            Assert.DoesNotThrow(() => content.Clear());
+        }
     }
 }
 #endif

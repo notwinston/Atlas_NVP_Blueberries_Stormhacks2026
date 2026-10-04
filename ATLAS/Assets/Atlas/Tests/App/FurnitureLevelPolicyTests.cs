@@ -17,8 +17,9 @@ namespace Atlas.App.Tests
             RoomModel m_Room;
             public int Sets;
             FurnitureLevel m_Level;
-            public FurnitureLevel FurnitureLevel { get { return m_Level; } set { m_Level = value; Sets++; } }
-            public void ResetPresentation() { m_Level = FurnitureLevel.Full; }
+            public FurnitureLevel FurnitureLevel { get { return m_Level; } set { Log.Add("level:" + value); m_Level = value; Sets++; } }
+            public readonly System.Collections.Generic.List<string> Log = new System.Collections.Generic.List<string>();
+            public void ResetPresentation() { Log.Add("reset"); m_Level = FurnitureLevel.Full; }
             public RoomModel Room { get { return m_Room; } }
             public bool IsBuilt { get { return m_Room != null; } }
             public void Build(RoomModel room) { m_Room = room; ResetPresentation(); if (Built != null) Built(room); }
@@ -39,6 +40,7 @@ namespace Atlas.App.Tests
             public bool SetObjectState(int objectId, MeshState state) { return false; }
             public bool SetGeneratedMesh(int objectId, UnityEngine.Mesh mesh, string assetHash, float fadeSeconds = 0.3f) { return false; }
             public bool SetGeneratedLightMesh(int objectId, UnityEngine.Mesh mesh, string assetHashLight) { return false; }
+            public bool IsMeshDrawn(UnityEngine.Mesh mesh) { return false; }
             public bool SetBuiltInMesh(int objectId, UnityEngine.Mesh sharedMesh, UnityEngine.Vector3 scale, float fadeSeconds = 0.3f) { return false; }
             public event Action<RoomModel> Built;
             public event Action<int> ObjectChanged { add { } remove { } }
@@ -164,6 +166,34 @@ namespace Atlas.App.Tests
 
             registry.Set(AppParams.Furniture, 0f);
             Assert.That(rig.Content.FurnitureLevel, Is.EqualTo(FurnitureLevel.Light), "auto: Glued is light, and Serious holds it there");
+        }
+
+        // The real stage, with the look given: the room is reset first, then the level of the next space is set.
+        [Test]
+        public void SpaceStage_ResetsThePresentation_ThenSetsTheLevel()
+        {
+            var rig = new Rig();
+            var stage = new SpaceStage(rig.Content, rig.Policy, () => { }, fade => { });
+            rig.Content.Log.Clear();
+            stage.ResetForSpace(SpaceId.Glued);
+            Assert.That(rig.Content.Log, Is.EqualTo(new[] { "reset", "level:Light" }));
+            Assert.That(rig.Content.FurnitureLevel, Is.EqualTo(FurnitureLevel.Light), "a reset after the set would leave Full");
+
+            rig.Content.Log.Clear();
+            stage.ResetForSpace(SpaceId.Home);
+            Assert.That(rig.Content.FurnitureLevel, Is.EqualTo(FurnitureLevel.Full));
+            stage.ResetForSpace(SpaceId.Portal);
+            stage.ResetForSpace(null);
+            Assert.That(rig.Content.FurnitureLevel, Is.EqualTo(FurnitureLevel.Full), "no space: Full");
+        }
+
+        [Test]
+        public void SpaceStage_WithNoRoomBuilt_OrNoPolicy_DoesNotThrow()
+        {
+            var content = new LevelContent();
+            var stage = new SpaceStage(content, null, () => { }, fade => { });
+            Assert.DoesNotThrow(() => stage.ResetForSpace(SpaceId.Home));
+            Assert.DoesNotThrow(() => new SpaceStage(null, null, () => { }, fade => { }).ResetForSpace(null));
         }
 
         [Test]

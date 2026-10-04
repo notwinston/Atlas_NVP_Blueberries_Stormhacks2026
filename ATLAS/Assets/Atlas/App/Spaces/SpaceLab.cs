@@ -355,8 +355,11 @@ namespace Atlas.App
                     _fallbackTried = true;
                     _target = SpaceId.Home;
                     _loadBegun = false;
+                    // The stage was told the failed space; Home gets its own level (and a clean presentation).
+                    if (_stage != null) _stage.ResetForSpace(_target);
                     continue;
                 }
+                if (_stage != null) _stage.ResetForSpace(null);
                 EndEmpty();
                 return true;
             }
