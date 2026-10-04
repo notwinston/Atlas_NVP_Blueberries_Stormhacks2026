@@ -44,6 +44,9 @@ namespace Atlas.App.Onboarding
         PanelSettings _panel;
         VisualElement _root, _touch, _card, _buttonRow;
         Label _title, _body, _notice;
+        /// <summary>The theme style sheet under Resources: one line that imports Unity's default runtime theme.</summary>
+        public const string ThemeResource = "AtlasUi/AtlasRuntimeTheme";
+
         TextField _address;
         readonly Button[] _buttons = new Button[OnboardingScreen.MaxButtons];
 
@@ -114,6 +117,11 @@ namespace Atlas.App.Onboarding
             _panel.screenMatchMode = PanelScreenMatchMode.MatchWidthOrHeight;
             _panel.match = 1f;
             _panel.sortingOrder = 10;
+            // The default runtime theme gives the text field and the buttons their base styling. Every size
+            // and colour of this screen is set inline, so a missing theme costs polish, not the screen.
+            var theme = Resources.Load<ThemeStyleSheet>(ThemeResource);
+            if (theme != null) _panel.themeStyleSheet = theme;
+            else Debug.LogWarning("Atlas: " + ThemeResource + " not in Resources; the onboarding screen has no theme.");
             document.panelSettings = _panel;
 
             _root = document.rootVisualElement;

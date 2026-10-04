@@ -28,6 +28,9 @@ MANIFEST = [
     ("Space_Glued", "Space_Glued", "Assets/Atlas/Spaces/Glued/GluedSpace.cs", True),
     ("Space_Portal", "Space_Portal", "Assets/Atlas/Spaces/Portal/PortalSpace.cs", True),
     ("Space_Slicer", "Space_Slicer", "Assets/Atlas/Spaces/Slicer/SlicerSpace.cs", True),
+    # The Station's scene: the Spectator boots in any scene of this name, or one that holds this marker object.
+    # It carries no script and is never in the iOS build list (AtlasBuild.Spectator names it explicitly).
+    ("PC_Spectator", "AtlasSpectatorBoot", None, False),
 ]
 
 OBJECT = """--- !u!1 &100000
@@ -82,6 +85,11 @@ SceneRoots:
 """
 
 
+# A root object with a Transform and nothing else.
+MARKER = OBJECT[:OBJECT.index("--- !u!114 &100002")].replace("  - component: {{fileID: 100002}}\n", "") \
+    + OBJECT[OBJECT.index("--- !u!1660057539"):]
+
+
 def scene_settings():
     """The four settings blocks Unity writes at the top of every scene, copied from the boot scene."""
     with open(os.path.join(PROJECT, BOOT)) as f:
@@ -115,11 +123,12 @@ def main():
     head = scene_settings()
     build = [(BOOT, guid_of(BOOT))]
     for scene, root, script, in_build in MANIFEST:
-        if not os.path.exists(os.path.join(PROJECT, script)):
+        if script is not None and not os.path.exists(os.path.join(PROJECT, script)):
             missing.append(script)
             continue
         rel = "%s/%s.unity" % (SCENES, scene)
-        write(os.path.join(PROJECT, rel), head + OBJECT.format(name=root, guid=guid_of(script)), check, changed)
+        body = OBJECT.format(name=root, guid=guid_of(script)) if script is not None else MARKER.format(name=root)
+        write(os.path.join(PROJECT, rel), head + body, check, changed)
         meta = os.path.join(PROJECT, rel) + ".meta"
         if not os.path.exists(meta):
             write(meta, "fileFormatVersion: 2\nguid: %s\n%s" % (gen_meta.guid_for(rel), gen_meta.DEFAULT), check, changed)

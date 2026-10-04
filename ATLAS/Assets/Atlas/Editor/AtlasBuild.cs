@@ -38,5 +38,37 @@ namespace Atlas.EditorTools
             if (report.summary.result != BuildResult.Succeeded)
                 EditorApplication.Exit(1);
         }
+
+        const string SpectatorScene = "Assets/Atlas/Scenes/PC_Spectator.unity";
+
+        /// <summary>
+        /// Batch-mode Station build of the Spectator (Master Plan Appendix C.7): Windows, with ATLAS_SPECTATOR,
+        /// starting in PC_Spectator and carrying the space scenes so the mirror can load them.
+        /// <c>-executeMethod Atlas.EditorTools.AtlasBuild.Spectator -buildOutput Build/Spectator/AtlasSpectator.exe</c>.
+        /// The scene is never part of the iOS build list.
+        /// </summary>
+        public static void Spectator()
+        {
+            var args = Environment.GetCommandLineArgs();
+            var output = args[Array.IndexOf(args, "-buildOutput") + 1];
+
+            var scenes = new[] { SpectatorScene }
+                .Concat(EditorBuildSettings.scenes
+                    .Where(s => s.enabled && System.IO.Path.GetFileName(s.path).StartsWith("Space_"))
+                    .Select(s => s.path))
+                .ToArray();
+
+            var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+            {
+                scenes = scenes,
+                locationPathName = output,
+                target = BuildTarget.StandaloneWindows64,
+                extraScriptingDefines = new[] { "ATLAS_SPECTATOR" },
+                options = BuildOptions.None,
+            });
+
+            if (report.summary.result != BuildResult.Succeeded)
+                EditorApplication.Exit(1);
+        }
     }
 }
