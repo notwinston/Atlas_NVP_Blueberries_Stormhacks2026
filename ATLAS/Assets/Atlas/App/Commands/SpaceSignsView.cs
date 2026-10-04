@@ -17,12 +17,14 @@ namespace Atlas.App
         const float TextHeight = 0.04f;
         // Cells of the neutral ramp: a sign that can act, one that cannot.
         const int ActiveCell = 3, DimCell = 1;
+        /// <summary>The boards' squircle corners.</summary>
+        const float BoardRadius = 0.02f;
 
         static readonly Color s_text = new Color(0.92f, 0.95f, 0.92f, 1f);
 
         readonly MaterialPool _pool;
         readonly Material _material;
-        readonly AtlasMeshBuilder _builder = new AtlasMeshBuilder(16, 32);
+        readonly AtlasMeshBuilder _builder = new AtlasMeshBuilder(160, 448);
         readonly GameObject _root;
         readonly Mesh _mesh;
         readonly bool[] _available = new bool[SpaceSignLayout.Count];
@@ -97,9 +99,8 @@ namespace Atlas.App
             {
                 float3 c = SpaceSignLayout.Centre(i);
                 int cell = !_available[i] ? DimCell : i == SpaceSignLayout.Home ? AtlasPalette.HomeBeacon : ActiveCell;
-                _builder.AddQuad(new float3(c.x - SpaceSignLayout.BoardHalfWidth, c.y - SpaceSignLayout.BoardHalfHeight, c.z),
-                    new float3(2f * SpaceSignLayout.BoardHalfWidth, 0f, 0f),
-                    new float3(0f, 2f * SpaceSignLayout.BoardHalfHeight, 0f), AtlasPalette.Uv(cell));
+                _builder.AddSquircle(c, SpaceSignLayout.BoardHalfWidth, SpaceSignLayout.BoardHalfHeight,
+                    BoardRadius, AtlasPalette.Uv(cell));
             }
         }
 

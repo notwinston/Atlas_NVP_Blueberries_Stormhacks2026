@@ -22,11 +22,16 @@ namespace Atlas.App.Onboarding
         // How near a touch must be to a corner to pick it up, as a share of the screen height.
         const float PickRadius = 0.09f;
         const float CardShare = 46f;
+        // The card floats clear of the screen's edges, its corners concentric with the capsules inside it.
+        const float CardInset = 24f, CardRadius = 44f, FieldRadius = 22f;
 
         static readonly Color CardColor = new Color(0.03f, 0.04f, 0.06f, 0.93f);
         static readonly Color Ink = Color.white;
         static readonly Color Amber = new Color(1f, 0.80f, 0.20f, 1f);
-        static readonly Color ButtonDark = new Color(0.20f, 0.22f, 0.27f, 1f);
+        // A second button is a tint of light on the card, not a block of its own.
+        static readonly Color ButtonTint = new Color(1f, 1f, 1f, 0.14f);
+        // The lit edge of the card, as on a pane of glass.
+        static readonly Color CardRim = new Color(1f, 1f, 1f, 0.16f);
         static readonly Color Shade = new Color(0f, 0f, 0f, 0.85f);
         static readonly Color OutlineColor = Color.white;
         static readonly Color FreeColor = new Color(0.25f, 1f, 0.45f, 1f);
@@ -180,11 +185,12 @@ namespace Atlas.App.Onboarding
 
             _card = new VisualElement();
             _card.style.position = Position.Absolute;
-            _card.style.top = 0f;
-            _card.style.bottom = 0f;
-            _card.style.right = 0f;
+            _card.style.top = CardInset;
+            _card.style.bottom = CardInset;
+            _card.style.right = CardInset;
             _card.style.width = new Length(CardShare, LengthUnit.Percent);
             _card.style.backgroundColor = CardColor;
+            Border(_card, 1.5f, CardRim, CardRadius);
             _card.style.paddingLeft = 40f;
             _card.style.paddingRight = 40f;
             _card.style.paddingTop = 30f;
@@ -217,6 +223,7 @@ namespace Atlas.App.Onboarding
             _address.style.backgroundColor = Color.white;
             _address.style.marginTop = 12f;
             _address.style.paddingLeft = 16f;
+            Border(_address, 0f, Color.clear, FieldRadius);
             _address.style.flexShrink = 0f;
             VisualElement input = _address.Q(null, TextField.inputUssClassName);
             if (input != null)
@@ -244,7 +251,8 @@ namespace Atlas.App.Onboarding
                 button.style.marginLeft = 0f;
                 button.style.marginRight = 0f;
                 button.style.marginBottom = 0f;
-                Border(button, 3f, Ink, 16f);
+                // No outline: the fill alone marks a button.
+                Border(button, 0f, Color.clear, 0f);
                 _buttons[i] = button;
                 _buttonRow.Add(button);
             }
@@ -270,6 +278,15 @@ namespace Atlas.App.Onboarding
             label.style.flexShrink = 0f;
             label.pickingMode = PickingMode.Ignore;
             return label;
+        }
+
+        static void Radius(VisualElement element, float radius)
+        {
+            IStyle style = element.style;
+            style.borderTopLeftRadius = radius;
+            style.borderTopRightRadius = radius;
+            style.borderBottomLeftRadius = radius;
+            style.borderBottomRightRadius = radius;
         }
 
         static void Border(VisualElement element, float width, Color color, float radius)
@@ -323,8 +340,11 @@ namespace Atlas.App.Onboarding
                 if (button.text != model.Label) button.text = model.Label;
                 // The way on is one wide, light button; the others sit two to a row.
                 button.style.width = new Length(model.Primary ? 100f : 48.5f, LengthUnit.Percent);
-                button.style.height = model.Primary ? 112f : 92f;
-                button.style.backgroundColor = model.Primary ? Ink : ButtonDark;
+                float height = model.Primary ? 112f : 92f;
+                button.style.height = height;
+                // Capsules: round ends, half the height.
+                Radius(button, 0.5f * height);
+                button.style.backgroundColor = model.Primary ? Ink : ButtonTint;
                 button.style.color = model.Primary ? Color.black : Ink;
             }
         }
