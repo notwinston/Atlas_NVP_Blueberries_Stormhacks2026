@@ -206,6 +206,27 @@ namespace Atlas.Rendering.Tests.Room
             Assert.That(content.IsMeshDrawn(full1), Is.False);
             Assert.DoesNotThrow(() => content.Clear());
         }
+
+        // A mesh swap in a curved space: the outgoing copy is warped and has the warp's bounds on the frame the swap
+        // begins, not only from the next Tick, or it is culled for a frame while the new mesh is still clear (a blink).
+        [Test]
+        public void Swap_UnderTheWarp_TheOutgoingCopyFollowsFromItsFirstFrame()
+        {
+            content.Instant = false;
+            content.TryGetObject(1, out IRoomObjectView one);
+            Matrix4x4 anchor = Matrix4x4.Translate(new Vector3(2f, 0f, 1f));
+            one.Material.SetFloat(AtlasShaderIDs.WarpMode, 2f);
+            one.Material.SetMatrix(AtlasShaderIDs.Anchor, anchor);
+            AtlasWarpBounds.Apply(one.Renderer);
+
+            Assert.That(content.SetGeneratedMesh(1, MeshOfTriangles(20, "generated"), "aa"), Is.True);
+            var view = (RoomObjectView)one;
+            Assert.That(view.IsFading, Is.True);
+            Assert.That(view.OutRenderer.enabled, Is.True);
+            Assert.That(view.OutRenderer.localBounds.size.x, Is.EqualTo(AtlasWarpBounds.Size));
+            Assert.That(view.OutMaterial.GetFloat(AtlasShaderIDs.WarpMode), Is.EqualTo(2f));
+            Assert.That(view.OutMaterial.GetMatrix(AtlasShaderIDs.Anchor), Is.EqualTo(anchor));
+        }
     }
 }
 #endif

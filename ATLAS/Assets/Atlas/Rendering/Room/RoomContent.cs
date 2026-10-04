@@ -535,6 +535,8 @@ namespace Atlas.Rendering.Room
                 m_FadingCount++;
                 SetOpacity(view.MaterialInternal, 0f);
                 SetOpacity(view.OutMaterial, 1f);
+                // Under the warp from the first frame: with its own bounds it would be culled while the new mesh is still clear.
+                FollowWarp(view);
             }
             else if (drawnOwned)
             {
