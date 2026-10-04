@@ -51,3 +51,10 @@
 - **Pass (acceptance):** at the designed fork both arrows are visible on arrival, pointing into different child corridors, the beacon into `target.address[len(fork)]`; exactly one `compass_choice` and one `fork` event for that address, choice matching the corridor taken.
 - **Pass (supporting):** at the other fork no arrow before 8 s, arrow at 8 s +/- 1 frame, `fork` event `beacon_shown` = true.
 - **Record:** compass, beacon, choice, t_s, thermal state. Do not claim P2-D07's 4-fork criterion (PH-39).
+
+## P2-B12 Airway run test (Editor tests pass; phone run deferred: phone in headset, 10 naive walkers)
+- Editor: `AirwayRunTests` (T12.1 centre strip, Mode 1, 3 rooms x 0.7/1.0 m/s, tree.json route plus the 100 routes: 0 straight-side WARN starts, 0 STRONG, via the test-only `BumpWarnOracle`; corner cues counted, not judged; T12.2 run report; S12.1 bridge). Evidence `evidence/P2-B12/sim_centre_strip.json`, `run_report_sim.json`.
+- Scene: Lung_Airway.unity, Mode 1, `lung.route` = 0, beacon rescue enabled (P2-B06); FMS asked each minute (lane C).
+- Steps per run: a walker who did not build the airway walks from the trachea chamber to the lesion chamber. Export events.jsonl; build the report with `AirwayRunReport.FromJsonLines(lines, targetAddress)`; store as `docs/laneB/evidence/P2-B12/phone_run_<n>.json`.
+- Expected: RescueFree in >= 9 of 10 runs; FmsMax <= 3 (FMS <= 3/20) in every run; on the straight sides (head > 0.5 m from a lap corner when the cue starts) no Bump Guard WARN over the first 8 tile steps (real Bump Guard, Console cue log).
+- PH-39: the route has TargetAddress.Length forks (fixture 6), not 4. Report the measured run with that route; the "4 forks" criterion stays open until PH-39 is decided. It is not claimed here.
