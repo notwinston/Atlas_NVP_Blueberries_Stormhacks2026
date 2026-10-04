@@ -2,7 +2,7 @@ using Unity.Mathematics;
 
 namespace Atlas.Spaces.SmallPlanet
 {
-    // CPU reference for lane A's AtlasCore (kernel.md §6.3); lane A owns the GPU side.
+    // CPU reference for the look's fog and for AtlasWarpClip in AtlasWarp.hlsl (kernel.md §6.3); the GPU side is the shared shader's.
     public static class SmallPlanetShading
     {
         // log map is radially exact, so |dxz| / R is the geodesic distance in rad

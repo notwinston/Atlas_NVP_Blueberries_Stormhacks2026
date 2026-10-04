@@ -110,6 +110,46 @@ namespace Atlas.Spaces.AlignedCells.Tests
             }
         }
 
+        // Master Plan §12.2 S3 row, kill switch cells.viewDepth: fewer neighbour cells drawn. Depth 2 is the full list; depth 1 is
+        // the cells that touch the walker's cell (two instances of each diagonal one); depth 0 is the walker's cell alone.
+        [Test]
+        public void Mode2_SightLines_ViewDepth()
+        {
+            var graph = new TileGraph(5);
+            var f0 = new CellFrame(TileId.Zero, 0);
+            CellGrid grid = G(5.4, 7.4);
+            var full = new CellInstanceList(); var list = new CellInstanceList();
+            for (int cz = 0; cz < grid.CountZ; cz++)
+                for (int cx = 0; cx < grid.CountX; cx++)
+                {
+                    var u = new int2(cx, cz);
+                    SightLines.Build(grid, graph, u, f0, full);
+                    SightLines.Build(grid, graph, u, f0, list, SightLines.ViewRange);
+                    Assert.AreEqual(full.Count, list.Count);
+                    SightLines.Build(grid, graph, u, f0, list, 7);
+                    Assert.AreEqual(full.Count, list.Count, "clamped to the view range");
+
+                    SightLines.Build(grid, graph, u, f0, list, 0);
+                    Assert.AreEqual(1, list.Count);
+                    Assert.AreEqual(u, list[0].Cell); Assert.AreEqual(f0, list[0].Frame);
+
+                    SightLines.Build(grid, graph, u, f0, list, 1);
+                    int expected = 0;
+                    for (int dz = -1; dz <= 1; dz++)
+                        for (int dx = -1; dx <= 1; dx++)
+                            if (grid.Contains(u + new int2(dx, dz))) expected += dx != 0 && dz != 0 ? 2 : 1;
+                    Assert.AreEqual(expected, list.Count, $"cell ({cx},{cz})");
+                    for (int i = 0; i < list.Count; i++)
+                    {
+                        Assert.LessOrEqual(math.cmax(math.abs(list[i].Cell - u)), 1);
+                        bool inFull = false;
+                        for (int k = 0; k < full.Count; k++)
+                            inFull |= full[k].Cell.Equals(list[i].Cell) && full[k].Frame == list[i].Frame && full[k].GateCount == list[i].GateCount;
+                        Assert.IsTrue(inFull, "a nearer list is a part of the full one");
+                    }
+                }
+        }
+
         // independent trace of the straight eye -> fragment cell sequence from crossing parameters
         static CellFrame Trace(CellGrid grid, TileGraph graph, CellFrame f, double2 eye, double2 frag)
         {

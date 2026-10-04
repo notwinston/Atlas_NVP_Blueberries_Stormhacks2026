@@ -1,51 +1,53 @@
-using System;
+using Atlas.Kernel;
 using Atlas.Rendering;
 using Unity.Mathematics;
-using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace Atlas.Spaces.SmallPlanet
 {
-    // §3.5 pole beacon: octagonal prism, origin at its foot, no bottom cap; 17 vertices, 24 triangles.
+    // §3.5 pole beacon: octagonal prism, origin at its foot, no bottom cap; 17 vertices, 24 triangles. Engine-free.
     public static class PoleBeaconMesh
     {
-        public static int Build(Mesh target)
+        /// <summary>Appends the beacon and returns the triangles added.</summary>
+        public static int Build(AtlasMeshBuilder into)
         {
             int n = SmallPlanetConstants.BeaconSides;
             float r = SmallPlanetConstants.BeaconRadius, h = SmallPlanetConstants.BeaconHeight;
-            var verts = new TileVertex[2 * n + 1];
-            var idx = new ushort[(2 * n + n) * 3];
             byte lo = (byte)math.round(255f * (float)TileChart.AoMin), hi = 255;
+            int first = into.VertexCount;
+            into.Reserve(2 * n + 1, 3 * n * 3);
             for (int i = 0; i < n; i++)
             {
-                float th = (22.5f + 360f / n * i) * Mathf.Deg2Rad;
-                float x = r * Mathf.Cos(th), z = r * Mathf.Sin(th);
-                verts[i] = new TileVertex { Position = new float3(x, 0, z), Color = new Color32(lo, lo, lo, 255), Uv = SmallPlanetConstants.BeaconUv };
-                verts[n + i] = new TileVertex { Position = new float3(x, h, z), Color = new Color32(hi, hi, hi, 255), Uv = SmallPlanetConstants.BeaconUv };
+                float th = math.radians(22.5f + 360f / n * i);
+                into.AddVertex(Vertex(new float3(r * math.cos(th), 0, r * math.sin(th)), lo));
             }
-            verts[2 * n] = new TileVertex { Position = new float3(0, h, 0), Color = new Color32(hi, hi, hi, 255), Uv = SmallPlanetConstants.BeaconUv };
-            int c = 0;
+            for (int i = 0; i < n; i++)
+            {
+                float th = math.radians(22.5f + 360f / n * i);
+                into.AddVertex(Vertex(new float3(r * math.cos(th), h, r * math.sin(th)), hi));
+            }
+            into.AddVertex(Vertex(new float3(0, h, 0), hi));
             for (int i = 0; i < n; i++)
             {
                 int j = (i + 1) % n;
-                idx[c++] = (ushort)i; idx[c++] = (ushort)(n + i); idx[c++] = (ushort)(n + j);
-                idx[c++] = (ushort)i; idx[c++] = (ushort)(n + j); idx[c++] = (ushort)j;
+                into.AddTriangle(first + i, first + n + i, first + n + j);
+                into.AddTriangle(first + i, first + n + j, first + j);
             }
             for (int i = 0; i < n; i++)
             {
                 int j = (i + 1) % n;
-                idx[c++] = (ushort)(2 * n); idx[c++] = (ushort)(n + j); idx[c++] = (ushort)(n + i);
+                into.AddTriangle(first + 2 * n, first + n + j, first + n + i);
             }
-            target.Clear();
-            target.SetVertexBufferParams(verts.Length, TileVertex.Descriptors);
-            target.SetVertexBufferData(verts, 0, 0, verts.Length, 0, MeshUpdateFlags.DontRecalculateBounds);
-            target.SetIndexBufferParams(idx.Length, IndexFormat.UInt16);
-            target.SetIndexBufferData(idx, 0, 0, idx.Length, MeshUpdateFlags.DontRecalculateBounds);
-            var bounds = new Bounds(new Vector3(0, h * 0.5f, 0), new Vector3(2 * r, h, 2 * r));
-            target.subMeshCount = 1;
-            target.SetSubMesh(0, new SubMeshDescriptor(0, idx.Length) { bounds = bounds, vertexCount = verts.Length }, MeshUpdateFlags.DontRecalculateBounds);
-            target.bounds = bounds;
-            return idx.Length / 3;
+            return 3 * n;
         }
+
+        // The shade is baked (COLOR.r); the beacon carries no lines.
+        static AtlasVertex Vertex(float3 position, byte shade) => new AtlasVertex
+        {
+            Position = position,
+            Normal = new float3(0, 1, 0),
+            Color = AtlasVertex.PackColor(shade, 0),
+            Uv0 = SmallPlanetConstants.BeaconUv,
+            Uv1 = new float2(0.5f, 0.5f),
+        };
     }
 }

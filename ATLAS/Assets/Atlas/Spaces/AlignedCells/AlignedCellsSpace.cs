@@ -1,40 +1,161 @@
 using Atlas.Kernel;
+using Atlas.Link;
+using Atlas.Rendering;
+using Atlas.World;
 using Unity.Mathematics;
+using UnityEngine;
 
 namespace Atlas.Spaces.AlignedCells
 {
-    // Seam for ISpaceModule (lane A, Master Plan §6.5): Configure/Enter/Tick/Exit forward here; WriteState is deferred.
-    public sealed class AlignedCellsSpace
+    /// <summary>
+    /// S3 Aligned Cells, Mode 2 (Master Plan sections 4.7 to 4.9, tasks P1-B10 and P1-B12): the free floor cut into
+    /// flat square cells, each showing one tile of the {4,5} tiling; which tile depends on the path walked.
+    /// Registered: the root is the identity of the room frame, the walls are the real walls and the furniture
+    /// stands where it really is, drawn once by the shared room content.
+    /// </summary>
+    /// <remarks>
+    /// A thin adapter. The logic is in <see cref="AlignedCellsCore"/>, the cell instances in
+    /// <see cref="AlignedCellsView"/>, the room in <see cref="AlignedCellsRoomView"/>. The frame loop's kernel
+    /// stays flat and registered here; entered from Curved Walk, SpaceLab hands over Mode 1's pose and the tile
+    /// id is kept (section 4.8).
+    /// </remarks>
+    public sealed class AlignedCellsSpace : MonoBehaviour, ISpaceModule, IUploadStep, ISpaceStateReader
     {
-        readonly TileGraph graph;
-        public CellGrid Grid { get; private set; }
-        public CellWalker Walker { get; private set; }
-        public CellInstanceList Instances { get; } = new CellInstanceList();
+        readonly AlignedCellsCore _core = new AlignedCellsCore();
+        AlignedCellsView _view;
+        AlignedCellsRoomView _roomView;
 
-        public AlignedCellsSpace(TileGraph graph) { this.graph = graph; }
+        MaterialPool _pool;
+        IRoomContent _room;
+        ISpaceHost _host;
+        IEventLog _events;
 
-        public void Configure(in FreeRectangle freeRect)
+        WalkerPose _start;
+        bool _entered, _pendingEnter, _dirty;
+
+        /// <summary>The factory given to SpaceRegistry: a new object named like the scene.</summary>
+        public static ISpaceModule Create()
         {
-            Grid = CellGrid.FromFreeRectangle(freeRect);
-            Walker = new CellWalker(Grid, graph);
+            return new GameObject(SpaceIds.SceneName(SpaceId.AlignedCells)).AddComponent<AlignedCellsSpace>();
         }
 
-        // §4.8: switch from Mode 1 at the same tile id.
-        public void Enter(in WalkerPose start, double2 headXZ)
+        /// <summary>The parameters of group "cells". Safe to call again.</summary>
+        public static void DeclareParams(ParamRegistry registry)
         {
-            Walker.EnterFromCurvedWalk(start, headXZ);
-            Rebuild();
+            AlignedCellsCore.DeclareParams(registry);
         }
 
-        public bool Tick(double2 headXZ)
+        public SpaceId Id { get { return SpaceId.AlignedCells; } }
+        public bool Registered { get { return true; } }
+
+        /// <summary>The logic behind this component.</summary>
+        public AlignedCellsCore Core { get { return _core; } }
+        /// <summary>The cell instances, or null when there is no material pool.</summary>
+        public AlignedCellsView View { get { return _view; } }
+        /// <summary>The driver of the shared room content, or null until the room is built.</summary>
+        public AlignedCellsRoomView RoomView { get { return _roomView; } }
+
+        public void Configure(RoomModel room, ParamRegistry registry)
         {
-            if (Walker.Walk(headXZ) == 0) return false;
-            Rebuild();
-            return true;
+            ReleaseViews();
+            _core.Configure(room, registry);
+            AtlasServices.TryGet(out _room);
+            AtlasServices.TryGet(out _host);
+            AtlasServices.TryGet(out _events);
+            if (!AtlasServices.TryGet(out _pool)) return;     // no look in this build: nothing to draw with
+            _view = new AlignedCellsView(transform, _pool, _core.Grid);
+            _dirty = true;
         }
 
-        public void Exit() => Instances.Clear();
+        public void Enter(in WalkerPose start)
+        {
+            // Registered: the module's root is the room frame itself (contract README F4).
+            Transform root = transform;
+            root.localPosition = Vector3.zero;
+            root.localRotation = Quaternion.identity;
+            root.localScale = Vector3.one;
 
-        void Rebuild() => SightLines.Build(Grid, graph, Walker.Cell, Walker.Frame, Instances);
+            _start = start;
+            _entered = true;
+            TakeRoom();
+            // The walker stands in the cell under the head. The loop's last frame gives the head now; without a
+            // loop (a test, the Station) the first Tick brings it.
+            if (AtlasServices.TryGet(out IFrameLoop loop)) Place(loop.Current.HeadPosition);
+            else _pendingEnter = true;
+            gameObject.SetActive(true);
+        }
+
+        public void ReadState(in StateMessage state)
+        {
+            _core.ReadState(in state);
+        }
+
+        public void Tick(in FrameContext frame)
+        {
+            if (!_entered) return;
+            var head = new double2(frame.HeadPosition.x, frame.HeadPosition.z);
+            if (_pendingEnter) Place(frame.HeadPosition);
+            if (_core.Tick(head, frame.Kernel.Rejected)) _dirty = true;
+            if (_roomView == null) TakeRoom();                // the room content was built after Enter
+            if (_core.PollModeSwitch() && (_host == null || !_host.RequestSwitch(SpaceId.CurvedWalk))) _core.RefuseModeSwitch();
+        }
+
+        /// <summary>Step 6. Re-uploads when the instances, the room content or the root changed: gate posts are world-space.</summary>
+        public void Upload(in FrameContext frame)
+        {
+            if (!_entered || !_core.Entered) return;
+            bool roomDirty = _roomView != null && _roomView.Dirty;
+            if (!_dirty && !roomDirty && !transform.hasChanged) return;
+            if (_view != null) _view.Apply(_core.Instances);
+            if (_roomView != null) _roomView.Apply(_core.Instances);
+            transform.hasChanged = false;
+            _dirty = false;
+        }
+
+        public void Exit()
+        {
+            _entered = false;
+            _pendingEnter = false;
+            if (_roomView != null) _roomView.Exit();
+            _roomView = null;
+            _core.Exit();
+            ReleaseViews();
+        }
+
+        public void WriteState(ref StateMessage state)
+        {
+            _core.WriteState(ref state);
+        }
+
+        void OnDestroy()
+        {
+            // Exit has returned the materials already; this only covers a root destroyed without Exit.
+            if (_roomView != null) _roomView.Exit();
+            _roomView = null;
+            ReleaseViews();
+        }
+
+        void Place(float3 head)
+        {
+            _pendingEnter = false;
+            _core.Enter(in _start, new double2(head.x, head.z));
+            _dirty = true;
+            if (_events != null)
+                _events.Log("cells.enter", "cells", _core.Grid.CountX * _core.Grid.CountZ, "fromMode1", _core.EnteredFromCurvedWalk ? 1 : 0);
+        }
+
+        void TakeRoom()
+        {
+            if (_room == null || !_room.IsBuilt || !_core.Configured) return;
+            _roomView = new AlignedCellsRoomView(_room, _core.Grid);
+            _roomView.Enter();
+            _dirty = true;
+        }
+
+        void ReleaseViews()
+        {
+            if (_view != null) _view.Dispose();
+            _view = null;
+        }
     }
 }

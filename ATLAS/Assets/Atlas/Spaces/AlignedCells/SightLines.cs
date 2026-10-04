@@ -37,11 +37,16 @@ namespace Atlas.Spaces.AlignedCells
         }
 
         public static void Build(CellGrid grid, TileGraph graph, int2 walkerCell, CellFrame walkerFrame, CellInstanceList into)
+            => Build(grid, graph, walkerCell, walkerFrame, into, ViewRange);
+
+        // range: Chebyshev cells drawn round the walker's cell, 0..ViewRange (cells.viewDepth, Master Plan §12.2 S3 row).
+        public static void Build(CellGrid grid, TileGraph graph, int2 walkerCell, CellFrame walkerFrame, CellInstanceList into, int range)
         {
             into.Clear();
+            range = Math.Clamp(range, 0, ViewRange);
             Span<int> rX = stackalloc int[ViewRange + 1];
-            for (int dz = -ViewRange; dz <= ViewRange; dz++)
-                for (int dx = -ViewRange; dx <= ViewRange; dx++)
+            for (int dz = -range; dz <= range; dz++)
+                for (int dx = -range; dx <= range; dx++)
                 {
                     int2 c = walkerCell + new int2(dx, dz);
                     if (!grid.Contains(c)) continue;

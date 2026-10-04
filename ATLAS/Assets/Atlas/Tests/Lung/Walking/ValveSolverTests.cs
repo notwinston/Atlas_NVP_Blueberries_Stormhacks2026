@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using Atlas.Kernel;
+using Atlas.Safety;
 using Atlas.World;
 using NUnit.Framework;
 using Unity.Mathematics;
@@ -275,6 +276,45 @@ namespace Atlas.Blades.Lung.Walking.Tests
             Assert.AreEqual(ValvePhase.DeadEnd, wing.Phase);
             Assert.AreEqual(before, reaims, "no reaim at the dead end");
             Assert.AreEqual(ShellState.Opaque, wing.Shell);
+        }
+
+        // The solver on the app's real Bump Guard (BumpGuard is the IClearanceQuery of MP §4.10), not only on FakeClearance:
+        // the side clearances agree with the room's distance field, and a stamped dynamic cell closes that side of the valve.
+        [Test]
+        public void Valve_OnTheRealBumpGuard_SidesFollowTheFieldAndTheDynamicLayer()
+        {
+            foreach (string name in Rooms)
+            {
+                var room = Room(name);
+                var lap = new LapCorners(room.LapSide);
+                using (var guard = new BumpGuard(false))
+                {
+                    guard.SetRoom(room);
+                    guard.Tick(new SensorFrame
+                    {
+                        Time = 1.0, DeltaTime = 1f / 60f, RoomActive = true, AnchorTracked = true,
+                        Head = new HeadPose(1.0, new float3(0f, 1.6f, 0f), quaternion.identity, TrackingState.Normal),
+                    });
+                    var fake = new FakeClearance(room);
+                    for (int i = 0; i < 4; i++)
+                        foreach (int j in new[] { (i + 1) & 3, (i + 3) & 3 })
+                            Assert.AreEqual(ValveSolver.SideClearance(fake, lap.Corner(i), lap.Corner(j)),
+                                ValveSolver.SideClearance(guard, lap.Corner(i), lap.Corner(j)), 1e-3, name + " side " + i + "-" + j);
+
+                    // block the side 0 -> 1 in the middle; the side 0 -> 3 stays as the field has it
+                    double2 a = lap.Corner(0), b = lap.Corner(1), mid = (a + b) / 2;
+                    double cp = ValveSolver.SideClearance(guard, a, lap.Corner(3));
+                    guard.Core.StampDynamic(new float2((float)mid.x, (float)mid.y), 0.5f, 1.0);
+                    Assert.Less(ValveSolver.SideClearance(guard, a, b), 0.06, name + ": the stamped side");
+                    var d = new ValveSolver(lap, guard).Solve(0);
+                    if (cp >= ValveSolver.ClearMin)
+                    {
+                        Assert.IsTrue(d.Open, name);
+                        Assert.AreEqual(3, d.TargetCorner, name + ": the clear side is chosen");
+                    }
+                    else Assert.IsFalse(d.Open, name + ": neither side clear");
+                }
+            }
         }
 
         // S3.7, MP §10.2.6 "fork {address, choice, correct, beacon_shown, t_s}"; MP §10.2.3 step 2.

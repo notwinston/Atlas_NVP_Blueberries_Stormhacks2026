@@ -3,7 +3,10 @@
     "rootNamespace": "Atlas.Spaces.SmallPlanet.Tests",
     "references": [
         "Atlas.Kernel",
+        "Atlas.Link",
+        "Atlas.World",
         "Atlas.Rendering",
+        "Atlas.Input",
         "Atlas.Spaces.SmallPlanet",
         "Unity.Mathematics",
         "UnityEngine.TestRunner",

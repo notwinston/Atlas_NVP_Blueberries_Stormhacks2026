@@ -6,12 +6,9 @@
         "Atlas.World",
         "Atlas.Link",
         "Atlas.Rendering",
-        "Atlas.Scan",
         "Atlas.Input",
         "Atlas.Telemetry",
         "Atlas.Spaces.CurvedWalk",
-        "Atlas.Spaces.SmallPlanet",
-        "Atlas.World.Lint.Editor",
         "Unity.Mathematics",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"

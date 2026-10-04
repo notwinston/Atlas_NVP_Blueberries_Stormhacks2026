@@ -1,3 +1,5 @@
+// PENDING DELETION (with its .meta): replaced by AlignedCellsRegistration.cs. Compiled out, text untouched below; the integration agent could not delete files.
+#if ATLAS_PENDING_DELETION
 using Atlas.Kernel;
 using Atlas.World;
 using UnityEngine;
@@ -21,3 +23,4 @@ namespace Atlas.Spaces.AlignedCells
         void OnDestroy() => Module?.Dispose();
     }
 }
+#endif

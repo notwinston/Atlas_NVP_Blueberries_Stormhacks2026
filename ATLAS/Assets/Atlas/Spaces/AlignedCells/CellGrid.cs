@@ -1,14 +1,14 @@
 using System;
+using Atlas.World;
 using Unity.Mathematics;
 
 namespace Atlas.Spaces.AlignedCells
 {
-    // Master Plan §4.7 grid rule. double2 .x = anchor x, .y = anchor z; int2 cell .x = column (x), .y = row (z).
+    // Master Plan §4.7 grid. The rule itself is CellGridRules.Aligned (lane C contract §4.2), which also fills RoomModel.Aligned.
+    // double2 .x = anchor x, .y = anchor z; int2 cell .x = column (x), .y = row (z).
     public sealed class CellGrid
     {
-        public const double TargetCell = 1.5;     // §4.7 n = max(3, ceil(Wf_short/1.5))
-        public const double MinCell = 0.75;       // §4.7 corner demo below this
-        public const double Epsilon = 1e-6;       // §4.7 m = floor(Wf_long/g + 1e-6)
+        public const double MinSide = 0.4;        // below this the flat cell mesh cannot be built (TileMeshSpec)
 
         public int CountX { get; }
         public int CountZ { get; }
@@ -23,16 +23,23 @@ namespace Atlas.Spaces.AlignedCells
         }
 
         public static CellGrid FromFreeRectangle(in FreeRectangle r)
+            => FromAligned(CellGridRules.Aligned(r.Width, r.Depth), r.Width <= r.Depth);
+
+        // The grid the RoomModel carries (cells.aligned); a model that was never fitted gets the rule applied to its free rectangle.
+        public static CellGrid FromRoom(RoomModel room)
         {
-            double s = Math.Min(r.Width, r.Depth), l = Math.Max(r.Width, r.Depth);
-            int n = Math.Max(3, (int)Math.Ceiling(s / TargetCell));
-            double g = s / n;
-            int m = (int)Math.Floor(l / g + Epsilon);
-            bool demo = false;
-            if (g < MinCell) { n = 2; m = 2; g = s / 2; demo = true; } // §4.7 "a 2 x 2 grid, five tiles round one post"
-            if (g < 0.4) throw new ArgumentOutOfRangeException(nameof(r), "free rectangle too small: cell side below 0.4 m");
-            bool xShort = r.Width <= r.Depth;
-            return new CellGrid(xShort ? n : m, xShort ? m : n, g, demo);
+            if (room == null) throw new ArgumentNullException(nameof(room));
+            AlignedGrid a = room.Aligned;
+            if (a.N <= 0 || a.M <= 0 || !(a.G > 0)) a = CellGridRules.Aligned(Math.Round(room.FreeRect.Wf, 6), Math.Round(room.FreeRect.Df, 6));
+            return FromAligned(a, room.FreeRect.Wf <= room.FreeRect.Df);
+        }
+
+        // n cells along the short side, m along the long one; n = 2 only in the corner demo (§4.7 "five tiles round one post").
+        public static CellGrid FromAligned(in AlignedGrid a, bool xShort)
+        {
+            if (a.N < 2 || a.M < 2 || !(a.G >= MinSide) || double.IsInfinity(a.G))
+                throw new ArgumentOutOfRangeException(nameof(a), "free rectangle too small: cell side below 0.4 m");
+            return new CellGrid(xShort ? a.N : a.M, xShort ? a.M : a.N, a.G, a.N < CellGridRules.AlignedMinN);
         }
 
         public bool Contains(int2 cell) => cell.x >= 0 && cell.x < CountX && cell.y >= 0 && cell.y < CountZ;

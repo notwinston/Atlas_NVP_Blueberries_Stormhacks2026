@@ -1,92 +1,87 @@
 using System;
 using Atlas.Rendering;
 using Atlas.World;
+using Unity.Mathematics;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace Atlas.Spaces.AlignedCells
 {
-    // Master Plan §4.7, §4.9, §8.3, §8.5 S3 row; task P1-B12.
-    // Home walls, floor and every RoomModel object are drawn once per eye, unclipped, at their true anchor-frame position,
-    // whenever any instance of the object's cell is drawn; never duplicated per instance (§4.7). One renderer per object,
-    // parented to the root, never to a cell instance (furniture is registered, not tiled).
-    public sealed class AlignedCellsRoomView : IDisposable
+    // Master Plan §4.7, §4.9, §8.5 S3 row; task P1-B12; lane C contract §9.2 (S3: walls Full, floor hidden, objects shown once).
+    // The room is not copied: this drives the shared room content (IRoomContent). The walls stand in full on the edge of the grid,
+    // the cells bring the floor, and every object keeps its own renderer at its true place, unclipped, enabled whenever any
+    // instance of one of its cells is drawn. A mesh the asset client swaps in is therefore the mesh S3 shows.
+    public sealed class AlignedCellsRoomView
     {
-        public const float HomeFloorDrop = 0.005f;   // m, [P1-B12 D2]
-
-        readonly Transform root;
-        readonly IHomeShell home;
+        readonly IRoomContent room;
         readonly CellGrid grid;
-        readonly Material material;                  // [P1-B12 D3] one per-room instance, no property blocks
-        readonly GameObject walls, floor;
-        readonly GameObject[] objectGos;
-        readonly MeshFilter[] objectFilters;
-        readonly MeshRenderer[] objectRenderers;
-        readonly CellRange[] ranges;
         readonly bool[] mask;
-        readonly Action<int> onMeshChanged;
-        bool disposed;
+        readonly Action<RoomModel> onBuilt;
+        readonly Action<int> onObjectChanged;
+        CellRange[] ranges = Array.Empty<CellRange>();
+        bool[] visible = Array.Empty<bool>();
+        bool entered;
 
-        public Material Material => material;
-        public MeshRenderer WallsRenderer { get; }
-        public MeshRenderer FloorRenderer { get; }
-        public int ObjectCount { get; }
+        public IRoomContent Room => room;
+        public int ObjectCount { get; private set; }
         public int VisibleObjectCount { get; private set; }
+        // The room content changed under the space (a rebuilt room, a swapped mesh): Apply must run again.
+        public bool Dirty { get; private set; }
 
-        public AlignedCellsRoomView(Transform root, Material template, IHomeShell home, CellGrid grid)
+        public AlignedCellsRoomView(IRoomContent room, CellGrid grid)
         {
-            this.root = root; this.home = home; this.grid = grid;
-            material = new Material(template) { hideFlags = HideFlags.DontSave };
-            material.SetMatrix(AtlasShaderIDs.Gates, Matrix4x4.zero);   // §4.7 unclipped
-            material.SetFloat(AtlasShaderIDs.WarpMode, 0);
+            this.room = room ?? throw new ArgumentNullException(nameof(room));
+            this.grid = grid ?? throw new ArgumentNullException(nameof(grid));
+            mask = new bool[grid.CountX * grid.CountZ];
+            onBuilt = _ => { ReadObjects(); if (entered) Present(); };
+            onObjectChanged = _ => Dirty = true;      // the content enables the renderer of a mesh it swaps in
+            ReadObjects();
+        }
 
-            walls = MakeObject("HomeWalls", home.Walls, Vector3.zero, Quaternion.identity, out var wf, out var wr);
-            WallsRenderer = wr;
-            floor = MakeObject("HomeFloor", home.Floor, new Vector3(0, -HomeFloorDrop, 0), Quaternion.identity, out var ff, out var fr);
-            FloorRenderer = fr;
+        public CellRange ObjectCells(int i) => ranges[i];
+        public bool ObjectVisible(int i) => visible[i];
 
-            ObjectCount = home.ObjectCount;
-            objectGos = new GameObject[ObjectCount];
-            objectFilters = new MeshFilter[ObjectCount];
-            objectRenderers = new MeshRenderer[ObjectCount];
-            ranges = new CellRange[ObjectCount];
+        public void Enter()
+        {
+            entered = true;
+            room.Built += onBuilt;
+            room.ObjectChanged += onObjectChanged;
+            Present();
+        }
+
+        // Walls Full at once, floor hidden, objects on; §4.7 "unclipped": no gate and no warp on the room's own materials.
+        void Present()
+        {
+            Dirty = true;
+            if (!room.IsBuilt) return;
+            room.SetWallMode(WallMode.Full, 0f);
+            room.FloorVisible = false;
+            room.ObjectsVisible = true;
+            Unclip(room.ShellMaterial);
+            for (int i = 0; i < ObjectCount; i++) Unclip(room.GetObject(i)?.Material);
+        }
+
+        static void Unclip(Material material)
+        {
+            if (material == null) return;
+            MaterialPool.ClearGates(material);
+            MaterialPool.SetWarpMode(material, 0);
+        }
+
+        void ReadObjects()
+        {
+            ObjectCount = room.IsBuilt ? room.ObjectCount : 0;
+            if (ranges.Length != ObjectCount) { ranges = new CellRange[ObjectCount]; visible = new bool[ObjectCount]; }
             for (int i = 0; i < ObjectCount; i++)
             {
-                RoomObject rec = home.ObjectRecord(i);
-                objectGos[i] = MakeObject("Object" + i, home.ObjectMesh(i), new Vector3(rec.position.x, 0, rec.position.z),
-                                          RoomObjectCells.Rotation(rec), out objectFilters[i], out objectRenderers[i]);
-                ranges[i] = RoomObjectCells.Of(grid, rec);
+                IRoomObjectView view = room.GetObject(i);
+                ranges[i] = view != null && view.Data != null ? RoomObjectCells.Of(grid, view.Data) : new CellRange(new int2(-1), new int2(-1));
             }
-            mask = new bool[grid.CountX * grid.CountZ];
-            onMeshChanged = i =>   // §4.5: placeholder to generated swap; the pose is untouched
-            {
-                if (disposed || i < 0 || i >= ObjectCount || objectFilters[i] == null) return;
-                objectFilters[i].sharedMesh = home.ObjectMesh(i);
-            };
-            home.ObjectMeshChanged += onMeshChanged;
+            VisibleObjectCount = 0;
+            Dirty = true;
         }
 
-        GameObject MakeObject(string name, Mesh mesh, Vector3 pos, Quaternion rot, out MeshFilter mf, out MeshRenderer mr)
-        {
-            var go = new GameObject(name) { hideFlags = HideFlags.DontSave };
-            var tr = go.transform;
-            tr.SetParent(root, false);
-            tr.localPosition = pos; tr.localRotation = rot;
-            mf = go.AddComponent<MeshFilter>(); mf.sharedMesh = mesh;
-            mr = go.AddComponent<MeshRenderer>();
-            mr.sharedMaterial = material;
-            mr.shadowCastingMode = ShadowCastingMode.Off;
-            mr.receiveShadows = false;
-            mr.lightProbeUsage = LightProbeUsage.Off;
-            mr.reflectionProbeUsage = ReflectionProbeUsage.Off;
-            return go;
-        }
-
-        public MeshRenderer ObjectRenderer(int i) => objectRenderers[i];
-        public CellRange ObjectCells(int i) => ranges[i];
-
-        // §4.7: visible iff any instance of one of its cells is drawn. No allocation; writes only on change.
-        public void Apply(CellInstanceList instances)
+        // §4.7: visible iff any instance of one of its cells is drawn. No allocation, no engine call.
+        public void Compute(CellInstanceList instances)
         {
             Array.Clear(mask, 0, mask.Length);
             int n = instances.Count, cx = grid.CountX;
@@ -95,34 +90,46 @@ namespace Atlas.Spaces.AlignedCells
                 ref readonly CellInstance inst = ref instances[k];
                 mask[inst.Cell.y * cx + inst.Cell.x] = true;
             }
-            int visible = 0;
+            int count = 0;
             for (int i = 0; i < ObjectCount; i++)
             {
                 CellRange r = ranges[i];
                 bool v = false;
                 for (int z = r.Min.y; z <= r.Max.y && !v; z++)
                     for (int x = r.Min.x; x <= r.Max.x; x++)
-                        if (mask[z * cx + x]) { v = true; break; }
-                if (objectRenderers[i].enabled != v) objectRenderers[i].enabled = v;
-                if (v) visible++;
+                        if (x >= 0 && z >= 0 && mask[z * cx + x]) { v = true; break; }
+                visible[i] = v;
+                if (v) count++;
             }
-            VisibleObjectCount = visible;
+            VisibleObjectCount = count;
         }
 
-        public void Dispose()
+        // Step 6: Compute, then each object's own renderer on or off; writes only on change.
+        public void Apply(CellInstanceList instances)
         {
-            if (disposed) return;
-            disposed = true;
-            home.ObjectMeshChanged -= onMeshChanged;
-            Kill(walls); Kill(floor);
-            for (int i = 0; i < ObjectCount; i++) Kill(objectGos[i]);
-            Kill(material);
+            Compute(instances);
+            for (int i = 0; i < ObjectCount; i++)
+            {
+                Renderer r = room.GetObject(i)?.Renderer;
+                if (r != null && r.enabled != visible[i]) r.enabled = visible[i];
+            }
+            Dirty = false;
         }
 
-        static void Kill(UnityEngine.Object o)
+        // Every renderer back on; SpaceLab's ResetPresentation restores walls, floor and materials.
+        public void Exit()
         {
-            if (o == null) return;
-            if (Application.isPlaying) UnityEngine.Object.Destroy(o); else UnityEngine.Object.DestroyImmediate(o);
+            if (!entered) return;
+            entered = false;
+            room.Built -= onBuilt;
+            room.ObjectChanged -= onObjectChanged;
+            if (!room.IsBuilt) return;
+            int n = Math.Min(ObjectCount, room.ObjectCount);
+            for (int i = 0; i < n; i++)
+            {
+                Renderer r = room.GetObject(i)?.Renderer;
+                if (r != null && !r.enabled) r.enabled = true;
+            }
         }
     }
 }

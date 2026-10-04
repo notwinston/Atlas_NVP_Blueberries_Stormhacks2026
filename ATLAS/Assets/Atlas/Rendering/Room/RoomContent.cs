@@ -259,6 +259,7 @@ namespace Atlas.Rendering.Room
                     }
                     SetOpacity(view.MaterialInternal, t);
                     SetOpacity(view.OutMaterial, 1f - t);
+                    FollowWarp(view);
                 }
             }
             BeginQueuedSwaps();
@@ -497,8 +498,21 @@ namespace Atlas.Rendering.Room
             RaiseObjectChanged(view.DataInternal.Id);
         }
 
+        // A curved space writes the object's anchor to its material every frame, before this runs (the space's
+        // Upload comes first in step 6): the mesh that is fading out stays on the object, under the same warp
+        // and with the same bounds (Master Plan section 4.6).
+        static void FollowWarp(RoomObjectView view)
+        {
+            float mode = view.MaterialInternal.GetFloat(AtlasShaderIDs.WarpMode);
+            view.OutMaterial.SetFloat(AtlasShaderIDs.WarpMode, mode);
+            if (mode < 0.5f) return;
+            view.OutMaterial.SetMatrix(AtlasShaderIDs.Anchor, view.MaterialInternal.GetMatrix(AtlasShaderIDs.Anchor));
+            view.OutRenderer.localBounds = view.MeshRenderer.localBounds;
+        }
+
         void FinishFade(RoomObjectView view)
         {
+            view.OutRenderer.ResetLocalBounds();
             view.Fading = false;
             m_FadingCount--;
             SetOpacity(view.MaterialInternal, 1f);

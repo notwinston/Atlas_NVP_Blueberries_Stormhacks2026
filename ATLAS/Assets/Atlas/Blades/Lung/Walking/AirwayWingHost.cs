@@ -14,11 +14,11 @@ namespace Atlas.Blades.Lung.Walking
         public AirwayWingModule Module { get; private set; }
 
         // G6 §3.9 returns the AirwayBeat; that type arrives with P2-B09 (DV-B05-3), so this returns the module.
-        // clearance: the live Bump Guard (BumpGuard is an IClearanceQuery); null takes the one SafetyInstaller published.
+        // clearance: the live Bump Guard (BumpGuard is an IClearanceQuery); null takes the one AtlasApp published as clear(p) of MP §4.10.
         // The module is built once and handed to SpaceRegistry as S2's factory, which is how lane A's loader creates a space.
         public AirwayWingModule Register(IClearanceQuery clearance, IChamberView view)
         {
-            if (clearance == null && AtlasServices.TryGet<IBumpGuard>(out var guard)) clearance = guard as IClearanceQuery;
+            if (clearance == null) AtlasServices.TryGet(out clearance);
             var tree = new AirwayTreeBinding(new AirwayTree(AirwayTreeFile.Load(CaseManifest.Root("illustrative")), TileFrame.Zero));
             Module = new AirwayWingModule(tree, clearance, new NoChoice(), view, id => AtlasServices.Get<ISpaceHost>().RequestSwitch(id));
             SpaceRegistry.Register(SpaceId.CurvedWalk, () => Module);

@@ -6,7 +6,9 @@ using Atlas.Kernel;
 using Atlas.Rendering;
 using NUnit.Framework;
 using Unity.Mathematics;
+#if !ATLAS_HEADLESS
 using UnityEngine;
+#endif
 using static Atlas.Spaces.SmallPlanet.Tests.SmallPlanetTestUtil;
 using Random = System.Random;
 
@@ -17,40 +19,10 @@ namespace Atlas.Spaces.SmallPlanet.Tests
         static readonly double3 O = new double3(0, 0, 1);
         static readonly float3 Head = new float3(0, 1.6f, 0);
 
-        sealed class TileData
-        {
-            public Vector3[] V; public int[] T; public TileMeshLayout Lay; public double R;
-        }
-
-        static TileData BuildTile(double R)
-        {
-            var mesh = new Mesh();
-            var lay = new TileMeshGenerator(TilePalette.Provisional).Build(TileMeshSpec.Spherical(R, TileLod.Near, 0, 0xF), mesh);
-            var d = new TileData { V = mesh.vertices, T = mesh.triangles, Lay = lay, R = R };
-            UnityEngine.Object.DestroyImmediate(mesh);
-            return d;
-        }
-
-        static TileData BuildBeacon(double R)
-        {
-            var mesh = new Mesh();
-            PoleBeaconMesh.Build(mesh);
-            var d = new TileData { V = mesh.vertices, T = mesh.triangles, R = R };
-            UnityEngine.Object.DestroyImmediate(mesh);
-            return d;
-        }
-
         static Iso2 PoseTowards(double3 world, double rotation)
         {
             double2 t = Geometry2.Log(world, 1);
             return new Iso2((Iso2.Boost(t, 1) * Iso2.Rot(rotation)).M, 1);
-        }
-
-        static SmallPlanetSpace Place(double s, int face, Iso2 u)
-        {
-            var sp = NewSpace(s);
-            sp.Enter(new WalkerPose { Tile = CubeTiling.FaceId(face), Local = u });
-            return sp;
         }
 
         // T4. P1-B05 seam criterion on the {4,3} frames; §3.4, §9.5.6 P1-B05
@@ -81,8 +53,7 @@ namespace Atlas.Spaces.SmallPlanet.Tests
                     int face = rng.Next(6);
                     double r = CubeTiling.Circumradius * Math.Sqrt(rng.NextDouble()), a = rng.NextDouble() * 2 * Math.PI, th = rng.NextDouble() * 2 * Math.PI;
                     var u = new Iso2((Iso2.Boost(r * new double2(Math.Cos(a), Math.Sin(a)), 1) * Iso2.Rot(th)).M, 1);
-                    var sp = Place(s, face, u);
-                    sp.ComputeAnchors(anchors, out _);
+                    Anchors(Place(s, face, u), anchors, out _);
                     var mats = new float4x4[6];
                     for (int f = 0; f < 6; f++) mats[f] = ToF4(WarpAnchor.ToMatrix(anchors[f]));
                     for (int f = 0; f < 6; f++)
@@ -191,8 +162,7 @@ namespace Atlas.Spaces.SmallPlanet.Tests
                 foreach (var (name, w) in HeadPoints())
                 {
                     var u = PoseTowards(w, name.StartsWith("centre") ? 0 : rng.NextDouble() * 2 * Math.PI);
-                    var sp = Place(s, 0, u);
-                    sp.ComputeAnchors(anchors, out var ba);
+                    Anchors(Place(s, 0, u), anchors, out var ba);
                     for (int f = 0; f < 6; f++) drawnBad += Scan(tile, anchors[f], ToF4(WarpAnchor.ToMatrix(anchors[f])), ref worstG);
                     drawnBad += Scan(beacon, ba, ToF4(WarpAnchor.ToMatrix(ba)), ref worstG);
                     poses++;
@@ -207,11 +177,10 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             {
                 double R = 2 * s / Math.PI;
                 var tile = BuildTile(R);
-                var sp = Place(s, 0, new Iso2(double3x3.identity, 1));
-                sp.ComputeAnchors(anchors, out _);
+                Anchors(Place(s, 0, new Iso2(double3x3.identity, 1)), anchors, out _);
                 int vi = -1;
                 for (int i = tile.Lay.FloorVertices.start; i < tile.Lay.FloorVertices.start + tile.Lay.FloorVertices.length; i++)
-                    if (math.length(new float2(tile.V[i].x, tile.V[i].z)) < 1e-6f) vi = i;
+                    if (math.length(tile.V[i].xz) < 1e-6f) vi = i;
                 Assert.GreaterOrEqual(vi, 0);
                 float3 w = AtlasWarpCpu.AtlasWarp(tile.V[vi], ToF4(WarpAnchor.ToMatrix(anchors[5])), 2f, (float)R, Head, float4x4.identity);
                 float g = SmallPlanetShading.VertexGeodesic(w, Head, (float)R);
@@ -229,36 +198,55 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             var p = new float3(0.3f, 0.2f, (float)Math.Sqrt(1 - 0.13));
             double2 want = Geometry2.Log(new double3(p), 1);
             Assert.Less(math.length((double2)AtlasWarpCpu.LogS2(p) - want), 1e-6);
-            string src = File.ReadAllText(Path.Combine(Application.dataPath, "Atlas/Rendering/Shaders/AtlasWarp.hlsl"));
-            src = Regex.Replace(src, @"/\*.*?\*/", "", RegexOptions.Singleline);
-            src = Regex.Replace(src, @"//[^\n]*", "");
+            string src = Hlsl("AtlasWarp.hlsl");
             StringAssert.IsMatch(@"LogS2[\s\S]*p\.z\s*<\s*0", src);
+        }
+
+        static string Hlsl(string file)
+        {
+            string src = File.ReadAllText(Path.Combine(ProjectDir, "Assets/Atlas/Rendering/Shaders/Resources", file));
+            src = Regex.Replace(src, @"/\*.*?\*/", "", RegexOptions.Singleline);
+            return Regex.Replace(src, @"//[^\n]*", "");
+        }
+
+        // T6b. §9.5.6 "fragments beyond 2.6 rad discarded" in the shared shader: spherical mode only, in units of _HypL = R, in the fragment stage
+        [Test]
+        public void Warp_SphericalDiscardIsInTheShader()
+        {
+            string warp = Hlsl("AtlasWarp.hlsl");
+            StringAssert.IsMatch(@"void\s+AtlasWarpClip\s*\(\s*float3\s+positionWS\s*\)[\s\S]*_WarpMode\s*>\s*1\.5[\s\S]*clip\s*\(\s*2\.6\s*-\s*length\s*\(\s*positionWS\.xz\s*-\s*_HeadPosWS\.xz\s*\)\s*/\s*_HypL\s*\)", warp);
+            Assert.AreEqual(2.6, SmallPlanetConstants.DiscardRad, "the CPU reference and the shader agree");
+            StringAssert.IsMatch(@"AtlasWarpClip\s*\(\s*input\.positionWS\s*\)", Hlsl("AtlasSurface.shader"));
         }
 
         // T7. §3.5 pole beacon; R6 §2.6, §5.3; Spec §6.3
         [Test]
         public void SmallPlanet_PoleBeacon()
         {
-            var mesh = new Mesh();
+            var mesh = new AtlasMeshBuilder(32, 96);
             int tris = PoleBeaconMesh.Build(mesh);
             Assert.AreEqual(24, tris); Assert.LessOrEqual(tris, 500);
-            Assert.AreEqual(17, mesh.vertexCount);
-            Assert.AreEqual(SmallPlanetConstants.BeaconHeight, mesh.bounds.size.y, 1e-6);
-            var v = mesh.vertices; var t = mesh.triangles;
-            for (int i = 0; i < t.Length; i += 3)
+            Assert.AreEqual(24, mesh.TriangleCount);
+            Assert.AreEqual(17, mesh.VertexCount);
+            Assert.AreEqual(SmallPlanetConstants.BeaconHeight, mesh.BoundsSize.y, 1e-6);
+            for (int i = 0; i < mesh.VertexCount; i++)
             {
-                var n = Vector3.Cross(v[t[i + 1]] - v[t[i]], v[t[i + 2]] - v[t[i]]);
-                var c = (v[t[i]] + v[t[i + 1]] + v[t[i + 2]]) / 3f;
-                var outward = new Vector3(c.x, 0, c.z);
-                Assert.IsTrue(Vector3.Dot(n, outward) > 0 || (Mathf.Approximately(outward.sqrMagnitude, 0) || n.y > 0), $"triangle {i / 3} faces outward");
-                Assert.IsTrue(Vector3.Dot(n, outward) > 0 || n.y > 0);
+                Assert.AreEqual(AtlasPalette.Uv(AtlasPalette.Beacon), mesh.Vertices[i].Uv0);
+                Assert.AreEqual(0, mesh.Vertices[i].LineWeight);
             }
-            UnityEngine.Object.DestroyImmediate(mesh);
+            var v = mesh.Vertices; var t = mesh.Indices;
+            for (int i = 0; i < mesh.IndexCount; i += 3)
+            {
+                float3 n = math.cross(v[t[i + 1]].Position - v[t[i]].Position, v[t[i + 2]].Position - v[t[i]].Position);
+                float3 c = (v[t[i]].Position + v[t[i + 1]].Position + v[t[i + 2]].Position) / 3f;
+                var outward = new float3(c.x, 0, c.z);
+                Assert.IsTrue(math.dot(n, outward) > 0 || n.y > 0, $"triangle {i / 3} faces outward");
+            }
             double inscribed = SmallPlanetConstants.BeaconRadius * Math.Cos(Math.PI / 8);
             Assert.Greater(inscribed, TileChart.PostRadius);
             Assert.LessOrEqual(SmallPlanetConstants.BeaconRadius, 0.3 * (2 * 1.0 / Math.PI));
 
-            double3 bw = math.mul((CubeTiling.Frame(5) * SmallPlanetSpace.BeaconPlacement).M, O);
+            double3 bw = math.mul((CubeTiling.Frame(5) * SmallPlanetCore.BeaconPlacement).M, O);
             Assert.Less(math.length(bw - new double3(1, -1, -1) / Math.Sqrt(3)), 1e-12);
             var d = new List<double>();
             for (int f = 0; f < 6; f++)
@@ -272,25 +260,40 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             TestContext.WriteLine("T7 beacon distances to face centres: " + string.Join(", ", d.ConvertAll(x => x.ToString("F4"))));
             for (int i = 0; i < 3; i++) { Assert.AreEqual(0.9553, d[i], 1e-4); Assert.AreEqual(2.1863, d[i + 3], 1e-4); }
 
-            var sp = Place(2.0, 0, new Iso2(double3x3.identity, 1));
-            sp.ComputeAnchors(new Iso2[6], out var ba);
+            Anchors(Place(2.0, 0, new Iso2(double3x3.identity, 1)), new Iso2[6], out var ba);
             Assert.Less(math.length(math.mul(ba.M, O) - new double3(1, -1, -1) / Math.Sqrt(3)), 1e-12);
         }
 
         // T10. §8.3, §8.5 (S4 <= 70 draw calls, <= 190k triangles), §8.4 Near cap 1,200
         [Test]
-        public void SmallPlanet_ViewAndBudget()
+        public void SmallPlanet_Budget()
         {
-            var shared = new Material(Shader.Find("Hidden/InternalErrorShader"));
+            foreach (double s in LapSides)
+            {
+                int T = BuildTile(2 * s / Math.PI).Lay.TriangleCount;
+                Assert.LessOrEqual(T, 1200);
+                int draws = 2 * 7, tris = 2 * (6 * T + 24);
+                TestContext.WriteLine($"T10 s={s}: tile triangles {T}, planet draws {draws}, planet triangles {tris}");
+                Assert.LessOrEqual(draws, 70); Assert.LessOrEqual(tris, 190000);
+            }
+        }
+
+#if !ATLAS_HEADLESS
+        // T10 (view). §8.3: seven renderers, one pooled instance each, one shared tile mesh, huge bounds; everything goes back to the pool
+        [Test, Category("Unity")]
+        public void SmallPlanet_View()
+        {
+            var pool = MaterialPool.CreateDefault(16);
             var go = new GameObject("view");
             try
             {
                 var view = go.AddComponent<SmallPlanetView>();
+                var anchors = new Iso2[6];
                 foreach (double s in LapSides)
                 {
-                    var sp = NewSpace(s);
-                    sp.Enter(SmallPlanetSpace.StartPose(double2.zero, sp.R));
-                    view.Build(sp, shared);
+                    double R = 2 * s / Math.PI;
+                    view.Build(R, pool);
+                    Assert.AreEqual(7, pool.Rented);
                     Assert.AreEqual(6, view.TileRenderers.Count);
                     Assert.IsNotNull(view.BeaconRenderer);
                     var mats = new HashSet<Material>();
@@ -299,28 +302,33 @@ namespace Atlas.Spaces.SmallPlanet.Tests
                     {
                         Assert.IsTrue(r.enabled);
                         Assert.AreEqual(new Vector3(1000, 1000, 1000), r.localBounds.size);
-                        Assert.AreEqual(HideFlags.DontSave, r.sharedMaterial.hideFlags);
-                        Assert.AreNotSame(shared, r.sharedMaterial);
+                        Assert.IsTrue(pool.Owns(r.sharedMaterial));
+                        Assert.AreEqual(AtlasWarpCpu.ModeSpherical, r.sharedMaterial.GetFloat(AtlasShaderIDs.WarpMode));
                         mats.Add(r.sharedMaterial);
                     }
                     Assert.AreEqual(7, mats.Count);
                     var m0 = view.TileRenderers[0].GetComponent<MeshFilter>().sharedMesh;
                     for (int f = 1; f < 6; f++) Assert.AreSame(m0, view.TileRenderers[f].GetComponent<MeshFilter>().sharedMesh);
-                    int T = (int)m0.GetIndexCount(0) / 3;
-                    Assert.LessOrEqual(T, 1200);
-                    int draws = 2 * 7, tris = 2 * (6 * T + 24);
-                    TestContext.WriteLine($"T10 s={s}: tile triangles {T}, planet draws {draws}, planet triangles {tris}");
-                    Assert.LessOrEqual(draws, 70); Assert.LessOrEqual(tris, 190000);
-                    view.Upload(sp, new Vector3(0, 1.6f, 0));
+                    Assert.AreEqual(view.TileTriangles, (int)m0.GetIndexCount(0) / 3);
+                    Assert.AreEqual(24, (int)view.BeaconRenderer.GetComponent<MeshFilter>().sharedMesh.GetIndexCount(0) / 3);
+                    Anchors(Place(s, 0, new Iso2(double3x3.identity, 1)), anchors, out Iso2 beacon);
+                    view.Upload(anchors, beacon);
+                    Assert.AreEqual(WarpAnchor.ToMatrix(anchors[3]), view.TileRenderers[3].sharedMaterial.GetMatrix(AtlasShaderIDs.Anchor));
+                    view.Shown = false;
+                    Assert.IsFalse(view.BeaconRenderer.gameObject.activeSelf);
+                    view.SetRadius(R * 1.5);
+                    Assert.AreSame(m0, view.TileRenderers[0].GetComponent<MeshFilter>().sharedMesh, "rebuilt in place");
                     view.Release();
                     Assert.AreEqual(0, go.transform.childCount);
+                    Assert.AreEqual(0, pool.Rented);
                 }
             }
             finally
             {
                 UnityEngine.Object.DestroyImmediate(go);
-                UnityEngine.Object.DestroyImmediate(shared);
+                pool.Dispose();
             }
         }
+#endif
     }
 }

@@ -1,5 +1,6 @@
 Shader "Hidden/Atlas/Tests/AlignedCellsGates"
 {
+    // The gates include on its own, against the four gate vectors of the frozen block (lane A contract §10.1).
     SubShader
     {
         Tags { "RenderPipeline" = "UniversalPipeline" "RenderType" = "Opaque" }
@@ -11,10 +12,12 @@ Shader "Hidden/Atlas/Tests/AlignedCellsGates"
             #pragma fragment frag
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             CBUFFER_START(UnityPerMaterial)
-                float4x4 _Gates;
-                float _WarpMode;
+                float4 _Gate0;
+                float4 _Gate1;
+                float4 _Gate2;
+                float4 _Gate3;
             CBUFFER_END
-            #include "Assets/Atlas/Rendering/Shaders/AtlasGates.hlsl"
+            #include "Assets/Atlas/Rendering/Shaders/Resources/AtlasGates.hlsl"
 
             struct Attributes { float3 positionOS : POSITION; };
             struct Varyings { float4 positionCS : SV_POSITION; float3 positionWS : TEXCOORD0; };

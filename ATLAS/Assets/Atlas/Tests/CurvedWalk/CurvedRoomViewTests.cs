@@ -1,171 +1,143 @@
+using System;
 using System.Collections.Generic;
 using Atlas.Kernel;
+using Atlas.Link;
 using Atlas.Rendering;
-using Atlas.Scan;
+using Atlas.Rendering.Room;
 using Atlas.World;
 using NUnit.Framework;
 using Unity.Mathematics;
-using UnityEngine;
 using static Atlas.Spaces.CurvedWalk.Tests.ReplayLogs;
 
 namespace Atlas.Spaces.CurvedWalk.Tests
 {
-    // P1-B11: the Home rebuild placed in curved space (MP §3.5, §4.6, §8.3, §8.4, §9.5.6 P1-B11, §11.1 WorldLint_All items)
+    // P1-B11: the room content placed in curved space (MP §3.5, §4.6, §8.3, §8.4, §9.5.6 P1-B11). The mathematics runs on
+    // the real RoomModel and on the mesh data the room content draws (RoomShellBuilder, RoomObjectMeshes), with the anchors
+    // CurvedRoomView uploads: U^-1 F0 for the shell and U^-1 F0 Object(base, yaw) per object. The engine half, on the real
+    // RoomContent, is at the end of the file.
     public class CurvedRoomViewTests
     {
-        GameObject parent; Material shared;
-        readonly List<UnityEngine.Object> toKill = new List<UnityEngine.Object>();
-
-        [SetUp] public void SetUp() { parent = new GameObject("test"); shared = DialWalkTests.TestMaterial(); }
-
-        [TearDown]
-        public void TearDown()
-        {
-            Object.DestroyImmediate(parent); Object.DestroyImmediate(shared);
-            foreach (var o in toKill) if (o != null) Object.DestroyImmediate(o);
-            toKill.Clear();
-        }
-
-        CurvedRoomView NewView(string room, out IHomeShell home, out RoomModel model)
-        {
-            model = Room(room);
-            home = HomeRebuild.Build(model);
-            return new CurvedRoomView(parent.transform, shared, home, model.walls);
-        }
-
         static Iso2 Neutral(double kappa) => new Iso2(double3x3.identity, kappa);
 
-        // Room_Kappa0_MatchesHome: "at kappa = 0 the curved-space room matches Home to 1 cm" (MP §9.5.6 P1-B11, §4.6)
-        [TestCase("room_3x3.json")]
-        [TestCase("budget_room.json")]
-        public void Room_Kappa0_MatchesHome(string name)
+        // The layout WarpAnchor.ToMatrix uploads (kernel.md §6.2): the isometry's 3x3 in the upper left, cast to float last.
+        static float4x4 Upload(in Iso2 a) =>
+            new float4x4(new float4((float3)a.M.c0, 0f), new float4((float3)a.M.c1, 0f), new float4((float3)a.M.c2, 0f), new float4(0f, 0f, 0f, 1f));
+
+        static AtlasMeshBuilder Kerbs(RoomModel room)
         {
-            using (var v = NewView(name, out var home, out var model))
-            {
-                // (a) K = 0: mode 0 and the transforms give the Home positions to 1e-5 m
-                Iso2 u0 = TileZeroPlacement.Registered(new double2(0.3, -0.2), 0, 1);
-                v.Upload(0, 1, u0, Iso2.Identity, true);
-                Assert.IsTrue(v.FloorRenderer.enabled); Assert.IsTrue(v.WallsRenderer.enabled); Assert.IsFalse(v.KerbRenderer.enabled);
-                foreach (var r in new[] { v.FloorRenderer, v.WallsRenderer })
-                {
-                    Assert.AreEqual(0f, r.sharedMaterial.GetFloat(AtlasShaderIDs.WarpMode));
-                    Assert.AreEqual(Matrix4x4.identity, r.transform.localToWorldMatrix);
-                }
-                for (int i = 0; i < home.ObjectCount; i++)
-                {
-                    var rec = home.ObjectRecord(i); var r = v.ObjectRenderer(i);
-                    Assert.IsTrue(r.enabled);
-                    Assert.AreEqual(0f, r.sharedMaterial.GetFloat(AtlasShaderIDs.WarpMode));
-                    Assert.Less(Vector3.Distance(r.transform.position, rec.position), 1e-5f);
-                    var expect = Quaternion.Euler(0, rec.yaw * Mathf.Rad2Deg, 0);
-                    Assert.Less(Quaternion.Angle(r.transform.rotation, expect), 1e-3f);
-                }
-
-                // (b) near-zero curvature: L = 10,000 m, the float warp of every vertex is within 0.01 m of the Home position
-                const double L = 10000;
-                var head = new double2(0.3, -0.2);
-                Iso2 u = TileZeroPlacement.Registered(head, -1, L);
-                Iso2 f0 = Neutral(-1);
-                v.Upload(-1, L, u, f0, true);
-                var headWS = new float3((float)head.x, 1.6f, (float)head.y);
-                float worst = 0;
-                var kerb = v.KerbMeshAsset;
-                var kv = kerb.vertices;
-                float4x4 kA = ToF4(v.KerbRenderer.sharedMaterial.GetMatrix(AtlasShaderIDs.Anchor));
-                foreach (var p in kv)
-                {
-                    float3 w = AtlasWarpCpu.AtlasWarp(p, kA, 1f, (float)L, headWS, float4x4.identity);
-                    worst = Mathf.Max(worst, Mathf.Abs(w.x - p.x), Mathf.Abs(w.z - p.z));
-                }
-                for (int i = 0; i < home.ObjectCount; i++)
-                {
-                    var rec = home.ObjectRecord(i);
-                    float4x4 a = ToF4(v.ObjectRenderer(i).sharedMaterial.GetMatrix(AtlasShaderIDs.Anchor));
-                    Quaternion q = Quaternion.Euler(0, rec.yaw * Mathf.Rad2Deg, 0);
-                    foreach (var p in home.ObjectMesh(i).vertices)
-                    {
-                        Vector3 homePos = rec.position + q * p;
-                        float3 w = AtlasWarpCpu.AtlasWarp(p, a, 1f, (float)L, headWS, float4x4.identity);
-                        worst = Mathf.Max(worst, Mathf.Abs(w.x - homePos.x), Mathf.Abs(w.z - homePos.z));
-                        Assert.AreEqual(homePos.y, w.y, 1e-6f);
-                    }
-                }
-                Assert.Less(worst, 0.01f, "float warp at L = 10,000 m vs Home");
-
-                // (c) the flat double reference is exact to 1e-9 (U^-1 F0 Placement applied in double)
-                Iso2 uf = TileZeroPlacement.Registered(head, 0, 1);
-                double exact = 0;
-                for (int i = 0; i < home.ObjectCount; i++)
-                {
-                    var rec = home.ObjectRecord(i);
-                    Iso2 a = uf.Inverse() * Neutral(0) * TileZeroPlacement.Object(new double2(rec.position.x, rec.position.z), rec.yaw, 0, 1);
-                    foreach (var p in home.ObjectMesh(i).vertices)
-                    {
-                        double3 pt = math.mul(a.M, new double3(p.x, p.z, 1));
-                        double2 w = head + pt.xy;
-                        double2 h = new double2(rec.position.x, rec.position.z) + new double2(p.x * System.Math.Cos(rec.yaw) + p.z * System.Math.Sin(rec.yaw), -p.x * System.Math.Sin(rec.yaw) + p.z * System.Math.Cos(rec.yaw));
-                        exact = math.max(exact, math.length(w - h));
-                    }
-                }
-                Assert.Less(exact, 1e-9, "the flat double reference is exact");
-            }
+            var data = new AtlasMeshBuilder();
+            RoomShellBuilder.Kerbs(room, CurvedRoomConstants.KerbHeightM, data);
+            return data;
         }
 
-        static float4x4 ToF4(Matrix4x4 m) => new float4x4(m.GetColumn(0), m.GetColumn(1), m.GetColumn(2), m.GetColumn(3));
+        static AtlasMeshBuilder ObjectMesh(RoomObject o)
+        {
+            var data = new AtlasMeshBuilder();
+            RoomObjectMeshes.Initial(o, data);
+            return data;
+        }
+
+        // Room_Kappa0_MatchesHome: "at kappa = 0 the curved-space room matches Home to 1 cm" (MP §9.5.6 P1-B11, §4.6)
+        [TestCase(RoomFixtures.Sample3x3)]
+        [TestCase(RoomFixtures.Sample4x5Table)]
+        [TestCase(RoomFixtures.BudgetRoom)]
+        public void Room_Kappa0_MatchesHome(string name)
+        {
+            RoomModel room = Room(name);
+            // near-zero curvature: L = 10,000 m, the float warp of every vertex is within 0.01 m of the Home position
+            const double L = 10000;
+            var head = new double2(0.3, -0.2);
+            Iso2 a0 = TileZeroPlacement.Registered(head, -1, L).Inverse() * Neutral(-1);
+            var headWS = new float3((float)head.x, 1.6f, (float)head.y);
+            float worst = 0;
+            AtlasMeshBuilder kerb = Kerbs(room);
+            Assert.Greater(kerb.VertexCount, 0);
+            float4x4 kA = Upload(a0);
+            for (int i = 0; i < kerb.VertexCount; i++)
+            {
+                float3 p = kerb.Vertices[i].Position;
+                float3 w = AtlasWarpCpu.AtlasWarp(p, kA, AtlasWarpCpu.ModeHyperbolic, (float)L, headWS, float4x4.identity);
+                worst = math.max(worst, math.max(math.abs(w.x - p.x), math.abs(w.z - p.z)));
+            }
+            foreach (RoomObject o in room.Objects)
+            {
+                float4x4 a = Upload(a0 * TileZeroPlacement.Object(new double2(o.Base.x, o.Base.z), o.Yaw, -1, L));
+                AtlasMeshBuilder mesh = ObjectMesh(o);
+                for (int i = 0; i < mesh.VertexCount; i++)
+                {
+                    float3 p = mesh.Vertices[i].Position;
+                    float3 home = RoomObjectMeshes.ToRoom(o, p);
+                    float3 w = AtlasWarpCpu.AtlasWarp(p, a, AtlasWarpCpu.ModeHyperbolic, (float)L, headWS, float4x4.identity);
+                    worst = math.max(worst, math.max(math.abs(w.x - home.x), math.abs(w.z - home.z)));
+                    Assert.AreEqual(p.y, w.y, 1e-6f, "the warp leaves the height alone");
+                }
+            }
+            Assert.Less(worst, 0.01f, "float warp at L = 10,000 m vs Home");
+
+            // the flat double reference is exact to 1e-9 (U^-1 F0 Placement applied in double)
+            Iso2 uf = TileZeroPlacement.Registered(head, 0, 1);
+            double exact = 0;
+            foreach (RoomObject o in room.Objects)
+            {
+                Iso2 a = uf.Inverse() * Neutral(0) * TileZeroPlacement.Object(new double2(o.Base.x, o.Base.z), o.Yaw, 0, 1);
+                AtlasMeshBuilder mesh = ObjectMesh(o);
+                for (int i = 0; i < mesh.VertexCount; i++)
+                {
+                    float3 p = mesh.Vertices[i].Position;
+                    double3 pt = math.mul(a.M, new double3(p.x, p.z, 1));
+                    double2 w = head + pt.xy;
+                    double2 h = new double2(o.Base.x, o.Base.z) + new double2(p.x * Math.Cos(o.Yaw) + p.z * Math.Sin(o.Yaw), -p.x * Math.Sin(o.Yaw) + p.z * Math.Cos(o.Yaw));
+                    exact = math.max(exact, math.length(w - h));
+                }
+            }
+            Assert.Less(exact, 1e-9, "the flat double reference is exact");
+        }
 
         // Room_ExpAboutCentre: with U = identity the exp map about the room centre is radially exact (MP §4.6)
         [Test]
         public void Room_ExpAboutCentre()
         {
-            using (var v = NewView("room_4x5_table.json", out var home, out var model))
+            RoomModel room = Room(RoomFixtures.Sample4x5Table);
+            double L = room.Curvature.ForDial(5);
+            Iso2 id = Neutral(-1);
+            double3 headWS = new double3(0, 1.6, 0);
+            double worst = 0;
+            AtlasMeshBuilder kerb = Kerbs(room);
+            for (int i = 0; i < kerb.VertexCount; i++)
             {
-                double L = 1.4;
-                Iso2 id = Neutral(-1);
-                v.Upload(-1, L, id, id, true);
-                double3 headWS = new double3(0, 1.6, 0);
-                double worst = 0;
-                foreach (var p in v.KerbMeshAsset.vertices)
-                {
-                    var a = ToIso(v.KerbRenderer.sharedMaterial.GetMatrix(AtlasShaderIDs.Anchor));
-                    double3 w = AtlasWarpReference.Warp(new double3(p.x, p.y, p.z), a, -1, L, headWS);
-                    worst = math.max(worst, math.max(math.abs(w.x - p.x), math.abs(w.z - p.z)));
-                }
-                Assert.Less(worst, 1e-6, "kerb vertices land on their Home x,z");
-                for (int i = 0; i < home.ObjectCount; i++)
-                {
-                    var rec = home.ObjectRecord(i);
-                    Iso2 a = TileZeroPlacement.Object(new double2(rec.position.x, rec.position.z), rec.yaw, -1, L);
-                    double3 w = AtlasWarpReference.Warp(double3.zero, a, -1, L, headWS);
-                    Assert.AreEqual(rec.position.x, w.x, 1e-6); Assert.AreEqual(rec.position.z, w.z, 1e-6);
-                }
+                float3 p = kerb.Vertices[i].Position;
+                double3 w = AtlasWarpReference.Warp(new double3(p.x, p.y, p.z), id, -1, L, headWS);
+                worst = math.max(worst, math.max(math.abs(w.x - p.x), math.abs(w.z - p.z)));
+            }
+            Assert.Less(worst, 1e-6, "kerb vertices land on their Home x,z");
+            Assert.GreaterOrEqual(room.Objects.Length, 1);
+            foreach (RoomObject o in room.Objects)
+            {
+                Iso2 a = TileZeroPlacement.Object(new double2(o.Base.x, o.Base.z), o.Yaw, -1, L);
+                double3 w = AtlasWarpReference.Warp(double3.zero, a, -1, L, headWS);
+                Assert.AreEqual(o.Base.x, w.x, 1e-6); Assert.AreEqual(o.Base.z, w.z, 1e-6);
             }
         }
 
-        static Iso2 ToIso(Matrix4x4 m)
-        {
-            // WarpAnchor.ToMatrix wrote (float)M[c][r] at [r, c]
-            var d = new double3x3(m[0, 0], m[1, 0], m[2, 0], m[0, 1], m[1, 1], m[2, 1], m[0, 2], m[1, 2], m[2, 2]);
-            return new Iso2(d, -1);
-        }
-
         // Furniture_Rigid: object anchors are rigid placements about the base (MP §4.6 "per-object anchors")
-        [Test]
-        public void Furniture_Rigid()
+        [TestCase(RoomFixtures.Sample4x5Table)]
+        [TestCase(RoomFixtures.BudgetRoom)]
+        public void Furniture_Rigid(string name)
         {
-            var model = Room("room_4x5_table.json");
-            var home = HomeRebuild.Build(model);
-            double L = 1.4;
-            Assert.GreaterOrEqual(home.ObjectCount, 1);
-            for (int i = 0; i < home.ObjectCount; i++)
+            RoomModel room = Room(name);
+            double L = room.Curvature.ForDial(5);
+            Assert.GreaterOrEqual(room.Objects.Length, 1);
+            foreach (RoomObject o in room.Objects)
             {
-                var rec = home.ObjectRecord(i);
-                Iso2 a = TileZeroPlacement.Object(new double2(rec.position.x, rec.position.z), rec.yaw, -1, L);
+                Iso2 a = TileZeroPlacement.Object(new double2(o.Base.x, o.Base.z), o.Yaw, -1, L);
                 double3 baseP = a.M.c2;
-                double3 expect = Geometry2.Exp(new double2(rec.position.x, rec.position.z) / L, -1);
+                double3 expect = Geometry2.Exp(new double2(o.Base.x, o.Base.z) / L, -1);
                 Assert.Less(Geometry2.Distance(baseP, expect, -1) * L, 1e-3, "base centre at Exp(pos / L)");
                 double worst = 0;
-                foreach (var p in home.ObjectMesh(i).vertices)
+                AtlasMeshBuilder mesh = ObjectMesh(o);
+                for (int i = 0; i < mesh.VertexCount; i++)
                 {
+                    float3 p = mesh.Vertices[i].Position;
                     double3 w = math.mul(a.M, Geometry2.Exp(new double2(p.x, p.z) / L, -1));
                     double d = Geometry2.Distance(w, baseP, -1) * L;
                     worst = math.max(worst, math.abs(d - math.length(new double2(p.x, p.z))));
@@ -174,95 +146,35 @@ namespace Atlas.Spaces.CurvedWalk.Tests
             }
         }
 
-        static Wall DoorWall()
+        // Walls_SinkToKerbs (MP §3.5, §4.6, §8.4): the kerb the room content draws in curved space is 0.9 m high and has no
+        // edge over 0.25 m, so the warp bends it correctly. The openings are the room content's own tests (RoomShellTests).
+        [TestCase(RoomFixtures.Sample3x3)]
+        [TestCase(RoomFixtures.SampleL3x4)]
+        [TestCase(RoomFixtures.Sample4x5Table)]
+        [TestCase(RoomFixtures.BudgetRoom)]
+        public void Walls_SinkToKerbs(string name)
         {
-            return new Wall
-            {
-                a = new FloorPoint { x = -1.5f, z = -1.5f }, b = new FloorPoint { x = 1.5f, z = -1.5f }, height = 2.4f,
-                openings = new[]
-                {
-                    new Opening { kind = "door", from = 1.0f, to = 1.9f, bottom = 0f, top = 2.0f },
-                    new Opening { kind = "window", from = 2.2f, to = 2.8f, bottom = 1.0f, top = 2.0f },
-                },
-            };
+            Assert.AreEqual(0.9f, CurvedRoomConstants.KerbHeightM);
+            Assert.LessOrEqual(CurvedRoomConstants.KerbHeightM, RoomShellBuilder.MaxKerbHeight);
+            AtlasMeshBuilder kerb = Kerbs(Room(name));
+            Assert.Greater(kerb.TriangleCount, 0);
+            Assert.AreEqual(0.9f, kerb.BoundsMax.y, 1e-5f);
+            // The warp leaves the height alone, so what counts is an edge's length along the floor (room contract §9.3).
+            Assert.LessOrEqual(RoomShellBuilder.LongestFloorPlaneEdge(kerb), CurvedRoomConstants.EdgeRuleM * 1.0002f, "no edge over 0.25 m along the floor (MP §8.4)");
         }
 
-        // Walls_SinkToKerbs (MP §3.5, §4.6, §8.4): kerb 0.9 m, no edge over 0.25 m, door gap stays open
-        [Test]
-        public void Walls_SinkToKerbs()
+        // The warp reads the mesh in metres and ignores Transforms: every room object mesh obeys the edge rule too. A stand-in
+        // has no edge over 0.25 m; a placeholder box is gridded at 0.25 m, so its sides obey it and a cell's diagonal is 0.354 m.
+        [TestCase(RoomFixtures.Sample4x5Table)]
+        [TestCase(RoomFixtures.BudgetRoom)]
+        public void Furniture_ObeysTheEdgeRule(string name)
         {
-            var w0 = DoorWall();
-            var rest = new[]
+            foreach (RoomObject o in Room(name).Objects)
             {
-                new Wall { a = new FloorPoint { x = 1.5f, z = -1.5f }, b = new FloorPoint { x = 1.5f, z = 1.5f }, height = 2.4f },
-                new Wall { a = new FloorPoint { x = 1.5f, z = 1.5f }, b = new FloorPoint { x = -1.5f, z = 1.5f }, height = 2.4f },
-                new Wall { a = new FloorPoint { x = -1.5f, z = 1.5f }, b = new FloorPoint { x = -1.5f, z = -1.5f }, height = 2.4f },
-            };
-            var walls = new[] { w0, rest[0], rest[1], rest[2] };
-            var mesh = new Mesh(); toKill.Add(mesh);
-            int tris = KerbMesh.Build(walls, 0.9f, mesh);
-            Assert.Greater(tris, 0);
-            var v = mesh.vertices; var t = mesh.triangles;
-            float maxY = 0; foreach (var p in v) maxY = Mathf.Max(maxY, p.y);
-            Assert.AreEqual(0.9f, maxY, 1e-5f);
-            float longest = 0;
-            for (int i = 0; i < t.Length; i += 3)
-                for (int e = 0; e < 3; e++)
-                    longest = Mathf.Max(longest, Vector3.Distance(v[t[i + e]], v[t[i + (e + 1) % 3]]));
-            Assert.LessOrEqual(longest, 0.25f, "no edge over 0.25 m (MP §8.4)");
-            foreach (var p in v)   // door gap along wall 0 (z = -1.5, x from -0.5 to 0.4): no vertex strictly inside
-                if (Mathf.Abs(p.z + 1.5f) < 1e-4f) Assert.IsFalse(p.x > -0.5f + 1e-3f && p.x < 0.4f - 1e-3f, "door gap at x = " + p.x);
-            bool windowWallPresent = false;   // the window starts at 1.0 m (above the kerb): that stretch stays closed
-            foreach (var p in v) if (Mathf.Abs(p.z + 1.5f) < 1e-4f && p.x > 0.75f && p.x < 1.25f) windowWallPresent = true;
-            Assert.IsTrue(windowWallPresent);
-            var n = mesh.normals; Assert.AreEqual(v.Length, n.Length);
-            foreach (var nn in n) Assert.AreEqual(0f, nn.y, 1e-6f);   // horizontal, two-sided
-
-            // the view: K != 0 walls and floor off, kerb on; K = 0 the reverse
-            var model = Room("room_3x3.json");
-            var home = HomeRebuild.Build(model);
-            using (var view = new CurvedRoomView(parent.transform, shared, home, model.walls))
-            {
-                Iso2 id = Neutral(-1);
-                view.Upload(-1, 1.884481, id, id, true);
-                Assert.IsFalse(view.FloorRenderer.enabled); Assert.IsFalse(view.WallsRenderer.enabled); Assert.IsTrue(view.KerbRenderer.enabled);
-                Assert.AreEqual(1f, view.KerbRenderer.sharedMaterial.GetFloat(AtlasShaderIDs.WarpMode));
-                view.Upload(0, 1, Iso2.Identity, Iso2.Identity, true);
-                Assert.IsTrue(view.FloorRenderer.enabled); Assert.IsTrue(view.WallsRenderer.enabled); Assert.IsFalse(view.KerbRenderer.enabled);
-                view.Upload(-1, 1.884481, id, id, false);
-                Assert.IsFalse(view.KerbRenderer.enabled);
-                for (int i = 0; i < view.ObjectCount; i++) Assert.IsFalse(view.ObjectRenderer(i).enabled);
-            }
-        }
-
-        // Room_EveryObjectDrawn (MP §11.1 WorldLint_All): one renderer per object with a mesh; WarpBounds: 1000 m local bounds
-        [TestCase("budget_room.json")]
-        [TestCase("room_4x5_table.json")]
-        public void Room_EveryObjectDrawn_And_WarpBounds(string name)
-        {
-            using (var view = NewView(name, out var home, out var model))
-            {
-                Assert.AreEqual(model.objects.Length, view.ObjectCount);
-                Iso2 id = Neutral(-1);
-                foreach (double kappa in new[] { -1.0, 0.0 })
-                {
-                    view.Upload(kappa, 1.4, kappa == 0 ? Iso2.Identity : id, kappa == 0 ? Iso2.Identity : id, true);
-                    for (int i = 0; i < home.ObjectCount; i++)
-                    {
-                        Assert.IsNotNull(home.ObjectMesh(i));
-                        Assert.IsTrue(view.ObjectRenderer(i).enabled, "object " + i + " kappa " + kappa);
-                        Assert.IsNotNull(view.ObjectRenderer(i).GetComponent<MeshFilter>().sharedMesh);
-                    }
-                }
-                var all = new List<MeshRenderer> { view.FloorRenderer, view.WallsRenderer, view.KerbRenderer };
-                for (int i = 0; i < view.ObjectCount; i++) all.Add(view.ObjectRenderer(i));
-                foreach (var r in all)
-                {
-                    Assert.AreEqual(1000f, r.localBounds.size.x); Assert.AreEqual(1000f, r.localBounds.size.y); Assert.AreEqual(1000f, r.localBounds.size.z);
-                    Assert.AreEqual(UnityEngine.Rendering.ShadowCastingMode.Off, r.shadowCastingMode);
-                }
-                var mats = new HashSet<Material>();
-                foreach (var r in all) Assert.IsTrue(mats.Add(r.sharedMaterial), "one material instance each");
+                AtlasMeshBuilder mesh = ObjectMesh(o);
+                float limit = CurvedRoomConstants.EdgeRuleM * 1.0002f;
+                if (o.Mesh == MeshState.StandIn) Assert.LessOrEqual(mesh.LongestEdge(), limit, "object " + o.Id);
+                else Assert.LessOrEqual(mesh.LongestSide(), limit, "object " + o.Id);
             }
         }
 
@@ -272,5 +184,158 @@ namespace Atlas.Spaces.CurvedWalk.Tests
             Assert.IsTrue(CurvedRoomConstants.NearFadeEngaged(0.29)); Assert.IsFalse(CurvedRoomConstants.NearFadeEngaged(0.3));
             Assert.AreEqual(0.3, CurvedRoomConstants.NearFadeRadiusM);
         }
+
+        [Test]
+        public void Registration_PutsCurvedWalkInTheRegistry()
+        {
+            CurvedWalkRegistration.Register();
+            Assert.IsTrue(SpaceRegistry.IsRegistered(SpaceId.CurvedWalk));
+            // Safe to run twice: no domain reload in the Editor.
+            CurvedWalkRegistration.Register();
+            Assert.IsTrue(SpaceRegistry.IsRegistered(SpaceId.CurvedWalk));
+            var registry = new ParamRegistry();
+            SpaceRegistry.DeclareAllParams(registry);
+            Assert.IsNotNull(registry.Find(CurvedWalkCore.ParamQ), "the dial is in the manifest at boot");
+            Assert.IsNotNull(registry.Find(CurvedWalkCore.ParamStrong));
+        }
+
+#if !ATLAS_HEADLESS
+        // ---- the engine half: the real RoomContent, driven by CurvedRoomView and by the module ----
+
+        UnityEngine.GameObject root;
+        MaterialPool pool;
+        RoomContent content;
+
+        void Build(string name)
+        {
+            root = new UnityEngine.GameObject("room");
+            pool = MaterialPool.CreateDefault();
+            content = new RoomContent(root.transform, pool) { Instant = true };
+            content.Build(Room(name));
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            AtlasServices.Clear();
+            if (content != null) content.Dispose();
+            content = null;
+            if (pool != null) pool.Dispose();
+            pool = null;
+            if (root != null) UnityEngine.Object.DestroyImmediate(root);
+            root = null;
+        }
+
+        // K = 0: exactly the room (warp off, floor, full walls); K != 0: floor off, 0.9 m kerbs, the shell and every object
+        // warped on its own material with 1000 m bounds; the reverse on the way back.
+        [Test, Category("Unity")]
+        public void View_DrivesTheRealRoomContent()
+        {
+            Build(RoomFixtures.Sample4x5Table);
+            using (var view = new CurvedRoomView(content))
+            {
+                Assert.AreEqual(content.Room.Objects.Length, view.ObjectCount);
+                view.Upload(0, 1, TileZeroPlacement.Registered(new double2(0.3, -0.2), 0, 1), Iso2.Identity, true);
+                Assert.IsTrue(content.FloorVisible); Assert.AreEqual(WallMode.Full, content.Walls);
+                Assert.AreEqual(0f, content.ShellMaterial.GetFloat(AtlasShaderIDs.WarpMode));
+
+                double L = content.Room.Curvature.ForDial(5);
+                Iso2 id = Neutral(-1);
+                view.Upload(-1, L, id, id, true);
+                Assert.IsFalse(content.FloorVisible); Assert.AreEqual(WallMode.Kerbs, content.Walls);
+                Assert.AreEqual(CurvedRoomConstants.KerbHeightM, content.KerbHeight);
+                Assert.AreEqual(1f, content.ShellMaterial.GetFloat(AtlasShaderIDs.WarpMode));
+                Assert.AreEqual(AtlasWarpBounds.Size, view.WallRenderer.localBounds.size.x);
+                var mats = new HashSet<UnityEngine.Material> { content.ShellMaterial };
+                for (int i = 0; i < view.ObjectCount; i++)
+                {
+                    IRoomObjectView o = content.GetObject(i);
+                    Assert.IsTrue(o.Renderer.enabled);
+                    Assert.IsNotNull(o.Renderer.GetComponent<UnityEngine.MeshFilter>().sharedMesh, "every object is drawn");
+                    Assert.AreEqual(1f, o.Material.GetFloat(AtlasShaderIDs.WarpMode));
+                    Assert.AreEqual(AtlasWarpBounds.Size, o.Renderer.localBounds.size.x);
+                    Assert.AreEqual(UnityEngine.Vector3.one, o.Renderer.transform.localScale, "the warp ignores Transforms: no fitting scale");
+                    Assert.IsTrue(mats.Add(o.Material), "one material instance each");
+                    Iso2 a = TileZeroPlacement.Object(new double2(o.Data.Base.x, o.Data.Base.z), o.Data.Yaw, -1, L);
+                    Assert.AreEqual(WarpAnchor.ToMatrix(a), o.Material.GetMatrix(AtlasShaderIDs.Anchor));
+                }
+
+                view.Upload(-1, L, id, id, false);
+                Assert.AreEqual(WallMode.Hidden, content.Walls); Assert.IsFalse(content.ObjectsVisible);
+
+                view.Upload(0, 1, Iso2.Identity, Iso2.Identity, true);
+                Assert.IsTrue(content.FloorVisible); Assert.AreEqual(WallMode.Full, content.Walls); Assert.IsTrue(content.ObjectsVisible);
+                Assert.AreEqual(0f, content.ShellMaterial.GetFloat(AtlasShaderIDs.WarpMode));
+                for (int i = 0; i < view.ObjectCount; i++) Assert.AreEqual(0f, content.GetObject(i).Material.GetFloat(AtlasShaderIDs.WarpMode));
+            }
+        }
+
+        // The module as SpaceLab drives it, on the app's services: created by the factory, configured, entered on the shared
+        // kernel, ticked and uploaded; the room is the room content's (no copy), the world is drawn once curved, and Exit
+        // gives every material back.
+        [Test, Category("Unity")]
+        public void Module_RunsOnTheAppsServices_AndGivesEverythingBack()
+        {
+            Build(RoomFixtures.Sample4x5Table);
+            var kernel = new HolonomyWalkerKernel();
+            RoomModel room = content.Room;
+            kernel.Configure(KernelConfig.Flat(room.LapSide));
+            AtlasServices.Register(pool);
+            AtlasServices.Register<IRoomContent>(content);
+            AtlasServices.Register<IDialKernel>(kernel);
+            var registry = new ParamRegistry();
+            CurvedWalkSpace.DeclareParams(registry);
+
+            var module = (CurvedWalkSpace)CurvedWalkSpace.Create();
+            try
+            {
+                Assert.AreEqual(SpaceIds.SceneName(SpaceId.CurvedWalk), module.gameObject.name);
+                Assert.AreEqual(SpaceId.CurvedWalk, module.Id);
+                Assert.IsFalse(module.Registered);
+                int rentedBefore = pool.Rented;
+                module.Configure(room, registry);
+                Assert.AreEqual(16, module.ContentHash.Length);
+                Assert.AreEqual(CurvedWalkCore.WorldSeed, module.WorldSeed);
+                module.Enter(kernel.Pose);
+                Assert.AreEqual(5, kernel.Q);
+
+                var log = Load("walk_still_60s.poselog");
+                for (int i = 0; i < 330; i++)
+                {
+                    FrameContext f = StepKernel(kernel, i, log[i]);
+                    module.Tick(in f);
+                    module.Upload(in f);
+                    if (i == 1)
+                    {
+                        Assert.AreEqual(0.0, kernel.CurvatureNow, 1e-3);
+                        Assert.AreEqual(WallMode.Full, content.Walls, "the room is Home until the ramp begins");
+                    }
+                }
+                Assert.Less(kernel.CurvatureNow, 0.0);
+                Assert.IsTrue(module.Tiles.gameObject.activeSelf);
+                Assert.IsFalse(module.Tiles.DrawShells, "the generated world draws the tiles");
+                Assert.Greater(module.Content.TilesDrawn, 0);
+                Assert.AreEqual(module.Tiles.Selection.DrawnCount, module.Content.TilesDrawn);
+                Assert.AreEqual(WallMode.Kerbs, content.Walls);
+                Assert.IsFalse(content.FloorVisible);
+                Assert.AreEqual(1f, content.ShellMaterial.GetFloat(AtlasShaderIDs.WarpMode));
+                Assert.AreEqual(2 + content.ObjectCount, root.transform.GetComponentsInChildren<UnityEngine.MeshRenderer>(true).Length,
+                    "the room content holds the floor, the walls and one renderer per object: the space made no copy of the room");
+
+                var st = StateMessage.Identity;
+                module.WriteState(ref st);
+                Assert.AreEqual(5f, st.GetParam(CurvedWalkCore.StateQ));
+
+                module.Exit();
+                Assert.AreEqual(rentedBefore, pool.Rented, "every material is back in the pool");
+                Assert.AreEqual(0f, content.ShellMaterial.GetFloat(AtlasShaderIDs.WarpMode), "the warp is off the room");
+                Assert.AreEqual(5, kernel.Q, "the kernel is SpaceLab's to restore");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(module.gameObject);
+            }
+        }
+#endif
     }
 }

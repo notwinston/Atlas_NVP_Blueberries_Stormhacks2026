@@ -13,5 +13,5 @@
         "Unity.Collections"
     ],
     "allowUnsafeCode": true,
-    "_tests": "Atlas.Spaces.Tests"
+    "_tests": "Atlas.Spaces.AlignedCells.Tests"
 }

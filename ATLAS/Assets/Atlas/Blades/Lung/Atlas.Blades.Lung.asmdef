@@ -7,7 +7,6 @@
         "Atlas.Rendering",
         "Atlas.Input",
         "Atlas.Telemetry",
-        "Atlas.Scan",
         "Atlas.Safety",
         "Atlas.Spaces.AlignedCells",
         "Atlas.Link",

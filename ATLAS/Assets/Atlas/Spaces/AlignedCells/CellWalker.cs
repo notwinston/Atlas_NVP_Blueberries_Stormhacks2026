@@ -28,6 +28,23 @@ namespace Atlas.Spaces.AlignedCells
         public void EnterFromCurvedWalk(in WalkerPose pose, double2 headXZ)
             => Reset(headXZ, new CellFrame(pose.Tile, TurnFromCurvedWalk(pose.Local)));
 
+        // The Station's copy: cell and frame exactly as the phone sent them (State.sheet, tileId, xform).
+        public void Place(int2 cell, CellFrame frame)
+        {
+            Cell = math.clamp(cell, int2.zero, new int2(grid.CountX - 1, grid.CountZ - 1));
+            Frame = frame; LastHead = grid.CellCentre(Cell);
+        }
+
+        // A head displacement the kernel refused (jump, tracking not Normal: KernelStep.Rejected) steps no tile: the walker
+        // keeps its tile and stands in the cell that is under the head now. True when the cell changed.
+        public bool Reseat(double2 headXZ)
+        {
+            int2 c = grid.CellAt(headXZ);
+            bool moved = !c.Equals(Cell);
+            Cell = c; LastHead = headXZ;
+            return moved;
+        }
+
         // Master Plan §4.7: each cell edge crossed along the head's segment steps the tile graph.
         public int Walk(double2 headXZ)
         {
@@ -71,8 +88,11 @@ namespace Atlas.Spaces.AlignedCells
         {
             double2 t = Geometry2.Log(local.M.c2, -1);
             Iso2 r = Iso2.Boost(t, -1).Inverse() * local;
-            double theta = Math.Atan2(r.M.c0.y, r.M.c0.x);
-            return (int)Math.Floor(-theta / (Math.PI / 2) + 0.5) & 3;
+            return TurnFromRotation(r.M.c0.x, r.M.c0.y);
         }
+
+        // The quarter-turn nearest to a rotation by theta, given as (cos theta, sin theta).
+        public static int TurnFromRotation(double cos, double sin)
+            => (int)Math.Floor(-Math.Atan2(sin, cos) / (Math.PI / 2) + 0.5) & 3;
     }
 }

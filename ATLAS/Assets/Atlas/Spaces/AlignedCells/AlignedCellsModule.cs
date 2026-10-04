@@ -1,3 +1,5 @@
+// PENDING DELETION (with its .meta): replaced by AlignedCellsSpace.cs and AlignedCellsCore.cs. Compiled out, text untouched below; the integration agent could not delete files.
+#if ATLAS_PENDING_DELETION
 using System;
 using Atlas.Kernel;
 using Atlas.Link;
@@ -128,3 +130,4 @@ namespace Atlas.Spaces.AlignedCells
         }
     }
 }
+#endif

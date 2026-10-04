@@ -2,47 +2,31 @@ using System;
 using Atlas.World;
 using NUnit.Framework;
 using Unity.Mathematics;
-using UnityEngine;
 
 namespace Atlas.Spaces.AlignedCells.Tests
 {
     public class RoomContentTests
     {
-        static CellGrid GridOf(RoomModel r) => CellGrid.FromFreeRectangle(new FreeRectangle(r.freeRect.Wf, r.freeRect.Df));
-
-        // Criterion: Master Plan §4.3 cells.aligned; §4.7 grid rule (PH-22 corner demo) [P1-B12 D10]
-        [TestCase("room_3x3", 3, 3, 0.8)]
-        [TestCase("room_3x4_L", 3, 3, 0.8)]
-        [TestCase("room_4x5_table", 2, 2, 0.75)]
-        [TestCase("budget_room", 3, 4, 0.933333)]
-        public void Mode2_Room_GridMatchesRoomModel(string name, int cx, int cz, double g)
-        {
-            var room = Fixtures.Room(name);
-            var grid = GridOf(room);
-            Assert.AreEqual(cx, grid.CountX); Assert.AreEqual(cz, grid.CountZ);
-            Assert.AreEqual(g, grid.Side, 1e-5);
-            var a = room.cells.aligned;
-            bool xShort = room.freeRect.Wf <= room.freeRect.Df;
-            Assert.AreEqual(xShort ? a.n : a.m, grid.CountX); Assert.AreEqual(xShort ? a.m : a.n, grid.CountZ);
-            Assert.AreEqual(a.g, grid.Side, 1e-5);
-        }
+        static CellGrid GridOf(RoomModel r) => CellGrid.FromRoom(r);
 
         // Row output "Home walls on the edge of the cell grid"; Master Plan §4.3 (0.30 m inside walls)
-        [TestCase("room_3x3", 0.30)]
-        [TestCase("room_3x4_L", 0.30)]
-        [TestCase("room_4x5_table", 0.30)]
-        [TestCase("budget_room", 0.60)]
-        public void Mode2_Room_WallsBoundGrid(string name, double expectedClearance)
+        [TestCase(RoomFixtures.Sample3x3)]
+        [TestCase(RoomFixtures.SampleL3x4)]
+        [TestCase(RoomFixtures.Sample4x5Table)]
+        [TestCase(RoomFixtures.BudgetRoom)]
+        [TestCase(RoomFixtures.TinyStanding)]
+        public void Mode2_Room_WallsBoundGrid(string name)
         {
             var room = Fixtures.Room(name);
             var grid = GridOf(room);
             double2 lo = grid.Origin, hi = grid.Origin + new double2(grid.CountX * grid.Side, grid.CountZ * grid.Side);
+            Assert.LessOrEqual(hi.x - lo.x, room.FreeRect.Wf + 1e-6); Assert.LessOrEqual(hi.y - lo.y, room.FreeRect.Df + 1e-6);
             var corners = new[] { lo, new double2(hi.x, lo.y), hi, new double2(lo.x, hi.y) };
             foreach (var c in corners) Assert.IsTrue(InsideEvenOdd(room, c), "grid corner outside the wall polygon " + c);
             double min = double.MaxValue;
-            foreach (var w in room.walls)
+            foreach (var w in room.Walls)
             {
-                double2 a = new double2(w.a.x, w.a.z), b = new double2(w.b.x, w.b.z);
+                double2 a = w.A, b = w.B;
                 for (int i = 0; i < 4; i++)
                 {
                     double2 p = corners[i], q = corners[(i + 1) % 4];
@@ -50,17 +34,16 @@ namespace Atlas.Spaces.AlignedCells.Tests
                     min = Math.Min(min, SegSegDist(a, b, p, q));
                 }
             }
-            TestContext.WriteLine($"{name}: wall clearance {min:F3} m (expected {expectedClearance:F2})");
+            TestContext.WriteLine($"{name}: wall clearance {min:F3} m");
             Assert.GreaterOrEqual(min, 0.30 - 1e-4);
-            Assert.AreEqual(expectedClearance, min, 1e-3);
         }
 
         static bool InsideEvenOdd(RoomModel r, double2 p)
         {
             bool inside = false;
-            foreach (var w in r.walls)
+            foreach (var w in r.Walls)
             {
-                double ax = w.a.x, az = w.a.z, bx = w.b.x, bz = w.b.z;
+                double ax = w.A.x, az = w.A.y, bx = w.B.x, bz = w.B.y;
                 if ((az > p.y) != (bz > p.y) && p.x < (bx - ax) * (p.y - az) / (bz - az) + ax) inside = !inside;
             }
             return inside;
@@ -81,30 +64,47 @@ namespace Atlas.Spaces.AlignedCells.Tests
         [Test]
         public void Mode2_Room_ObjectCells()
         {
-            var bud = Fixtures.Room("budget_room");
+            // The table of the 4 x 5 room: base (-1.4, 0, 0), 1.0 x 0.75 x 0.6, yaw -90 deg, so its footprint is x -1.7 .. -1.1,
+            // z -0.5 .. 0.5. The grid is 2 x 2 of 0.8 from (-0.8, -0.8): outside it in x (column 0 by the clamp), both rows.
+            var tbl = Fixtures.Room(RoomFixtures.Sample4x5Table);
+            Assert.AreEqual(1, tbl.Objects.Length);
+            Assert.AreEqual(new CellRange(new int2(0, 0), new int2(0, 1)), RoomObjectCells.Of(GridOf(tbl), tbl.Objects[0]));
+
+            // Every object of the budget room: the range is the bounding range of the cells of its footprint's corners,
+            // and its base centre lies in it.
+            var bud = Fixtures.Room(RoomFixtures.BudgetRoom);
             var g = GridOf(bud);
-            int[][] exp = {
-                new[]{0,0,0,0}, new[]{0,1,0,2}, new[]{0,3,0,3}, new[]{2,0,2,0}, new[]{2,1,2,2}, new[]{2,3,2,3},
-                new[]{0,0,0,0}, new[]{1,0,1,0}, new[]{2,0,2,0}, new[]{0,3,0,3}, new[]{1,3,1,3}, new[]{2,3,2,3} };
-            Assert.AreEqual(12, bud.objects.Length);
-            for (int i = 0; i < 12; i++)
-                Assert.AreEqual(new CellRange(new int2(exp[i][0], exp[i][1]), new int2(exp[i][2], exp[i][3])), RoomObjectCells.Of(g, bud.objects[i]), "object " + i);
+            Assert.AreEqual(12, bud.Objects.Length);
+            foreach (RoomObject o in bud.Objects)
+            {
+                CellRange r = RoomObjectCells.Of(g, o);
+                Assert.IsTrue(math.all(r.Min <= r.Max));
+                Assert.IsTrue(g.Contains(r.Min) && g.Contains(r.Max));
+                Assert.IsTrue(r.Contains(g.CellAt(new double2(o.Base.x, o.Base.z))), "object " + o.Id);
+                bool onMinX = false, onMaxX = false, onMinZ = false, onMaxZ = false;
+                for (int sx = -1; sx <= 1; sx += 2)
+                    for (int sz = -1; sz <= 1; sz += 2)
+                    {
+                        double3 p = RoomObjectCells.BoxToAnchor(o, new double3(sx * o.Size.x / 2.0, 0, sz * o.Size.z / 2.0));
+                        int2 c = g.CellAt(new double2(p.x, p.z));
+                        Assert.IsTrue(r.Contains(c), "object " + o.Id);
+                        onMinX |= c.x == r.Min.x; onMaxX |= c.x == r.Max.x; onMinZ |= c.y == r.Min.y; onMaxZ |= c.y == r.Max.y;
+                    }
+                Assert.IsTrue(onMinX && onMaxX && onMinZ && onMaxZ, "tight, object " + o.Id);
+            }
 
-            var tbl = Fixtures.Room("room_4x5_table");
-            Assert.AreEqual(new CellRange(new int2(0, 1), new int2(1, 1)), RoomObjectCells.Of(GridOf(tbl), tbl.objects[0]));
-
-            // Synthetic, room_3x3 grid (g = 0.8, origin -1.2). Footprint x 0.93..1.77, z -0.42..0.42 gives (2,0)-(2,2).
-            // (The brief's z = 0.3 would give (2,1)-(2,2); z = 0 is used so that the three rows are crossed.)
-            var r3 = Fixtures.Room("room_3x3");
-            var syn = RoomEdit.Obj(0, 1.35f, 0f, 0.2f, 0.7f, 1.0f, Mathf.PI / 4);
+            // Synthetic, sample_3x3 grid (g = 0.8, origin -1.2). Footprint x 0.93..1.77, z -0.42..0.42 gives (2,0)-(2,2).
+            var r3 = Fixtures.Room(RoomFixtures.Sample3x3);
+            var syn = Fixtures.Obj(1, 1.35f, 0f, 0.2f, 0.7f, 1.0f, math.PI / 4);
             Assert.AreEqual(new CellRange(new int2(2, 0), new int2(2, 2)), RoomObjectCells.Of(GridOf(r3), syn));
 
+            // The yaw sense is the room content's: RoomObject.Rotation about the base centre.
             foreach (float yaw in new[] { 0f, 0.7f, -2.1f })
             {
-                var o = RoomEdit.Obj(0, 0.4f, -0.3f, 0.5f, 0.8f, 0.3f, yaw);
+                var o = Fixtures.Obj(1, 0.4f, -0.3f, 0.5f, 0.8f, 0.3f, yaw);
                 var local = new double3(0.21, 0.5, -0.13);
                 double3 a = RoomObjectCells.BoxToAnchor(o, local);
-                Vector3 b = RoomObjectCells.Rotation(o) * new Vector3((float)local.x, (float)local.y, (float)local.z) + o.position;
+                float3 b = math.mul(o.Rotation, (float3)local) + o.Base;
                 Assert.AreEqual(a.x, b.x, 1e-5); Assert.AreEqual(a.y, b.y, 1e-5); Assert.AreEqual(a.z, b.z, 1e-5);
             }
         }

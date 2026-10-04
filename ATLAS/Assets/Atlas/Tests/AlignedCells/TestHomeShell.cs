@@ -1,3 +1,5 @@
+// PENDING DELETION (with its .meta): replaced by RoomFixtures and the IRoomContent double in Fixtures.cs. Compiled out, text untouched below; the integration agent could not delete files.
+#if ATLAS_PENDING_DELETION
 using System;
 using System.Collections.Generic;
 using Atlas.World;
@@ -135,3 +137,4 @@ namespace Atlas.Spaces.AlignedCells.Tests
         }
     }
 }
+#endif
