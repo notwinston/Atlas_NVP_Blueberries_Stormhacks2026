@@ -362,6 +362,8 @@ float3 AtlasWarp(float3 positionOS);          // [P1-X06: name]  input metres, o
 | `_Anchor` | per material | `float4x4` | none | Lane B, per pooled material instance (`Material.SetMatrix`) | The upper-left 3 × 3 is the isometry from the mesh's chart into the walker's frame. Tile t: inverse(U)·F[t]. Room object: inverse(U)·F[tile zero]·(its placement in tile zero). Computed in double, cast last. Other entries: 0, with [3][3] = 1 |
 | `_WarpMode` | per material | `float` | none | Lane B on its materials; default 0 | 0 none, 1 hyperbolic, 2 spherical [P1-X06: per-material number, as §8.3 prefers to a keyword] |
 
+- [P1-B03] `AtlasWarpCpu` (float, line for line with the HLSL) and `AtlasWarpReference` (double, from `Geometry2` and `Iso2`) in `Atlas.Rendering` are the EditMode warp for later checks (P1-B05 seams, P1-B06 draw check). `WarpAnchor.ToMatrix` is the upload cast.
+
 **Upload layout** [derived]: `Matrix4x4 m; m[r, c] = (float)A.M[c][r]` for r, c < 3. Unity's `m[row, column]` reaches HLSL as `_Anchor[row][column]`, so `mul((float3x3)_Anchor, p)` is A·p.
 
 **Where they are declared.** `_Anchor` and `_WarpMode` are declared by lane A inside the single `UnityPerMaterial` block in `AtlasCore.hlsl`. `AtlasWarp.hlsl` declares no constant buffer of its own; it declares only its globals, `_HypL` and `_HeadPosWS`. `AtlasCore.hlsl` includes `AtlasWarp.hlsl` after the per-material block.
@@ -376,6 +378,7 @@ float3 AtlasWarp(float3 positionOS);          // [P1-X06: name]  input metres, o
 
 - One pooled material instance per tile or per room object, created at run time and never saved as an asset. `_Anchor` and `_WarpMode` are set on it. **No MaterialPropertyBlocks** anywhere in `Atlas.*` (test `Shader_Contract`).
 - Every renderer that uses a warped material gets huge `localBounds` (`P1-B03`'s component; `WorldLint_All` checks it). Unity then culls nothing, and the §8.5 draw rule decides what is drawn. The Small Planet always draws its six tiles.
+- [P1-B03] `AtlasWarpBounds` (`Atlas.Rendering`) sets `localBounds` to a 1000 m cube centred on the object origin; `AtlasWarpBounds.Apply(Renderer)` is static, for pooled renderers after a mesh is assigned.
 - Globals and anchors are written in frame step 6 (Upload, §6.3), after the kernel step and before rendering, once for both eyes.
 
 ### 6.5 `AtlasGates.hlsl`: sight-line gates for Aligned Cells [plan for the purpose, §4.7, §8.3; P1-X06 for the signature]
