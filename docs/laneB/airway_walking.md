@@ -70,3 +70,14 @@ Deviations
 - DV-B05-5: `Lung_Airway.unity` is created by the test `Scene_LungAirway_HasOneAirwayWingHost` with `EditorSceneManager` when absent.
 - DV-B05-6: `SimWalker` gains an optional `Module` so frames pass through `AirwayWingModule.Tick`.
 Phone half: `docs/laneB/TESTING.md` G10-B05 (deferred).
+
+## P2-B12 Airway run test
+
+Delivered: `AirwayRunReport` (FromEvents, FromJsonLines, ToJsonLine, ToJson), `NavigationBridge` (IForkChoice; wing.BeaconShown from the beacon; recentres the tree window and ticks the beacon per frame), test-only `BumpWarnOracle`, `AirwayRunTests` (T12.1, T12.2, S12.1).
+Member mapping (the only file naming B06/B08 members): P2-B06 `AirwayBeacon` (Reset, Tick, RescueShown), `AirwayTree.SetCurrent`, `AirwayTile`, `AirwayRoute`; P2-B08 `TwoCompasses.EuclideanChild/BeaconChild`, `CompassChoiceEventData`.
+Deviations
+- DV-B12-1: P2-B08 has no fork-UI class, so the fork choice source is a delegate (`ChoiceSource`) plus `Submit(letter)`; S12.1 drives those.
+- DV-B12-2: the bridge emits `compass_choice` itself (not through `ForkLog`, which would emit a second `fork`); the wing emits `fork`.
+- DV-B12-3: `RouteForks` = endAddress.Length (PH-39); `RescueFree` = all forks correct and no beacon shown.
+- DV-B12-4: the fms source is any scene (DV-G6-9). Oracle relax hold uses the path threshold of the current level (G6 silent).
+Phone half: `TESTING.md` G10-B12 (deferred). The 4-fork acceptance is not claimed (PH-39).

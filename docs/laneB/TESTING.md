@@ -99,6 +99,12 @@ Same scene and preconditions as above.
   and Spectator twin (fork events) is unchanged across both switches; the walk continues to the next fork. Record: address before
   and after each switch, frame of switch. 2 of 2 switches keep the address.
 
+## P2-B09 Lesion chamber hand-over (Editor tests pass; phone measurement deferred)
+- Editor: `HandOverTests` (T9.1 trigger at end tile, T9.2 ramp only while standing 3-5 s, T9.3 S6 requested once + beat, T9.4 no simulated frame > 33 ms; evidence `evidence/P2-B09/handover_sim.json`).
+- Phone, deferred (phone in headset): Lung_Airway.unity, run once with `lung.route` = 1 and once with 0 (PH-39). Walk to the end chamber, stand on the glyph, take one step mid-ramp, stand again, wait for S6.
+  Expected: curvature changes only while standing; ramp 3-5 s of standing (4.0 s set); S6 loads; no frame > 33 ms from end-chamber entry to S6 + 2 s (Frame Timing Stats max). Record max, p95, ramp time.
+- Deviations: DV-B09-1 route is a constructor value (AirwayParams/Mode 2 from P2-B04/B05 not on this branch; Mode 2 path S6-at-entry not built); DV-B09-2 AirwayBeat wraps AirwayWing + LesionHandOver (AirwayWingModule is B05).
+
 ## P2-B07 Endoluminal window (deferred: phone in hand)
 - **Scene:** `Assets/Atlas/Blades/Lung/Endoluminal/TestScene/Lung_EndoluminalTest.unity`. It contains a Main Camera and `EndoluminalTestDriver`, whose fields reference the Atlas/AtlasSurface shader, the URP/Unlit shader and LiberationSans SDF.
 - **Build:** use the on-request slot with Build Profiles = [Lung_EndoluminalTest.unity]. Release build, phone A in hand, thermal Nominal at the start. Afterwards run `git checkout ATLAS/ProjectSettings`.
@@ -209,3 +215,10 @@ Also record (qualitative): whether the text visibly parts around an empty region
 - Steps and the table to fill: checklist items 7-10 in `docs/laneB/checklists/P3-B03-B05-B08_phone.md`.
 - Expected numbers (Master Plan §10.4.8, §11.2 Must): FieldFitBlit < 1 ms (Xcode, mean of 3 frames); GPU p95 <= 9 ms cold; frame time p50/p95/p99 <= 16.7/20/33.3 ms; over 17.2/33.8 ms <= 5 %/0.5 %; CPU main/render p95 <= 8/6 ms; draw calls <= 300, set-pass <= 60, triangles <= 500k; memory <= 1.5 GB; GC <= 1 kB per frame; soak 15 min: no Critical, Serious not before 10 min, hot fps mean >= 45 and never < 30. Reported only: `Atlas.FieldFit.LutRebuild` p95 while `lens.t` is dragged.
 - Overrun: step to 1,280^2 or 2x MSAA, re-measure, record both, change no number.
+
+## P2-B12 Airway run test (Editor tests pass; phone run deferred: phone in headset, 10 naive walkers)
+- Editor: `AirwayRunTests` (T12.1 centre strip, Mode 1, 3 rooms x 0.7/1.0 m/s, tree.json route plus the 100 routes: 0 straight-side WARN starts, 0 STRONG, via the test-only `BumpWarnOracle`; corner cues counted, not judged; T12.2 run report; S12.1 bridge). Evidence `evidence/P2-B12/sim_centre_strip.json`, `run_report_sim.json`.
+- Scene: Lung_Airway.unity, Mode 1, `lung.route` = 0, beacon rescue enabled (P2-B06); FMS asked each minute (lane C).
+- Steps per run: a walker who did not build the airway walks from the trachea chamber to the lesion chamber. Export events.jsonl; build the report with `AirwayRunReport.FromJsonLines(lines, targetAddress)`; store as `docs/laneB/evidence/P2-B12/phone_run_<n>.json`.
+- Expected: RescueFree in >= 9 of 10 runs; FmsMax <= 3 (FMS <= 3/20) in every run; on the straight sides (head > 0.5 m from a lap corner when the cue starts) no Bump Guard WARN over the first 8 tile steps (real Bump Guard, Console cue log).
+- PH-39: the route has TargetAddress.Length forks (fixture 6), not 4. Report the measured run with that route; the "4 forks" criterion stays open until PH-39 is decided. It is not claimed here.
