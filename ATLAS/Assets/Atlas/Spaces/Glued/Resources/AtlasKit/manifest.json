@@ -1,0 +1,12 @@
+{
+  "pieces": {
+    "avatar": {
+      "sha256": "91af4206a9cdc145fc139f41da9162a93ea900729327ed6cbae27dcd75deea16",
+      "triangles": 356
+    },
+    "landmark": {
+      "sha256": "14e14a76fff46cee7eb8bb17e3f36f1d165e418b312cf8a68f6d489e48d46a9a",
+      "triangles": 428
+    }
+  }
+}

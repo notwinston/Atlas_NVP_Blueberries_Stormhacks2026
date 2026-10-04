@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System;
 using Atlas.Kernel;
+using Atlas.World;
 using NUnit.Framework;
 using Unity.Mathematics;
 
@@ -614,6 +615,40 @@ namespace Atlas.Rendering.Tests.Look
             Assert.That(a.BoundsMax.x, Is.EqualTo(6f));
             AssertWindingAgreesWithNormals(a);
             AssertUnitNormalsAndBounds(a);
+        }
+
+        [Test]
+        public void Append_MeshData_MovesItByTheOffset()
+        {
+            var source = new MeshData(8, 8);
+            source.AddQuadGrid(float3.zero, new float3(1f, 0f, 0f), new float3(0f, 0f, 1f), new float2(0.25f, 0.5f),
+                               new float2(3f, 4f), new float2(1f, 0f), new float2(0f, 1f));
+            var a = new AtlasMeshBuilder();
+            a.AddQuad(float3.zero, new float3(1f, 0f, 0f), new float3(0f, 0f, 1f), float2.zero);
+            var offset = new float3(2f, 0.5f, -1f);
+            a.Append(source, offset);
+
+            Assert.That(a.VertexCount, Is.EqualTo(4 + source.VertexCount));
+            Assert.That(a.TriangleCount, Is.EqualTo(2 + source.TriangleCount));
+            Assert.That(a.Indices[6], Is.EqualTo(4 + source.Indices[0]));
+            for (int v = 0; v < source.VertexCount; v++)
+            {
+                AtlasVertex copied = a.Vertices[4 + v], original = source.Vertices[v];
+                Assert.That(copied.Position, Is.EqualTo(original.Position + offset));
+                Assert.That(copied.Normal, Is.EqualTo(original.Normal));
+                Assert.That(copied.Color, Is.EqualTo(original.Color));
+                Assert.That(copied.Uv0, Is.EqualTo(original.Uv0));
+                Assert.That(copied.Uv1, Is.EqualTo(original.Uv1), "the line coordinates do not move with the piece");
+            }
+            Assert.That(a.BoundsMin, Is.EqualTo(new float3(0f, 0f, -1f)));
+            Assert.That(a.BoundsMax, Is.EqualTo(new float3(3f, 0.5f, 1f)));
+            AssertWindingAgreesWithNormals(a);
+
+            // An empty source adds nothing and leaves the bounds alone.
+            var empty = new MeshData(4, 6);
+            a.Append(empty, new float3(100f, 100f, 100f));
+            Assert.That(a.VertexCount, Is.EqualTo(4 + source.VertexCount));
+            Assert.That(a.BoundsMax, Is.EqualTo(new float3(3f, 0.5f, 1f)));
         }
 
         [Test]

@@ -127,18 +127,19 @@ namespace Atlas.Spaces.Glued
         public const int SpaceDrawCalls = 150, SpaceTriangles = 250000;
         public const int SpaceTorus3DrawCalls = 160, SpaceTorus3Triangles = 250000;
 
-        /// <summary>Triangles of the cell mesh for this cell size.</summary>
-        public static int CellTriangles(float sizeX, float sizeZ)
+        /// <summary>Triangles of the cell mesh for this cell size, with the kit landmark when one is given.</summary>
+        public static int CellTriangles(float sizeX, float sizeZ, MeshData landmark = null)
         {
             var scratch = new AtlasMeshBuilder(1024, 4096);
-            GluedCellMesh.Build(sizeX, sizeZ, scratch);
+            GluedCellMesh.Build(sizeX, sizeZ, scratch, landmark);
             return scratch.TriangleCount;
         }
 
-        public static int AvatarTriangles()
+        /// <summary>Triangles of the avatar mesh, the kit avatar when one is given.</summary>
+        public static int AvatarTriangles(MeshData kit = null)
         {
             var scratch = new AtlasMeshBuilder(512, 2048);
-            GluedAvatarMesh.Build(scratch);
+            GluedAvatarMesh.Build(scratch, kit);
             return scratch.TriangleCount;
         }
 

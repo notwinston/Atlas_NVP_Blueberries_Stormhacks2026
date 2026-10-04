@@ -219,7 +219,8 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             StringAssert.IsMatch(@"AtlasWarpClip\s*\(\s*input\.positionWS\s*\)", Hlsl("AtlasSurface.shader"));
         }
 
-        // T7. §3.5 pole beacon; R6 §2.6, §5.3; Spec §6.3
+        // T7. §3.5 pole beacon; R6 §2.6, §5.3; Spec §6.3. Drawn on the procedural fallback only: with the PlanetKit tiles the
+        // cairn and lantern at the centre of face 5 (Beacon) replace it (PlanetKit.md).
         [Test]
         public void SmallPlanet_PoleBeacon()
         {
@@ -264,7 +265,8 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             Assert.Less(math.length(math.mul(ba.M, O) - new double3(1, -1, -1) / Math.Sqrt(3)), 1e-12);
         }
 
-        // T10. §8.3, §8.5 (S4 <= 70 draw calls, <= 190k triangles), §8.4 Near cap 1,200
+        // T10. §8.3, §8.5 (S4 <= 70 draw calls, <= 190k triangles), §8.4 Near cap 1,200: the procedural fallback.
+        // The PlanetKit tiles (up to 3,000 triangles each) are budgeted in PlanetKitTests.PlanetKit_Budget.
         [Test]
         public void SmallPlanet_Budget()
         {
@@ -279,7 +281,8 @@ namespace Atlas.Spaces.SmallPlanet.Tests
         }
 
 #if !ATLAS_HEADLESS
-        // T10 (view). §8.3: seven renderers, one pooled instance each, one shared tile mesh, huge bounds; everything goes back to the pool
+        // T10 (view). §8.3, the procedural fallback (no kit): seven renderers, one pooled instance each, one shared tile mesh,
+        // huge bounds; everything goes back to the pool. The kit path: PlanetKitTests.SmallPlanet_View_WithTheKit_*.
         [Test, Category("Unity")]
         public void SmallPlanet_View()
         {
@@ -292,7 +295,8 @@ namespace Atlas.Spaces.SmallPlanet.Tests
                 foreach (double s in LapSides)
                 {
                     double R = 2 * s / Math.PI;
-                    view.Build(R, pool);
+                    view.Build(R, pool, null);
+                    Assert.IsFalse(view.UsesKit);
                     Assert.AreEqual(7, pool.Rented);
                     Assert.AreEqual(6, view.TileRenderers.Count);
                     Assert.IsNotNull(view.BeaconRenderer);

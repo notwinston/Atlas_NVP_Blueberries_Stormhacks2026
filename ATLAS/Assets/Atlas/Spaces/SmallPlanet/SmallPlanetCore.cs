@@ -21,6 +21,9 @@ namespace Atlas.Spaces.SmallPlanet
         public const string ParamFogRho = "planet.fogRho", ParamRadius = "planet.R";
         /// <summary>planet.R is a lower bound on the radius, metres; 0 leaves the radius to the room.</summary>
         public const float MaxRadiusM = 4f;
+        /// <summary>planet.R's default: the PlanetKit tiles' authored radius, so their props are not stretched.
+        /// A room whose loop-fit radius is smaller then walks a planet too big to close the 3-corner lap inside it.</summary>
+        public const float DefaultRadiusM = (float)SmallPlanetConstants.KitRadius;
 
         readonly LapWalk walk = new LapWalk();
         readonly CurvatureDial dial = new CurvatureDial(3);
@@ -70,7 +73,7 @@ namespace Atlas.Spaces.SmallPlanet
             string group = SpaceIds.ParamGroup(SpaceId.SmallPlanet);
             registry.DeclareFloat(ParamFogRho, group, (float)SmallPlanetConstants.FogStartRad, (float)SmallPlanetConstants.FogOpaqueRad,
                                   (float)SmallPlanetConstants.FogOpaqueRad);
-            registry.DeclareFloat(ParamRadius, group, 0f, MaxRadiusM, 0f, null, true);
+            registry.DeclareFloat(ParamRadius, group, 0f, MaxRadiusM, DefaultRadiusM, null, true);
             CurvedDialParams.RegisterQ(registry);
             CurvedDialParams.RegisterStrong(registry);
         }

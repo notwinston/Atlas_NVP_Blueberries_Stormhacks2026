@@ -16,6 +16,13 @@ namespace Atlas.Spaces.SmallPlanet
         public const int BeaconSides = 8;
         public static readonly float2 BeaconUv = AtlasPalette.Uv(AtlasPalette.Beacon);   // emissive accent of the palette
 
+        /// <summary>
+        /// R0 of the PlanetKit tiles (PlanetKit.md, manifest "planet.R0"): the radius, metres, they were modelled at
+        /// (PLANET_SCALE 1.5, tile side 3.6 m). The default lower bound of planet.R, so the props keep the proportions
+        /// they were authored with. PlanetKitTests checks it against the shipped manifest.
+        /// </summary>
+        public const double KitRadius = 2.291831;
+
         // §3.2, §4.4, A.4: R = 2s/pi
         public static double RadiusFromLapSide(double s)
         {

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System;
 using Atlas.Kernel;
+using Atlas.World;
 using Unity.Mathematics;
 
 namespace Atlas.Rendering
@@ -118,6 +119,28 @@ namespace Atlas.Rendering
                 BoundsMin = math.min(BoundsMin, other.BoundsMin);
                 BoundsMax = math.max(BoundsMax, other.BoundsMax);
             }
+        }
+
+        /// <summary>
+        /// Appends a mesh read from a file (a kit piece) moved by offset. Normals, shade, palette and line
+        /// coordinates are copied unchanged. Allocates nothing once the arrays are large enough.
+        /// </summary>
+        public void Append(MeshData source, float3 offset)
+        {
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            if (source.VertexCount == 0) return;
+            Reserve(source.VertexCount, source.IndexCount);
+            int first = VertexCount;
+            for (int v = 0; v < source.VertexCount; v++)
+            {
+                AtlasVertex vertex = source.Vertices[v];
+                vertex.Position += offset;
+                Vertices[VertexCount++] = vertex;
+            }
+            for (int i = 0; i < source.IndexCount; i++) Indices[IndexCount + i] = source.Indices[i] + first;
+            IndexCount += source.IndexCount;
+            BoundsMin = math.min(BoundsMin, source.BoundsMin + offset);
+            BoundsMax = math.max(BoundsMax, source.BoundsMax + offset);
         }
 
         // ---- Quads -------------------------------------------------------------------------------------------
