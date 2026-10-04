@@ -423,6 +423,25 @@ namespace Atlas.App.Tests
         }
 
         [Test]
+        public void TheMenuFrame_OpensWhereTheChipStood_NotWhereTheChipIs()
+        {
+            var frame = new MenuFrame();
+            frame.Snap(0f);
+            // The walker looks down and left at the chip to open the menu: the panel stays ahead.
+            frame.Open(math.radians(-30f), true);
+            Assert.That(frame.Yaw, Is.EqualTo(0f));
+            // Opened again and again from the chip, it never walks off to the left.
+            for (int i = 0; i < 5; i++) frame.Open(frame.Yaw + math.radians(-30f), true);
+            Assert.That(frame.Yaw, Is.EqualTo(0f));
+            // Turned right round, or with no heading yet, it comes up where the walker looks.
+            frame.Open(math.radians(120f), true);
+            Assert.That(frame.Yaw, Is.EqualTo(math.radians(120f)).Within(1e-5f));
+            var fresh = new MenuFrame();
+            fresh.Open(math.radians(-30f), false);
+            Assert.That(fresh.Yaw, Is.EqualTo(math.radians(-30f)).Within(1e-5f));
+        }
+
+        [Test]
         public void TheMenuFrame_TrailsTheWalker_AndHoldsStillWhileTheyReachForTheChip()
         {
             var frame = new MenuFrame();

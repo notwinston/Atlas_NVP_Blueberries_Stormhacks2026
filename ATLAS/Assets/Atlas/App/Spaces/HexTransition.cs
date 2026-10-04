@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Atlas.Rendering;
 using Atlas.Safety;
+using Atlas.World;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -13,13 +14,16 @@ namespace Atlas.App
     /// The hexagon reveal between two spaces (<see cref="ISpaceTransition"/>). On Cover it takes a still of the
     /// space on show, six 512-pixel faces from the head, and puts up a dome of <see cref="HexDome"/> tiles that
     /// shows it, fixed in the room where the walker stood. The old space goes and the new one loads behind it.
-    /// On Reveal it takes a still of the new space for the backs of the tiles, and the tiles turn over one by
-    /// one from where the walker looks, each dropped once turned, onto the live space.
+    /// On Reveal it takes a still of the new space for the backs of the tiles, and the tiles turn over in a
+    /// ripple: the one the walker looks at first, then its neighbours, then theirs, each dropped once turned,
+    /// onto the live space.
     /// <para>The cost is the two stills: twelve camera renders, once each per switch; then one draw call of
     /// about 550 triangles while the dome is up, with the world behind it failing its depth test. The stills
     /// are pooled render textures, released when the dome goes down.</para>
-    /// <para>Never over a bump cue: the dome does not go up while one shows and comes down at once when one
-    /// does, so the walker sees the room. Only in the headset: in the hand the switch fades as before.</para>
+    /// <para>The warning cue draws over the dome, so a Warn or Strong cue shows on it. With tracking lost the
+    /// stills would stand in the wrong place: the dome does not go up then, and comes down at once if tracking
+    /// is lost under it. Only in the headset: in the hand the switch fades as before. Each refusal and drop is
+    /// in the event log as space.transition.</para>
     /// </summary>
     public sealed class HexTransition : ISpaceTransition, IDisposable
     {
@@ -33,7 +37,7 @@ namespace Atlas.App
         static readonly int s_NewStill = Shader.PropertyToID("_NewStill");
         static readonly int s_OldCentre = Shader.PropertyToID("_OldCentre");
         static readonly int s_NewCentre = Shader.PropertyToID("_NewCentre");
-        static readonly int s_RevealForward = Shader.PropertyToID("_RevealForward");
+        static readonly int s_TileDelays = Shader.PropertyToID("_TileDelays");
         static readonly int s_RevealTime = Shader.PropertyToID("_RevealTime");
         static readonly int s_SeamGain = Shader.PropertyToID("_SeamGain");
 
@@ -55,6 +59,9 @@ namespace Atlas.App
         readonly Material _material;
         readonly Camera _camera;
         readonly int _hudLayer;
+        readonly HexDome _tiles = new HexDome();
+        readonly int[] _rings = new int[HexDome.TileCount];
+        readonly float[] _delays = new float[HexDome.TileCount];
 
         RenderTexture _old, _new;
         bool _covered;
@@ -68,7 +75,7 @@ namespace Atlas.App
             // On the head-locked layer, so the tracked camera never draws it and a still never holds it, but
             // in the room: it stays where it was put while the head moves inside it.
             _dome = new GameObject("Atlas Hex Dome") { layer = _hudLayer };
-            _mesh = BuildMesh(new HexDome());
+            _mesh = BuildMesh(_tiles);
             _material = new Material(shader) { name = "Atlas Hex Dome", hideFlags = HideFlags.DontSave };
             _dome.AddComponent<MeshFilter>().sharedMesh = _mesh;
             _renderer = _dome.AddComponent<MeshRenderer>();
@@ -115,10 +122,18 @@ namespace Atlas.App
             return new HexTransition(rig, shader);
         }
 
+        /// <summary>Where space.transition goes; null logs nothing.</summary>
+        public IEventLog Events { get; set; }
+
         public bool Cover()
         {
             Uncover();
-            if (_rig.Mode != DisplayMode.Headset || BumpCue.Shown != BumpLevel.Clear) return false;
+            string refusal = Refusal();
+            if (refusal != null)
+            {
+                Log("refused", refusal);
+                return false;
+            }
 
             Transform head = _rig.Head;
             Vector3 centre = head.position;
@@ -131,12 +146,14 @@ namespace Atlas.App
             _material.SetTexture(s_NewStill, _old);
             _material.SetVector(s_OldCentre, centre);
             _material.SetVector(s_NewCentre, centre);
-            _material.SetVector(s_RevealForward, Vector3.forward);
+            for (int i = 0; i < _delays.Length; i++) _delays[i] = 0f;
+            _material.SetFloatArray(s_TileDelays, _delays);
             _material.SetFloat(s_RevealTime, -1f);
             _material.SetFloat(s_SeamGain, 0f);
             _renderer.enabled = true;
             _covered = true;
             _coveredAt = Time.realtimeSinceStartup;
+            Log("cover", null);
             return true;
         }
 
@@ -149,17 +166,24 @@ namespace Atlas.App
             Capture(centre, _new);
             _material.SetTexture(s_NewStill, _new);
             _material.SetVector(s_NewCentre, centre);
-            // The tile the walker looks at now turns first, wherever they turned while the space loaded.
-            _material.SetVector(s_RevealForward, _dome.transform.InverseTransformDirection(head.forward));
+            // The tile the walker looks at now turns first, wherever they turned while the space loaded, and
+            // sets off the ripple.
+            Vector3 gaze = _dome.transform.InverseTransformDirection(head.forward).normalized;
+            int outer = _tiles.Rings(_tiles.TileAt(gaze), _rings);
+            for (int i = 0; i < _delays.Length; i++) _delays[i] = HexDome.Delay(_rings[i]);
+            _material.SetFloatArray(s_TileDelays, _delays);
             _material.SetFloat(s_RevealTime, 0f);
-            return HexDome.RevealSeconds;
+            Log("reveal", null);
+            return HexDome.RevealSeconds(outer);
         }
 
         public bool Show(float revealSeconds)
         {
             if (!_covered) return false;
-            if (_rig.Mode != DisplayMode.Headset || BumpCue.Shown != BumpLevel.Clear)
+            string refusal = Refusal();
+            if (refusal != null)
             {
+                Log("dropped", refusal);
                 Uncover();
                 return false;
             }
@@ -188,6 +212,22 @@ namespace Atlas.App
             if (_dome != null) UnityEngine.Object.Destroy(_dome);
             if (_mesh != null) UnityEngine.Object.Destroy(_mesh);
             if (_material != null) UnityEngine.Object.Destroy(_material);
+        }
+
+        // Why the dome cannot stand now, or null.
+        string Refusal()
+        {
+            if (_rig.Mode != DisplayMode.Headset) return "hand";
+            if (BumpCue.Shown == BumpLevel.TrackingLost) return "trackingLost";
+            return null;
+        }
+
+        void Log(string state, string reason)
+        {
+            IEventLog events = Events;
+            if (events == null) return;
+            if (reason == null) events.Log("space.transition", "state", state);
+            else events.LogJson("space.transition", "{\"state\":\"" + state + "\",\"reason\":\"" + reason + "\"}");
         }
 
         // Six faces of 90 degrees from centre, world-aligned, into the slices of target. What the eyes draw but

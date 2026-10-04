@@ -8,8 +8,8 @@ namespace Atlas.App
     /// The tiles of the hexagon reveal between two spaces: a Goldberg sphere (the dual of an icosahedron
     /// subdivided three times), 80 hexagons and 12 pentagons of about 20 degrees, round the head. Local space has
     /// +z where the walker looked when the switch began, and a hexagon is centred there. The tile the walker
-    /// looks at when the reveal begins turns first, and each tile starts later the further it is from it
-    /// (<see cref="Delay"/>; the shader computes the same). Engine-free, so the layout and the order are tested
+    /// looks at when the reveal begins turns first; partway through its turn it sets off its neighbours, and
+    /// they set off theirs, ring after ring, until the tiles behind the walker turn last (<see cref="Rings"/>). Engine-free, so the layout and the order are tested
     /// headless; <see cref="HexTransition"/> makes the mesh from it.
     /// <para>One vertex stream for the whole sphere, one draw: each tile is a fan round its centre, and its
     /// corners are shared with its neighbours, so the closed sphere has no gap to see through.</para>
@@ -23,17 +23,15 @@ namespace Atlas.App
         public const float Radius = 2.5f;
         /// <summary>Seconds one tile takes to turn over.</summary>
         public const float FlipSeconds = 0.5f;
-        /// <summary>Seconds between the first tile starting (ahead) and the last (behind).</summary>
-        public const float SpreadSeconds = 1.0f;
-        /// <summary>The whole reveal: when it is over, every tile has turned.</summary>
-        public const float RevealSeconds = SpreadSeconds + FlipSeconds;
+        /// <summary>Seconds from a tile starting to turn to its neighbours starting: a third of the way over.</summary>
+        public const float RingSeconds = 0.17f;
 
         /// <summary>Each tile's centre on the unit sphere, local space.</summary>
         public readonly float3[] Centres = new float3[TileCount];
         /// <summary>Each tile's corners, 6 or 5, on the unit sphere and in order round the centre.</summary>
         public readonly float3[][] Corners = new float3[TileCount][];
-        /// <summary>Seconds after the reveal begins that a tile starts to turn, when the walker looks along +z.</summary>
-        public readonly float[] Delays = new float[TileCount];
+        /// <summary>The tiles that share an edge with each tile: 6 round a hexagon, 5 round a pentagon.</summary>
+        public readonly int[][] Neighbours = new int[TileCount][];
         /// <summary>The line through a tile's centre it turns about: the local vertical, laid in the tile.</summary>
         public readonly float3[] Axes = new float3[TileCount];
 
@@ -42,7 +40,7 @@ namespace Atlas.App
         public readonly List<float3> Positions = new List<float3>(TileCount * 7);
         /// <summary>The turning axis of the vertex's tile.</summary>
         public readonly List<float3> VertexAxes = new List<float3>(TileCount * 7);
-        /// <summary>xyz: the centre of the vertex's tile, metres; w: 0.</summary>
+        /// <summary>xyz: the centre of the vertex's tile, metres; w: the tile's index.</summary>
         public readonly List<float4> VertexCentres = new List<float4>(TileCount * 7);
         /// <summary>0 at a tile's centre, 1 on its edge: the shader draws the seam from it.</summary>
         public readonly List<float> Rims = new List<float>(TileCount * 7);
@@ -86,18 +84,74 @@ namespace Atlas.App
 
                 Centres[i] = n;
                 Corners[i] = corners.ToArray();
-                Delays[i] = Delay(n, new float3(0f, 0f, 1f));
                 Axes[i] = AxisOf(n);
                 AddFan(i);
             }
+
+            // Two tiles share an edge when their points share a triangle of the subdivision.
+            var neighbours = new List<int>[TileCount];
+            for (int i = 0; i < TileCount; i++) neighbours[i] = new List<int>(6);
+            for (int t = 0; t < triangles.Count; t++)
+            {
+                int3 tri = triangles[t];
+                Link(neighbours, tri.x, tri.y);
+                Link(neighbours, tri.y, tri.z);
+                Link(neighbours, tri.z, tri.x);
+            }
+            for (int i = 0; i < TileCount; i++) Neighbours[i] = neighbours[i].ToArray();
         }
 
-        /// <summary>Seconds after the reveal begins that the tile centred on centre starts to turn, for a walker
-        /// looking along forward (both unit, local space): 0 straight ahead, SpreadSeconds straight behind.</summary>
-        public static float Delay(float3 centre, float3 forward)
+        static void Link(List<int>[] neighbours, int a, int b)
         {
-            return SpreadSeconds * math.acos(math.clamp(math.dot(centre, forward), -1f, 1f)) / math.PI;
+            if (!neighbours[a].Contains(b)) neighbours[a].Add(b);
+            if (!neighbours[b].Contains(a)) neighbours[b].Add(a);
         }
+
+        /// <summary>The tile whose centre is nearest a direction (unit, local space).</summary>
+        public int TileAt(float3 direction)
+        {
+            int best = 0;
+            float bestDot = float.MinValue;
+            for (int i = 0; i < TileCount; i++)
+            {
+                float d = math.dot(Centres[i], direction);
+                if (d <= bestDot) continue;
+                bestDot = d;
+                best = i;
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// The ripple from one tile: each tile's ring, the number of steps across neighbours from first (0 for
+        /// first itself). Returns the outermost ring. rings must hold TileCount entries.
+        /// </summary>
+        public int Rings(int first, int[] rings)
+        {
+            for (int i = 0; i < TileCount; i++) rings[i] = -1;
+            var queue = new Queue<int>(TileCount);
+            rings[first] = 0;
+            queue.Enqueue(first);
+            int outer = 0;
+            while (queue.Count > 0)
+            {
+                int tile = queue.Dequeue();
+                foreach (int next in Neighbours[tile])
+                {
+                    if (rings[next] >= 0) continue;
+                    rings[next] = rings[tile] + 1;
+                    outer = math.max(outer, rings[next]);
+                    queue.Enqueue(next);
+                }
+            }
+            return outer;
+        }
+
+        /// <summary>Seconds after the reveal begins that a tile of a ring starts to turn.</summary>
+        public static float Delay(int ring) { return ring * RingSeconds; }
+
+        /// <summary>The whole reveal for a ripple whose outermost ring is outer: every tile has turned.</summary>
+        public static float RevealSeconds(int outer) { return Delay(outer) + FlipSeconds; }
 
         /// <summary>
         /// How far a tile has turned at a time of the reveal: 0 face on, 1 turned over. Eased in and out.
@@ -112,7 +166,7 @@ namespace Atlas.App
         void AddFan(int tile)
         {
             float3 centre = Centres[tile] * Radius;
-            var packed = new float4(centre, 0f);
+            var packed = new float4(centre, tile);
             int first = Positions.Count;
             AddVertex(centre, tile, packed, 0f);
             float3[] corners = Corners[tile];

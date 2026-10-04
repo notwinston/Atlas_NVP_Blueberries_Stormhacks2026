@@ -5,7 +5,7 @@ using Unity.Mathematics;
 namespace Atlas.App.Tests
 {
     /// <summary>The tiles of the hexagon reveal: a closed sphere of hexagons and twelve pentagons, a hexagon
-    /// straight ahead that turns first, and the rest in order of their angle from it.</summary>
+    /// straight ahead, and a ripple that spreads from one tile to its neighbours ring by ring.</summary>
     public class HexDomeTests
     {
         static readonly HexDome s_Dome = new HexDome();
@@ -44,28 +44,55 @@ namespace Atlas.App.Tests
         }
 
         [Test]
-        public void AHexagonStandsStraightAhead_AndTurnsFirst()
+        public void AHexagonStandsStraightAhead()
         {
-            int front = -1;
-            for (int i = 0; i < HexDome.TileCount; i++)
-                if (math.distance(s_Dome.Centres[i], new float3(0f, 0f, 1f)) < 1e-4f) front = i;
-            Assert.That(front, Is.Not.EqualTo(-1));
+            int front = s_Dome.TileAt(new float3(0f, 0f, 1f));
+            Assert.That(math.distance(s_Dome.Centres[front], new float3(0f, 0f, 1f)), Is.LessThan(1e-4f));
             Assert.That(s_Dome.Corners[front].Length, Is.EqualTo(6));
-            Assert.That(s_Dome.Delays[front], Is.EqualTo(0f).Within(1e-4f));
+        }
+
+        [Test]
+        public void Neighbours_AreSixRoundAHexagon_FiveRoundAPentagon_AndMutual()
+        {
             for (int i = 0; i < HexDome.TileCount; i++)
             {
-                Assert.That(s_Dome.Delays[i], Is.InRange(0f, HexDome.SpreadSeconds));
-                if (i != front) Assert.That(s_Dome.Delays[i], Is.GreaterThan(s_Dome.Delays[front]));
+                Assert.That(s_Dome.Neighbours[i].Length, Is.EqualTo(s_Dome.Corners[i].Length));
+                foreach (int n in s_Dome.Neighbours[i]) Assert.That(s_Dome.Neighbours[n], Has.Member(i));
             }
         }
 
         [Test]
-        public void Delays_GrowWithTheAngleFromTheGaze()
+        public void TheRipple_StartsWithOneTile_AndEachRingTouchesTheOneBefore()
         {
-            float3 forward = math.normalize(new float3(1f, 0.2f, 0f));
-            Assert.That(HexDome.Delay(forward, forward), Is.EqualTo(0f).Within(1e-3f));
-            Assert.That(HexDome.Delay(-forward, forward), Is.EqualTo(HexDome.SpreadSeconds).Within(1e-3f));
-            Assert.That(HexDome.Delay(new float3(0f, 0f, 1f), forward), Is.EqualTo(HexDome.SpreadSeconds * 0.5f).Within(1e-3f));
+            var rings = new int[HexDome.TileCount];
+            int first = s_Dome.TileAt(new float3(0f, 0f, 1f));
+            int outer = s_Dome.Rings(first, rings);
+
+            Assert.That(rings[first], Is.EqualTo(0));
+            int zeros = 0;
+            foreach (int r in rings) if (r == 0) zeros++;
+            Assert.That(zeros, Is.EqualTo(1), "one tile turns alone first");
+            for (int i = 0; i < HexDome.TileCount; i++)
+            {
+                Assert.That(rings[i], Is.InRange(0, outer), "every tile is reached");
+                if (i == first) continue;
+                // Set off by a neighbour one ring in.
+                bool setOff = false;
+                foreach (int n in s_Dome.Neighbours[i]) setOff |= rings[n] == rings[i] - 1;
+                Assert.That(setOff, Is.True);
+            }
+            // Gradual: several rings, the furthest straight behind.
+            Assert.That(outer, Is.GreaterThanOrEqualTo(5));
+            Assert.That(rings[s_Dome.TileAt(new float3(0f, 0f, -1f))], Is.GreaterThanOrEqualTo(outer - 1));
+            Assert.That(HexDome.RevealSeconds(outer), Is.InRange(1.2f, 2.5f));
+        }
+
+        [Test]
+        public void ANeighbour_StartsBeforeItsSetterHasTurned()
+        {
+            // The next ring starts partway through the turn of the ring before: a wave, not steps.
+            Assert.That(HexDome.Delay(1), Is.LessThan(HexDome.FlipSeconds));
+            Assert.That(HexDome.Delay(1), Is.GreaterThan(0f));
         }
 
         [Test]
@@ -99,7 +126,7 @@ namespace Atlas.App.Tests
             Assert.That(HexDome.Turn(0.3f, 0.3f), Is.EqualTo(0f));
             Assert.That(HexDome.Turn(0.3f, 0.3f + HexDome.FlipSeconds * 0.5f), Is.EqualTo(0.5f).Within(1e-5f));
             Assert.That(HexDome.Turn(0.3f, 0.3f + HexDome.FlipSeconds), Is.EqualTo(1f));
-            Assert.That(HexDome.Turn(HexDome.SpreadSeconds, HexDome.RevealSeconds), Is.EqualTo(1f), "the last tile is over when the reveal ends");
+            Assert.That(HexDome.Turn(HexDome.Delay(8), HexDome.RevealSeconds(8)), Is.EqualTo(1f), "the last tile is over when the reveal ends");
         }
     }
 }

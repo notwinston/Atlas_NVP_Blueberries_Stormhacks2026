@@ -315,6 +315,7 @@ namespace Atlas.App
             IPerfSource perf;
             if (AtlasServices.TryGet(out perf)) Ladder.Perf = perf;
             Spaces.Events = events;
+            if (Transition != null) Transition.Events = events;
 
             // The room hand-over and the Editor-first path.
             PosePipeline pipeline = Pose.Pipeline;

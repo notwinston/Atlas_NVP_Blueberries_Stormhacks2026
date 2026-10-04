@@ -1,8 +1,8 @@
 // The hexagon reveal between two spaces (HexTransition). Each tile of the dome is a card: its front shows
 // the still of the old space, its back the still of the new one, both painted where they stood seen from
 // the head, so a tile face on cannot be told from the world it covers. A tile turns about its axis over
-// FLIP_SECONDS once the reveal reaches its delay, and when it has turned over it is dropped: the live space
-// behind it looks the same as its back. One mesh, one draw, two texture reads per pixel at most, no fog and
+// FLIP_SECONDS once the reveal reaches its delay (_TileDelays: its ring in the ripple from the tile the walker
+// looks at), and when it has turned over it is dropped: the live space behind it looks the same as its back. One mesh, one draw, two texture reads per pixel at most, no fog and
 // no fade. Loaded with Resources.Load<Shader>("AtlasHexFlip").
 //
 // The dome draws before the world, with its depth in a thin slab next to the near plane: everything after it
@@ -25,9 +25,9 @@ Shader "Hidden/Atlas/HexFlip"
             #pragma fragment Frag
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
-            // HexDome.FlipSeconds and HexDome.SpreadSeconds.
+            // HexDome.FlipSeconds and HexDome.TileCount.
             #define FLIP_SECONDS 0.5
-            #define SPREAD_SECONDS 1.0
+            #define TILE_COUNT 92
 
             TEXTURE2D_ARRAY(_OldStill);
             SAMPLER(sampler_OldStill);
@@ -36,7 +36,7 @@ Shader "Hidden/Atlas/HexFlip"
 
             float4 _OldCentre;      // world position the old still was taken from
             float4 _NewCentre;      // and the new one
-            float4 _RevealForward;  // object space: where the walker looked when the reveal began
+            float _TileDelays[TILE_COUNT];  // seconds after the reveal begins that each tile starts to turn
             float _RevealTime;      // seconds since the reveal began; negative before
             float _SeamGain;        // 0..1: the seams come up as the cover goes on
 
@@ -54,7 +54,7 @@ Shader "Hidden/Atlas/HexFlip"
             {
                 float3 positionOS : POSITION;
                 float3 axis : NORMAL;           // the tile's turning axis, unit, object space
-                float4 centre : TEXCOORD0;      // xyz: the tile's centre, object space
+                float4 centre : TEXCOORD0;      // xyz: the tile's centre, object space; w: the tile's index
                 float2 rim : TEXCOORD1;         // x: 0 at the centre, 1 on the edge
             };
 
@@ -78,7 +78,7 @@ Shader "Hidden/Atlas/HexFlip"
                 Varyings output;
                 float3 centre = input.centre.xyz;
                 float3 axis = input.axis;
-                float delay = SPREAD_SECONDS * acos(clamp(dot(normalize(centre), _RevealForward.xyz), -1.0, 1.0)) / PI;
+                float delay = _TileDelays[(int)(input.centre.w + 0.5)];
                 float x = saturate((_RevealTime - delay) / FLIP_SECONDS);
                 float turn = x * x * (3.0 - 2.0 * x);
                 float s, c;
