@@ -417,9 +417,9 @@ row is one test in the Runner, so the Runner's totals are a little higher than t
 | `Atlas.Scan.Tests` | 219 | 37 | 0 |
 | `Atlas.Spaces.Tests` | 100 | 0 | 5 |
 | `Atlas.Telemetry.Tests` | 132 | 52 | 0 |
-| `Atlas.World.Tests` | 43 | 32 | 0 |
+| `Atlas.World.Tests` | 40 | 32 | 0 |
 
-Twelve test assemblies. The first column sums to 1,117, of which 19 are Unity-only; the headless total of
+Twelve test assemblies. The first column sums to 1,114, of which 19 are Unity-only; the headless total of
 1,393 is higher because every `[TestCase]` row and every value of a source is a test of its own. In Unity
 expect that total plus the 19, minus the one headless-only test below.
 
