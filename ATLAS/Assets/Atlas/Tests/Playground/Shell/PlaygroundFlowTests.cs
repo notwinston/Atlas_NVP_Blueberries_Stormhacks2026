@@ -383,6 +383,7 @@ namespace Atlas.Blades.Playground.Tests.ShellFlow
             public void SetQuality(int tier) { }
             public void Cue() { }
             public void SetLock(bool on) { }
+            public void Walk(float moveX, float moveY, float turnDegreesPerSecond, float speed) { }
         }
 
         [Test]
