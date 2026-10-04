@@ -19,11 +19,11 @@ namespace Atlas.Blades.Playground
     }
 
     /// <summary>
-    /// Lane C's port for the Console's FMS and SEQ fields. The Hub writes its own <c>fms</c> line when the operator
-    /// submits (lane D contract section 3.5) and does not send it to the phone, so something at integration has
-    /// to carry the number back: lane D's link glue implements this interface (an <c>OperatorCmd</c> or a new
-    /// message is their decision) and the shell binds it. Until then <see cref="Raise"/> lets a test, the Editor
-    /// or a keyboard stand-in feed entries by hand.
+    /// Lane C's port for the Console's FMS and SEQ fields. The Hub writes the <c>fms</c>, <c>pg.fmsAlert</c> and
+    /// <c>seq</c> lines when the operator submits (lane D contract section 3.5) and does not send them to the
+    /// phone, so the phone only reacts to an entry that something carries back (the stop line, closing the SEQ
+    /// question). Nothing fed through here is ever logged by the phone. Until the link carries entries,
+    /// <see cref="ManualOperatorEntryFeed.Raise"/> lets a test, the Editor or a keyboard stand-in feed them.
     /// </summary>
     public interface IOperatorEntryFeed
     {

@@ -47,6 +47,20 @@ export function comfortScore(raw) {
   return n <= 20 ? n : null;
 }
 
+/** The Single Ease Question score the operator typed, 1 to 7 (Master Plan section 11.2); null when it is not one. */
+export function seqScore(raw) {
+  const text = String(raw).trim();
+  if (!/^[1-7]$/.test(text)) return null;
+  return Number(text);
+}
+
+/** The operator alert text for a Hub `pg.fmsAlert` event ({score, stop}); the Hub judged it against pg.fmsStop. */
+export function fmsAlertText(data) {
+  if (!data || !Number.isFinite(data.score)) return '';
+  const stop = Number.isFinite(data.stop) ? data.stop : '?';
+  return 'STOP the walk: comfort score ' + data.score + ' reached the stop value ' + stop + ' (pg.fmsStop). Headset off, sit down, water.';
+}
+
 /** Commands sent and what came back, newest first. */
 export class CommandTracker {
   constructor(limit = 40) {

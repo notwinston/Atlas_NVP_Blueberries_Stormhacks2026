@@ -737,8 +737,27 @@ namespace Atlas.Station
             }
         }
 
+        /// <summary>Hub-made event of the FMS stop alert: <c>{score, stop}</c>.</summary>
+        public const string FmsAlertEvent = "pg.fmsAlert";
+        /// <summary>Name of the phone's parameter the alert reads, and the value used until the phone has declared it.</summary>
+        public const string FmsStopParam = "pg.fmsStop";
+        public const int FmsStopDefault = 4;
+
         /// <summary>
-        /// A Hub-made line in <c>events.jsonl</c> (<c>fms</c>, <c>note</c>, <c>asset_ack</c>): the phone's event
+        /// <c>pg.fmsStop</c> as the Hub knows it: the phone's value from the manifest and snapshot, or the
+        /// cautious default (4, the one lane C declares) while the phone has not declared it.
+        /// </summary>
+        int FmsStopLocked()
+        {
+            ParamManifestEntry e;
+            if (!TryFindParam(FmsStopParam, out e)) return FmsStopDefault;
+            float value;
+            if (!_host.TryGetSnapshotValue(e.Name, out value)) value = e.Val;
+            return (int)Math.Round(value, MidpointRounding.AwayFromZero);
+        }
+
+        /// <summary>
+        /// A Hub-made line in <c>events.jsonl</c> (<c>fms</c>, <c>seq</c>, <c>pg.fmsAlert</c>, <c>note</c>, <c>asset_ack</c>): the phone's event
         /// shape, with scene <c>hub</c> and the Hub's clock (contract 3.4).
         /// </summary>
         void HubEvent(string ev, JsonValue data)
@@ -1130,7 +1149,7 @@ namespace Atlas.Station
 
         /// <summary>
         /// A message from a Console over the WebSocket (Appendix B.3): <c>{t: "param", id, value}</c>,
-        /// <c>{t: "scene", space, variant, args}</c>, <c>{t: "op", cmd, args}</c>, <c>{t: "fms", score}</c>,
+        /// <c>{t: "scene", space, variant, args}</c>, <c>{t: "op", cmd, args}</c>, <c>{t: "fms", score}</c>, <c>{t: "seq", score}</c>,
         /// <c>{t: "note", text}</c> and <c>{t: "preset", values}</c>.
         /// Returns the reply for that Console, or null when there is nothing to say.
         /// </summary>
@@ -1169,7 +1188,24 @@ namespace Atlas.Station
                     // The walker's comfort score, 0 to 20, as the operator types it (contract 3.3).
                     JsonValue score = message["score"];
                     if (!score.IsNumber || score.AsInt() < 0 || score.AsInt() > 20) return Error("fms needs a score from 0 to 20");
-                    lock (_gate) HubEvent("fms", JsonValue.Object().Set("score", score.AsInt()));
+                    lock (_gate)
+                    {
+                        int value = score.AsInt();
+                        HubEvent("fms", JsonValue.Object().Set("score", value));
+                        // The operator alert (P2-C09): an entry at or above pg.fmsStop, as the Hub knows it.
+                        int stop = FmsStopLocked();
+                        if (value >= stop)
+                            HubEvent(FmsAlertEvent, JsonValue.Object().Set("score", value).Set("stop", stop));
+                    }
+                    return null;
+                }
+                case "seq":
+                {
+                    // The Single Ease Question, 1 to 7, as the operator types it (Master Plan 11.2, P2-C17).
+                    JsonValue score = message["score"];
+                    if (!score.IsNumber || score.AsFloat() != Math.Floor(score.AsFloat()) || score.AsInt() < 1 || score.AsInt() > 7)
+                        return Error("seq needs a whole score from 1 to 7");
+                    lock (_gate) HubEvent("seq", JsonValue.Object().Set("score", score.AsInt()));
                     return null;
                 }
                 case "note":

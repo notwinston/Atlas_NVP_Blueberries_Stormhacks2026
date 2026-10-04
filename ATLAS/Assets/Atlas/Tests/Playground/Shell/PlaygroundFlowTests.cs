@@ -286,7 +286,8 @@ namespace Atlas.Blades.Playground.Tests.ShellFlow
             // SEQ is asked at the end, answered by the operator.
             Assert.That(r.Shell.Seq.Pending, Is.True);
             r.Shell.Enter(OperatorEntryKind.Seq, 6);
-            Assert.That(r.Log.Count("seq"), Is.EqualTo(1));
+            Assert.That(r.Shell.Seq.Pending, Is.False, "the entry closes the question");
+            Assert.That(r.Log.Count("seq"), Is.EqualTo(0), "the Hub writes seq; the phone must not log a second one");
 
             // FMS every 60 s once the headset is on.
             r.Now += 61.0;
@@ -309,7 +310,7 @@ namespace Atlas.Blades.Playground.Tests.ShellFlow
             Assert.That(r.Log.Count("probe"), Is.EqualTo(2));
             Assert.That(r.IndexOf("glued.wrap", b9), Is.GreaterThan(b9).And.LessThan(b10));
             Assert.That(r.IndexOf("pg.home", b10), Is.GreaterThan(b10));
-            Assert.That(r.IndexOf("seq", b10), Is.GreaterThan(r.IndexOf("pg.home", b10)));
+            Assert.That(r.Shell.Seq.Answers, Is.EqualTo(1), "SEQ asked after the walker is home and answered once");
 
             // One prompt per beat: the chip showed each beat's line once, on entry.
             var expected = new List<string>();
@@ -328,7 +329,7 @@ namespace Atlas.Blades.Playground.Tests.ShellFlow
         }
 
         [Test]
-        public void FmsIsAskedEverySixtySecondsAndTheEntryIsLogged()
+        public void FmsIsAskedEverySixtySecondsAndTheEntryIsNotLoggedByThePhone()
         {
             var r = new Rig();
             RunTo(r, 5);
@@ -338,8 +339,11 @@ namespace Atlas.Blades.Playground.Tests.ShellFlow
             r.Frame();
             Assert.That(r.Shell.Comfort.AskCount, Is.EqualTo(1));
             r.Shell.Enter(OperatorEntryKind.Fms, 3);
-            Assert.That(r.Log.Count("fms"), Is.EqualTo(1));
+            Assert.That(r.Log.Count("fms"), Is.EqualTo(0), "the Hub writes fms; the phone must not log a second one");
             Assert.That(r.Shell.Comfort.LastScore, Is.EqualTo(3));
+            r.Shell.Enter(OperatorEntryKind.Fms, 20);
+            Assert.That(r.Log.Count("pg.fmsAlert"), Is.EqualTo(0), "the Hub writes pg.fmsAlert too");
+            Assert.That(r.Shell.Comfort.AlertActive, Is.True, "the phone still shows the stop line");
             Assert.That(r.Params.Find(ComfortMonitor.StopParamName), Is.Not.Null, "pg.fmsStop is declared");
         }
 

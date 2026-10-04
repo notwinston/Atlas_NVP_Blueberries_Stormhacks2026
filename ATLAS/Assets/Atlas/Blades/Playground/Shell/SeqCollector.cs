@@ -1,30 +1,27 @@
 using System;
-using Atlas.World;
 
 namespace Atlas.Blades.Playground
 {
     /// <summary>
     /// The Single Ease Question at the end of the run (task P2-C17): "how easy was that, 1 (very difficult) to 7
-    /// (very easy)". The walker answers aloud, the operator types it into the Console, and it is logged as
-    /// <c>seq {score}</c> under the scene entered (S0 or S2), once per use case (Master Plan section 11.2).
+    /// (very easy)". The walker answers aloud, the operator types it into the Console, and the Hub logs it as
+    /// <c>seq {score}</c> (Master Plan section 11.2, lane D contract 2.12). This class asks the question and
+    /// takes the entry back to close it; it never logs, so the answer is never in <c>events.jsonl</c> twice.
     /// Engine-free.
     /// </summary>
     public sealed class SeqCollector
     {
         public const int MinScore = 1;
         public const int MaxScore = 7;
-        public const string SeqEvent = "seq";
         public const string QuestionText = "How easy was that? 1 is very difficult, 7 is very easy.";
 
         readonly PromptQueue _prompts;
-        readonly IEventLog _log;
         bool _asked;
 
-        public SeqCollector(PromptQueue prompts, IEventLog log)
+        public SeqCollector(PromptQueue prompts)
         {
             if (prompts == null) throw new ArgumentNullException("prompts");
             _prompts = prompts;
-            _log = log;
         }
 
         /// <summary>True from <see cref="Ask"/> until an entry arrives.</summary>
@@ -49,7 +46,6 @@ namespace Atlas.Blades.Playground
             LastScore = score;
             Answers++;
             _asked = false;
-            if (_log != null) _log.Log(SeqEvent, "score", score);
             _prompts.Clear(PromptKind.Seq, nowS);
             return true;
         }

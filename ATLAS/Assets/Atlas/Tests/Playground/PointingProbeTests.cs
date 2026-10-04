@@ -210,22 +210,18 @@ namespace Atlas.Blades.Playground.Tests
         }
 
         [Test]
-        public void Seq_LogsAScoreFromOneToSeven()
+        public void Seq_TakesAScoreFromOneToSevenAndClosesTheQuestion()
         {
             var prompts = new PromptQueue(new RecordingSink());
-            var log = new RecordingEvents();
-            var seq = new SeqCollector(prompts, log);
+            var seq = new SeqCollector(prompts);
             seq.Ask(0);
             Assert.That(seq.Pending, Is.True);
             Assert.That(prompts.Current.Kind, Is.EqualTo(PromptKind.Seq));
             Assert.That(seq.Submit(0, 1), Is.False);
             Assert.That(seq.Submit(8, 1), Is.False);
             Assert.That(seq.Pending, Is.True);
-            Assert.That(log.Count("seq"), Is.EqualTo(0));
 
             Assert.That(seq.Submit(6, 2), Is.True);
-            Assert.That(log.Count("seq"), Is.EqualTo(1));
-            Assert.That(log.Last("seq").Json, Is.EqualTo("{\"score\":6}"));
             Assert.That(seq.Pending, Is.False);
             Assert.That(prompts.Current, Is.Null);
             Assert.That(seq.LastScore, Is.EqualTo(6));
@@ -235,14 +231,13 @@ namespace Atlas.Blades.Playground.Tests
         public void Seq_FeedRoutesOnlySeqEntries()
         {
             var prompts = new PromptQueue(new RecordingSink());
-            var log = new RecordingEvents();
-            var seq = new SeqCollector(prompts, log);
+            var seq = new SeqCollector(prompts);
             var feed = new ManualOperatorEntryFeed();
             seq.Bind(feed, () => 0.0);
             feed.Raise(OperatorEntryKind.Fms, 5);
-            Assert.That(log.Count("seq"), Is.EqualTo(0));
+            Assert.That(seq.Answers, Is.EqualTo(0));
             feed.Raise(OperatorEntryKind.Seq, 5);
-            Assert.That(log.Count("seq"), Is.EqualTo(1));
+            Assert.That(seq.Answers, Is.EqualTo(1));
         }
     }
 }

@@ -81,7 +81,7 @@ namespace Atlas.Station.Tests
     {
         public readonly LinkClient Client;
         public readonly ParamRegistry Registry;
-        public readonly ParamEntry Rho, Copies, Predict;
+        public readonly ParamEntry Rho, Copies, Predict, FmsStop;
         public readonly ConcurrentQueue<OperatorCommand> Commands = new ConcurrentQueue<OperatorCommand>();
         public readonly ConcurrentQueue<uint> ReceivedSeqs = new ConcurrentQueue<uint>();
         public readonly ConcurrentQueue<string> Jobs = new ConcurrentQueue<string>();
@@ -114,6 +114,7 @@ namespace Atlas.Station.Tests
                 Rho = Registry.DeclareFloat("curved.cullRho", "curved", 2f, 3.5f, 3f);
                 Copies = Registry.DeclareInt("glued.copies", "glued", 3, 5, 5);
                 Predict = Registry.DeclareBool("pose.gyroPredict", "pose", true);
+                FmsStop = Registry.DeclareInt("pg.fmsStop", "playground", 0, 20, 4);
             }
             Client = new LinkClient(new LiteNetTransport(), new StopwatchClock(), role, Registry)
             {

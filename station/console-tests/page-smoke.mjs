@@ -121,19 +121,23 @@ else {
 byId.get('stop').dispatch('click');
 byId.get('fms-score').value = '4';
 byId.get('fms-form').dispatch('submit');
+byId.get('seq-score').value = '6';
+byId.get('seq-form').dispatch('submit');
 await sleep(600);
 paint();
 
 const report = {
   phone: text('phone-state'), rtt: text('phone-rtt'), clock: text('phone-clock'), state: text('state-hz'), loss: text('state-loss'),
   session: text('session-id'), space: text('space-now'), bump: text('bump-now'), groups: groups.children.length, parameters: rows.length,
-  echo: echoNote, stop: text('stop-status'), comfort: text('fms-status'), rows: text('rows-summary'), walker: text('map-walker'),
+  echo: echoNote, stop: text('stop-status'), comfort: text('fms-status'), seq: text('seq-status'), alert: text('fms-alert'), alertHidden: byId.get('fms-alert').hidden, rows: text('rows-summary'), walker: text('map-walker'),
   nearest: text('map-nearest'), room: text('map-room'), pairing: text('pair-url'), jobs: byId.get('job-rows').children.length
 };
 console.log(report);
 if (report.phone !== 'connected') problems.push('the strip does not show a connected phone');
 if (!/phone \d+ ms/.test(report.stop)) problems.push('STOP shows no acknowledgement from the phone: "' + report.stop + '"');
 if (!/Logged 4/.test(report.comfort)) problems.push('the comfort score was not confirmed: "' + report.comfort + '"');
+if (!/Logged 6/.test(report.seq)) problems.push('the SEQ score was not confirmed: "' + report.seq + '"');
+if (report.alertHidden || !/score 4/.test(report.alert)) problems.push('no operator alert for an FMS entry at pg.fmsStop: "' + report.alert + '"');
 if (!/rows shown/.test(report.rows)) problems.push('the dashboard shows no telemetry');
 if (!/^atlas:\/\//.test(report.pairing)) problems.push('the pairing page shows no address');
 if (report.groups === 0) problems.push('the tuner built no groups');

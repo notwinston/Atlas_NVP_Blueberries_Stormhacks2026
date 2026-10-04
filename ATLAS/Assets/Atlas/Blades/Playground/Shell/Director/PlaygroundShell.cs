@@ -119,9 +119,9 @@ namespace Atlas.Blades.Playground.Shell
             Return = new HomeReturn(parts.Host, parts.Ramp, parts.Projection, parts.Log);
             Probe = new PointingProbe(parts.HomeBearing, parts.Log, Prompts);
             if (parts.Input != null) ProbeInput = new PointingProbeInput(parts.Input, Probe, m_Clock);
-            Seq = new SeqCollector(Prompts, parts.Log);
+            Seq = new SeqCollector(Prompts);
             FmsStop = ComfortMonitor.DeclareStopParam(parts.Params);
-            Comfort = new ComfortMonitor(Prompts, parts.Log, ComfortMonitor.StopReader(FmsStop));
+            Comfort = new ComfortMonitor(Prompts, ComfortMonitor.StopReader(FmsStop));
             Exhibits = new ExhibitRelay(Prompts, m_Clock);
             Director = new PlaygroundDirectorCore(parts.Log, Prompts, parts.BeatNames);
 

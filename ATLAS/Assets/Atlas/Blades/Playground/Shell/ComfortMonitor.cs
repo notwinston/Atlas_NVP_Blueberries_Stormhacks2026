@@ -1,13 +1,15 @@
 using System;
 using Atlas.Link;
-using Atlas.World;
 
 namespace Atlas.Blades.Playground
 {
     /// <summary>
-    /// The comfort question of the Playground (task P2-C09): asks for the FMS score every 60 s, logs each entry as
-    /// an <c>fms</c> event, and raises the operator alert when an entry reaches <c>pg.fmsStop</c> (Master Plan
-    /// section 10.1.4). Engine-free; time is the caller's clock in seconds.
+    /// The comfort question of the Playground (task P2-C09): asks for the FMS score every 60 s and reacts to the
+    /// entries the operator typed, with the stop line when one reaches <c>pg.fmsStop</c> (Master Plan section
+    /// 10.1.4). Engine-free; time is the caller's clock in seconds.
+    /// <para>One writer: the Hub writes the <c>fms</c> line and the <c>pg.fmsAlert</c> line (lane D contract 2.12,
+    /// Hub-made events). This class never logs either, so an entry is never in <c>events.jsonl</c> twice. The
+    /// operator alert is the Console's.</para>
     /// <para>The question is spoken by the operator and shown on the prompt chip as a reminder; the walker answers
     /// aloud and the operator types the number into the Console. A late frame never makes two questions in a row:
     /// the next one is always a full minute after the one asked.</para>
@@ -32,26 +34,18 @@ namespace Atlas.Blades.Playground
         public const string QuestionText = "Comfort check: say your score, 0 to 20.";
         public const string StopText = "Stop. Headset off, sit down, water.";
 
-        /// <summary>Event of an entry: <c>{score, stop}</c>.</summary>
-        public const string FmsEvent = "fms";
-        /// <summary>Event of the operator alert: <c>{score, stop}</c>.</summary>
-        public const string AlertEvent = "pg.fmsAlert";
-
         readonly PromptQueue _prompts;
-        readonly IEventLog _log;
         readonly Func<int> _stop;
         bool _running, _paused;
         double _nextAskS, _pausedAtS;
 
         /// <param name="prompts">Shows the question and the stop line.</param>
-        /// <param name="log">The event log; may be null in a sandbox.</param>
         /// <param name="stop">Reads <c>pg.fmsStop</c>; see <see cref="DeclareStopParam"/>.</param>
-        public ComfortMonitor(PromptQueue prompts, IEventLog log, Func<int> stop)
+        public ComfortMonitor(PromptQueue prompts, Func<int> stop)
         {
             if (prompts == null) throw new ArgumentNullException("prompts");
             if (stop == null) throw new ArgumentNullException("stop");
             _prompts = prompts;
-            _log = log;
             _stop = stop;
         }
 
@@ -78,7 +72,7 @@ namespace Atlas.Blades.Playground
         public bool AlertActive { get; private set; }
         public int StopValue { get { return _stop(); } }
 
-        /// <summary>Raised with (score, stop) when an entry reaches the stop value. The Console's alert hangs on the event log line.</summary>
+        /// <summary>Raised with (score, stop) when an entry reaches the stop value: the phone's own reaction (the stop line on the chip).</summary>
         public event Action<int, int> Alerted;
 
         /// <summary>The walker is in the headset and the run is on: the first question comes one interval later.</summary>
@@ -131,21 +125,19 @@ namespace Atlas.Blades.Playground
         }
 
         /// <summary>
-        /// An entry from the Console. Rejects anything but a whole number from 0 to 20. A valid one is logged as
-        /// <c>fms {score, stop}</c> and answers the question on the chip; at or above <c>pg.fmsStop</c> it also
-        /// logs <c>pg.fmsAlert</c>, shows the stop line and raises <see cref="Alerted"/>.
+        /// An entry the Console typed, as it reaches the phone. Rejects anything but a whole number from 0 to 20.
+        /// A valid one answers the question on the chip; at or above <c>pg.fmsStop</c> it also shows the stop line
+        /// and raises <see cref="Alerted"/>. It writes no event: the Hub has already logged the entry.
         /// </summary>
         public bool Submit(int score, double nowS)
         {
             if (score < MinScore || score > MaxScore) return false;
             int stop = _stop();
             LastScore = score;
-            if (_log != null) _log.Log(FmsEvent, "score", score, "stop", stop);
             _prompts.Clear(PromptKind.Fms, nowS);
             if (score >= stop)
             {
                 AlertActive = true;
-                if (_log != null) _log.Log(AlertEvent, "score", score, "stop", stop);
                 _prompts.Enqueue(PromptKind.Stop, StopText, nowS);
                 Action<int, int> handler = Alerted;
                 if (handler != null) handler(score, stop);

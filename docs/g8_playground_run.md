@@ -63,8 +63,8 @@ most one `SceneCmd` advance per run, which is written in the sheet.
 ### The three measures taken during every run
 
 **FMS (comfort).** The narrator asks aloud once per minute, the prompt chip reminds with "Comfort check: say your
-score, 0 to 20." The operator types the walker's number (0 to 20) into the Console comfort field, which logs `fms`.
-The interval is 60 s, plus or minus 5 s. At or above `pg.fmsStop` the build raises `pg.fmsAlert`, the chip reads
+score, 0 to 20." The operator types the walker's number (0 to 20) into the Console comfort field, which the Hub logs as `fms` (the phone does not log it).
+The interval is 60 s, plus or minus 5 s. At or above `pg.fmsStop` the Console raises its red operator alert and the Hub logs `pg.fmsAlert`; the chip reads
 "Stop. Headset off, sit down, water." and the narrator stops the run. A stopped run is recorded as stopped, with the
 score; it is not repeated by the same walker that day.
 
@@ -169,8 +169,8 @@ Problems met (what, when, which beat, fixed how):
 
 | Seam | State on `laneC/phase2` | Who |
 |---|---|---|
-| The Console SEQ field | The Hub's Console has the FMS field (`{t:"fms"}`). A `seq` message and field are not in the Hub. `SeqCollector.Submit` and `IOperatorEntryFeed` are the phone's side (`OperatorEntryKind.Seq`) | Lane D adds `{t:"seq", score}` to the Hub and the Console and the link carries it to the phone |
-| FMS and SEQ back to the phone | The Hub logs `fms` itself and does not send it on; `IOperatorEntryFeed` is the port the link glue implements | Lane D (link glue), bound by the integrator |
+| The Console SEQ field | Built (P2-C17): the Console's Ease score field sends `{t:"seq", score}` and the Hub logs `seq {score}`. The phone does not log it | none |
+| FMS and SEQ back to the phone | The Hub logs `fms`, `pg.fmsAlert` and `seq` itself; the phone only reacts (stop line, closes the SEQ question) if the link glue feeds `IOperatorEntryFeed`, and never logs them | Lane D (link glue), optional |
 | The director that runs the beats (`PlaygroundDirector`, `Beats.asset`, `pg.beat`) | Not on this branch; the beat enum, prompts and the shell parts are | `P2-C01` package |
 | Spectator display of beats | The Spectator re-renders from `State`; showing the beat number or name on it is lane D's. If the beat is not visible, tick "Spectator showed beat N" only for what the walker's world shows, and report the gap | Lane D |
 | Lane B spaces and the dial | Not on this branch (only contract types and the flat stub) | Lane B, bound at integration |

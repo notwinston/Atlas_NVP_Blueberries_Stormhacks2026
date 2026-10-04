@@ -15,7 +15,7 @@ import { drawLines, drawTimeline } from './charts.js';
 import { Trail, cellLabel, nearestObstacle, relativeSide } from './mapmath.js';
 import { drawMap } from './mapview.js';
 import { JobList, phaseOf } from './jobs.js';
-import { CommandTracker, comfortScore, requestFor, statusText } from './commands.js';
+import { CommandTracker, comfortScore, fmsAlertText, requestFor, seqScore, statusText } from './commands.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -39,6 +39,7 @@ const model = {
   dirtyCharts: false,
   dirtyMap: false,
   fmsPending: null,
+  seqPending: null,
   notePending: false
 };
 
@@ -571,6 +572,20 @@ function buildOperator() {
     model.fmsPending = score;
     setStatus($('fms-status'), 'Sending ' + score + '…', '');
   });
+  $('seq-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const score = seqScore($('seq-score').value);
+    if (score === null) {
+      setStatus($('seq-status'), 'A whole number from 1 to 7.', 'bad');
+      return;
+    }
+    if (!feed.send({ t: 'seq', score })) {
+      setStatus($('seq-status'), 'Not logged: no Hub.', 'bad');
+      return;
+    }
+    model.seqPending = score;
+    setStatus($('seq-status'), 'Sending ' + score + '…', '');
+  });
   $('note-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const text = $('note-text').value.trim();
@@ -665,7 +680,20 @@ function onEvent(event) {
     showError('The phone ignored a parameter change (' + ((event.data && event.data.reason) || 'unknown reason') + ').');
   } else if (event.ev === 'space.refused') {
     showError('The phone refused the switch to ' + ((event.data && event.data.to) || 'that space') + ': ' + ((event.data && event.data.reason) || 'refused') + '.');
+  } else if (event.ev === 'seq' && event.data) {
+    if (model.seqPending === event.data.score) {
+      model.seqPending = null;
+      $('seq-score').value = '';
+    }
+    setStatus($('seq-status'), 'Logged ' + event.data.score + ' at ' + clockTime() + '.', 'good');
+  } else if (event.ev === 'pg.fmsAlert') {
+    // The Hub writes it right after the fms line it judged against pg.fmsStop; it stays until a lower entry.
+    const alert = $('fms-alert');
+    alert.textContent = fmsAlertText(event.data);
+    alert.hidden = false;
+    showError(alert.textContent);
   } else if (event.ev === 'fms' && event.data) {
+    $('fms-alert').hidden = true;
     if (model.fmsPending === event.data.score) {
       model.fmsPending = null;
       $('fms-score').value = '';

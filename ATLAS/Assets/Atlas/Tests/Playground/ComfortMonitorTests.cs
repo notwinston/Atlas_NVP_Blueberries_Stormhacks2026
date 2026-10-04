@@ -3,15 +3,14 @@ using NUnit.Framework;
 
 namespace Atlas.Blades.Playground.Tests
 {
-    /// <summary>P2-C09: the FMS question every 60 s ± 5 s, the entry in the log and the stop alert.</summary>
+    /// <summary>P2-C09: the FMS question every 60 s ± 5 s, the stop line on an entry, and no event of its own (the Hub writes fms).</summary>
     [TestFixture]
     public class ComfortMonitorTests
     {
-        static ComfortMonitor Make(out PromptQueue prompts, out RecordingEvents log, int stop = 4)
+        static ComfortMonitor Make(out PromptQueue prompts, int stop = 4)
         {
             prompts = new PromptQueue(new RecordingSink());
-            log = new RecordingEvents();
-            return new ComfortMonitor(prompts, log, () => stop);
+            return new ComfortMonitor(prompts, () => stop);
         }
 
         /// <summary>Runs the monitor at 90 Hz and returns the times of the questions.</summary>
@@ -38,8 +37,8 @@ namespace Atlas.Blades.Playground.Tests
         [Test]
         public void Fms_AskedEverySixtySecondsPlusMinusFive()
         {
-            PromptQueue prompts; RecordingEvents log;
-            ComfortMonitor monitor = Make(out prompts, out log);
+            PromptQueue prompts;
+            ComfortMonitor monitor = Make(out prompts);
             var asks = Run(monitor, 10 * 60 + 1);
             Assert.That(asks.Count, Is.EqualTo(10));
             double previous = 0;
@@ -53,8 +52,8 @@ namespace Atlas.Blades.Playground.Tests
         [Test]
         public void Fms_AFrameHitchNeverMakesTwoQuestionsInARow()
         {
-            PromptQueue prompts; RecordingEvents log;
-            ComfortMonitor monitor = Make(out prompts, out log);
+            PromptQueue prompts;
+            ComfortMonitor monitor = Make(out prompts);
             var asks = Run(monitor, 5 * 60, hitchAt: 58.0, hitch: 20.0);
             for (int i = 1; i < asks.Count; i++)
                 Assert.That(asks[i] - asks[i - 1], Is.InRange(55.0, 65.0), "question " + i);
@@ -63,8 +62,8 @@ namespace Atlas.Blades.Playground.Tests
         [Test]
         public void Fms_PauseStopsTheClock()
         {
-            PromptQueue prompts; RecordingEvents log;
-            ComfortMonitor monitor = Make(out prompts, out log);
+            PromptQueue prompts;
+            ComfortMonitor monitor = Make(out prompts);
             monitor.Start(0);
             monitor.Tick(30);
             monitor.Pause(30);
@@ -80,8 +79,8 @@ namespace Atlas.Blades.Playground.Tests
         [Test]
         public void Fms_TheQuestionShowsOnTheChip()
         {
-            PromptQueue prompts; RecordingEvents log;
-            ComfortMonitor monitor = Make(out prompts, out log);
+            PromptQueue prompts;
+            ComfortMonitor monitor = Make(out prompts);
             monitor.Start(0);
             monitor.Tick(60);
             Assert.That(prompts.Current.Kind, Is.EqualTo(PromptKind.Fms));
@@ -89,29 +88,26 @@ namespace Atlas.Blades.Playground.Tests
         }
 
         [Test]
-        public void Fms_EntryAppearsInTheLog()
+        public void Fms_EntryAnswersTheQuestionAndWritesNoEvent()
         {
-            PromptQueue prompts; RecordingEvents log;
-            ComfortMonitor monitor = Make(out prompts, out log);
+            PromptQueue prompts;
+            ComfortMonitor monitor = Make(out prompts);
             monitor.Start(0);
             monitor.Tick(60);
             Assert.That(monitor.Submit(2, 61), Is.True);
-            Assert.That(log.Count("fms"), Is.EqualTo(1));
-            Assert.That(log.Last("fms").Json, Is.EqualTo("{\"score\":2,\"stop\":4}"));
             Assert.That(monitor.LastScore, Is.EqualTo(2));
             Assert.That(prompts.Current, Is.Null, "the entry answers the question");
             Assert.That(monitor.AlertActive, Is.False);
-            Assert.That(log.Count("pg.fmsAlert"), Is.EqualTo(0));
         }
 
         [Test]
         public void Fms_RejectsScoresOutsideZeroToTwenty()
         {
-            PromptQueue prompts; RecordingEvents log;
-            ComfortMonitor monitor = Make(out prompts, out log);
+            PromptQueue prompts;
+            ComfortMonitor monitor = Make(out prompts);
             Assert.That(monitor.Submit(-1, 0), Is.False);
             Assert.That(monitor.Submit(21, 0), Is.False);
-            Assert.That(log.Events.Count, Is.EqualTo(0));
+            Assert.That(monitor.LastScore, Is.EqualTo(-1));
             Assert.That(monitor.Submit(0, 0), Is.True);
             Assert.That(monitor.Submit(20, 0), Is.True);
         }
@@ -121,9 +117,9 @@ namespace Atlas.Blades.Playground.Tests
         {
             for (int trial = 0; trial < 10; trial++)
             {
-                PromptQueue prompts; RecordingEvents log;
+                PromptQueue prompts;
                 int stop = 4 + trial;
-                ComfortMonitor monitor = Make(out prompts, out log, stop);
+                ComfortMonitor monitor = Make(out prompts, stop);
                 int alerts = 0, alertScore = -1, alertStop = -1;
                 monitor.Alerted += (s, st) => { alerts++; alertScore = s; alertStop = st; };
 
@@ -134,7 +130,6 @@ namespace Atlas.Blades.Playground.Tests
                 Assert.That(alertScore, Is.EqualTo(stop));
                 Assert.That(alertStop, Is.EqualTo(stop));
                 Assert.That(monitor.AlertActive, Is.True);
-                Assert.That(log.Count("pg.fmsAlert"), Is.EqualTo(1));
                 Assert.That(prompts.Current.Kind, Is.EqualTo(PromptKind.Stop));
             }
         }
@@ -142,8 +137,8 @@ namespace Atlas.Blades.Playground.Tests
         [Test]
         public void Fms_AlertClearsOnALowerEntryOrOnResume()
         {
-            PromptQueue prompts; RecordingEvents log;
-            ComfortMonitor monitor = Make(out prompts, out log);
+            PromptQueue prompts;
+            ComfortMonitor monitor = Make(out prompts);
             monitor.Start(0);
             monitor.Submit(9, 1);
             Assert.That(monitor.AlertActive, Is.True);
@@ -167,7 +162,7 @@ namespace Atlas.Blades.Playground.Tests
             Assert.That(ComfortMonitor.DeclareStopParam(registry), Is.SameAs(stop), "declared twice, kept once");
 
             var prompts = new PromptQueue(new RecordingSink());
-            var monitor = new ComfortMonitor(prompts, new RecordingEvents(), ComfortMonitor.StopReader(stop));
+            var monitor = new ComfortMonitor(prompts, ComfortMonitor.StopReader(stop));
             int alerts = 0;
             monitor.Alerted += (s, st) => alerts++;
             monitor.Submit(8, 0);
@@ -182,14 +177,14 @@ namespace Atlas.Blades.Playground.Tests
         [Test]
         public void Fms_FeedRoutesOnlyFmsEntries()
         {
-            PromptQueue prompts; RecordingEvents log;
-            ComfortMonitor monitor = Make(out prompts, out log);
+            PromptQueue prompts;
+            ComfortMonitor monitor = Make(out prompts);
             var feed = new ManualOperatorEntryFeed();
             monitor.Bind(feed, () => 5.0);
             feed.Raise(OperatorEntryKind.Seq, 6);
-            Assert.That(log.Count("fms"), Is.EqualTo(0));
+            Assert.That(monitor.LastScore, Is.EqualTo(-1));
             feed.Raise(OperatorEntryKind.Fms, 3);
-            Assert.That(log.Count("fms"), Is.EqualTo(1));
+            Assert.That(monitor.LastScore, Is.EqualTo(3));
         }
     }
 }

@@ -167,7 +167,7 @@ namespace Atlas.Station.Tests
             using (var phone = new TestClient(LinkRole.Phone, t.Hub.UdpPort, null, c => c.SessionId = Session))
             {
                 Wait.Ready(phone);
-                Wait.Until(() => t.Hub.GetParams()["params"].Count == 3, "the manifest");
+                Wait.Until(() => t.Hub.GetParams()["params"].Count == 4, "the manifest");
                 var outline = new RoomOutlineMessage { Height = 2.4f };
                 outline.AddPoint(0, 0); outline.AddPoint(3, 0); outline.AddPoint(3, 3); outline.AddPoint(0, 3);
                 phone.Post(c => c.SendRoomOutline(outline));
