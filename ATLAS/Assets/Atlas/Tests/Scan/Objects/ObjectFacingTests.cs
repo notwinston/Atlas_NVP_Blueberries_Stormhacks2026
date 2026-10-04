@@ -346,6 +346,174 @@ namespace Atlas.Scan.Tests.Objects
             Assert.That(rule, Is.EqualTo(ObjectFacingRule.Box));
         }
 
+        // ---- the clearance rule in a corner, and beside other furniture ----
+
+        /// <summary>A 4 m x 5 m room with the given boxes, as the builder makes it.</summary>
+        static RoomModel Room4x5(params ObstacleBox[] boxes)
+        {
+            RoomModel room = RoomModelBuilder.FromOutline("corner", ScanTestRooms.Rectangle(4f, 5f), boxes, new float2(2f, 2.5f));
+            Assert.That(room, Is.Not.Null);
+            Assert.That(room.Objects.Length, Is.EqualTo(boxes.Length));
+            return room;
+        }
+
+        /// <summary>
+        /// A box whose true front looks north (the room's +Z in the frame it is described in), reported with
+        /// its axis some quarter turns away. along is its side along the south wall, depth the side out from it.
+        /// </summary>
+        static ObstacleBox FacingNorth(ObjectCategory category, float x, float z, float along, float height, float depth, int turnedBy = 0)
+        {
+            return new ObstacleBox
+            {
+                Base = new float3(x, 0f, z),
+                Size = (turnedBy & 1) != 0 ? new float3(depth, height, along) : new float3(along, height, depth),
+                Yaw = -turnedBy * Quarter, Category = (int)category, SourceId = 1,
+            };
+        }
+
+        static RoomObject Find(RoomModel room, ObjectCategory category)
+        {
+            foreach (RoomObject o in room.Objects)
+                if (o.Category == category) return o;
+            Assert.Fail("No " + category + " in the room");
+            return null;
+        }
+
+        /// <summary>The object's front after facing, in the frame the room was described in; rule is the rule that answered.</summary>
+        static float2 FrontAfterFacing(RoomModel room, RoomObject obj, byte[] profile, out ObjectFacingRule rule)
+        {
+            int turns = ObjectFacing.Decide(obj.Category, obj.Base, obj.Size, obj.Yaw, profile, room.Sdf, room.Objects, out rule);
+            return Front(obj.Yaw + turns * Quarter + room.Anchor.Yaw);
+        }
+
+        // The south-west corner of the room: the object's back on the south wall, its side on the west wall or
+        // a few centimetres off it. A bed and a toilet come with a level profile, which says nothing.
+        static readonly object[] s_cornerRows =
+        {
+            new object[] { "a refrigerator 0.6 x 0.6, flush", ObjectCategory.Refrigerator, 0.6f, 1.8f, 0.6f, 0f, false },
+            new object[] { "a cupboard 0.5 x 0.6, flush", ObjectCategory.Storage, 0.5f, 1.8f, 0.6f, 0f, false },
+            new object[] { "a bed 1.4 x 2.0, its head on one wall and its side on the other", ObjectCategory.Bed, 1.4f, 0.5f, 2.0f, 0f, true },
+            new object[] { "a toilet 0.4 x 0.7, flush to the side wall", ObjectCategory.Toilet, 0.4f, 0.8f, 0.7f, 0f, true },
+            new object[] { "a refrigerator 0.6 x 0.7, 3 cm off the side wall", ObjectCategory.Refrigerator, 0.6f, 1.8f, 0.7f, 0.03f, false },
+            new object[] { "a washer 0.6 x 0.6, 10 cm off the side wall", ObjectCategory.WasherDryer, 0.6f, 0.85f, 0.6f, 0.10f, false },
+            new object[] { "storage 1.2 x 0.4, flush", ObjectCategory.Storage, 1.2f, 1.8f, 0.4f, 0f, false },
+        };
+
+        [TestCaseSource(nameof(s_cornerRows))]
+        public void InARoomCorner_ABoxThatIsRight_IsNotTurned(string what, ObjectCategory category, float along, float height, float depth,
+            float offTheSideWall, bool levelProfile)
+        {
+            RoomModel room = Room4x5(FacingNorth(category, offTheSideWall + 0.5f * along, 0.5f * depth, along, height, depth));
+            RoomObject obj = room.Objects[0];
+            ObjectFacingRule rule;
+            float2 front = FrontAfterFacing(room, obj, levelProfile ? Filled(200) : null, out rule);
+            Assert.That(math.dot(front, new float2(0f, 1f)), Is.GreaterThan(0.999f), what + ": the front must still look into the room");
+        }
+
+        [TestCaseSource(nameof(s_cornerRows))]
+        public void InARoomCorner_TheFloorCannotTell_AndGivesNoAnswer(string what, ObjectCategory category, float along, float height, float depth,
+            float offTheSideWall, bool levelProfile)
+        {
+            // Two sides have free floor in front and a wall behind. Whichever way the box was reported, it keeps its axis.
+            for (int turnedBy = 0; turnedBy < 4; turnedBy++)
+            {
+                RoomModel room = Room4x5(FacingNorth(category, offTheSideWall + 0.5f * along, 0.5f * depth, along, height, depth, turnedBy));
+                RoomObject obj = room.Objects[0];
+                int turns;
+                Assert.That(ObjectFacing.TryClearance(obj.Base, obj.Size, obj.Yaw, room.Sdf, out turns), Is.False, what + ", turned by " + turnedBy);
+                ObjectFacingRule rule;
+                turns = ObjectFacing.Decide(category, obj.Base, obj.Size, obj.Yaw, levelProfile ? Filled(200) : null, room.Sdf, room.Objects, out rule);
+                Assert.That(rule, Is.EqualTo(ObjectFacingRule.Box), what + ", turned by " + turnedBy);
+                Assert.That(turns, Is.EqualTo(0), what + ", turned by " + turnedBy);
+            }
+        }
+
+        [Test]
+        public void InEveryCornerOfTheRoom_TheFloorGivesNoAnswer()
+        {
+            // The flush refrigerator in each of the four corners, its front along each of the two free directions.
+            var corners = new[] { new float2(0.3f, 0.3f), new float2(3.7f, 0.3f), new float2(3.7f, 4.7f), new float2(0.3f, 4.7f) };
+            foreach (float2 corner in corners)
+            {
+                for (int quarter = 0; quarter < 4; quarter++)
+                {
+                    var box = new ObstacleBox
+                    {
+                        Base = new float3(corner.x, 0f, corner.y), Size = new float3(0.6f, 1.8f, 0.6f), Yaw = quarter * Quarter,
+                        Category = (int)ObjectCategory.Refrigerator, SourceId = 1,
+                    };
+                    RoomModel room = Room4x5(box);
+                    RoomObject obj = room.Objects[0];
+                    int turns;
+                    Assert.That(ObjectFacing.TryClearance(obj.Base, obj.Size, obj.Yaw, room.Sdf, out turns), Is.False, "corner " + corner + ", yaw " + quarter);
+                }
+            }
+        }
+
+        [Test]
+        public void ANeighbourStandingAgainstOneSide_MakesACorner()
+        {
+            // A cupboard on the south wall with a second one flush against its west side: free floor in front of it
+            // and to the east, a wall behind and furniture to the west. The floor cannot tell north from east.
+            for (int turnedBy = 0; turnedBy < 4; turnedBy++)
+            {
+                RoomModel room = Room4x5(
+                    FacingNorth(ObjectCategory.Storage, 2f, 0.2f, 0.9f, 1.8f, 0.4f, turnedBy),
+                    FacingNorth(ObjectCategory.Refrigerator, 1.2f, 0.35f, 0.7f, 1.8f, 0.7f));
+                RoomObject obj = Find(room, ObjectCategory.Storage);
+                int turns;
+                Assert.That(ObjectFacing.TryClearance(obj.Base, obj.Size, obj.Yaw, room.Sdf, out turns), Is.False, "turned by " + turnedBy);
+            }
+        }
+
+        [Test]
+        public void ANeighbourHalfAMetreOff_DoesNotStopTheAnswer()
+        {
+            // The same cupboard with the other piece 0.5 m from its side: the floor between them is free, so it
+            // stands against the wall only, and the front is the room side whichever way the box was reported.
+            for (int turnedBy = 0; turnedBy < 4; turnedBy++)
+            {
+                RoomModel room = Room4x5(
+                    FacingNorth(ObjectCategory.Storage, 2f, 0.2f, 0.9f, 1.8f, 0.4f, turnedBy),
+                    FacingNorth(ObjectCategory.Refrigerator, 0.7f, 0.35f, 0.7f, 1.8f, 0.7f));
+                ObjectFacingRule rule;
+                float2 front = FrontAfterFacing(room, Find(room, ObjectCategory.Storage), null, out rule);
+                Assert.That(rule, Is.EqualTo(ObjectFacingRule.Clearance), "turned by " + turnedBy);
+                Assert.That(math.dot(front, new float2(0f, 1f)), Is.GreaterThan(0.999f), "turned by " + turnedBy);
+            }
+        }
+
+        [Test]
+        public void BetweenTwoNeighbours_OnlyTheRoomSideIsFree_AndIsTheFront()
+        {
+            // An oven in a row of kitchen units: furniture 10 cm from both its sides, the wall behind.
+            for (int turnedBy = 0; turnedBy < 4; turnedBy++)
+            {
+                RoomModel room = Room4x5(
+                    FacingNorth(ObjectCategory.Oven, 2f, 0.3f, 0.6f, 0.9f, 0.6f, turnedBy),
+                    FacingNorth(ObjectCategory.Storage, 1.2f, 0.3f, 0.8f, 0.9f, 0.6f),
+                    FacingNorth(ObjectCategory.Refrigerator, 2.75f, 0.35f, 0.7f, 1.8f, 0.7f));
+                ObjectFacingRule rule;
+                float2 front = FrontAfterFacing(room, Find(room, ObjectCategory.Oven), null, out rule);
+                Assert.That(rule, Is.EqualTo(ObjectFacingRule.Clearance), "turned by " + turnedBy);
+                Assert.That(math.dot(front, new float2(0f, 1f)), Is.GreaterThan(0.999f), "turned by " + turnedBy);
+            }
+        }
+
+        [TestCase(0.05f, true)]
+        [TestCase(0.25f, true)]
+        [TestCase(0.45f, false)]
+        [TestCase(1.0f, false)]
+        public void StandingOffTheWall_TheAnswerNeedsTheWallWithinReach(float gap, bool answers)
+        {
+            // The probe behind the box is 0.30 m out: a wall within about that is what the object stands against.
+            RoomModel room = Room4x5(FacingNorth(ObjectCategory.Storage, 2f, gap + 0.2f, 0.9f, 1.8f, 0.4f, 2));
+            RoomObject obj = room.Objects[0];
+            int turns;
+            Assert.That(ObjectFacing.TryClearance(obj.Base, obj.Size, obj.Yaw, room.Sdf, out turns), Is.EqualTo(answers));
+            if (answers) Assert.That(math.dot(Front(obj.Yaw + turns * Quarter + room.Anchor.Yaw), new float2(0f, 1f)), Is.GreaterThan(0.999f));
+        }
+
         // ---- the lists ----
 
         [Test]
@@ -528,10 +696,12 @@ namespace Atlas.Scan.Tests.Objects
             Assert.That(yaw, Is.EqualTo(-3f - Quarter + 2f * math.PI).Within(1e-6f));
             Assert.That(size, Is.EqualTo(new float3(0.6f, 1f, 0.4f)));
 
-            // Half a turn from zero lands on +pi, the closed end of the range.
+            // Half a turn from zero looks the other way and stays in (-pi, pi]. What a RoomModel then stores is
+            // the builder's business (RoomModelBuilder.StoredYaw): pi itself does not survive six decimals.
             yaw = 0f;
             ObjectFacing.Apply(2, ref yaw, ref size, ref profile);
-            Assert.That(yaw, Is.EqualTo(math.PI).Within(1e-6f));
+            Assert.That(math.dot(Front(yaw), Front(0f)), Is.LessThan(-0.999999f));
+            Assert.That(yaw, Is.GreaterThan(-math.PI).And.LessThanOrEqualTo(math.PI));
         }
     }
 }

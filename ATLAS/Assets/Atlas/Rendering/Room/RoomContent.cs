@@ -404,6 +404,19 @@ namespace Atlas.Rendering.Room
             return true;
         }
 
+        public bool IsMeshDrawn(Mesh mesh)
+        {
+            if (mesh == null) return false;
+            for (int k = 0; k < m_ViewCount; k++)
+            {
+                RoomObjectView view = m_Views[k];
+                if (view.Mesh == mesh || view.LightMesh == mesh) return true;
+                if (view.Fading && view.OutMesh == mesh) return true;
+                if (view.HasPending && view.PendingMesh == mesh) return true;
+            }
+            return false;
+        }
+
         public bool SetBuiltInMesh(int objectId, Mesh sharedMesh, Vector3 scale, float fadeSeconds = 0.3f)
         {
             int index = IndexOf(objectId);

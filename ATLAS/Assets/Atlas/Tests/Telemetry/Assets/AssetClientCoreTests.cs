@@ -788,6 +788,57 @@ namespace Atlas.Telemetry.Tests
             Assert.That(rig.Core.ObjectCount, Is.EqualTo(0));
         }
 
+        [Test]
+        public void Asset_ForgetRoom_AlsoDeletesTheLightCopiesFromTheCache()
+        {
+            Rig rig = LightRig(TestGlb.Make(6000), TestGlb.Make(2000));
+            string fullSha = rig.Forge.JobOf(1).Sha, lightSha = rig.Forge.JobOf(1).LightSha;
+            Assert.That(rig.Cache.Contains(fullSha), Is.True);
+            Assert.That(rig.Cache.Contains(lightSha), Is.True);
+            Assert.That(rig.Cache.Count, Is.EqualTo(2));
+
+            rig.Core.ForgetRoom("room_l");
+            rig.Run(0.5);
+            Assert.That(rig.Forge.Requests, Does.Contain("DELETE /rooms/room_l"));
+            Assert.That(rig.Cache.Contains(fullSha), Is.False);
+            Assert.That(rig.Cache.Contains(lightSha), Is.False, "the room's light GLBs go as well");
+            Assert.That(rig.Cache.Count, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void Asset_ForgeCacheHit_WithLightKeysInTheAnswer_FetchesTheLightCopy()
+        {
+            byte[] full = TestGlb.Make(6000), light = TestGlb.Make(2000);
+            string fullSha = GlbValidator.Sha256Hex(full, full.Length), lightSha = GlbValidator.Sha256Hex(light, light.Length);
+            var rig = new Rig();
+            rig.Forge.Assets[fullSha] = full;
+            rig.Forge.Assets[lightSha] = light;
+            rig.Forge.Cached[1] = fullSha;                      // the Forge has this photo already: it answers at once
+            rig.Forge.CachedLight[1] = lightSha;
+            rig.Scan(LightRoom());
+            rig.Run(8.0);
+
+            Assert.That(rig.Core.GetState(1), Is.EqualTo(ObjectAssetState.Ready));
+            Assert.That(rig.Room.Generated[1], Is.EqualTo(fullSha));
+            Assert.That(rig.Room.GeneratedLight[1], Is.EqualTo(lightSha), "the light keys of the POST answer were taken");
+            Assert.That(rig.Forge.CountOf("GET /assets/"), Is.EqualTo(2));
+        }
+
+        [Test]
+        public void Asset_ForgeCacheHit_WithoutLightKeys_ShowsTheFullCopyAndBreaksNothing()
+        {
+            byte[] full = TestGlb.Make(6000);
+            string fullSha = GlbValidator.Sha256Hex(full, full.Length);
+            var rig = new Rig();
+            rig.Forge.Assets[fullSha] = full;
+            rig.Forge.Cached[1] = fullSha;
+            rig.Scan(LightRoom());
+            rig.Run(8.0);
+            AssertFullStillShown(rig);
+            Assert.That(rig.Forge.CountOf("GET /assets/"), Is.EqualTo(1));
+            Assert.That(rig.Events.CountOf("light_dropped") + rig.Events.CountOf("light_deferred"), Is.EqualTo(0));
+        }
+
         // ---- First shapes ---------------------------------------------------------------------------------------
 
         static byte[] ProfileOf(int value)
@@ -968,6 +1019,32 @@ namespace Atlas.Telemetry.Tests
         }
 
         [Test]
+        public void Asset_LightCopy_WithTheSameHashAsTheFullOne_NeedsNoSecondDownload()
+        {
+            byte[] full = TestGlb.Make(4000);
+            var rig = new Rig();
+            RoomModel room = LightRoom();
+            rig.Scan(room);
+            rig.Run(2.0);
+            string sha = rig.Forge.Finish(1, full);
+            rig.Forge.JobOf(1).LightSha = sha;                       // the Forge published one file as both copies
+            rig.Run(6.0);
+            AssertFullStillShown(rig);
+            Assert.That(rig.Forge.CountOf("GET /assets/"), Is.EqualTo(1), "one download");
+            Assert.That(rig.Room.Calls.FindAll(c => c.StartsWith("light")), Is.Empty, "no light placement, no refusal");
+            Assert.That(rig.Events.CountOf("light_same", 1), Is.EqualTo(1));
+            Assert.That(rig.Events.Last("light_same", 1).GetString("reason"), Is.EqualTo("same_as_full"));
+            Assert.That(room.Objects[0].AssetHashLight, Is.EqualTo(sha), "the hash is recorded");
+            Assert.That(rig.Events.CountOf("light_dropped") + rig.Events.CountOf("light_deferred"), Is.EqualTo(0));
+
+            // Built again: still nothing separate to fetch.
+            rig.Room.Shown.Clear();
+            rig.Core.RoomBuilt(room);
+            rig.Run(4.0);
+            Assert.That(rig.Room.Calls.FindAll(c => c.StartsWith("light")), Is.Empty);
+        }
+
+        [Test]
         public void Asset_LightCopy_WithAWrongHash_IsDroppedAndTheFullMeshStays()
         {
             string claimed = new string('e', 64);
@@ -975,6 +1052,9 @@ namespace Atlas.Telemetry.Tests
             AssertFullStillShown(rig);
             Assert.That(rig.Events.Last("light_dropped", 1).GetString("reason"), Is.EqualTo("hash_mismatch"));
             Assert.That(rig.Forge.CountOf("GET /assets/" + claimed), Is.EqualTo(1), "a rejected file is not fetched again");
+            rig.Run(300.0);
+            Assert.That(rig.Forge.CountOf("GET /assets/" + claimed), Is.EqualTo(1), "not retried later either: the file is wrong for good");
+            Assert.That(rig.Events.CountOf("light_deferred"), Is.EqualTo(0));
             Assert.That(rig.Cache.Contains(claimed), Is.False);
             Assert.That(rig.Events.CountOf("rejected"), Is.EqualTo(0), "the full copy's record is untouched");
             Assert.That(rig.Acks.Count, Is.EqualTo(1));
@@ -1008,14 +1088,34 @@ namespace Atlas.Telemetry.Tests
         }
 
         [Test]
-        public void Asset_LightCopy_ThatCannotBeDownloaded_IsDroppedAfterTheUsualRetries()
+        public void Asset_LightCopy_ThatCannotBeDownloaded_IsAskedForAgainWhenTheForgeComesBack()
         {
-            Rig rig = LightRig(TestGlb.Make(6000), TestGlb.Make(2000), null, false);
-            rig.Forge.Assets.Remove(rig.Forge.JobOf(1).LightSha);          // the Forge answers 404
+            byte[] light = TestGlb.Make(2000);
+            Rig rig = LightRig(TestGlb.Make(6000), light, null, false);
+            string lightSha = rig.Forge.JobOf(1).LightSha;
+            rig.Forge.Assets.Remove(lightSha);                              // the Forge answers 404
             rig.Run(10.0);
             AssertFullStillShown(rig);
-            Assert.That(rig.Forge.CountOf("GET /assets/" + rig.Forge.JobOf(1).LightSha), Is.EqualTo(AssetClientCore.MaxAttempts));
-            Assert.That(rig.Events.Last("light_dropped", 1).GetString("reason"), Is.EqualTo("download_failed"));
+            Assert.That(rig.Forge.CountOf("GET /assets/" + lightSha), Is.EqualTo(AssetClientCore.MaxAttempts), "the usual three attempts");
+            Assert.That(rig.Events.Last("light_deferred", 1).GetString("reason"), Is.EqualTo("download_failed"));
+            Assert.That(rig.Events.CountOf("light_dropped"), Is.EqualTo(0), "not given up");
+
+            // Still away: the next attempt is not before the back-off (15 s from the failure), and then not in a hurry.
+            rig.Run(4.0);
+            Assert.That(rig.Forge.CountOf("GET /assets/" + lightSha), Is.EqualTo(AssetClientCore.MaxAttempts), "no spinning");
+            rig.Run(10.0);
+            Assert.That(rig.Forge.CountOf("GET /assets/" + lightSha), Is.EqualTo(2 * AssetClientCore.MaxAttempts), "a second round after 15 s");
+            Assert.That(rig.Events.Last("light_deferred", 1).GetFloat("retryIn"), Is.EqualTo(30f), "the wait doubles");
+            AssertFullStillShown(rig);
+
+            // The Forge has the file again: it is fetched and placed, and the full copy is not disturbed.
+            rig.Forge.Assets[lightSha] = light;
+            rig.Run(40.0);
+            Assert.That(rig.Room.GeneratedLight[1], Is.EqualTo(lightSha));
+            Assert.That(rig.Core.GetState(1), Is.EqualTo(ObjectAssetState.Ready));
+            Assert.That(rig.Room.Calls.FindAll(c => c.StartsWith("generated:")).Count, Is.EqualTo(1), "the full mesh was placed once");
+            Assert.That(rig.Acks.Count, Is.EqualTo(1));
+            Assert.That(rig.Events.CountOf("rejected"), Is.EqualTo(0));
         }
 
         [Test]
@@ -1050,12 +1150,18 @@ namespace Atlas.Telemetry.Tests
             rig.Room.Shown.Clear();
             rig.Room.Calls.Clear();
             rig.Core.RoomBuilt(room);
-            rig.Run(0.2);
-            Assert.That(rig.Room.Calls, Does.Not.Contain("light:1"), "nothing is handed to views that have no full mesh");
+            // Past the time the old request would have taken: a stale light mesh would arrive now, to views that
+            // have no full mesh, and the room content would refuse it (the fake records every refusal).
+            rig.Run(1.6);
+            Assert.That(rig.Room.Calls.FindAll(c => c.StartsWith("lightrefused:")), Is.Empty,
+                "no light mesh is handed to views that have no full mesh");
+            int light = rig.Room.Calls.IndexOf("light:1");
+            Assert.That(light < 0 || rig.Room.Calls.IndexOf("generated:1") < light, Is.True, "a light mesh only after the full one");
             rig.Run(8.0);
             Assert.That(rig.Room.ShownFor(1), Is.EqualTo("generated"));
             Assert.That(rig.Room.Calls.FindAll(c => c.StartsWith("light:")).Count, Is.EqualTo(1), "the light copy follows the full one again");
             Assert.That(rig.Room.Calls.IndexOf("generated:1"), Is.LessThan(rig.Room.Calls.IndexOf("light:1")));
+            Assert.That(rig.Room.Calls, Does.Not.Contain("lightrefused:1"));
             Assert.That(rig.Room.GeneratedLight[1], Is.EqualTo(lightSha));
         }
 

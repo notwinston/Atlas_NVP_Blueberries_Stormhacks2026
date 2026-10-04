@@ -20,6 +20,8 @@ namespace Atlas.Scan
         // How far the floor of an outline-only room is laid beyond the outline's bounding box. The outline
         // cuts it back; the margin only has to cover the grid's own five cells.
         const float FloorMargin = 1.0f;
+        // The largest yaw written to a RoomModel, either way round: pi cut, not rounded, at six decimals.
+        const float MaxStoredYaw = 3.141592f;
 
         /// <summary>
         /// grid.Status must be Ok and the grid must carry an outline. Fills every field: the anchor from
@@ -193,7 +195,7 @@ namespace Atlas.Scan
                 ObjectFacingRule rule;
                 int turns = ObjectFacing.Decide(obj.Category, obj.Base, obj.Size, obj.Yaw, obj.Profile, sdf, objects, out rule);
                 ObjectFacing.Apply(turns, ref obj.Yaw, ref obj.Size, ref obj.Profile);
-                obj.Yaw = Round6(obj.Yaw);
+                obj.Yaw = StoredYaw(obj.Yaw);
                 obj.Facing = rule;
             }
         }
@@ -219,7 +221,7 @@ namespace Atlas.Scan
                 Category = (ObjectCategory)category,
                 Base = new float3(Round6(bottom.x), Round6(bottom.y), Round6(bottom.z)),
                 Size = new float3(Round6(size.x), Round6(size.y), Round6(size.z)),
-                Yaw = Round6(WrapAngle(box.Yaw)),
+                Yaw = StoredYaw(box.Yaw),
                 Mesh = MeshState.Placeholder,
                 AssetHash = "",
             };
@@ -260,6 +262,16 @@ namespace Atlas.Scan
             var copy = new float2[ring.Length];
             for (int k = 0; k < copy.Length; k++) copy[k] = new float2(Round6(ring[k].x), Round6(ring[k].y));
             return copy;
+        }
+
+        /// <summary>
+        /// A yaw as a RoomModel holds it: wrapped into (-pi, pi], at six decimals, and never beyond 3.141592.
+        /// Pi itself rounds to 3.141593 at six decimals, which is past what a reader of the file accepts
+        /// (RoomModelJson stops at 3.1415928), so half a turn is stored as 3.141592: under a micro-radian off.
+        /// </summary>
+        internal static float StoredYaw(float yaw)
+        {
+            return math.clamp(Round6(WrapAngle(yaw)), -MaxStoredYaw, MaxStoredYaw);
         }
 
         // Into (-pi, pi].
