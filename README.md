@@ -343,7 +343,7 @@ Each frame the kernel receives the head's floor point $h_{xz}$ in room metres an
 d = h_{xz}^{\text{now}}-h_{xz}^{\text{prev}},\qquad U\leftarrow\mathrm{GS}_\kappa\!\big(U\cdot \mathrm{Boost}_\kappa(d/\ell)\big)
 ```
 
-where $\mathrm{GS}_\kappa$ is the renormalisation of Section 4.6. The displacement is set to zero (dropped, not clamped) if $\lVert d\rVert>0.2$ m, if it is not finite, or if tracking is not Normal.
+where $\mathrm{GS}_\kappa$ is the renormalisation of Section 4.6. The displacement is set to zero (dropped, not clamped) if $\lVert d\rVert\gt 0.2$ m, if it is not finite, or if tracking is not Normal.
 Nothing is scaled or redirected: a real metre is a metre of geodesic.
 
 Let $p=Uo$ be the walker's position in the current tile and $e_k$ the four edge directions. The signed excursion past edge $k$ is
@@ -370,7 +370,7 @@ The radii are chosen so that $s$ equals the centre spacing of the tiling: the sc
 The dial then applies provisional comfort floors, $L\ge1.4$ m and $R\ge1.2$ m, unless the parameter `curved.strong` is set. When a floor overrides the fitted value the lap no longer closes exactly (Section 18).
 A room whose free short side is under 1.5 m is in standing mode.
 
-Registration is a plain statement about coordinates: room metres are the chart metres of tile zero. On entry the walker is registered at $U=\mathrm{Boost}_0(h_{xz})$, a translation, so at $K=0$ the virtual room is exactly where the real one is, and the warp is bypassed.
+Registration is a plain statement about coordinates: room metres are the chart metres of tile zero. On entry the walker is registered at $`U=\mathrm{Boost}_0(h_{xz})`$, a translation, so at $K=0$ the virtual room is exactly where the real one is, and the warp is bypassed.
 Curvature is then turned on by a ramp that is linear in $K$ and lasts 4 s of standing time:
 
 ```math
@@ -539,7 +539,7 @@ The warp has four modes, selected per material: 0 none (the ordinary object tran
 
 ### 8.2 Culling, level of detail and fog
 
-Unity's frustum culling is disabled for warped renderers (they are given 1000 m bounds), and a CPU draw rule runs once per frame for both eyes. With $d_t$ the walker-to-tile distance and $\rho$ the draw radius (default 3 kernel units, clamped to 2 to 3.5): a tile is rejected if $\cosh d_t>\cosh(\rho+r_c)$, always drawn if $\cosh d_t\le\cosh r_c$, and otherwise drawn unless its bounding disc lies wholly outside a view cone widened by 12 degrees sideways and 4 degrees vertically. At most 128 tiles are drawn. Floor grids of 16, 8 or 4 cells per side serve as levels of detail, always with 16 boundary segments so neighbours of different detail share an identical edge.
+Unity's frustum culling is disabled for warped renderers (they are given 1000 m bounds), and a CPU draw rule runs once per frame for both eyes. With $d_t$ the walker-to-tile distance and $\rho$ the draw radius (default 3 kernel units, clamped to 2 to 3.5): a tile is rejected if $\cosh d_t\gt\cosh(\rho+r_c)$, always drawn if $\cosh d_t\le\cosh r_c$, and otherwise drawn unless its bounding disc lies wholly outside a view cone widened by 12 degrees sideways and 4 degrees vertically. At most 128 tiles are drawn. Floor grids of 16, 8 or 4 cells per side serve as levels of detail, always with 16 boundary segments so neighbours of different detail share an identical edge.
 
 Fog is linear in horizontal distance from the head, which under the warp equals $L$ times geodesic distance, from $(\rho-1)L$ to $\rho L$. The fog colour is also the background at the horizon, so geometry at the fog radius merges with the sky and hides the edge of the finite draw set.
 
