@@ -11,6 +11,9 @@
         "Atlas.Safety",
         "Atlas.Spaces.AlignedCells",
         "Atlas.Link",
-        "Unity.Mathematics"
+        "Unity.Mathematics",
+        "Unity.Burst",
+        "Unity.Collections",
+        "Unity.TextMeshPro"
     ]
 }

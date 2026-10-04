@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Airway walking (G6): P2-B03 ValveSolver, Mode 1
 
 Source: Master Plan §10.2.3 steps 1-5 and §10.2.8 row P2-B03; G6 brief (binding, plan wins). Code: `Assets/Atlas/Blades/Lung/Walking/`
@@ -27,7 +26,6 @@ G6 DV-G6-1..4, 5, 11, 12, 13, 20, 21 are implemented as written in the brief. Ne
 ## Cross-lane assumptions and hand-overs
 A2 (placeholders.md): Unity world xz is the RoomModel anchor frame. The live `IClearanceQuery` is passed in (C-G6-1).
 H-1: the renderer and kit register chamber objects into `ChamberViewRegistry`.
-=======
 
 ## P2-B04 Valve walk, Mode 2
 
@@ -47,4 +45,3 @@ Deviations
   1.5x1.5 (2x2 corner demo at 0.75 m), 2.25x3 (3x4 at 0.75 m). Clearance is a fake rectangle SDF plus blocked-cell-centre points.
 - DV-B04-4: `Atlas.Blades.Lung.asmdef` gains `Atlas.Spaces.AlignedCells`; the tests asmdef gains `Atlas.Safety`, `Atlas.Spaces.AlignedCells`.
 - DV-B04-5: Mode 2 has no glyph gate, so the valve opens at chamber entry (G6 brief DV-G6-7).
->>>>>>> P2-B04
