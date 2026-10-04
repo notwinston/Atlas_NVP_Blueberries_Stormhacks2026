@@ -14,8 +14,9 @@ plain box, the fit and the seconds of each attempt and which one was published, 
 triangles and validator verdicts. Then the totals M1 and M2 ask for. A line has a verdict only when the
 record settles it: an object that could not be judged (it is not in truth.json, its mesh's front cannot
 be read, it has no fit, none of its generations was timed) counts against a pass and against a fail
-alike, and is named. The exit code is 0 when no line failed, 1 when one did, 2 when the record cannot
-be read.
+alike, and is named. The last line says how many lines pass, fail and are not settled. The exit code is 0
+only when every line that asks for something passes, 1 when one fails, 3 when none fails but one is not
+settled, 2 when the record cannot be read.
 
 Only these numbers, and pictures rendered from the meshes (`--pictures`), go into `docs/evidence/mesh/`.
 No camera frame leaves the Station.
@@ -212,8 +213,23 @@ def read_record(data: Path, room_id: str, truth: Optional[dict]) -> dict:
 # --------------------------------------------------------------------------- the totals
 
 
-def line(label: str, verdict: Optional[bool], text: str) -> dict:
-    return {"check": label, "pass": verdict, "text": text}
+def line(label: str, verdict: Optional[bool], text: str, asks: bool = True) -> dict:
+    """One line of the totals. ``asks`` is False for a line that only tells: it never has a verdict."""
+    return {"check": label, "pass": verdict if asks else None, "text": text, "asks": asks}
+
+
+def outcome(checks: dict) -> tuple[int, str]:
+    """The exit code and the last line: a pass only when every line that asks for something passes."""
+    asked = [item for name in checks for item in checks[name] if item["asks"]]
+    failed = sum(1 for item in asked if item["pass"] is False)
+    unsettled = sum(1 for item in asked if item["pass"] is None)
+    passed = len(asked) - failed - unsettled
+    counts = f"{passed} of {len(asked)} lines pass, {failed} fail, {unsettled} are not settled by this record"
+    if failed:
+        return 1, counts
+    if unsettled or not asked:
+        return 3, counts + ": no pass"
+    return 0, counts
 
 
 def share_verdict(right: int, wrong: int, unknown: int, asked: float) -> Optional[bool]:
@@ -298,9 +314,9 @@ def totals(record: dict, poor_fit: float = POOR_FIT) -> dict:
              f"{walls_right} of {walls_right + walls_wrong}" + unjudged_text(walls_unknown)),
         line("facing by the rule that answered", None,
              ", ".join(f"{rule}: {right} of {total}" for rule, (right, total) in sorted(by_rule.items()))
-             or "nothing to judge"),
+             or "nothing to judge", asks=False),
         line("plain boxes with no profile", None,
-             _names(o for o in objects if o["plainBox"] and not o["profile"]) or "none"),
+             _names(o for o in objects if o["plainBox"] and not o["profile"]) or "none", asks=False),
     ]
 
     # M2: the generated meshes. Every line speaks of the objects that receive meshes.
@@ -309,10 +325,12 @@ def totals(record: dict, poor_fit: float = POOR_FIT) -> dict:
             and o["job"]["light"] and o["job"]["light"]["ok"]]
     missing = [o for o in meshed if o not in both]
 
+    # Every timed attempt can be too slow, a failed one too. But only one that made a mesh shows how long
+    # a generation takes: one that broke off after three seconds says nothing of the object's sixty.
     timed = [(o, a) for o in meshed if o["job"] for a in o["job"]["attempts"] if a["seconds"] is not None]
     slow = [f"{o['name']} view {a['view']} ({a['seconds']:.0f} s)" for o, a in timed
             if a["seconds"] > SECONDS_PER_ATTEMPT]
-    untimed = [o for o in meshed if not any(o is t for t, _ in timed)]
+    untimed = [o for o in meshed if not any(o is t and not a["error"] for t, a in timed)]
     seconds_verdict = False if slow else (None if untimed or not timed else True)
 
     ready = [o for o in meshed if o["job"] and o["job"]["state"] == "ready"]
@@ -335,8 +353,8 @@ def totals(record: dict, poor_fit: float = POOR_FIT) -> dict:
              f"{len(both)} of {len(meshed)}" + (f"; without: {_names(missing)}" if missing else "")),
         line(f"generation takes {SECONDS_PER_ATTEMPT:.0f} s or less per attempt", seconds_verdict,
              f"{len(timed) - len(slow)} of {len(timed)} attempts" + (f"; over: {', '.join(slow)}" if slow else "")
-             + (f"; {len(untimed)} of {len(meshed)} meshed objects have no timed attempt: {_names(untimed)}"
-                if untimed else "")),
+             + (f"; {len(untimed)} of {len(meshed)} meshed objects have no timed attempt that made a mesh: "
+                f"{_names(untimed)}" if untimed else "")),
         line(f"the median fit is {MEDIAN_FIT} or better", median_verdict(fits, len(unfitted), MEDIAN_FIT),
              ("no object has a fit" if not fits else
               f"{statistics.median(fits):.3f} over {len(fits)} of {len(meshed)} meshed objects")
@@ -346,7 +364,8 @@ def totals(record: dict, poor_fit: float = POOR_FIT) -> dict:
              share_text(mesh_right, mesh_wrong)
              + (f"; the mesh's front could not be read for: {_names(unread)}" if unread else "")
              + unjudged_text(unlisted)),
-        line(f"objects above the poor-fit line of {poor_fit:g} after their attempts", None, ", ".join(poor) or "none"),
+        line(f"objects above the poor-fit line of {poor_fit:g} after their attempts", None, ", ".join(poor) or "none",
+             asks=False),
     ]
     return {"M1": m1, "M2": m2}
 
@@ -354,7 +373,7 @@ def totals(record: dict, poor_fit: float = POOR_FIT) -> dict:
 # --------------------------------------------------------------------------- printing
 
 
-def print_record(record: dict, checks: dict) -> None:
+def print_record(record: dict, checks: dict, result: str) -> None:
     print(f"room {record['room']}: {len(record['objects'])} objects, {record['meshedObjects']} receive meshes"
           + ("" if record["truth"] else "; no truth.json, so facing is not judged"))
     for o in record["objects"]:
@@ -377,7 +396,8 @@ def print_record(record: dict, checks: dict) -> None:
         if job["state"] != "ready":
             print(f"  mesh: {job['state']}: {job['error']}")
             continue
-        fit = "no fit (no profile)" if job["fit"] is None else f"fit {job['fit']:.3f}"
+        fit = f"fit {job['fit']:.3f}" if job["fit"] is not None else (
+            "no fit (no profile)" if not o["profile"] else f"no fit (the profile covers {o['coverage']:.2f} of the box)")
         front = f"its front is on {job['meshFront']}" if job["meshFront"] else "its front cannot be read from it"
         facing = {True: "right", False: "WRONG", None: "not judged"}[job["meshFacingRight"]]
         print(f"  mesh: {job['generator']}" + (f" ({job['decoder']})" if job["decoder"] else "")
@@ -395,6 +415,7 @@ def print_record(record: dict, checks: dict) -> None:
         for item in checks[name]:
             mark = {True: "PASS", False: "FAIL", None: "    "}[item["pass"]]
             print(f"  {mark}  {item['check']}: {item['text']}")
+    print(f"\n{result}")
 
 
 def write_pictures(record: dict, data: Path, folder: Path) -> int:
@@ -447,13 +468,14 @@ def main(argv=None) -> int:
         print(f"FAIL {exc}")
         return 2
     checks = totals(record, args.poor_fit)
-    print_record(record, checks)
+    code, result = outcome(checks)
+    print_record(record, checks, result)
     if args.json:
         Path(args.json).write_text(json.dumps({**record, "checks": checks}, indent=1), encoding="utf-8")
         print(f"\nwritten: {args.json}")
     if args.pictures:
         print(f"written: {write_pictures(record, data, Path(args.pictures))} pictures in {args.pictures}")
-    return 1 if any(item["pass"] is False for name in checks for item in checks[name]) else 0
+    return code
 
 
 if __name__ == "__main__":

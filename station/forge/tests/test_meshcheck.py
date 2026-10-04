@@ -218,7 +218,7 @@ def test_a_cached_answer_never_stands_in_for_the_job_that_generated(record, tmp_
     assert chair["cached"] is True and chair["attempts"] == [] and chair["jobId"] == "f" * 16  # the later of the two
     seconds = lines(result)["generation takes 60 s or less per attempt"]
     assert seconds["pass"] is None  # six attempts within the time is no pass for seven objects
-    assert seconds["text"] == "6 of 6 attempts; 1 of 7 meshed objects have no timed attempt: 1 chair"
+    assert seconds["text"] == "6 of 6 attempts; 1 of 7 meshed objects have no timed attempt that made a mesh: 1 chair"
     assert "the only job of this object was answered from the cache" in capsys.readouterr().out
 
 
@@ -254,6 +254,22 @@ def test_no_line_passes_on_what_it_did_not_measure(record, tmp_path, capsys):
     box = lines(result)["no object with a profile is a plain box"]
     assert box["pass"] is None and box["text"] == "0 objects have a profile; plain boxes among them: none"
     assert "      no object with a profile is a plain box" in capsys.readouterr().out  # no mark before the line
+    # With the couch's truth put right nothing fails any more, and still it is no pass: two lines are open.
+    code, result = run_on(data, {**truth, "2": "+Z"}, tmp_path)
+    assert [item["pass"] for item in result["checks"]["M1"][:3]] == [None, True, True]
+    assert [item["pass"] for item in result["checks"]["M2"][:4]] == [True, True, True, None]
+    assert code == 3
+    assert "5 of 7 lines pass, 0 fail, 2 are not settled by this record: no pass" in capsys.readouterr().out
+
+    # An attempt that broke off is timed, and is no measure of how long the couch's generation takes.
+    couch = job_of(data, 2)
+    couch["attemptLog"] = [{"view": 0, "seconds": 3.0, "error": "triposg: CUDA out of memory"}] + couch["attemptLog"]
+    couch["attemptLog"][1].pop("seconds")
+    (data / "jobs" / couch["jobId"] / "job.json").write_text(json.dumps(couch))
+    _, result = run_on(data, truth, tmp_path)
+    seconds = lines(result)["generation takes 60 s or less per attempt"]
+    assert seconds["pass"] is None and seconds["text"] == (
+        "7 of 7 attempts; 1 of 7 meshed objects have no timed attempt that made a mesh: 2 couch")
 
     # No fit at all: no median. And a room whose jobs all failed has no timed pass either.
     for path in (data / "jobs").glob("*/job.json"):
@@ -267,6 +283,20 @@ def test_no_line_passes_on_what_it_did_not_measure(record, tmp_path, capsys):
     assert found["generation takes 60 s or less per attempt"]["pass"] is None
     assert found["generated meshes of objects with a front face right"]["pass"] is None
     assert found["each meshed object has a full and a light copy that pass the validator"]["pass"] is False
+
+
+def test_the_exit_code_is_a_pass_only_when_every_line_that_asks_passes():
+    def checks(*verdicts):
+        return {"M1": [check.line(f"line {k}", verdict, "") for k, verdict in enumerate(verdicts)],
+                "M2": [check.line("a list", True, "told, not asked", asks=False)]}
+
+    assert check.outcome(checks(True, True)) == (0, "2 of 2 lines pass, 0 fail, 0 are not settled by this record")
+    assert check.outcome(checks(True, None))[0] == 3 and check.outcome(checks(None, None))[0] == 3
+    assert check.outcome(checks(True, False, None)) == (
+        1, "1 of 3 lines pass, 1 fail, 1 are not settled by this record")
+    # A line that only tells has no verdict, whatever it was given, and is not counted.
+    assert check.line("a list", True, "", asks=False)["pass"] is None
+    assert check.outcome({"M1": [], "M2": []})[0] == 3  # nothing asked is nothing passed
 
 
 def test_the_verdict_of_a_share_and_of_a_median():
