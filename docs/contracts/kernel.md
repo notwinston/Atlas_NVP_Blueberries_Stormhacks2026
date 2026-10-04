@@ -141,6 +141,16 @@ public readonly struct VisibleTile {                          // the §6.5 comme
 }
 public sealed class TileGraph : ITileGraph {                  // file name from the P1-B04 brief (§9.9)
     public TileGraph(int q);                                 // q = 5 exact ids; q = 6 tolerance variant; q = 3 six faces
+    // [P1-B04, lane-internal: not part of ITileGraph]
+    public int Q { get; }
+    public double InRadius { get; }                          // r (A.3)
+    public double CircumRadius { get; }                      // r_c (A.3)
+    public const double CrossingHysteresis = 0.02;           // units of L (R3 §A5)
+    public void VisibleSet(TileId centre, double rho, List<VisibleTile> into);   // breadth-first order; clears `into`
+    public TileId Neighbour(TileId tile, int edge);          // §4.6 Neighbour(tile, i); any q
+    public Iso2 StepMatrix(TileId tile, int edge);           // §4.6 G[i]: neighbour's frame → tile's frame
+    public int ExitEdge(in Iso2 local);                      // -1 inside the tile (with hysteresis)
+    public bool Reroot(ref WalkerPose pose);                 // §4.6 crossing; the caller rebuilds VisibleSet when true
 }
 }
 ```
@@ -319,7 +329,7 @@ The seed never uses `string.GetHashCode()` or the default struct hash. Test `Til
 
 ### 5.8 Other values of q
 
-- **q = 6**: `P1-B04` delivers a tolerance-hash variant. Its use of the six words is fixed by `P1-B04` and added to this page with notice before that task merges.
+- **q = 6** [P1-B04]: tolerance-hash ids. Frames are doubles snapped to the {4,6} lattice (integers; √3·integers off the diagonal blocks). The id is the rounded centre (Xu = round(x/√3), Yu = round(z/√3), Tu = round(w)), with Xv = Yv = Tv = 0. Invariant 3(X²+Y²) − T² = −1. Tile zero (0,0,0,0,1,0) keeps the identity frame. Canonical frame: the lexicographically smallest (a11, a21, c1/√3) over M·R^j. Range ≈ 26 straight steps; beyond that, InvalidOperationException or OverflowException. Content seed: §5.7 unchanged.
 - **q = 3** (S4): six tiles, one per face of a cube blown onto the sphere. As in B.1, `tileId` carries the face index in word 0 and 0 in the other words. `P1-B08` fixes the face numbering and adds it here before it merges.
 - **q = 4** (the dial's flat snap): the plan defines no tile graph for it.
 - `TileId.Step` is the {4,5} step. For q = 3 and q = 6, neighbours come from `ITileGraph`. Lane B may add lane-internal helpers that are not part of this contract.
@@ -447,8 +457,8 @@ The shader names `_HypL`, `_HeadPosWS` and `_Anchor` are [plan] (§4.6). `_WarpM
    - The plan does not say who makes them so. If lane A's XR origin is placed that way after the scan, no floor offset and no yaw ψ appear anywhere.
    - If not, every warped mesh must carry world height in y. U must carry ψ, set at "Return to Home" by `P1-B11`. And the Spectator needs ψ, because `State` gives the head pose in the anchor frame while `xform` is in world axes.
    - The minimal option is the first one. It needs a decision by lanes A and C, and lane D's agreement.
-2. **Resolving an id received from elsewhere** (lane D). The Station gets `State.tileId` as six integers. `P1-B04` states here, before it merges, how its graph resolves such an id to the tile's frame (§5.3) so that `Step` and `VisibleSet` work on it. The plan leaves the body free.
-3. **q = 6 encoding** (`P1-B04`) and **S4 face numbering** (`P1-B08`), as in §5.8.
+2. **Resolving an id received from elsewhere** (lane D). [P1-B04] Build `TileId` from the six `State.tileId` words. Pass it to `TileGraph(q).VisibleSet / Neighbour / StepMatrix` of the same q. An id the graph has not seen is resolved by descent from tile zero: in each tile, step through the edge e maximising (X, Y, −X, −Y) of the target expressed in that tile's frame, updated with S_e⁻¹ by additions only, until the target is reached. The result is the target's canonical frame (§5.3), so edge numbering, F and content seeds equal the phone's whatever order tiles were found in. `TileId.Step` ({4,5}) uses the same rule and needs no graph. Invalid ids throw `ArgumentException`.
+3. **q = 6 encoding** (`P1-B04`, now in §5.8) and **S4 face numbering** (`P1-B08`), as in §5.8.
 4. **Read by the other three lanes, no question open.** This is the human half of `P1-X06`'s acceptance, signed off at G0.
 
 ## 10. Not in this contract
