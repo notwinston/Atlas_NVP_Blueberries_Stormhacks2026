@@ -2,6 +2,7 @@
     "name": "Atlas.Safety",
     "rootNamespace": "Atlas.Safety",
     "references": [
+        "Atlas.World",
         "Atlas.Scan",
         "Unity.Mathematics",
         "Unity.Burst",
