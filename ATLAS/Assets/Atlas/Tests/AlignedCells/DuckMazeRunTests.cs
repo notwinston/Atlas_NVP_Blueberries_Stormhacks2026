@@ -100,12 +100,14 @@ namespace Atlas.Spaces.AlignedCells.Tests
             Assert.IsFalse(run.Core.NeedsReconfigure);
         }
 
+        // Any start but Curved Walk's (a flat pose, whatever its tile) begins a maze run at tile zero.
         [Test]
         public void Maze_EnterStartsAtTileZero()
         {
             var tile = TileId.Zero.Step(1).Step(2);
-            var run = new Run(seed: 99, start: new int2(2, 1), pose: new WalkerPose { Tile = tile, Local = Iso2.Boost(new double2(0.1, 0.05), -1) });
-            Assert.IsFalse(run.Core.EnteredFromCurvedWalk, "a maze run does not keep Curved Walk's tile");
+            var run = new Run(seed: 99, start: new int2(2, 1), pose: new WalkerPose { Tile = tile, Local = Iso2.Boost(new double2(0.1, 0.05), 0) });
+            Assert.IsTrue(run.Core.MazeMode);
+            Assert.IsFalse(run.Core.EnteredFromCurvedWalk, "a maze run does not keep the start's tile");
             Assert.AreEqual(new CellFrame(TileId.Zero, 0), run.Core.Walker.Frame);
             Assert.AreEqual(new int2(2, 1), run.Core.Walker.Cell);
             DuckMaze m = run.Core.Maze;
@@ -120,6 +122,78 @@ namespace Atlas.Spaces.AlignedCells.Tests
             Assert.IsFalse(run.Core.MazeFound);
             Assert.AreEqual(0, run.Core.MazeSteps);
             Assert.AreEqual(0, run.Core.MazeWallsCrossed);
+        }
+
+        // S3 entered from S2 Curved Walk (a hyperbolic pose with a tile) keeps the walker's tile (Master Plan §4.8) and runs classic
+        // S3 for that entry, with cells.maze on: the classic grid, no maze, P7 = 0, no maze events, nothing to draw.
+        [Test]
+        public void Maze_EnterFromCurvedWalkRunsClassic()
+        {
+            var tile = TileId.Zero.Step(1).Step(2);
+            var pose = new WalkerPose { Tile = tile, Local = Iso2.Boost(new double2(0.1, 0.05), -1) };
+            var run = new Run(seed: 99, start: new int2(2, 1), pose: pose);
+            Assert.IsTrue(run.Registry.Find(AlignedCellsCore.ParamMaze).Bool, "cells.maze is on");
+            Assert.IsFalse(run.Core.MazeMode);
+            Assert.IsNull(run.Core.Maze);
+            Assert.IsTrue(run.Core.EnteredFromCurvedWalk);
+            Assert.AreEqual(tile, run.Core.Walker.Frame.Tile, "Mode 1's tile is kept");
+            AssertSameGrid(CellGrid.FromRoom(run.Room), run.Core.Grid);
+            Assert.That(run.Core.Instances.Count, Is.GreaterThan(0));
+            bool shown = false;
+            for (int k = 0; k < run.Core.Instances.Count; k++)
+                if (run.Core.Instances[k].Cell.Equals(run.Core.Walker.Cell)) { shown = true; Assert.AreEqual(tile, run.Core.Instances[k].Frame.Tile); }
+            Assert.IsTrue(shown);
+
+            for (int i = 0; i < 3; i++) run.Stay();
+            run.GoCell(new int2(1, 0));
+            Assert.IsFalse(run.Core.NeedsReconfigure, "cells.maze did not move: no reconfigure loop");
+            Assert.AreEqual(0, run.Log.Count(AlignedCellsCore.EventMazeStart));
+            Assert.AreEqual(0, run.Log.Count(AlignedCellsCore.EventMazeUnavailable));
+            Assert.AreEqual(0, run.Log.Count(AlignedCellsCore.EventMazeWall));
+            Assert.That(run.Log.Count(AlignedCellsCore.EventCross), Is.GreaterThan(0), "classic S3's own events");
+            Assert.IsNull(AlignedCellsSpace.ShownMaze(run.Core));
+            var st = StateMessage.Identity;
+            run.Core.WriteState(ref st);
+            Assert.AreEqual(0f, st.P7);
+            Assert.AreEqual(run.Core.Walker.Frame.Tile, new TileId(st.Tile0, st.Tile1, st.Tile2, st.Tile3, st.Tile4, st.Tile5));
+            Assert.AreEqual((float)run.Core.Grid.CountX, st.P4);
+
+            // Entered again from anywhere else (the reconfigure's fresh start): the maze grid and a run at tile zero.
+            run.Core.Enter(WalkerPose.Start, CellGrid.Maze(run.Room).CellCentre(new int2(2, 1)));
+            Assert.IsTrue(run.Core.MazeMode);
+            Assert.IsFalse(run.Core.EnteredFromCurvedWalk);
+            Assert.AreEqual(4, run.Core.Grid.CountX);
+            Assert.AreEqual(new CellFrame(TileId.Zero, 0), run.Core.Walker.Frame);
+            Assert.AreEqual(new int2(2, 1), run.Core.Walker.Cell);
+            Assert.IsNotNull(run.Core.Maze);
+            run.Stay();
+            Assert.AreEqual(1, run.Log.Count(AlignedCellsCore.EventMazeStart));
+        }
+
+        // A cells.maze toggle while entered from Curved Walk: the space configures again and re-enters with a fresh start
+        // (WalkerPose.Start), so turning the maze off never revives the stale Mode-1 tile, and turning it on starts a maze.
+        [Test]
+        public void Maze_ToggleAfterCurvedWalkStartsFresh()
+        {
+            var tile = TileId.Zero.Step(1).Step(2);
+            var run = new Run(seed: 99, start: new int2(2, 1), pose: new WalkerPose { Tile = tile, Local = Iso2.Boost(new double2(0.1, 0.05), -1) });
+            Assert.IsFalse(run.Core.MazeMode);
+            run.Registry.Find(AlignedCellsCore.ParamMaze).Set(false);
+            run.Stay();
+            Assert.IsTrue(run.Core.NeedsReconfigure);
+            run.Core.Configure(run.Room, run.Registry);
+            run.Core.Enter(AlignedCellsSpace.ReconfigureStart, run.Core.Grid.CellCentre(int2.zero));
+            Assert.IsFalse(run.Core.MazeMode);
+            Assert.IsFalse(run.Core.EnteredFromCurvedWalk);
+            Assert.AreEqual(new CellFrame(TileId.Zero, 0), run.Core.Walker.Frame, "no stale Mode-1 tile");
+
+            run.Registry.Find(AlignedCellsCore.ParamMaze).Set(true);
+            run.Stay();
+            Assert.IsTrue(run.Core.NeedsReconfigure);
+            run.Core.Configure(run.Room, run.Registry);
+            run.Core.Enter(AlignedCellsSpace.ReconfigureStart, run.Core.Grid.CellCentre(int2.zero));
+            Assert.IsTrue(run.Core.MazeMode, "turned on mid-S3: a maze starts");
+            Assert.IsNotNull(run.Core.Maze);
         }
 
         [Test]

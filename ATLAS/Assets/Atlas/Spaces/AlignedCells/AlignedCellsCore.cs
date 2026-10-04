@@ -129,13 +129,23 @@ namespace Atlas.Spaces.AlignedCells
         // §4.8: a start from Mode 1 (a pose of the {4,5} world, kappa = -1: SpaceLab hands it over) keeps the tile id and takes the
         // nearest quarter-turn; any other start is registered like every flat space: tile zero, unturned, in the cell under the head.
         // TurnFromCurvedWalk assumes the anchor axes equal the room axes (B10 review, X06 open point).
-        // In maze mode a run starts instead: the maze is a game and always begins at tile zero (duck maze design §2).
+        // With cells.maze on, any start but Mode 1's begins a maze run instead: the maze is a game and always begins at tile zero
+        // (duck maze design §2). Entered from Mode 1, the tile is kept and this entry runs classic S3 on the classic grid (no
+        // maze, P7 = 0); the next entry from anywhere else is a maze run again. A room whose classic grid cannot be built runs
+        // the maze.
         public void Enter(in WalkerPose start, double2 headXZ)
         {
             if (!Configured) throw new InvalidOperationException("AlignedCellsCore.Enter before Configure");
             if (!IsFinite(headXZ)) headXZ = double2.zero;
             Crossings = 0; Entered = true;
             unavailablePending = mazeUnavailable;
+            bool fromCurvedWalk = start.Local.Kappa == Curvature.Hyperbolic && !start.Tile.IsNone;
+            if (mazeRequested && mazeGrid != null)
+            {
+                CellGrid classic = fromCurvedWalk ? TryClassicGrid() : null;
+                if (classic != null) UseGrid(classic, false);
+                else UseGrid(mazeGrid, true);
+            }
             if (MazeMode)
             {
                 EnteredFromCurvedWalk = false;
@@ -143,7 +153,7 @@ namespace Atlas.Spaces.AlignedCells
             }
             else
             {
-                EnteredFromCurvedWalk = start.Local.Kappa == Curvature.Hyperbolic && !start.Tile.IsNone;
+                EnteredFromCurvedWalk = fromCurvedWalk;
                 if (EnteredFromCurvedWalk) Walker.EnterFromCurvedWalk(start, headXZ);
                 else Walker.Reset(headXZ, new CellFrame(TileId.Zero, 0));
                 Loops.Reset(Walker.Cell, Walker.Frame);

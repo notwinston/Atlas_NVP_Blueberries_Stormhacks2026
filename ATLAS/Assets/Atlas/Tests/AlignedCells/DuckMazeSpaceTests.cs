@@ -188,6 +188,43 @@ namespace Atlas.Spaces.AlignedCells.Tests
                 Assert.IsFalse(hud.Visible, "hidden on Exit");
             }
         }
+
+        // Entered from Curved Walk with cells.maze on: classic S3 for this entry, drawn on the classic grid (the views follow the
+        // core's grid), no duck and no read-out; a cells.maze toggle re-enters fresh, never at the Mode-1 tile.
+        [Test, Category("Unity")]
+        public void Space_EnteredFromCurvedWalkDrawsClassic()
+        {
+            ParamRegistry registry = MazeRegistry(1234);
+            RoomModel room = Fixtures.Rectangle(2.4f, 2.4f);
+            using (var stage = new UnityStage(room, registry: registry))
+            {
+                var tile = TileId.Zero.Step(1).Step(2);
+                stage.Enter(new WalkerPose { Tile = tile, Local = Iso2.Boost(new double2(0.1, 0.05), -1) }, new int2(1, 1));
+                AlignedCellsCore core = stage.Space.Core;
+                Assert.IsFalse(core.MazeMode);
+                Assert.IsTrue(core.EnteredFromCurvedWalk);
+                Assert.AreEqual(tile, core.Walker.Frame.Tile);
+                Assert.AreEqual(CellGrid.FromRoom(room).CountX, stage.Grid.CountX);
+                Assert.AreEqual(core.Instances.Count, stage.Space.View.ActiveInstanceCount);
+                Assert.AreEqual(0, stage.Space.View.DuckViewCount);
+                Assert.IsFalse(stage.Space.Hud.Visible);
+                stage.Step(); stage.Step();
+                Assert.IsFalse(core.NeedsReconfigure);
+                Assert.AreEqual(tile, core.Walker.Frame.Tile, "no reconfigure loop");
+
+                registry.Find(AlignedCellsCore.ParamMaze).Set(false);
+                stage.Step();
+                Assert.IsFalse(core.MazeMode);
+                Assert.AreEqual(new CellFrame(TileId.Zero, 0), core.Walker.Frame, "re-entered fresh: no stale Mode-1 tile");
+
+                registry.Find(AlignedCellsCore.ParamMaze).Set(true);
+                stage.Step();
+                Assert.IsTrue(core.MazeMode, "turned on mid-S3: a maze starts");
+                Assert.AreEqual(4, stage.Grid.CountX);
+                AssertMazeDrawn(core, stage.Space.View);
+                Assert.IsTrue(stage.Space.Hud.Visible);
+            }
+        }
 #endif
     }
 }

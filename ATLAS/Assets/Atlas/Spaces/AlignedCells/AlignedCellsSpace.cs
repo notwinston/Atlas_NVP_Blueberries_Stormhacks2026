@@ -221,6 +221,12 @@ namespace Atlas.Spaces.AlignedCells
                 _events.Log("cells.enter", "cells", _core.Grid.CountX * _core.Grid.CountZ, "fromMode1", _core.EnteredFromCurvedWalk ? 1 : 0);
         }
 
+        /// <summary>
+        /// The start of a re-entry after a cells.maze toggle: a fresh start, never Mode 1's pose, so turning the maze on mid-S3
+        /// starts a maze and turning it off never brings back a stale Mode-1 tile.
+        /// </summary>
+        internal static WalkerPose ReconfigureStart { get { return WalkerPose.Start; } }
+
         // cells.maze changed while entered (duck maze design §2): the grid changes, so the space is configured again and
         // re-entered with the head of this frame, as a fresh entry is (cells.enter is logged again).
         void Reconfigure(float3 head)
@@ -228,7 +234,7 @@ namespace Atlas.Spaces.AlignedCells
             if (_roomView != null) _roomView.Exit();
             _roomView = null;
             Configure(_roomModel, _registry);
-            Enter(in _start);
+            Enter(ReconfigureStart);
             if (_pendingEnter) Place(head);
         }
 
