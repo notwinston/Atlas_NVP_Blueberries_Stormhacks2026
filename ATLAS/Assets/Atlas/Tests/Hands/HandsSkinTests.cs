@@ -86,7 +86,7 @@ namespace Atlas.Hands.Tests
 
                 // Outward winding: every face agrees with its normals, none is flat, and the whole encloses a
                 // positive volume about the size of a hand.
-                Assert.That(AssertWoundOutwards(vertices, indices, template.IndexCount, 0.2f, side + " open"), Is.EqualTo(0));
+                Assert.That(AssertWoundOutwards(vertices, indices, template.IndexCount, 0.5f, side + " open"), Is.EqualTo(0));
                 float3 middle = 0.5f * (joints[HandJoint.Wrist] + joints[HandJoint.MiddleMcp]);
                 double volume = HandsSkinRig.SignedVolume(vertices, indices, template.IndexCount, middle);
                 Assert.That(volume, Is.InRange(150e-6, 450e-6), side + ": cubic metres");

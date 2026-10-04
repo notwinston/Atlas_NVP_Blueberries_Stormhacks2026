@@ -48,6 +48,7 @@ namespace Atlas.Hands.Tests
             fixed (int* p = indices) template.CopyIndices(p, template.IndexCount);
             for (int i = template.IndexCount; i < indices.Length; i++)
                 Assert.That(indices[i], Is.EqualTo(-77), "wrote past the index buffer");
+            System.Array.Resize(ref indices, template.IndexCount);
             return indices;
         }
 
