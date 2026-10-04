@@ -68,9 +68,10 @@ namespace Atlas.Telemetry
             if (Files != null) Files.Open(SessionId);
             Probe.ResetSession();
             Pump.ResetSession();
-            Events.Log("session", "sessionId", SessionId);
-            // A Station that is connected is told with a second Hello; the handshake is not repeated.
+            // A Station that is connected is told with a second Hello; the handshake is not repeated. It goes
+            // out before the session event, so that the Hub files the event under the new session.
             Link.SetSession(SessionId);
+            Events.Log("session", "sessionId", SessionId);
             return SessionId;
         }
 

@@ -86,6 +86,9 @@ namespace Atlas.Telemetry
             AtlasServices.Replace<IPerfSource>(probe);
             var hud = new AtlasHud(boot.Hud, probe, pump);
             telemetry.Hud = hud;
+            // The flat-twin mini-map of the headset (rule 6), off until hud.map is switched on. The Spectator
+            // draws its own map beside the mirror.
+            if (!boot.IsSpectator) FlatTwinHud.Install(boot);
 
             // 5. Parameters of lane D, with the start values of this build.
             DeclareParams(registry, telemetry);
