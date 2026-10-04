@@ -32,6 +32,7 @@ namespace Atlas.World.Lint
             CheckBudget(g1, ball, L, meshes, s, rep);
             CheckCoincidence(g1, ball, L, meshes, s, rep);
             CheckDeterminism(g1, g2, ball, s, rep);
+            if (footprint != null) CheckFootprint(g1, footprint, rep);
             return rep;
         }
 
@@ -229,6 +230,89 @@ namespace Atlas.World.Lint
             }
             if (rep.StructuralConflicts > 0) rep.Failures.Add($"{rep.StructuralConflicts} structural conflicts between neighbours");
             if (rep.CoincidentFaces > 0) rep.Failures.Add($"{rep.CoincidentFaces} coincident triangle pairs across tile edges");
+        }
+
+        // ---- 8. room footprint (P1-B11; MP §3.4, §4.6, §9.5.6 P1-B11 "WorldLint finds no generated prop inside the room footprint") ----
+        static void CheckFootprint(WorldGenerator g, RoomFootprint fp, WorldLintReport rep)
+        {
+            rep.FootprintTilesNotHome = FootprintViolations(g, fp, out int props, out int samples);
+            rep.PropTilesInFootprint = props;
+            rep.FootprintSamples = samples;
+            if (rep.FootprintTilesNotHome > 0) rep.Failures.Add($"{rep.FootprintTilesNotHome} tiles under the room footprint are not flagged home (§3.4)");
+            if (props > 0) rep.Failures.Add($"{props} tiles under the room footprint carry generated props (§3.4)");
+        }
+
+        public const double FootprintStepM = 0.02;   // interior grid and boundary spacing, finer than the generator's 0.05 m
+
+        /// <summary>
+        /// Samples the polygon (interior points on a 0.02 m grid, boundary points every at most 0.02 m), maps each with P = Exp(p / L, -1)
+        /// and finds the containing tile as the Voronoi cell of the tile centres (minimum w of F_t^-1 P, A.2 cosh d = w); every tile within
+        /// 1e-9 w of that minimum counts (a point on an edge belongs to both tiles). Returns the number of distinct such tiles that are not
+        /// Home; propTiles is the number whose archetype is not Home.
+        /// </summary>
+        public static int FootprintViolations(WorldGenerator g, RoomFootprint fp, out int propTiles, out int samples)
+        {
+            if (g == null) throw new ArgumentNullException(nameof(g));
+            if (fp == null) throw new ArgumentNullException(nameof(fp));
+            var pts = fp.Outline;
+            double L = fp.L, maxR = 0;
+            double2 mn = pts[0], mx = pts[0];
+            for (int i = 0; i < pts.Count; i++) { maxR = Math.Max(maxR, math.length(pts[i])); mn = math.min(mn, pts[i]); mx = math.max(mx, pts[i]); }
+            var list = new List<VisibleTile>();
+            g.Graph.VisibleSet(TileId.Zero, maxR / L + g.Graph.CircumRadius + 0.05, list);
+            int n = list.Count;
+            var rowW = new double3[n];   // third row of F_t^-1: w = row . P
+            for (int i = 0; i < n; i++)
+            {
+                var inv = list[i].F.Inverse().M;
+                rowW[i] = new double3(inv.c0.z, inv.c1.z, inv.c2.z);
+            }
+            var notHome = new HashSet<TileId>(); var props = new HashSet<TileId>();
+            int count = 0;
+
+            void Sample(double2 p)
+            {
+                count++;
+                double3 P = Geometry2.Exp(p / L, -1);
+                double best = double.MaxValue;
+                for (int i = 0; i < n; i++) { double w = math.dot(rowW[i], P); if (w < best) best = w; }
+                double tol = 1e-9 * best;
+                for (int i = 0; i < n; i++)
+                {
+                    if (math.dot(rowW[i], P) > best + tol) continue;
+                    TileId id = list[i].Id;
+                    if (!g.IsHome(id)) notHome.Add(id);
+                    if (g.Content(id).Archetype != Archetype.Home) props.Add(id);
+                }
+            }
+
+            int nx = (int)Math.Floor((mx.x - mn.x) / FootprintStepM), nz = (int)Math.Floor((mx.y - mn.y) / FootprintStepM);
+            for (int i = 0; i <= nx; i++)
+                for (int j = 0; j <= nz; j++)
+                {
+                    var p = new double2(mn.x + i * FootprintStepM, mn.y + j * FootprintStepM);
+                    if (InsidePolygon(pts, p)) Sample(p);
+                }
+            for (int i = 0; i < pts.Count; i++)
+            {
+                double2 a = pts[i], b = pts[(i + 1) % pts.Count];
+                int m = Math.Max(1, (int)Math.Ceiling(math.length(b - a) / FootprintStepM));
+                for (int s = 0; s <= m; s++) Sample(a + (b - a) * ((double)s / m));
+            }
+            propTiles = props.Count;
+            samples = count;
+            return notHome.Count;
+        }
+
+        static bool InsidePolygon(IReadOnlyList<double2> poly, double2 p)
+        {
+            bool inside = false;
+            for (int i = 0, j = poly.Count - 1; i < poly.Count; j = i++)
+            {
+                double2 a = poly[i], b = poly[j];
+                if ((a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
+            }
+            return inside;
         }
 
         // ---- 7. determinism (§3.4, §11.1) ----

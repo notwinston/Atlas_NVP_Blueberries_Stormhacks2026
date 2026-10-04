@@ -30,3 +30,22 @@ One section per task: scene, steps, expected numbers. A human fills in the measu
   - Standing room: the dial snaps 3..6, q = 5 reaches K = -1/1.4^2, no flag or beacon is visible, at q = 3 S4 is still requested.
 - The read-outs are not drawn as text (no text package, same open lead item as P3-B01; deviation D7): read `walk.corner` / `walk.lap` / `walk.closed` on the Console or in the event log.
 - Editor-proved here: `Atlas.Spaces.CurvedWalk.Tests` (closure q = 3, 4, 5, 6 on replayed walks, curvature frozen while head speed > 0.1 m/s, ramp duration, S4 request, standing room, logged events) and `Atlas.Kernel.Tests` (`CurvatureDialTests`, `LapWalkTests`, `HolonomyRigGraphTests`).
+
+## P1-B11 The room becomes tile zero (deferred: phone A in the headset)
+
+- Scene: `Assets/Atlas/Spaces/CurvedWalk/Scenes/Space_CurvedWalk.unity` with the live Home rebuild (P1-C07) as `Home` (`SpaceLab.Home`) and the live RoomModel.
+- Steps:
+  1. q = 4 (flat): touch three points on a wall and one table edge with the controller or a finger; note them.
+  2. Dial 5, wait about 4 s, dial 4, wait about 4 s, touch the same points.
+  3. Walk one lap, press Return Home (B held), touch the same points again.
+  4. Run the WorldLint menu on the session RoomModel (`Atlas/World/Run WorldLint`).
+  5. Walk the lap on the lap square and watch the tile id on the Spectator.
+  6. Look at the start-corner post from the flag.
+- Expected (MP §9.5.6 P1-B11, §4.6, §3.5, A.4):
+  1. Each point within 1 cm of the real one (the room at kappa = 0 is exactly Home).
+  2. Within 2 cm; `LastRegistrationErrorM` is logged by the space (read it in the test build's debug overlay or the event log).
+  3. Within 2 cm after Return Home; `SelectedQ` reads 4.
+  4. `PropTilesInFootprint` 0 and `FootprintTilesNotHome` 0.
+  5. No flicker: every tile run is at least 0.25 s (15 frames at 60 Hz); the sequence is tile zero, then one neighbour per side, back to tile zero.
+  6. The corner post is 0.17 m from the flag at L = 1.88 m (0.0920553 L) and fades once lane A's near-head fade lands (the 0.3 m fade is in lane A's AtlasCore, deviation D13).
+- Editor-proved here: `Atlas.Spaces.CurvedWalk.Tests` (`CurvedRoomViewTests`, `TileZeroTests`), `Atlas.WorldGen.Tests` (`FootprintLintTests`) and `Atlas.Kernel.Tests` (`TileZeroPlacementTests`).
