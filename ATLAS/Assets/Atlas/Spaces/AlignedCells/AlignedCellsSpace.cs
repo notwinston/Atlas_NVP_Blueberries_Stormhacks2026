@@ -1,6 +1,7 @@
 using Atlas.Kernel;
 using Atlas.Link;
 using Atlas.Rendering;
+using Atlas.Telemetry;
 using Atlas.World;
 using Unity.Mathematics;
 using UnityEngine;
@@ -17,13 +18,17 @@ namespace Atlas.Spaces.AlignedCells
     /// A thin adapter. The logic is in <see cref="AlignedCellsCore"/>, the cell instances in
     /// <see cref="AlignedCellsView"/>, the room in <see cref="AlignedCellsRoomView"/>. The frame loop's kernel
     /// stays flat and registered here; entered from Curved Walk, SpaceLab hands over Mode 1's pose and the tile
-    /// id is kept (section 4.8).
+    /// id is kept (section 4.8). The duck maze (S3 duck maze design, 2026-10-04): the view draws the core's maze
+    /// (walls, off tiles, the duck from the kit), redrawn whenever the maze changes, and a head-locked
+    /// <see cref="MazeHud"/> shows the run.
     /// </remarks>
     public sealed class AlignedCellsSpace : MonoBehaviour, ISpaceModule, IUploadStep, ISpaceStateReader
     {
         readonly AlignedCellsCore _core = new AlignedCellsCore();
         AlignedCellsView _view;
         AlignedCellsRoomView _roomView;
+        MazeHud _hud;                                          // made at the first Configure, kept across reconfigures
+        DuckMaze _shownMaze;                                   // the maze of the last Apply: a new one (a new run, P7, a reconfigure) redraws
 
         MaterialPool _pool;
         IRoomContent _room;
@@ -56,6 +61,8 @@ namespace Atlas.Spaces.AlignedCells
         public AlignedCellsView View { get { return _view; } }
         /// <summary>The driver of the shared room content, or null until the room is built.</summary>
         public AlignedCellsRoomView RoomView { get { return _roomView; } }
+        /// <summary>The maze read-out (no object without a stereo rig or TextMeshPro fonts), or null before Configure.</summary>
+        public MazeHud Hud { get { return _hud; } }
 
         public void Configure(RoomModel room, ParamRegistry registry)
         {
@@ -67,8 +74,17 @@ namespace Atlas.Spaces.AlignedCells
             AtlasServices.TryGet(out _host);
             AtlasServices.TryGet(out _events);
             _core.Events = _events;                            // cells.cross and cells.postLoop (Master Plan §10.1.3)
+            if (_hud == null)
+            {
+                // The read-out hangs under the head-locked HUD root, as Curved Walk's; no rig (the Station, a test): no object.
+                AtlasServices.TryGet(out IStereoRig rig);
+                _hud = new MazeHud(rig != null ? rig.Hud : null);
+            }
             if (!AtlasServices.TryGet(out _pool)) return;     // no look in this build: nothing to draw with
-            _view = new AlignedCellsView(transform, _pool, _core.Grid);
+            // The duck modelled in Blender (kit piece "duck"; one AtlasKit for the whole app, read as Glued reads it), once per
+            // Configure and only when a maze can be drawn. No kit, or a refused piece: the view draws the procedural duck.
+            KitSet kit = _core.MazeMode ? KitSet.Load(ReadKitResource) : null;
+            _view = new AlignedCellsView(transform, _pool, _core.Grid, kit);
             _dirty = true;
         }
 
@@ -100,28 +116,57 @@ namespace Atlas.Spaces.AlignedCells
             if (!_entered) return;
             var head = new double2(frame.HeadPosition.x, frame.HeadPosition.z);
             if (_pendingEnter) Place(frame.HeadPosition);
-            if (_core.Tick(head, frame.Kernel.Rejected, frame.Time)) _dirty = true;
+            if (_core.Tick(head, frame.Kernel.Rejected, frame.Time)) _dirty = true;   // also true when a new maze run began
             if (_core.NeedsReconfigure) Reconfigure(frame.HeadPosition);
+            if (_hud != null) ShowRun(_hud, _core);
             if (_roomView == null) TakeRoom();                // the room content was built after Enter
             if (_core.PollModeSwitch() && (_host == null || !_host.RequestSwitch(SpaceId.CurvedWalk))) _core.RefuseModeSwitch();
         }
 
-        /// <summary>Step 6. Re-uploads when the instances, the room content or the root changed: gate posts are world-space.</summary>
+        /// <summary>
+        /// Step 6. Re-uploads when the instances, the maze, the room content or the root changed: gate posts are world-space.
+        /// Then, every frame a duck is drawn, it turns and bobs (Apply places the ducks, Animate moves them: in that order).
+        /// </summary>
         public void Upload(in FrameContext frame)
         {
             if (!_entered || !_core.Entered) return;
+            DuckMaze maze = ShownMaze(_core);
+            // The core's Tick reports a new run; this also catches a maze changed by any other path (a Station's P7, a reconfigure).
+            if (!ReferenceEquals(maze, _shownMaze)) _dirty = true;
             bool roomDirty = _roomView != null && _roomView.Dirty;
-            if (!_dirty && !roomDirty && !transform.hasChanged) return;
-            if (_view != null) _view.Apply(_core.Instances);
-            if (_roomView != null) _roomView.Apply(_core.Instances);
-            transform.hasChanged = false;
-            _dirty = false;
+            if (_dirty || roomDirty || transform.hasChanged)
+            {
+                if (_view != null) _view.Apply(_core.Instances, maze);
+                if (_roomView != null) _roomView.Apply(_core.Instances);
+                _shownMaze = maze;
+                transform.hasChanged = false;
+                _dirty = false;
+            }
+            if (_view != null && _view.DuckViewCount > 0) _view.Animate(frame.Time, _core.MazeFound, _core.MazeFoundTime);
+        }
+
+        /// <summary>The maze the cells show: the core's in maze mode, none otherwise (classic S3, a Station copy without one).</summary>
+        internal static DuckMaze ShownMaze(AlignedCellsCore core)
+        {
+            return core.MazeMode ? core.Maze : null;
+        }
+
+        /// <summary>
+        /// The read-out follows the run, every frame: while searching the live time (the core's MazeElapsed runs until the
+        /// find and is frozen there), then the toast with the steps until the next run; hidden without a maze. MazeHud
+        /// rebuilds its text only when what it shows changes, so this allocates nothing per frame.
+        /// </summary>
+        internal static void ShowRun(MazeHud hud, AlignedCellsCore core)
+        {
+            if (ShownMaze(core) != null) hud.Show(core.MazeElapsed, core.MazeSteps, core.MazeWallsCrossed, core.MazeFound);
+            else hud.Hide();
         }
 
         public void Exit()
         {
             _entered = false;
             _pendingEnter = false;
+            if (_hud != null) _hud.Hide();
             if (_roomView != null) _roomView.Exit();
             _roomView = null;
             _core.Exit();
@@ -139,6 +184,8 @@ namespace Atlas.Spaces.AlignedCells
             if (_roomView != null) _roomView.Exit();
             _roomView = null;
             ReleaseViews();
+            if (_hud != null) _hud.Dispose();
+            _hud = null;
         }
 
         void Place(float3 head)
@@ -173,6 +220,17 @@ namespace Atlas.Spaces.AlignedCells
         {
             if (_view != null) _view.Dispose();
             _view = null;
+            _shownMaze = null;
+        }
+
+        // GluedSpace's reader: the kit's files are TextAssets in Resources/AtlasKit (Spaces/Glued/Resources/AtlasKit).
+        static byte[] ReadKitResource(string name)
+        {
+            var asset = Resources.Load<TextAsset>(KitSet.ResourceFolder + "/" + name);
+            if (asset == null) return null;
+            byte[] bytes = asset.bytes;
+            Resources.UnloadAsset(asset);
+            return bytes;
         }
     }
 }
