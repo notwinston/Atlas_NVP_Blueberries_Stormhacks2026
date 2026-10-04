@@ -33,6 +33,10 @@ namespace Atlas.Spaces.SmallPlanet
         SmallPlanetView view;
         LapMarkerView markers;
         CurvedRoomView roomView;
+        SmallPlanetDial dial;
+        GameObject dialChip;
+        Mesh dialChipMesh;
+        Material dialChipMaterial;
         float fogStart = -1f, fogEnd = -1f;
 
         /// <summary>The factory given to SpaceRegistry: a new object named like the scene.</summary>
@@ -53,6 +57,10 @@ namespace Atlas.Spaces.SmallPlanet
         public SmallPlanetCore Core => core;
         public SmallPlanetView View => view;
         public LapMarkerView Markers => markers;
+        /// <summary>The gaze twin of the dial while the space is entered with an input service, or null.</summary>
+        internal SmallPlanetDial Dial => dial;
+        /// <summary>What marks the twin for the eyes, or null with no look in this build.</summary>
+        internal GameObject DialChip => dialChip;
 
         public void Configure(RoomModel roomModel, ParamRegistry registry)
         {
@@ -91,6 +99,13 @@ namespace Atlas.Spaces.SmallPlanet
                 markers.Visible = false;
             }
             if (room != null && room.IsBuilt) roomView = new CurvedRoomView(room);
+            // Rule 5: the dial is read in Tick, so its gaze twin lives as long as the space is entered.
+            ReleaseDial();
+            if (input != null)
+            {
+                dial = new SmallPlanetDial(input);
+                if (pool != null) MakeDialChip();
+            }
             fogStart = fogEnd = -1f;
             UploadFog();
         }
@@ -104,9 +119,9 @@ namespace Atlas.Spaces.SmallPlanet
         {
             if (!core.Entered) return;
             bool still = kernel != null && kernel.Still;
-            bool left = input != null && input.Pressed(AtlasAction.DialLeft);
+            // q = 3 is the dial's lowest snap: DialLeft can do nothing here, so it is not read and needs no twin.
             bool right = input != null && input.Pressed(AtlasAction.DialRight);
-            LapEvent ev = core.Tick(frame.Walker, still, left, right);
+            LapEvent ev = core.Tick(frame.Walker, still, false, right);
             WalkEvents.Emit(log, core.Walk, ev);
 
             if (core.RadiusChanged)
@@ -122,6 +137,17 @@ namespace Atlas.Spaces.SmallPlanet
         {
             if (!core.Entered) return;
             UploadFog();
+            if (dial != null)
+            {
+                dial.Place(frame.HeadPosition, frame.HeadRotation);
+                dial.SetLive(core.Driving && kernel.Still);
+                if (dialChip != null)
+                {
+                    if (dialChip.activeSelf != dial.Live) dialChip.SetActive(dial.Live);
+                    Vector3 centre = (Vector3)dial.Centre;
+                    dialChip.transform.SetPositionAndRotation(centre, Quaternion.LookRotation(centre - (Vector3)frame.HeadPosition));
+                }
+            }
             bool placed = core.Placed;
             if (view != null)
             {
@@ -141,6 +167,7 @@ namespace Atlas.Spaces.SmallPlanet
         public void Exit()
         {
             core.Exit();
+            ReleaseDial();
             if (roomView != null) roomView.Dispose();
             roomView = null;
             if (markers != null) markers.Dispose();
@@ -151,6 +178,48 @@ namespace Atlas.Spaces.SmallPlanet
         public void WriteState(ref StateMessage state)
         {
             core.WriteState(ref state);
+        }
+
+        void OnDestroy()
+        {
+            ReleaseDial();   // Exit has done this already; this only covers a root destroyed without Exit
+        }
+
+        // A small plate where the twin is, facing the walker, in the room frame: not warped, not fogged.
+        void MakeDialChip()
+        {
+            var data = new AtlasMeshBuilder(32, 96);
+            float side = 2f * SmallPlanetDial.Radius;
+            data.AddBox(new float3(0f, -0.5f * side, 0f), new float3(side, side, 0.01f), 0f, AtlasPalette.Uv(AtlasPalette.Beacon), true);
+            dialChipMesh = AtlasMesh.Create(data, "PlanetDialChip");
+            dialChip = new GameObject("DialChip", typeof(MeshFilter), typeof(MeshRenderer)) { hideFlags = HideFlags.DontSave };
+            dialChip.transform.SetParent(transform, false);
+            dialChip.GetComponent<MeshFilter>().sharedMesh = dialChipMesh;
+            var mr = dialChip.GetComponent<MeshRenderer>();
+            dialChipMaterial = pool.Rent();
+            MaterialPool.SetSurface(dialChipMaterial, 1f, 0f);
+            mr.sharedMaterial = dialChipMaterial;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+            mr.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
+            mr.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
+            dialChip.SetActive(false);
+        }
+
+        void ReleaseDial()
+        {
+            if (dial != null) dial.Dispose();
+            dial = null;
+            Kill(dialChip); Kill(dialChipMesh);
+            dialChip = null; dialChipMesh = null;
+            if (dialChipMaterial != null && pool != null && pool.Owns(dialChipMaterial)) pool.Return(dialChipMaterial);
+            dialChipMaterial = null;
+        }
+
+        static void Kill(UnityEngine.Object o)
+        {
+            if (o == null) return;
+            if (Application.isPlaying) Destroy(o); else DestroyImmediate(o);
         }
 
         // §9.5.6, §10.2: fog from 0.5 pi R, opaque at 0.8 pi R (planet.fogRho moves the opaque end), metres from the head.

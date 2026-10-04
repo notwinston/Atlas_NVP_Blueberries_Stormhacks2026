@@ -49,7 +49,7 @@ namespace Atlas.Rendering
             float2 t;
             if (warpMode < 1.5f) t = LogH2(math.mul(a, ExpH2(positionOS.xz / hypL))) * hypL;
             else t = LogS2(math.mul(a, ExpS2(positionOS.xz / hypL))) * hypL;
-            return new float3(headPosWS.x + t.x, positionOS.y, headPosWS.z + t.y);
+            return new float3(headPosWS.x + t.x, positionOS.y + anchor.c3.y, headPosWS.z + t.y); // c3.y is _Anchor._m13
         }
     }
 }

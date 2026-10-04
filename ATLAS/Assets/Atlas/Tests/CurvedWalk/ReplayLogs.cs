@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Atlas.App;
 using Atlas.Kernel;
 using Atlas.Link;
 using Atlas.Telemetry;
@@ -76,6 +77,16 @@ namespace Atlas.Spaces.CurvedWalk.Tests
                 for (int i = 1; i <= stop; i++) l.Add(Sample(t + i * Dt, corner));
                 t += stop * Dt;
             }
+            return l;
+        }
+
+        /// <summary>A straight walk from one floor point to another at v, then a stop.</summary>
+        public static List<HeadPose> Line(double2 from, double2 to, double v = 0.7, int stop = 30)
+        {
+            var l = new List<HeadPose>();
+            int n = Math.Max(1, (int)Math.Round(math.length(to - from) / v / Dt));
+            for (int i = 1; i <= n; i++) l.Add(Sample(i * Dt, math.lerp(from, to, (double)i / n)));
+            Stop(l, to, stop);
             return l;
         }
 
@@ -163,6 +174,113 @@ namespace Atlas.Spaces.CurvedWalk.Tests
             public int Count(string ev) { int n = 0; foreach (var e in Events) if (e.Ev == ev) n++; return n; }
 
             public void Dispose() { Log.Logged -= Events.Add; }
+        }
+
+        /// <summary>
+        /// S2 inside the app, without the engine: the real frame loop (FrameLoopCore, which is also the walker reset that
+        /// Recentre and SpaceLab call), the real SpaceLab and the composition root's kernel. The loader makes Curved Walk
+        /// as CurvedWalkSpace is without its views (the same calls on the same core) and a Home that only says it is
+        /// registered. Step is one whole frame: steps 1 to 6, the State, then step 8b where a switch advances.
+        /// </summary>
+        public sealed class AppRig : ISpaceLoader, ISenseStep
+        {
+            public readonly HolonomyWalkerKernel Kernel = new HolonomyWalkerKernel();
+            public readonly ParamRegistry Reg = new ParamRegistry();
+            public readonly FrameLoopCore Loop;
+            public readonly SpaceLab Lab;
+            /// <summary>The core of the Curved Walk module made last; it outlives its Exit.</summary>
+            public CurvedWalkCore S;
+            public CurvedWalkInput Input;
+            public HeadPose Head;
+            SpaceId loading;
+
+            sealed class CurvedWalkModule : ISpaceModule
+            {
+                readonly AppRig app;
+                public readonly CurvedWalkCore Core = new CurvedWalkCore();
+                public CurvedWalkModule(AppRig app) { this.app = app; }
+                public SpaceId Id => SpaceId.CurvedWalk;
+                public bool Registered => false;
+                public void Configure(RoomModel room, ParamRegistry registry)
+                {
+                    Core.Configure(room, registry);
+                    Core.RequestSwitch = app.Lab.RequestSwitch;
+                    Core.WorldChanged = app.Lab.BumpWorldVersion;
+                }
+                public void Enter(in WalkerPose start) { Core.Enter(app.Kernel); Core.Register(app.Loop.Current.HeadPosition.xz); }
+                public void Tick(in FrameContext frame) { Core.Tick(in frame, in app.Input); }
+                public void Exit() { Core.Exit(); }
+                public void WriteState(ref StateMessage state) { Core.WriteState(ref state); }
+            }
+
+            sealed class HomeModule : ISpaceModule
+            {
+                public SpaceId Id => SpaceId.Home;
+                public bool Registered => true;
+                public void Configure(RoomModel room, ParamRegistry registry) { }
+                public void Enter(in WalkerPose start) { }
+                public void Tick(in FrameContext frame) { }
+                public void Exit() { }
+                public void WriteState(ref StateMessage state) { }
+            }
+
+            public AppRig(RoomModel room, int q = 5)
+            {
+                CurvedWalkCore.DeclareParams(Reg);   // SpaceRegistry.DeclareAllParams at boot
+                Reg.DeclareEnum(CurvedWalkCore.ParamMode, "curved", new[] { "Mode 1 Curved Walk", "Mode 2 Aligned Cells" }, 0, null, true);
+                Reg.Find(CurvedWalkCore.ParamQ).Set(q);
+                Loop = new FrameLoopCore(Kernel);
+                Lab = new SpaceLab(Reg, Kernel, Loop, this, null);
+                Loop.Space = Lab;
+                Loop.Host = Lab;
+                Loop.AddSense(this);
+                Loop.AddAfterFrame(Lab);
+                Lab.SetRoom(room);   // the flat kernel of the room; the loop places the walker in its first frame
+            }
+
+            public bool IsAvailable(SpaceId id) { return id == SpaceId.Home || id == SpaceId.CurvedWalk; }
+            public void Begin(SpaceId id) { loading = id; }
+            public bool TryFinish(out ISpaceModule module)
+            {
+                if (loading == SpaceId.CurvedWalk)
+                {
+                    var made = new CurvedWalkModule(this);
+                    S = made.Core;
+                    module = made;
+                }
+                else module = new HomeModule();
+                return true;
+            }
+            public void Unload(ISpaceModule module) { }
+
+            public void Sense(ref FrameContext frame)
+            {
+                frame.RawHeadPosition = Head.Position;
+                frame.RawHeadRotation = Head.Rotation;
+                frame.Tracking = Head.Tracking;
+            }
+
+            public void Step(in HeadPose s)
+            {
+                Head = s;
+                Loop.RunUpdate(s.Time, (float)Dt);
+                Loop.RunState();
+                Loop.RunAfterFrame();
+            }
+
+            public void Run(List<HeadPose> samples) { for (int i = 0; i < samples.Count; i++) Step(samples[i]); }
+
+            /// <summary>Frames in which the walker stands where he stood last.</summary>
+            public void Stand(int frames = 1)
+            {
+                for (int i = 0; i < frames; i++) Step(new HeadPose(Head.Time + Dt, Head.Position, Head.Rotation, Head.Tracking));
+            }
+
+            /// <summary>The walker stands until the condition holds; at most ten seconds.</summary>
+            public void StandUntil(Func<bool> done)
+            {
+                for (int i = 0; i < 600 && !done(); i++) Stand();
+            }
         }
     }
 }

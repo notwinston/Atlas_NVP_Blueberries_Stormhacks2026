@@ -35,8 +35,25 @@ namespace Atlas.App.Tests
 
             // Not the boot scene: nothing has booted by itself.
             Assert.That(AtlasBootstrap.App, Is.Null);
+            // A scene with no origin that brings a listener of its own, as the Editor's default Main Camera does.
+            AudioListener sceneListener = new GameObject("Scene Listener").AddComponent<AudioListener>();
             AtlasApp app = AtlasBootstrap.Start(new BootOptions { Room = RoomFixtures.Sample3x3 });
             Assert.That(app, Is.Not.Null, "boot failed: see the console");
+
+            // Exactly one audio listener, and it is the head's (Unity logs "There are 2 audio listeners" otherwise).
+            AudioListener[] listeners = Object.FindObjectsByType<AudioListener>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            int listening = 0;
+            AudioListener heard = null;
+            for (int i = 0; i < listeners.Length; i++)
+            {
+                if (!listeners[i].isActiveAndEnabled) continue;
+                listening++;
+                heard = listeners[i];
+            }
+            Assert.That(listening, Is.EqualTo(1), "one audio listener in the booted app");
+            Assert.That(sceneListener.enabled, Is.False, "the scene's own listener is switched off");
+            Assert.That(heard.GetComponent<Camera>(), Is.Not.Null, "the listener is on the origin's camera");
+            Assert.That(heard.gameObject.name, Is.EqualTo("Main Camera"));
             Assert.That(AtlasServices.BootCompleted, Is.True);
             Assert.That(AtlasBootstrap.Start(), Is.SameAs(app), "a second start returns the running app");
 

@@ -23,6 +23,13 @@ namespace Atlas.Spaces.CurvedWalk.Tests
         static float4x4 Upload(in Iso2 a) =>
             new float4x4(new float4((float3)a.M.c0, 0f), new float4((float3)a.M.c1, 0f), new float4((float3)a.M.c2, 0f), new float4(0f, 0f, 0f, 1f));
 
+        // The anchor CurvedRoomView uploads for one object, as the shader reads it (Matrix4x4 [row, column] = _Anchor[row][column]).
+        static float4x4 ObjectUpload(in Iso2 shellAnchor, RoomObject o, double kappa, double L)
+        {
+            UnityEngine.Matrix4x4 m = CurvedRoomView.ObjectAnchor(shellAnchor, o, kappa, L);
+            return new float4x4(m.m00, m.m01, m.m02, m.m03, m.m10, m.m11, m.m12, m.m13, m.m20, m.m21, m.m22, m.m23, m.m30, m.m31, m.m32, m.m33);
+        }
+
         static AtlasMeshBuilder Kerbs(RoomModel room)
         {
             var data = new AtlasMeshBuilder();
@@ -61,7 +68,7 @@ namespace Atlas.Spaces.CurvedWalk.Tests
             }
             foreach (RoomObject o in room.Objects)
             {
-                float4x4 a = Upload(a0 * TileZeroPlacement.Object(new double2(o.Base.x, o.Base.z), o.Yaw, -1, L));
+                float4x4 a = ObjectUpload(a0, o, -1, L);
                 AtlasMeshBuilder mesh = ObjectMesh(o);
                 for (int i = 0; i < mesh.VertexCount; i++)
                 {
@@ -69,10 +76,15 @@ namespace Atlas.Spaces.CurvedWalk.Tests
                     float3 home = RoomObjectMeshes.ToRoom(o, p);
                     float3 w = AtlasWarpCpu.AtlasWarp(p, a, AtlasWarpCpu.ModeHyperbolic, (float)L, headWS, float4x4.identity);
                     worst = math.max(worst, math.max(math.abs(w.x - home.x), math.abs(w.z - home.z)));
-                    Assert.AreEqual(p.y, w.y, 1e-6f, "the warp leaves the height alone");
+                    Assert.AreEqual(home.y, w.y, 1e-6f, "the height is Home's: the base's height plus the vertex's own");
                 }
             }
             Assert.Less(worst, 0.01f, "float warp at L = 10,000 m vs Home");
+            for (int i = 0; i < kerb.VertexCount; i++)
+            {
+                float3 p = kerb.Vertices[i].Position;
+                Assert.AreEqual(p.y, AtlasWarpCpu.AtlasWarp(p, kA, AtlasWarpCpu.ModeHyperbolic, (float)L, headWS, float4x4.identity).y, "the shell's height passes through");
+            }
 
             // the flat double reference is exact to 1e-9 (U^-1 F0 Placement applied in double)
             Iso2 uf = TileZeroPlacement.Registered(head, 0, 1);
@@ -144,6 +156,38 @@ namespace Atlas.Spaces.CurvedWalk.Tests
                 }
                 Assert.Less(worst, 1e-3, "local distances from the base centre are kept");
             }
+        }
+
+        // A wall-mounted object (Base.y above 0, room contract) stays at its height when the warp comes on: at K = 0 the height
+        // is on the object's Transform, which the warp does not read, so the anchor carries it. Both curved modes, the dial's
+        // length scale, a walker away from the centre; the Transform (objectToWorld) is given and must not count twice.
+        [TestCase(-1)]
+        [TestCase(1)]
+        public void Furniture_KeepsItsHeightUnderTheWarp(int kappa)
+        {
+            RoomModel room = Room(RoomFixtures.BudgetRoom);
+            double L = kappa < 0 ? room.Curvature.ForDial(5) : 1.6;
+            float mode = kappa < 0 ? AtlasWarpCpu.ModeHyperbolic : AtlasWarpCpu.ModeSpherical;
+            Iso2 a0 = TileZeroPlacement.Registered(new double2(0.4, -0.3), kappa, L).Inverse() * Neutral(kappa);
+            var headWS = new float3(0.4f, 1.6f, -0.3f);
+            int raised = 0;
+            foreach (RoomObject o in room.Objects)
+            {
+                if (o.Base.y > 0.5f) raised++;
+                float4x4 a = ObjectUpload(a0, o, kappa, L);
+                Assert.AreEqual(o.Base.y, a.c3.y, "the anchor's [1][3] is the height of the base");
+                float4x4 transform = float4x4.TRS(o.Base, quaternion.RotateY(o.Yaw), new float3(1f, 1f, 1f));
+                AtlasMeshBuilder mesh = ObjectMesh(o);
+                for (int i = 0; i < mesh.VertexCount; i++)
+                {
+                    float3 p = mesh.Vertices[i].Position;
+                    float home = AtlasWarpCpu.AtlasWarp(p, float4x4.identity, AtlasWarpCpu.ModeNone, (float)L, headWS, transform).y;
+                    Assert.AreEqual(RoomObjectMeshes.ToRoom(o, p).y, home, 1e-6f);
+                    float warped = AtlasWarpCpu.AtlasWarp(p, a, mode, (float)L, headWS, transform).y;
+                    Assert.AreEqual(home, warped, 1e-6f, "object " + o.Id + " is drawn at the same height warped as at K = 0");
+                }
+            }
+            Assert.GreaterOrEqual(raised, 1, "the fixture has a wall-mounted object");
         }
 
         // Walls_SinkToKerbs (MP §3.5, §4.6, §8.4): the kerb the room content draws in curved space is 0.9 m high and has no
@@ -276,7 +320,7 @@ namespace Atlas.Spaces.CurvedWalk.Tests
                     Assert.AreEqual(UnityEngine.Vector3.one, o.Renderer.transform.localScale, "the warp ignores Transforms: no fitting scale");
                     Assert.IsTrue(mats.Add(o.Material), "one material instance each");
                     Iso2 a = TileZeroPlacement.Object(new double2(o.Data.Base.x, o.Data.Base.z), o.Data.Yaw, -1, L);
-                    Assert.AreEqual(WarpAnchor.ToMatrix(a), o.Material.GetMatrix(AtlasShaderIDs.Anchor));
+                    Assert.AreEqual(WarpAnchor.ToMatrix(a, o.Data.Base.y), o.Material.GetMatrix(AtlasShaderIDs.Anchor));
                 }
 
                 view.Upload(-1, L, id, id, false);
@@ -286,6 +330,34 @@ namespace Atlas.Spaces.CurvedWalk.Tests
                 Assert.IsTrue(content.FloorVisible); Assert.AreEqual(WallMode.Full, content.Walls); Assert.IsTrue(content.ObjectsVisible);
                 Assert.AreEqual(0f, content.ShellMaterial.GetFloat(AtlasShaderIDs.WarpMode));
                 for (int i = 0; i < view.ObjectCount; i++) Assert.AreEqual(0f, content.GetObject(i).Material.GetFloat(AtlasShaderIDs.WarpMode));
+            }
+        }
+
+        // The real room content with a wall-mounted object: its material's anchor carries the height its Transform has, in both
+        // curved modes, and the anchor is the identity again at K = 0.
+        [Test, Category("Unity")]
+        public void View_UploadsTheHeightOfARaisedObject()
+        {
+            Build(RoomFixtures.BudgetRoom);
+            using (var view = new CurvedRoomView(content))
+            {
+                int raised = 0;
+                foreach (int kappa in new[] { -1, 1 })
+                {
+                    Iso2 id = Neutral(kappa);
+                    view.Upload(kappa, 1.6, id, id, true);
+                    for (int i = 0; i < view.ObjectCount; i++)
+                    {
+                        IRoomObjectView o = content.GetObject(i);
+                        if (o.Data.Base.y > 0.5f) raised++;
+                        Assert.AreEqual(o.Transform.position.y, o.Material.GetMatrix(AtlasShaderIDs.Anchor).m13, 1e-6f, "object " + o.ObjectId);
+                    }
+                    Assert.AreEqual(0f, content.ShellMaterial.GetMatrix(AtlasShaderIDs.Anchor).m13, "the shell stands on the floor");
+                }
+                Assert.GreaterOrEqual(raised, 2, "the fixture has a wall-mounted object");
+                view.Upload(0, 1, Iso2.Identity, Iso2.Identity, true);
+                for (int i = 0; i < view.ObjectCount; i++)
+                    Assert.AreEqual(UnityEngine.Matrix4x4.identity, content.GetObject(i).Material.GetMatrix(AtlasShaderIDs.Anchor));
             }
         }
 

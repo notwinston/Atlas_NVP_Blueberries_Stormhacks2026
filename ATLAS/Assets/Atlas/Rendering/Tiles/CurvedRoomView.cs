@@ -14,7 +14,7 @@ namespace Atlas.Rendering
     //   kappa = 0: exactly the room (warp mode 0): floor and full walls, every object at its own transform.
     //   kappa != 0: walls sink to a 0.9 m kerb [D10] and the room floor is hidden (tile zero's own floor is drawn by the tile
     //   renderer); the kerb is anchored U^-1 F0; furniture is rigid: anchor U^-1 F0 Object(base, yaw) so each object is a rigid copy
-    //   about its base.
+    //   about its base, at the height of its base (the anchor's [1][3]).
     public sealed class CurvedRoomView : IDisposable
     {
         readonly IRoomContent room;
@@ -63,10 +63,19 @@ namespace Atlas.Rendering
                 RoomObject o = view.Data;
                 Material material = view.Material;
                 material.SetFloat(AtlasShaderIDs.WarpMode, mode);
-                Iso2 a = a0 * TileZeroPlacement.Object(new double2(o.Base.x, o.Base.z), o.Yaw, kappa, lengthScaleM);
-                material.SetMatrix(AtlasShaderIDs.Anchor, WarpAnchor.ToMatrix(a));
+                material.SetMatrix(AtlasShaderIDs.Anchor, ObjectAnchor(a0, o, kappa, lengthScaleM));
                 AtlasWarpBounds.Apply(view.Renderer);
             }
+        }
+
+        /// <summary>
+        /// The anchor uploaded for one object: shellAnchor (U^-1 F0) times its placement in tile zero (base x, z and yaw), with
+        /// the height of its base in the entry the warp adds to the height (a wall-mounted object has Base.y above 0).
+        /// </summary>
+        public static Matrix4x4 ObjectAnchor(in Iso2 shellAnchor, RoomObject o, double kappa, double lengthScaleM)
+        {
+            Iso2 a = shellAnchor * TileZeroPlacement.Object(new double2(o.Base.x, o.Base.z), o.Yaw, kappa, lengthScaleM);
+            return WarpAnchor.ToMatrix(a, o.Base.y);
         }
 
         // The walls change at once: while they sink the room content scales them through the Transform, which the warp ignores.

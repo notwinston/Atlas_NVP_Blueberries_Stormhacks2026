@@ -41,6 +41,8 @@ namespace Atlas.Spaces.CurvedWalk
         readonly List<VisibleTile> visible = new List<VisibleTile>(2048);
         LapEvent lastEvent;
         Iso2 f0 = Iso2.Identity;
+        TileId f0Tile;     // the tile f0 was last found for
+        double armedL;     // the kernel's metres per unit the walk was armed with
         // The Station's copy (ISpaceStateReader): the phone's State sets the kernel and the dial; nothing is driven here.
         bool remote;
         int remoteQ;
@@ -144,7 +146,7 @@ namespace Atlas.Spaces.CurvedWalk
             ConfigureKernel(q == 6 ? 6 : 5);
             kernel.ResetToFloorFlat(double2.zero);   // K = 0 from the first moment; Register moves the walker under the head
             pending = true; hadCurvature = false; f0Valid = false; s4Requested = false;
-            f0 = Iso2.Identity; TileZeroFound = false; LastStill = false;
+            f0 = Iso2.Identity; f0Tile = TileId.Zero; TileZeroFound = false; LastStill = false;
             LastRegistrationErrorM = 0; Reregistrations = 0; lastEvent = LapEvent.None;
             modeAtEnter = modeEntry != null ? modeEntry.Int : 0;
             Walk.Disarm();
@@ -190,7 +192,10 @@ namespace Atlas.Spaces.CurvedWalk
             double2 head = new double2(f.HeadPosition.x, f.HeadPosition.z);
             if (pending) Register(head);
             LastStill = kernel.Still;
-            if (kernel.LastStep.Crossings > 0) f0Valid = false;
+            // f0 belongs to one tile. A crossing changes it, and so does a reset from outside (Recentre, a room reset),
+            // which re-roots the walker and reports no crossing.
+            TileId tile = kernel.Pose.Tile;
+            if (kernel.LastStep.Crossings > 0 || !tile.Equals(f0Tile)) { f0Tile = tile; f0Valid = false; }
 
             Control(head);
             UpdateTileZero();
@@ -235,6 +240,9 @@ namespace Atlas.Spaces.CurvedWalk
             }
             else if (kernel.Q == 5 && (World == null || Footprint.L != LengthScale(5))) BuildWorld();
             UpdateTileZero();
+            // Every State places the kernel settled at that frame's L, so a State from inside the phone's ramp would arm
+            // the walk with a ramping L and keep it: armed again whenever L moved, the walk ends on the dial's target.
+            if (Walk.Armed && armedL != kernel.MetresPerUnit) Walk.Disarm();
             ArmAndUpdateWalk();
             lastEvent = LapEvent.None;
         }
@@ -342,6 +350,7 @@ namespace Atlas.Spaces.CurvedWalk
             {
                 double kappa = kernel.Kappa, l = kappa == 0 ? 1.0 : kernel.MetresPerUnit;
                 Walk.Arm(q, kappa, l, s, TileZeroPlacement.LapFlag(s, kappa, l));
+                armedL = kernel.MetresPerUnit;
             }
             else if (!cond && Walk.Armed) Walk.Disarm();
             if (Walk.Armed && TileZeroFound) lastEvent = Walk.Update(f0, kernel.Pose.Local, LastStill);

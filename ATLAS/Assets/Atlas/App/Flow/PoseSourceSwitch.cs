@@ -118,7 +118,7 @@ namespace Atlas.App
             if (_loop == loop) return;
             _loop = loop;
             // The replay source takes its loop flag at construction: the same walk starts again.
-            if (_replay != null) Play(new PoseLogReplaySource(_replay.Log, ReplayMode.RealTime, loop));
+            if (_replay != null) Play(ArPoseSystems.NewReplay(_replay.Log, loop));
         }
 
         bool StartReplay()
@@ -133,7 +133,7 @@ namespace Atlas.App
             PoseLogReplaySource replay;
             try
             {
-                replay = PoseLogReplaySource.FromFile(path, ReplayMode.RealTime, _loop);
+                replay = ArPoseSystems.OpenReplay(path, _loop);
             }
             catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is FormatException ||
                                       e is ArgumentException || e is NotSupportedException)

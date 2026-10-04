@@ -193,6 +193,48 @@ namespace Atlas.Spaces.CurvedWalk.Tests
             }
         }
 
+        // The phone's ramp takes four seconds and every State of it carries that frame's L. The Station's kernel is placed
+        // settled at each of them, so its lap walk is armed from inside the ramp; the flag and the corners it shows must
+        // be those of the L the dial ends on, as the phone's are, not those of the first curved State.
+        [Test]
+        public void Station_ArmsTheLapWalk_AtTheScaleTheRampEndsOn()
+        {
+            RoomModel room = Room(RoomFixtures.Sample3x3);
+            List<HeadPose> log = Still(double2.zero, 600);
+            var station = new Station(room);
+            using (var phone = new Rig(room, 5))
+            {
+                SendWorld(station, room, phone);
+                bool armedInTheRamp = false;
+                double firstL = 0;
+                for (int i = 0; i < log.Count; i++)
+                {
+                    Frame(phone, station, log[i], "frame " + i);
+                    if (phone.Kernel.Ramping && phone.Kernel.CurvatureNow != 0 && station.Entered.Core.Walk.Armed && !armedInTheRamp)
+                    {
+                        armedInTheRamp = true;
+                        firstL = station.Kernel.MetresPerUnit;
+                    }
+                }
+                double target = phone.S.LengthScale(5), l = station.Kernel.MetresPerUnit;
+                Assert.IsTrue(armedInTheRamp, "the Station arms from a State inside the ramp");
+                Assert.Greater(firstL, 2 * target, "with an L far from the target");
+                Assert.IsFalse(phone.Kernel.Ramping, "the ramp has ended");
+                Assert.IsTrue(phone.S.Walk.Armed);
+                Assert.AreEqual(target, l, 1e-6 * target, "p[0] is a float");
+
+                LapWalk mine = station.Entered.Core.Walk, theirs = phone.S.Walk;
+                Assert.IsTrue(mine.Armed);
+                AssertSame(mine.Beacon(0), TileZeroPlacement.LapFlag(room.LapSide, Curvature.Hyperbolic, l), "the flag");
+                Span<double> x = stackalloc double[9], y = stackalloc double[9];
+                for (int k = 0; k <= 5; k++)
+                {
+                    mine.Beacon(k).CopyTo(x); theirs.Beacon(k).CopyTo(y);
+                    for (int e = 0; e < 9; e++) Assert.AreEqual(y[e], x[e], 1e-4, "beacon " + k + " [" + e + "]");
+                }
+            }
+        }
+
         // The dial moves to 6 on the phone: the ramp runs down, the tiling is swapped at K = 0 and the ramp runs up again.
         // The Station follows from the States and the world event, and drops the generated world that {4,6} does not have.
         [Test]

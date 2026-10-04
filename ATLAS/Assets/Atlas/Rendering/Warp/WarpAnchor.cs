@@ -18,5 +18,14 @@ namespace Atlas.Rendering
             m[3, 3] = 1f;
             return m;
         }
+
+        // An object whose base is baseHeightM above the floor: the warp adds _Anchor[1][3] to the height (kernel.md §6.1),
+        // because in modes 1 and 2 it does not read the Transform that carries the height at kappa = 0.
+        public static Matrix4x4 ToMatrix(in Iso2 anchor, float baseHeightM)
+        {
+            Matrix4x4 m = ToMatrix(anchor);
+            m[1, 3] = baseHeightM;
+            return m;
+        }
     }
 }

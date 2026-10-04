@@ -21,5 +21,24 @@ namespace Atlas.Spaces.AlignedCells.Tests
                 if (rig.RoomView.ObjectVisible(i)) tris += rig.Content.GetObject(i).TriangleCount;
             draws *= 2; tris *= 2;
         }
+
+#if !ATLAS_HEADLESS
+        // The same frame counted from what is really switched on under the given roots (the space's and the room's):
+        // every enabled renderer of an active object, one draw per submesh, its index count; x2 eyes.
+        public static void Measure(out int draws, out long tris, params UnityEngine.Transform[] roots)
+        {
+            draws = 0; tris = 0;
+            foreach (UnityEngine.Transform root in roots)
+                foreach (var mr in root.GetComponentsInChildren<UnityEngine.MeshRenderer>(true))
+                {
+                    if (!mr.enabled || !mr.gameObject.activeInHierarchy) continue;
+                    var mf = mr.GetComponent<UnityEngine.MeshFilter>();
+                    UnityEngine.Mesh mesh = mf != null ? mf.sharedMesh : null;
+                    if (mesh == null) continue;
+                    for (int s = 0; s < mesh.subMeshCount; s++) { draws++; tris += mesh.GetIndexCount(s) / 3; }
+                }
+            draws *= 2; tris *= 2;
+        }
+#endif
     }
 }

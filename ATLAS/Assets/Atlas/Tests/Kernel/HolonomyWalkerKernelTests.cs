@@ -604,6 +604,157 @@ namespace Atlas.Kernel.Tests
             Assert.That(kernel.StepCount, Is.EqualTo(600));
         }
 
+        [TestCase(5)]
+        [TestCase(6)]
+        public void HolonomyWalker_Still_IsTheHeadsSpeedInThreeDimensions_TheRampWaitsWhileTheHeadMovesVertically(int q)
+        {
+            // Rule 4 (Master Plan section 0.5; P1-B09): the curvature never changes while the head moves faster
+            // than 0.1 m/s. The head, not the floor point under it: sitting down, standing up or bending moves
+            // the head at 0.3 to 1 m/s with x and z unchanged, as HolonomyRig judged it from the full position.
+            double l = q == 5 ? L5 : L6;
+            IDialKernel kernel = new HolonomyWalkerKernel();
+            kernel.Configure(KernelConfig.Curved(q, l));
+            var head = new double2(0.4, -0.3);
+            double height = 1.6;
+            kernel.HeadHeightMetres = height;
+            kernel.ResetToFloorFlat(head);
+            Assert.That(kernel.SetCurvatureTarget(Curvature.Hyperbolic, l), Is.True);
+            double target = -1.0 / (l * l);
+
+            // The height given before the reset is the previous one: the first step already finds the walker standing.
+            double time = 0.0;
+            const double dt = 1.0 / 60.0;
+            time += dt;
+            kernel.Step(head, true, time);
+            Assert.That(kernel.Still, Is.True, "standing at eye height straight after the registration");
+            Assert.That(kernel.CurvatureChanged, Is.True);
+            double held = kernel.CurvatureNow;
+            WalkerPose pose = kernel.Pose;
+
+            // Sitting down at 0.5 m/s for a second: x and z do not move, the head does.
+            for (int n = 0; n < 60; n++)
+            {
+                time += dt;
+                height -= 0.5 * dt;
+                kernel.HeadHeightMetres = height;
+                KernelStep step = kernel.Step(head, true, time);
+                Assert.That(step.Rejected, Is.False);
+                Assert.That(step.AppliedMetres, Is.EqualTo(double2.zero), "the height integrates nothing");
+                Assert.That(kernel.Still, Is.False, "step " + n + ": the head moves at 0.5 m/s");
+                Assert.That(kernel.CurvatureChanged, Is.False);
+                Assert.That(kernel.CurvatureNow, Is.EqualTo(held), "step " + n + ": the ramp waits");
+            }
+            // The rig orthonormalises its frame in every step, so the frame is the same to rounding, not to the bit.
+            Assert.That(kernel.Pose.Tile, Is.EqualTo(pose.Tile));
+            Assert.That(kernel.Pose.Local.M02, Is.EqualTo(pose.Local.M02).Within(1e-12));
+            Assert.That(kernel.Pose.Local.M12, Is.EqualTo(pose.Local.M12).Within(1e-12));
+            Assert.That(kernel.Pose.Local.M00, Is.EqualTo(pose.Local.M00).Within(1e-12));
+            Assert.That(kernel.Pose.Local.M10, Is.EqualTo(pose.Local.M10).Within(1e-12));
+
+            // Seated and at rest: the ramp goes on. A slow nod (0.05 m/s) is standing still.
+            for (int n = 0; n < 60; n++)
+            {
+                time += dt;
+                if (n >= 30) height += 0.05 * dt;
+                kernel.HeadHeightMetres = height;
+                kernel.Step(head, true, time);
+                Assert.That(kernel.Still, Is.True, "step " + n);
+                Assert.That(kernel.CurvatureChanged, Is.True);
+            }
+            Assert.That(kernel.CurvatureNow, Is.EqualTo(target * 61.0 / 240.0).Within(1e-9), "61 standing steps of the 240");
+
+            // 0.08 m/s along the floor is standing; with 0.08 m/s of height it is 0.113 m/s of head speed.
+            held = kernel.CurvatureNow;
+            for (int n = 0; n < 30; n++)
+            {
+                time += dt;
+                head += new double2(0.08 * dt, 0.0);
+                height += 0.08 * dt;
+                kernel.HeadHeightMetres = height;
+                kernel.Step(head, true, time);
+                Assert.That(kernel.Still, Is.False, "step " + n);
+            }
+            Assert.That(kernel.CurvatureNow, Is.EqualTo(held));
+
+            // A height that is not finite is never standing still, in its own step and in the one that leaves it.
+            kernel.HeadHeightMetres = double.NaN;
+            time += dt;
+            kernel.Step(head, true, time);
+            Assert.That(kernel.Still, Is.False);
+            kernel.HeadHeightMetres = height;
+            time += dt;
+            kernel.Step(head, true, time);
+            Assert.That(kernel.Still, Is.False);
+            time += dt;
+            kernel.Step(head, true, time);
+            Assert.That(kernel.Still, Is.True);
+            Assert.That(kernel.CurvatureNow, Is.LessThan(held));
+
+            // A recentre takes the height of now as the previous one too.
+            kernel.ResetToFloor(head);
+            time += dt;
+            kernel.Step(head, true, time);
+            Assert.That(kernel.Still, Is.True, "standing straight after a recentre");
+        }
+
+        [TestCase(3)]
+        [TestCase(4)]
+        public void HolonomyWalker_Still_IsTheHeadsSpeedInThreeDimensions_OffTheRigToo(int q)
+        {
+            // Small Planet reads Still for its dial, its radius and its lap (q = 3): the same rule as the rig's.
+            IDialKernel kernel = new HolonomyWalkerKernel();
+            kernel.Configure(q == 3 ? KernelConfig.Curved(3, 1.3) : KernelConfig.Flat(2.0));
+            var head = new double2(0.1, 0.2);
+            double height = 1.6;
+            kernel.HeadHeightMetres = height;
+            kernel.ResetToFloor(head);
+
+            double time = 0.0;
+            const double dt = 1.0 / 60.0;
+            time += dt;
+            kernel.Step(head, true, time);
+            Assert.That(kernel.Still, Is.False, "there was no step before it to time");
+            time += dt;
+            kernel.Step(head, true, time);
+            Assert.That(kernel.Still, Is.True);
+
+            WalkerPose pose = kernel.Pose;
+            for (int n = 0; n < 60; n++)
+            {
+                time += dt;
+                height -= 0.5 * dt;
+                kernel.HeadHeightMetres = height;
+                KernelStep step = kernel.Step(head, true, time);
+                Assert.That(step.Rejected, Is.False);
+                Assert.That(kernel.Still, Is.False, "step " + n + ": the head moves at 0.5 m/s");
+            }
+            KernelTestUtil.AssertBitIdentical(pose, kernel.Pose);
+
+            for (int n = 0; n < 30; n++)
+            {
+                time += dt;
+                height += 0.05 * dt;
+                kernel.HeadHeightMetres = height;
+                kernel.Step(head, true, time);
+                Assert.That(kernel.Still, Is.True, "step " + n + ": 0.05 m/s");
+            }
+
+            for (int n = 0; n < 30; n++)
+            {
+                time += dt;
+                head += new double2(0.08 * dt, 0.0);
+                height += 0.08 * dt;
+                kernel.HeadHeightMetres = height;
+                kernel.Step(head, true, time);
+                Assert.That(kernel.Still, Is.False, "step " + n + ": 0.113 m/s of head speed");
+            }
+
+            kernel.HeadHeightMetres = double.NaN;
+            time += dt;
+            kernel.Step(head, true, time);
+            Assert.That(kernel.Still, Is.False);
+        }
+
         [Test]
         public void HolonomyWalker_Sphere_Rejections()
         {

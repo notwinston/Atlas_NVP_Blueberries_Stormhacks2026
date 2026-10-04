@@ -26,8 +26,9 @@ namespace Atlas.App
         /// <summary>The signs are drawn only while the head looks down past this, and always while one is dwelt on.</summary>
         public static readonly float RevealPitch = math.radians(-10f);
 
-        // The beacon stands low and in the middle; the three signs make a row under it. The menu chip (-0.55, -0.40)
-        // and the corner chips of the spaces (+-0.55) keep the far sides.
+        // The beacon stands low and in the middle; the three signs make a row under it, all below the horizon.
+        // The menu chip (-0.55, -0.40) is below it too, in its own frame; the chips of the spaces sit level
+        // with the horizon or above it, so no heading of their frame puts one on a sign.
         static readonly float3[] s_centres =
         {
             new float3(0f, -0.35f, 1.0f),

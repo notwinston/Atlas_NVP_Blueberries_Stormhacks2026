@@ -137,9 +137,16 @@ namespace Atlas.Kernel
         double CurvatureTarget { get; }
         /// <summary>CurvatureNow differs from CurvatureTarget.</summary>
         bool Ramping { get; }
-        /// <summary>The last timed Step found the walker standing: tracking Normal, no jump, floor speed at most
-        /// 0.1 m/s. False after a Step without a time, a Reset or a Configure.</summary>
+        /// <summary>The last timed Step found the walker standing: tracking Normal, no jump, head speed at most
+        /// 0.1 m/s. The speed is the head's in three dimensions (Master Plan section 0.5 rule 4): the floor
+        /// displacement of Step and the change of HeadHeightMetres. False after a Step without a time, a Reset
+        /// or a Configure.</summary>
         bool Still { get; }
+        /// <summary>The head's height in the room frame, in metres: set by the frame loop before each Step, from
+        /// the same geometry pose as the floor point. It moves nothing; it only makes the speed that Still judges
+        /// the head's own, so sitting down or bending is not standing still. Left alone, Still is judged from the
+        /// floor speed. A value that is not finite makes the walker not still.</summary>
+        double HeadHeightMetres { get; set; }
         /// <summary>The last Step moved the curvature. The scale of every anchor changed with it.</summary>
         bool CurvatureChanged { get; }
 

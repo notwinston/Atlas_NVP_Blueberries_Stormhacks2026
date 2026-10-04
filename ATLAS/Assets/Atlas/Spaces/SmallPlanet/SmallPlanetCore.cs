@@ -196,6 +196,9 @@ namespace Atlas.Spaces.SmallPlanet
             return ev;
         }
 
+        /// <summary>The dial is this space's to turn: the app's kernel is driven and no remote state replaces it.</summary>
+        public bool Driving => kernel != null && !hasRemote;
+
         /// <summary>The host would not switch: the dial goes back to 3, and may ask again.</summary>
         public void SwitchRefused()
         {

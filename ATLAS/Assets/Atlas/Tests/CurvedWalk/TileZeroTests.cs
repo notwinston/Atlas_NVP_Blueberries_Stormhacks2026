@@ -43,45 +43,106 @@ namespace Atlas.Spaces.CurvedWalk.Tests
             }
         }
 
-        // ReturnHome_Reregisters: return-to-Home re-registers (MP §4.6). The space keeps no walker, so leaving it from deep
-        // in the curved world leaves the app's kernel for SpaceLab to put back: flat for the room, the walker on the floor
-        // point under the head, tile zero.
+        // Three sides of the lap at q = 5 with the curvature on, then a few steps into the room: the walker stands
+        // inside the real room, 0.2 m from the lap line, and in the curved world in a tile that is not the room's.
+        static readonly double2 InTheRoom = new double2(-0.8, 0.4);
+        static List<HeadPose> ThreeSidesAndIn()
+        {
+            return Concat(Prefix(new double2(-1, -1)), Lap(3, 2, new double2(-1, -1), 0.03), Line(new double2(-1, 1), InTheRoom));
+        }
+
+        static double MaxDiff(in Iso2 a, in Iso2 b)
+            => math.max(math.cmax(math.abs(a.M.c0 - b.M.c0)), math.max(math.cmax(math.abs(a.M.c1 - b.M.c1)), math.cmax(math.abs(a.M.c2 - b.M.c2))));
+
+        // ReturnHome_Reregisters: return-to-Home re-registers (MP §4.6). The return is the app's: SpaceLab.ReturnHome fades
+        // out, calls the space's Exit and puts the shared kernel back, with the real frame loop as the walker reset. After
+        // it: K = 0, tile zero, the frame an unturned translation by the head's floor point. (The room's materials and
+        // renderers after Exit are checked where there is an engine: CurvedRoomViewTests.)
         [Test]
         public void ReturnHome_Reregisters()
         {
             var room = Room(RoomFixtures.Sample3x3);
-            using (var h = new Rig(room, 5))
+            var app = new AppRig(room, 5);
+            Assert.IsTrue(app.Lab.RequestSwitch(SpaceId.CurvedWalk));
+            var log = ThreeSidesAndIn();
+            app.Run(log);
+            Assert.AreEqual(SpaceId.CurvedWalk, app.Lab.Current);
+            Assert.AreEqual(SpaceHostState.Running, app.Lab.State);
+            CurvedWalkCore s2 = app.S;
+            Assert.AreSame(app.Kernel, s2.Kernel);
+            Assert.Less(app.Kernel.CurvatureNow, 0.0, "curved before Return Home");
+            Assert.AreNotEqual(TileId.Zero, app.Kernel.Pose.Tile, "the walker stands in the room, in a tile that is not the room's");
+
+            Assert.IsTrue(app.Lab.ReturnHome());
+            app.StandUntil(() => app.Lab.HasSpace && app.Lab.Current == SpaceId.Home);
+            Assert.AreEqual(SpaceId.Home, app.Lab.Current);
+            Assert.IsNull(s2.Kernel, "Curved Walk was left");
+            Assert.IsFalse(s2.Walk.Armed);
+            Assert.AreEqual(0, s2.Reregistrations, "Return Home is not a landing snap");
+
+            float3 head = app.Head.Position;
+            for (int frame = 0; frame < 2; frame++)   // as SpaceLab left it, and after the next frame
             {
-                var log = Concat(Prefix(new double2(-1, -1)), Lap(3, 2, new double2(-1, -1), 0.03));
-                h.Run(log);
-                Assert.Less(h.Kernel.CurvatureNow, 0.0, "curved before Return Home");
-                Assert.AreNotEqual(TileId.Zero, h.Kernel.Pose.Tile, "three sides of the lap end outside the room's tile");
-                h.S.Exit();
-                Assert.IsNull(h.S.Kernel);
-                Assert.IsFalse(h.S.Walk.Armed);
-
-                // what SpaceLab does after Exit while the kernel is not flat (App/Spaces/SpaceLab.cs)
-                var last = log[log.Count - 1];
-                h.Kernel.Configure(KernelConfig.Flat(room.LapSide));
-                h.Kernel.ResetToFloor(new double2(last.Position.x, last.Position.z));
-                Assert.AreEqual(4, h.Kernel.Q);
-                Assert.AreEqual(0.0, h.Kernel.CurvatureNow); Assert.AreEqual(0.0, h.Kernel.CurvatureTarget);
-                Assert.AreEqual(Curvature.Flat, h.Kernel.Kappa);
-                Assert.IsNull(h.Kernel.Rig, "no rig is left behind");
-                Iso2 u = h.Kernel.Pose.Local;
-                // a flat chart again: an unturned translation that lies within one tile of its centre
-                Assert.LessOrEqual(math.abs(u.M.c2.x), room.LapSide); Assert.LessOrEqual(math.abs(u.M.c2.y), room.LapSide);
-                Assert.AreEqual(1.0, u.M.c0.x, 1e-9); Assert.AreEqual(0.0, u.M.c0.y, 1e-9);
-
-                // and S2 entered again starts at the room's registration: tile zero, K = 0, the frame a translation by the head
-                h.S.Enter(h.Kernel);
-                h.S.Register(new double2(last.Position.x, last.Position.z));
-                WalkerPose pose = h.Kernel.Pose;
-                Assert.AreEqual(TileId.Zero, pose.Tile);
-                Assert.AreEqual(0.0, h.Kernel.CurvatureNow);
-                Assert.AreEqual(last.Position.x, pose.Local.M.c2.x, 1e-6); Assert.AreEqual(last.Position.z, pose.Local.M.c2.y, 1e-6);
-                Assert.AreEqual(0, h.S.Reregistrations, "entering is not a landing snap");
+                Assert.AreEqual(4, app.Kernel.Q);
+                Assert.AreEqual(0.0, app.Kernel.CurvatureNow); Assert.AreEqual(0.0, app.Kernel.CurvatureTarget);
+                Assert.AreEqual(Curvature.Flat, app.Kernel.Kappa);
+                Assert.IsNull(app.Kernel.Rig, "no rig is left behind");
+                WalkerPose home = app.Kernel.Pose;
+                Assert.AreEqual(TileId.Zero, home.Tile);
+                Assert.AreEqual(head.x, home.Local.M.c2.x, 1e-6); Assert.AreEqual(head.z, home.Local.M.c2.y, 1e-6);
+                Assert.AreEqual(1.0, home.Local.M.c0.x, 1e-6); Assert.AreEqual(0.0, home.Local.M.c0.y, 1e-6);
+                app.Stand();
             }
+
+            // and S2 entered again starts at the room's registration: tile zero, K = 0, the frame a translation by the head
+            app.StandUntil(() => app.Lab.State == SpaceHostState.Running);
+            Assert.IsTrue(app.Lab.RequestSwitch(SpaceId.CurvedWalk));
+            app.StandUntil(() => app.Lab.HasSpace && app.Lab.Current == SpaceId.CurvedWalk);
+            Assert.AreNotSame(s2, app.S);
+            WalkerPose pose = app.Kernel.Pose;
+            Assert.AreEqual(5, app.Kernel.Q);
+            Assert.AreEqual(TileId.Zero, pose.Tile);
+            Assert.AreEqual(0.0, app.Kernel.CurvatureNow);
+            Assert.AreEqual(head.x, pose.Local.M.c2.x, 1e-6); Assert.AreEqual(head.z, pose.Local.M.c2.y, 1e-6);
+            Assert.AreEqual(0, app.S.Reregistrations, "entering is not a landing snap");
+        }
+
+        // Recentre (CommandRouter.Recentre, and the room reset the frame loop latches) reaches the kernel through
+        // FrameLoopCore.ResetWalkerToFloor and tells the space nothing: the walker is in tile zero again with no edge
+        // crossed. The room and the lap markers are drawn from the frame of tile zero in the walker's tile, so that
+        // frame must follow in the same frame.
+        [Test]
+        public void Recentre_InAnotherTile_DrawsTheRoomFromTheNewTile()
+        {
+            var app = new AppRig(Room(RoomFixtures.Sample3x3), 5);
+            Assert.IsTrue(app.Lab.RequestSwitch(SpaceId.CurvedWalk));
+            app.Run(ThreeSidesAndIn());
+            CurvedWalkCore s2 = app.S;
+            Assert.Less(app.Kernel.CurvatureNow, 0.0);
+            Assert.AreNotEqual(TileId.Zero, app.Kernel.Pose.Tile);
+            Assert.IsTrue(s2.TileZeroFound);
+            var identity = new Iso2(double3x3.identity, -1);
+            Assert.Greater(MaxDiff(s2.TileZeroInCurrent, identity), 0.1, "tile zero is seen from another tile");
+
+            app.Loop.ResetWalkerToFloor();
+            Assert.AreEqual(TileId.Zero, app.Kernel.Pose.Tile, "the head is inside the room: tile zero");
+            app.Stand();
+            Assert.AreEqual(TileId.Zero, app.Kernel.Pose.Tile);
+            Assert.Less(app.Kernel.CurvatureNow, 0.0, "a recentre keeps the curvature");
+            Assert.IsTrue(s2.TileZeroFound);
+            Assert.Less(MaxDiff(s2.TileZeroInCurrent, identity), 1e-12, "tile zero seen from tile zero is the identity");
+
+            // And from wherever the walker goes next, the frame is the one of the tile the kernel says.
+            app.Run(Lap(2, 2, InTheRoom, 0.0, 0.7, 30, app.Head.Time + Dt));
+            WalkerPose pose = app.Kernel.Pose;
+            var seen = new List<VisibleTile>();
+            app.Kernel.Graph.VisibleSet(pose.Tile, 3.55 + s2.RoomRadiusM / app.Kernel.MetresPerUnit, seen);
+            Iso2 expected = identity;
+            bool found = false;
+            foreach (var t in seen) if (t.Id.Equals(TileId.Zero)) { expected = t.F; found = true; }
+            Assert.IsTrue(found);
+            Assert.IsTrue(s2.TileZeroFound);
+            Assert.Less(MaxDiff(s2.TileZeroInCurrent, pose.Tile.Equals(TileId.Zero) ? identity : expected), 1e-9);
         }
 
         // LapLine_PostDistance: "the lap line starts 0.17 m from a corner post of tile zero (at L = 1.88 m)" (MP A.4: 0.0920553 L at loop-fit L)

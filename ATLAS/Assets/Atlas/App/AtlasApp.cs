@@ -54,7 +54,15 @@ namespace Atlas.App
                 Camera camera = cameraObject.AddComponent<Camera>();
                 camera.nearClipPlane = StereoRig.NearPlane;
                 camera.farClipPlane = StereoRig.FarPlane;
+                // The head is the app's one listener: the Bump Guard cue is placed in space around it. A scene
+                // that has no origin may still bring a listener of its own (the Editor's default Main Camera);
+                // Unity allows one, so that one is switched off.
                 cameraObject.AddComponent<AudioListener>();
+                for (int i = 0; i < roots.Count; i++)
+                {
+                    AudioListener[] others = roots[i].GetComponentsInChildren<AudioListener>(true);
+                    for (int k = 0; k < others.Length; k++) others[k].enabled = false;
+                }
                 scene.Origin = originObject.AddComponent<XROrigin>();
                 scene.Origin.CameraFloorOffsetObject = offset;
                 scene.Origin.Camera = camera;

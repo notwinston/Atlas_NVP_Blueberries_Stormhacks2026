@@ -71,6 +71,11 @@ namespace Atlas.Telemetry
         bool _disagrees, _worldRefused;
         bool _hasOutline;
         bool _wantDirty;
+        // A Welcome named a new hash and the world event that tells how it was made has not come yet. The Hub
+        // flushes the Welcome at once; the phone's event leaves a frame later. For DisagreeSeconds a hash that
+        // no space matches is not held against the room.
+        bool _pendingFresh, _pending;
+        double _pendingSince = double.NegativeInfinity, _now;
 
         // What is held here.
         RoomModel _room;
@@ -169,8 +174,19 @@ namespace Atlas.Telemetry
             // A Welcome sent before the phone arrived names nothing; it does not unsay what a world event said.
             if (string.IsNullOrEmpty(welcome.RoomId) && string.IsNullOrEmpty(welcome.WorldHash)) return;
             // A Welcome names the hash alone: what a world event said of it stands only while the hash is the same.
-            if (!string.Equals(welcome.WorldHash ?? string.Empty, _wantHash, StringComparison.Ordinal)) _wantWorld = false;
-            Want(welcome.RoomId ?? string.Empty, welcome.WorldHash ?? string.Empty, null, -1);
+            string hash = welcome.WorldHash ?? string.Empty;
+            if (!string.Equals(hash, _wantHash, StringComparison.Ordinal))
+            {
+                _wantWorld = false;
+                _pendingFresh = true;
+                Want(welcome.RoomId ?? string.Empty, hash, null, -1);
+            }
+            else
+            {
+                // Sent again for the same world (another session id or Forge): the event that told the space and the
+                // geometry of this hash stands, and no new event will come to tell it again.
+                Want(welcome.RoomId ?? string.Empty, hash, _wantGeometry, _wantSpace);
+            }
         }
 
         /// <summary>A relayed State: the newest replaces the one held. No interpolation, no prediction.</summary>
@@ -226,6 +242,8 @@ namespace Atlas.Telemetry
             Want(room ?? _wantRoom, data.GetString("worldHash", string.Empty), data.GetString("geomHash", null), data.GetInt("space", -1));
             // A curved space hashes with its own tiling, generator seed and length scale (section 2.5). They are the
             // phone's to choose and are taken as told; the room they are hashed with stays the one held here.
+            _pendingFresh = false;
+            _pending = false;
             _wantWorld = data.Has("q") && data.Has("seed") && data.Has("genVer") && data.Has("lMm");
             if (_wantWorld)
             {
@@ -311,6 +329,19 @@ namespace Atlas.Telemetry
 
         void StepRoom(double now)
         {
+            _now = now;
+            if (_pendingFresh)
+            {
+                _pendingFresh = false;
+                _pending = true;
+                _pendingSince = now;
+            }
+            // The event did not come: the hash is held against the room as it stands.
+            if (_pending && now - _pendingSince >= DisagreeSeconds)
+            {
+                _pending = false;
+                _wantDirty = true;
+            }
             bool haveLead = !string.IsNullOrEmpty(_wantRoom) || _hasOutline;
 
             // A held room is checked again whenever the phone says something new about its world.
@@ -392,7 +423,9 @@ namespace Atlas.Telemetry
                 // A Welcome names the hash but not the space it was made for: it must be one of them.
                 bool any = false;
                 for (int s = 0; s < SpaceIds.Count && !any; s++) any = HashIs(s, q, lMm, seed, genVer);
-                if (!any) return false;
+                // The phone's world event is a moment behind its Welcome: the geometry and the outline have held, so
+                // the room stays and the event that follows is checked in full.
+                if (!any) return _pending && !_wantWorld && _now - _pendingSince < DisagreeSeconds;
             }
             WorldVerified = true;
             return true;

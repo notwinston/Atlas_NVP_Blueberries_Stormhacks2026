@@ -152,6 +152,99 @@ namespace Atlas.App.Tests
             Assert.That(rig.Sink.Last.P0, Is.EqualTo((float)l5), "State.p[0] is L");
         }
 
+        static Rig CurvedRigMidRamp(double l5)
+        {
+            var rig = new Rig(true);
+            IDialKernel kernel = rig.Kernel;
+            kernel.Configure(KernelConfig.Curved(5, l5));
+            rig.Frame();
+            rig.Loop.ResetWalkerToFloor();
+            kernel.ResetToFloorFlat(double2.zero);
+            Assert.That(kernel.SetCurvatureTarget(Curvature.Hyperbolic, l5), Is.True);
+            return rig;
+        }
+
+        [Test]
+        public void Kernel_Curved_StillIsTheHeadsSpeed_TheRampWaitsWhileTheWalkerSitsDown()
+        {
+            // Rule 4: the curvature never changes while the head moves faster than 0.1 m/s. Step 4 hands the
+            // kernel the floor point; the head's height has to reach it too, or sitting down, standing up and
+            // bending (x and z unchanged) read as standing still.
+            const double l5 = 2.0 / 1.0612750619050357;
+            Rig rig = CurvedRigMidRamp(l5);
+            IDialKernel kernel = rig.Kernel;
+            double target = -1.0 / (l5 * l5);
+
+            for (int i = 0; i < 60; i++)
+            {
+                rig.Frame();
+                Assert.That(kernel.Still, Is.True, "frame " + i + ": standing at eye height");
+            }
+            Assert.That(kernel.CurvatureNow, Is.EqualTo(0.25 * target).Within(1e-6), "one of the four seconds");
+
+            double held = kernel.CurvatureNow;
+            float y = 1.6f;
+            for (int i = 0; i < 60; i++)
+            {
+                y -= 0.5f * Dt;     // sitting down at 0.5 m/s
+                rig.Pose.Position = new float3(0f, y, 0f);
+                rig.Frame();
+                Assert.That(rig.Loop.Current.Kernel.Rejected, Is.False);
+                Assert.That(kernel.Still, Is.False, "frame " + i + ": the head moves at 0.5 m/s");
+                Assert.That(kernel.CurvatureNow, Is.EqualTo(held), "frame " + i + ": no ramp while the head moves");
+            }
+
+            for (int i = 0; i < 60; i++)
+            {
+                rig.Frame();
+                Assert.That(kernel.Still, Is.True, "frame " + i + ": seated and at rest");
+            }
+            Assert.That(kernel.CurvatureNow, Is.EqualTo(0.5 * target).Within(1e-6));
+
+            // A recentre takes the head's height as well as its floor point: the next frame is standing.
+            rig.Loop.ResetWalkerToFloor();
+            rig.Frame();
+            Assert.That(kernel.Still, Is.True);
+        }
+
+        [Test]
+        public void Kernel_Curved_ALongFrame_AdvancesTheRampByOneClampedFrame()
+        {
+            // The ramp takes four seconds of standing (Master Plan section 10.1.4). A hitch or a paused Editor
+            // gives one frame of a second or more with the head where it was: the ramp moves by the clamped
+            // frame time, as everything else in that frame does, and does not jump.
+            const double l5 = 2.0 / 1.0612750619050357;
+            Rig rig = CurvedRigMidRamp(l5);
+            IDialKernel kernel = rig.Kernel;
+            double target = -1.0 / (l5 * l5);
+
+            for (int i = 0; i < 60; i++) rig.Frame();
+            double before = kernel.CurvatureNow;
+            Assert.That(before, Is.EqualTo(0.25 * target).Within(1e-6));
+
+            rig.Time += 2.0;
+            rig.Loop.RunUpdate(rig.Time, 2f);
+            rig.Loop.RunState();
+            rig.Loop.RunAfterFrame();
+            Assert.That(rig.Loop.Current.Time, Is.EqualTo(rig.Time), "the frame's own time is the app clock");
+            Assert.That(rig.Loop.Current.DeltaTime, Is.EqualTo(FrameLoopCore.MaxDeltaTime));
+            Assert.That(kernel.Still, Is.True);
+            Assert.That(kernel.CurvatureNow - before, Is.EqualTo(target * FrameLoopCore.MaxDeltaTime / 4.0).Within(1e-9),
+                "two seconds in one frame move the ramp by 0.1 s of it, not by half its range");
+
+            // A pause as long as the whole ramp does not finish it either, and ordinary frames go on as before.
+            before = kernel.CurvatureNow;
+            rig.Time += 10.0;
+            rig.Loop.RunUpdate(rig.Time, 10f);
+            rig.Loop.RunState();
+            rig.Loop.RunAfterFrame();
+            Assert.That(kernel.Ramping, Is.True);
+            Assert.That(kernel.CurvatureNow - before, Is.EqualTo(target * FrameLoopCore.MaxDeltaTime / 4.0).Within(1e-9));
+            before = kernel.CurvatureNow;
+            rig.Frame();
+            Assert.That(kernel.CurvatureNow - before, Is.EqualTo(target * Dt / 4.0).Within(1e-9));
+        }
+
         [Test]
         public void State_CurvedKernel_TileWordsAndRowMajorFrame()
         {

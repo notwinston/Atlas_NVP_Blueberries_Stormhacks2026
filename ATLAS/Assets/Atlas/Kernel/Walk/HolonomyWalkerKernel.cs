@@ -34,6 +34,7 @@ namespace Atlas.Kernel
         private long _frame;
         private double _time;
         private double2 _previous;
+        private double _previousHeight; // HeadHeightMetres of the last Step, for the q = 3 and 4 stillness
         private bool _hasPrevious;
         private bool _candidatesStale;
         private bool _hasStepped;       // a Step since the last placement: the next one has a displacement and a duration
@@ -92,6 +93,7 @@ namespace Atlas.Kernel
         public double CurvatureTarget { get { return _rig != null ? _rig.TargetCurvature : CurvatureNow; } }
         public bool Ramping { get { return _rig != null && _rig.Curvature != _rig.TargetCurvature; } }
         public bool Still { get { return _still; } }
+        public double HeadHeightMetres { get; set; }
         public bool CurvatureChanged { get { return _curvatureChanged; } }
 
         public double CullRho
@@ -299,9 +301,12 @@ namespace Atlas.Kernel
                     if (result.Crossings > 0 || _candidatesStale) RebuildCandidates();
                     _lastStep = result;
                 }
-                // Standing, as the rig judges it: a step that was integrated, slower than the still speed.
+                // Standing, as the rig judges it: a step that was integrated, the head (in three dimensions)
+                // slower than the still speed.
+                double rise = HeadHeightMetres - _previousHeight;
+                _previousHeight = HeadHeightMetres;
                 _still = timed && _hasStepped && trackingNormal && !result.Rejected && dt > 0.0
-                    && math.length(result.AppliedMetres) / dt <= HolonomyRig.StillSpeed;
+                    && math.length(new double3(result.AppliedMetres.x, rise, result.AppliedMetres.y)) / dt <= HolonomyRig.StillSpeed;
                 _hasStepped = true;
                 return result;
             }
@@ -320,8 +325,9 @@ namespace Atlas.Kernel
                 _previous = headFloorMetres;
                 _hasPrevious = true;
                 result.Rejected = !trackingNormal || math.length(d) > HolonomyRig.JumpLimit;
+                // The height moves nothing (the rig integrates x and z only): it makes the rig's speed the head's.
                 r = _rig.Step(_frame, new HeadSample(_frame, timeSeconds,
-                    new double3(headFloorMetres.x, 0.0, headFloorMetres.y), trackingNormal));
+                    new double3(headFloorMetres.x, HeadHeightMetres, headFloorMetres.y), trackingNormal));
             }
 
             result.Crossings = r.Crossings;
@@ -392,7 +398,7 @@ namespace Atlas.Kernel
         private void SetRigPrevious(double2 floorMetres)
         {
             _frame++;
-            _rig.Step(_frame, new HeadSample(_frame, _time, new double3(floorMetres.x, 0.0, floorMetres.y), true));
+            _rig.Step(_frame, new HeadSample(_frame, _time, new double3(floorMetres.x, HeadHeightMetres, floorMetres.y), true));
             _previous = floorMetres;
             _hasPrevious = true;
         }

@@ -53,7 +53,8 @@ namespace Atlas.Spaces.AlignedCells.Tests
             public UnityEngine.Transform Transform => null;
             public UnityEngine.Renderer Renderer => null;
             public UnityEngine.Material Material => null;
-            public int TriangleCount => Object.TriTarget;
+            // The real room content's own rule: 5,000 for a stand-in, the box for a placeholder, the triangle target for a mesh.
+            public int TriangleCount => RoomObjectMeshes.Triangles(Object);
         }
 
         public readonly List<string> Calls = new List<string>();

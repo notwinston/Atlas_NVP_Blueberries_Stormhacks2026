@@ -10,8 +10,10 @@ namespace Atlas.Spaces.CurvedWalk
         /// <summary>Chip centres in the frame: x right, y up from the eyes, z ahead. Metres.</summary>
         public static readonly float3 DialLeft = new float3(-0.55f, 0.05f, 1.0f);
         public static readonly float3 DialRight = new float3(0.55f, 0.05f, 1.0f);
-        /// <summary>Mode 1 to Mode 2: down and to the right, mirroring the menu chip.</summary>
-        public static readonly float3 Mode = new float3(0.55f, -0.40f, 1.0f);
+        /// <summary>Mode 1 to Mode 2: up and to the right, above the dial's right detent. Not below the horizon: the
+        /// SpaceLab signs and the menu chip stand there in heading frames of their own, which turn against this one, so
+        /// a chip at their elevation ends on one ray with a sign.</summary>
+        public static readonly float3 Mode = new float3(0.55f, 0.30f, 1.0f);
         public const float Radius = 0.06f;
         /// <summary>The frame turns to the head's heading once they differ by more than this. Radians. Wider than the
         /// 29 degrees at which the dial chips sit, so looking at a chip never moves it.</summary>

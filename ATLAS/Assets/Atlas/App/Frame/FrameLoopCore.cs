@@ -61,6 +61,7 @@ namespace Atlas.App
         readonly List<IUploadStep> _upload = new List<IUploadStep>(8);
         readonly List<IAfterFrameStep> _after = new List<IAfterFrameStep>(8);
         readonly IWalkerKernel _kernel;
+        readonly IDialKernel _dial;     // the same object when it can tell standing from walking; else null
 
         ISafetyStep _guard;
         IStateWriter _guardState;
@@ -72,6 +73,10 @@ namespace Atlas.App
         int _nextFrameIndex;
         float2 _previousFloor;
         bool _havePreviousFloor;
+        // The kernel's clock is the app's less the time by which frames ran over MaxDeltaTime: a curvature ramp
+        // advances by the time between two steps, and one long frame (a hitch, a paused Editor) must not jump it.
+        double _previousTime, _kernelTimeHeld;
+        bool _havePreviousTime;
         bool _roomResetLatched;
         bool _statePending;
         bool _afterPending;
@@ -83,6 +88,7 @@ namespace Atlas.App
         {
             if (kernel == null) throw new ArgumentNullException(nameof(kernel));
             _kernel = kernel;
+            _dial = kernel as IDialKernel;
             _frame.RawHeadRotation = quaternion.identity;
             _frame.HeadRotation = quaternion.identity;
             _frame.Tracking = TrackingState.Normal;
@@ -226,6 +232,9 @@ namespace Atlas.App
             _frame.FrameIndex = _nextFrameIndex++;
             _frame.Time = time;
             _frame.DeltaTime = math.clamp(deltaTime, MinDeltaTime, MaxDeltaTime);
+            if (_havePreviousTime && time - _previousTime > MaxDeltaTime) _kernelTimeHeld += time - _previousTime - MaxDeltaTime;
+            _previousTime = time;
+            _havePreviousTime = true;
             IQualityState quality = Quality;
             _frame.Tier = quality != null ? quality.Tier : QualityTier.Nominal;
 
@@ -284,6 +293,10 @@ namespace Atlas.App
                 _havePreviousFloor = true;
             }
 
+            // "Still" is the head's speed, not the floor point's (Master Plan section 0.5, rule 4): the kernel
+            // gets the height too, before a reset or the step can read it.
+            if (_dial != null) _dial.HeadHeightMetres = _frame.HeadPosition.y;
+
             // A room became active: this is the first frame whose head is in the room frame, so the walker is
             // placed now, before the kernel sees the change of frame as a step.
             if (_roomResetLatched)
@@ -298,9 +311,10 @@ namespace Atlas.App
             }
 
             // 4  Kernel: exactly once per frame, with the head's floor point (the kernel forms the step itself)
-            //    and the frame's time, by which a curved kernel tells standing from walking for its ramp.
+            //    and the frame's time, by which a curved kernel tells standing from walking for its ramp. That
+            //    time advances by MaxDeltaTime at most per frame, as the frame time does.
             _frame.Kernel = _kernel.Step(new double2(_frame.HeadPosition.x, _frame.HeadPosition.z),
-                _frame.Tracking == TrackingState.Normal, _frame.Time);
+                _frame.Tracking == TrackingState.Normal, _frame.Time - _kernelTimeHeld);
             _frame.Walker = _kernel.Pose;
 
             // 5  Space module.

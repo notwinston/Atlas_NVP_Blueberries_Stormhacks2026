@@ -251,6 +251,88 @@ namespace Atlas.App.Tests
             Assert.That(w.EntrySpace, Is.EqualTo(SpaceId.Home), "an unknown code is ignored");
         }
 
+        // A 60 Hz log of a straight walk at 0.7 m/s, three metres long.
+        static PoseLog WalkAt07()
+        {
+            const int count = 258;
+            var log = new PoseLog { Frame = PoseFrameKind.Room, Samples = new HeadPose[count] };
+            for (int i = 0; i < count; i++)
+                log.Samples[i] = new HeadPose(i / 60.0, new float3((float)(-1.5 + 0.7 * i / 60.0), 1.6f, 0.25f), quaternion.identity, TrackingState.Normal);
+            return log;
+        }
+
+        [TestCase(0.5f, 60.0)]      // replay.speed 0.5: every second frame falls between two samples
+        [TestCase(1f, 144.0)]       // an Editor above the log's 60 Hz
+        [TestCase(0.25f, 90.0)]
+        [TestCase(1f, 60.0)]
+        public void Replay_AsTheAppPlaysIt_AWalkNeverReadsAsStanding(float speed, double frameRate)
+        {
+            // Rule 4: curvature changes only while the walker stands. The app's replay is by the clock; without
+            // interpolation a frame between two samples repeats the last one, the curved kernel sees a head
+            // that did not move, and the ramp runs and the dial unlocks in the middle of a walk.
+            PoseLogReplaySource replay = Atlas.Scan.ArPoseSystems.NewReplay(WalkAt07(), false);
+            Assert.That(replay.Mode, Is.EqualTo(ReplayMode.RealTime));
+            Assert.That(replay.Interpolate, Is.True);
+            var clock = new ReplayClock(replay) { Speed = speed };
+
+            const double l5 = 2.0 / 1.0612750619050357;
+            IDialKernel kernel = new HolonomyWalkerKernel();
+            kernel.Configure(KernelConfig.Curved(5, l5));
+
+            double dt = 1.0 / frameRate;
+            double time = 100.0;
+            HeadPose pose;
+            Assert.That(clock.TryRead(time, (float)dt, out pose), Is.True);
+            kernel.HeadHeightMetres = pose.Position.y;
+            // As in the app: the frame's step 4, then the space registers the walker under the head.
+            kernel.Step(new double2(pose.Position.x, pose.Position.z), true, time);
+            kernel.ResetToFloorFlat(new double2(pose.Position.x, pose.Position.z));
+            Assert.That(kernel.SetCurvatureTarget(Curvature.Hyperbolic, l5), Is.True);
+
+            // Four seconds of the app's time, all of it inside the walk: long enough for the whole ramp.
+            int frames = (int)(4.0 * frameRate);
+            for (int i = 1; i <= frames; i++)
+            {
+                time = 100.0 + i * dt;
+                Assert.That(clock.TryRead(time, (float)dt, out pose), Is.True, "frame " + i);
+                kernel.HeadHeightMetres = pose.Position.y;
+                KernelStep step = kernel.Step(new double2(pose.Position.x, pose.Position.z), pose.Tracking == TrackingState.Normal, time);
+                Assert.That(step.Rejected, Is.False, "frame " + i);
+                Assert.That(kernel.Still, Is.False, "frame " + i + ": the walk goes at " + (0.7f * speed) + " m/s");
+                Assert.That(kernel.CurvatureNow, Is.EqualTo(0.0), "frame " + i + ": no ramp in a walk");
+            }
+            Assert.That(replay.Ended, Is.False);
+            Assert.That(pose.Position.x, Is.EqualTo(-1.5f + 0.7f * speed * 4f).Within(0.02f), "the walk was played at its speed");
+        }
+
+        [Test]
+        public void Replay_OfAFile_IsByTheClockAndInterpolated()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "atlas_replay_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                string path = Path.Combine(root, "walk_a.poselog");
+                using (var writer = new StreamWriter(path)) PoseLog.Write(writer, WalkAt07());
+                PoseLogReplaySource replay = Atlas.Scan.ArPoseSystems.OpenReplay(path, true);
+                Assert.That(replay.Mode, Is.EqualTo(ReplayMode.RealTime));
+                Assert.That(replay.Loop, Is.True);
+                Assert.That(replay.Interpolate, Is.True);
+                Assert.That(replay.Log.Samples.Length, Is.EqualTo(258));
+
+                // Between two samples the head is where the walk had it.
+                HeadPose pose;
+                Assert.That(replay.TryRead(10.0, 0f, out pose), Is.True);
+                Assert.That(replay.TryRead(10.0 + 1.5 / 60.0, 0.025f, out pose), Is.True);
+                Assert.That(pose.Position.x, Is.EqualTo(-1.5f + 0.7f * 1.5f / 60f).Within(1e-4f));
+                Assert.That(Atlas.Scan.ArPoseSystems.OpenReplay(path, false).Loop, Is.False);
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+
         [Test]
         public void ReplayClock_PlaysARecordedWalkAtAnotherSpeed()
         {

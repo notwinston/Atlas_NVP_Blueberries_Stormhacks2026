@@ -130,6 +130,49 @@ namespace Atlas.Tiles.Tests
             AssertFog(7f, 8f);
         }
 
+        // A space's Exit releases the renderer and destroys its object; in play the destroy is deferred to the end of the frame,
+        // after the next space has entered and set its own fog (the Station switches in one call). The late OnDisable and
+        // OnDestroy must not put the old fog back. Here the destroy comes after the next fog is set, as it does in play.
+        [Test]
+        public void Fog_RestoredOnce_NotAgainAfterRelease()
+        {
+            r.Configure(graph, 1.885, pool);
+            var fc = Frame(1, new float3(0f, 1.6f, 0f), quaternion.identity);
+            r.KernelStep(new WalkerPose { Tile = TileId.Zero, Local = Iso2.Identity }, fc); r.Upload(fc);
+            AssertFog(3.77f, 5.655f);
+            r.Release();
+            AssertFog(7f, 8f);
+            AtlasLook.SetFog(2.5f, 4f);                    // the next space's Enter
+            UnityEngine.Object.DestroyImmediate(go);       // OnDisable, then OnDestroy -> Release
+            go = null;
+            AssertFog(2.5f, 4f);
+        }
+
+        // Hidden at K = 0 and shown again: each show captures the fog outside, each hide restores it, also after a Release.
+        [Test]
+        public void Fog_CapturedAgainOnEnable_AndOnConfigure()
+        {
+            r.Configure(graph, 1.885, pool);
+            var fc = Frame(1, new float3(0f, 1.6f, 0f), quaternion.identity);
+            var pose = new WalkerPose { Tile = TileId.Zero, Local = Iso2.Identity };
+            r.KernelStep(pose, fc); r.Upload(fc);
+            go.SetActive(false);
+            AssertFog(7f, 8f);
+            AtlasLook.SetFog(9f, 12f);
+            go.SetActive(true);
+            r.KernelStep(pose, fc); r.Upload(fc);
+            AssertFog(3.77f, 5.655f);
+            go.SetActive(false);
+            AssertFog(9f, 12f);
+            go.SetActive(true);
+            r.Release();
+            AtlasLook.SetFog(5f, 6f);
+            r.Configure(graph, 1.885, pool);
+            r.KernelStep(pose, fc); r.Upload(fc);
+            r.Release();
+            AssertFog(5f, 6f);
+        }
+
         // The fog as the look holds it and as the shader reads it: _AtlasFogParams = (start, 1 / (end - start)), metres.
         static void AssertFog(float start, float end)
         {

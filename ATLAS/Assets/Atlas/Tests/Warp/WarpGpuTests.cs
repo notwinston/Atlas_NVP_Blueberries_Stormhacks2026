@@ -14,6 +14,7 @@ namespace Atlas.Warp.Tests
     public class WarpGpuTests
     {
         const string Path = "Assets/Atlas/Tests/Warp/AtlasWarpProbe.compute";
+        const float BaseHeight = 0.75f;   // the anchor's [1][3]: a room object's base above the floor (kernel.md §6.1)
 
         // §9.5.6 P1-B03 acceptance: GPU positions match the kernel CPU reference to 1 mm for rho <= 3 (true GPU)
         [Test]
@@ -46,7 +47,7 @@ namespace Atlas.Warp.Tests
                             var pts = WarpSamples.Points(kappa, L, rng);
                             for (int i = 0; i < 64; i++) data[i] = new Vector4(pts[i].x, pts[i].y, pts[i].z, 0);
                             inBuf.SetData(data);
-                            cs.SetMatrix(AtlasShaderIDs.Anchor, WarpAnchor.ToMatrix(a));
+                            cs.SetMatrix(AtlasShaderIDs.Anchor, WarpAnchor.ToMatrix(a, BaseHeight));
                             cs.SetFloat(AtlasShaderIDs.WarpMode, kappa < 0 ? 1f : 2f);
                             cs.SetFloat(AtlasShaderIDs.HypL, (float)L);
                             cs.SetMatrix("_ProbeObjectToWorld", Matrix4x4.identity);
@@ -58,12 +59,12 @@ namespace Atlas.Warp.Tests
                                 outBuf.GetData(o);
                                 for (int i = 0; i < 64; i++)
                                 {
-                                    var rf = AtlasWarpReference.Warp(pts[i], a, kappa, L, head);
+                                    var rf = AtlasWarpReference.Warp(pts[i], a, kappa, L, head) + new double3(0, BaseHeight, 0);
                                     double rho = math.length(rf.xz - (double2)head.xz) / L;
                                     if (rho > 3.0) continue;
                                     double err = WarpTests.Cmax(new double3(o[i].x, o[i].y, o[i].z) - rf);
                                     accepted++; maxRho = Math.Max(maxRho, rho); maxErr = Math.Max(maxErr, err);
-                                    Assert.AreEqual((double)pts[i].y, (double)o[i].y);
+                                    Assert.AreEqual((double)(float)(pts[i].y + BaseHeight), (double)o[i].y, "y = positionOS.y + _Anchor[1][3]");
                                 }
                             }
                         }

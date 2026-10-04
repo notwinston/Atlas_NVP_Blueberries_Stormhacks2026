@@ -8,6 +8,7 @@
         "Atlas.Rendering",
         "Atlas.Input",
         "Atlas.Telemetry",
+        "Atlas.App",
         "Atlas.Spaces.CurvedWalk",
         "Unity.Mathematics",
         "UnityEngine.TestRunner",

@@ -154,6 +154,8 @@ namespace Atlas.Rendering
         {
             if (!fogCaptured) return;
             AtlasLook.SetFog(savedFogStart, savedFogEnd);
+            // Once only: after Release, a deferred OnDisable / OnDestroy must not write over the fog of the space entered since.
+            fogCaptured = false;
         }
 
         static void Kill(UnityEngine.Object o)

@@ -434,6 +434,158 @@ namespace Atlas.Telemetry.Tests
             Assert.That(wrong.Host.Room, Is.Null);
         }
 
+        // The phone enters Curved Walk {4,5} (seed 1, L of the dial) in a room the Station already shows flat.
+        const int CwQ = 5, CwGenVer = 1, CwSpace = (int)SpaceId.CurvedWalk;
+        const long CwSeed = 1;
+
+        static string CurvedHash(RoomModel room, out int lMm)
+        {
+            lMm = WorldHash.Millimetres(room.Curvature.ForDial(CwQ, false));
+            return WorldHash.Compute(CwSpace, CwQ, CwSeed, CwGenVer, RoomModelJson.GeometryHash(room), lMm);
+        }
+
+        static EventMessage CurvedEvent(RoomModel room, string hash, int lMm)
+        {
+            JsonValue data = JsonValue.Object().Set("worldVer", 1).Set("worldHash", hash).Set("space", CwSpace)
+                .Set("roomId", room.Id).Set("geomHash", RoomModelJson.GeometryHash(room))
+                .Set("q", CwQ).Set("seed", CwSeed).Set("genVer", CwGenVer).Set("lMm", lMm);
+            return new EventMessage(1, "S2", LinkEvents.World, data);
+        }
+
+        // A Station that shows the room's flat Slicer, as before the phone steps into the curved world.
+        static Rig FlatRigIn(RoomModel room)
+        {
+            var rig = new Rig();
+            rig.World(room.Id, (int)SpaceId.Slicer);
+            rig.State((byte)SpaceId.Slicer);
+            rig.Frame();
+            Assert.That(rig.Host.Current, Is.EqualTo(SpaceId.Slicer));
+            Assert.That(rig.Host.Room, Is.Not.Null);
+            return rig;
+        }
+
+        [Test]
+        public void Spectator_keeps_its_room_when_the_welcome_of_a_curved_world_comes_a_frame_before_its_event()
+        {
+            RoomModel room = RoomFixtures.LoadFromProject(RoomFixtures.Sample3x3);
+            int lMm;
+            string hash = CurvedHash(room, out lMm);
+            Rig rig = FlatRigIn(room);
+            int changes = rig.RoomChanges.Count;
+            RoomModel shown = rig.Host.Room;
+
+            // The Hub's Welcome leaves as the phone enters; the world event is still queued on the phone.
+            rig.Core.OnWelcome(new WelcomeMessage { SessionId = "s", RoomId = room.Id, WorldHash = hash });
+            rig.State((byte)SpaceId.Slicer);
+            for (int i = 0; i < 3; i++) rig.Frame();
+            Assert.That(rig.Host.Room, Is.SameAs(shown), "the room is not torn down");
+            Assert.That(rig.RoomChanges.Count, Is.EqualTo(changes));
+            Assert.That(rig.Core.Banner, Is.Not.EqualTo(SpectatorBanner.WorldMismatch));
+            Assert.That(rig.Core.Room, Is.Not.Null);
+
+            // The event lands and says how the hash was made; now it is checked in full.
+            rig.Core.OnEvent(CurvedEvent(room, hash, lMm));
+            rig.State((byte)SpaceId.CurvedWalk);
+            rig.Frame();
+            rig.Frame();
+            Assert.That(rig.Core.WorldVerified, Is.True);
+            Assert.That(rig.Host.Room, Is.SameAs(shown));
+            Assert.That(rig.RoomChanges.Count, Is.EqualTo(changes));
+            Assert.That(rig.Host.Current, Is.EqualTo(SpaceId.CurvedWalk));
+            Assert.That(rig.Core.Banner, Is.EqualTo(SpectatorBanner.None));
+            int q;
+            double metres;
+            Assert.That(rig.Core.TryGetWorld(SpaceId.CurvedWalk, out q, out metres), Is.True);
+            Assert.That(q, Is.EqualTo(CwQ));
+        }
+
+        [Test]
+        public void Spectator_takes_a_curved_world_whichever_of_the_welcome_and_the_event_comes_first()
+        {
+            RoomModel room = RoomFixtures.LoadFromProject(RoomFixtures.Sample3x3);
+            int lMm;
+            string hash = CurvedHash(room, out lMm);
+            var welcome = new WelcomeMessage { SessionId = "s", RoomId = room.Id, WorldHash = hash };
+            for (int order = 0; order < 2; order++)
+            {
+                // Late joiners too: a Station with nothing yet, given both at once (the Hub replays its kept event).
+                Rig rig = order == 0 ? new Rig() : FlatRigIn(room);
+                if (order == 0)
+                {
+                    rig.Core.OnWelcome(welcome);
+                    rig.Core.OnEvent(CurvedEvent(room, hash, lMm));
+                }
+                else
+                {
+                    rig.Core.OnEvent(CurvedEvent(room, hash, lMm));
+                    rig.Core.OnWelcome(welcome);
+                }
+                rig.State((byte)SpaceId.CurvedWalk);
+                rig.Frame();
+                rig.Frame();
+                Assert.That(rig.Core.Banner, Is.EqualTo(SpectatorBanner.None), "order " + order);
+                Assert.That(rig.Core.WorldVerified, Is.True, "order " + order);
+                Assert.That(rig.Host.Current, Is.EqualTo(SpaceId.CurvedWalk), "order " + order);
+                int q;
+                double metres;
+                Assert.That(rig.Core.TryGetWorld(SpaceId.CurvedWalk, out q, out metres), Is.True, "order " + order);
+                Assert.That(q, Is.EqualTo(CwQ));
+                Assert.That(metres, Is.EqualTo(lMm / 1000.0).Within(1e-9));
+            }
+        }
+
+        [Test]
+        public void Spectator_late_joiner_given_only_a_welcome_of_a_curved_world_waits_then_refuses_it()
+        {
+            RoomModel room = RoomFixtures.LoadFromProject(RoomFixtures.Sample3x3);
+            int lMm;
+            string hash = CurvedHash(room, out lMm);
+            var rig = new Rig();
+            rig.Core.OnWelcome(new WelcomeMessage { SessionId = "s", RoomId = room.Id, WorldHash = hash });
+            rig.State((byte)SpaceId.CurvedWalk);
+            rig.Frame();
+            rig.Frame();
+            Assert.That(rig.Core.Room, Is.Not.Null, "held while the event may still come");
+            Assert.That(rig.Core.WorldVerified, Is.False);
+            // No event ever comes: a hash that no world of this room makes is not shown.
+            for (int i = 0; i < 60; i++) rig.Frame();
+            Assert.That(rig.Core.Banner, Is.EqualTo(SpectatorBanner.WorldMismatch));
+            Assert.That(rig.Host.Room, Is.Null);
+            Assert.That(rig.Host.HasSpace, Is.False);
+            // The event, when it does come, brings the room back.
+            rig.Core.OnEvent(CurvedEvent(room, hash, lMm));
+            for (int i = 0; i < 3; i++) rig.Frame();
+            Assert.That(rig.Core.WorldVerified, Is.True);
+            Assert.That(rig.Host.Current, Is.EqualTo(SpaceId.CurvedWalk));
+        }
+
+        [Test]
+        public void Spectator_keeps_the_space_and_tiling_of_a_world_event_when_the_welcome_is_sent_again_for_the_same_hash()
+        {
+            RoomModel room = RoomFixtures.LoadFromProject(RoomFixtures.Sample3x3);
+            int lMm;
+            string hash = CurvedHash(room, out lMm);
+            var rig = new Rig();
+            rig.Core.OnEvent(CurvedEvent(room, hash, lMm));
+            rig.State((byte)SpaceId.CurvedWalk);
+            rig.Frame();
+            Assert.That(rig.Host.Current, Is.EqualTo(SpaceId.CurvedWalk));
+            int q;
+            double metres;
+            Assert.That(rig.Core.TryGetWorld(SpaceId.CurvedWalk, out q, out metres), Is.True);
+
+            // Another session id or Forge URL, the same world: no event follows.
+            rig.Core.OnWelcome(new WelcomeMessage { SessionId = "s2", ForgeUrl = "http://10.0.0.3:8000", RoomId = room.Id, WorldHash = hash });
+            rig.State((byte)SpaceId.CurvedWalk);
+            for (int i = 0; i < 3; i++) rig.Frame();
+            Assert.That(rig.Core.TryGetWorld(SpaceId.CurvedWalk, out q, out metres), Is.True, "the tiling is still the kernel's, not the dial's");
+            Assert.That(q, Is.EqualTo(CwQ));
+            Assert.That(metres, Is.EqualTo(lMm / 1000.0).Within(1e-9));
+            Assert.That(rig.Core.WorldVerified, Is.True);
+            Assert.That(rig.Core.Banner, Is.EqualTo(SpectatorBanner.None));
+            Assert.That(rig.Host.Current, Is.EqualTo(SpaceId.CurvedWalk));
+        }
+
         [Test]
         public void Spectator_takes_a_welcome_hash_for_any_space_and_marks_a_silent_phone()
         {

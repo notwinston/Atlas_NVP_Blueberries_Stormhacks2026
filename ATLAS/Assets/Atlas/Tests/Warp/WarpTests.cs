@@ -91,6 +91,36 @@ namespace Atlas.Warp.Tests
             Assert.Less(max, 1e-5);
         }
 
+        // kernel.md §6.1 "Height": in modes 1 and 2 world y = positionOS.y + _Anchor[1][3] and the Transform is not read; x and z
+        // do not depend on the entry; mode 0 does not read the anchor.
+        [TestCase(-1.0)]
+        [TestCase(1.0)]
+        public void Warp_AnchorHeight_LiftsTheObject(double kappa)
+        {
+            var rng = new Random(WarpSamples.Seed);
+            var frames = WarpSamples.Frames(kappa, 8, rng);
+            float mode = kappa < 0 ? 1f : 2f;
+            var head = new float3(0.3f, 1.6f, -0.2f);
+            foreach (var (u, f, a) in frames)
+            {
+                var pts = WarpSamples.Points(kappa, 1.9, rng);
+                float4x4 flat = ToF4(WarpAnchor.ToMatrix(a)), raised = ToF4(WarpAnchor.ToMatrix(a, 1.25f));
+                Assert.AreEqual(0f, flat.c3.y);
+                Assert.AreEqual(1.25f, raised.c3.y);
+                Assert.AreEqual(flat.c0, raised.c0); Assert.AreEqual(flat.c1, raised.c1); Assert.AreEqual(flat.c2, raised.c2);
+                for (int i = 0; i < pts.Length; i++)
+                {
+                    float3 low = AtlasWarpCpu.AtlasWarp(pts[i], flat, mode, 1.9f, head, Trs);
+                    float3 high = AtlasWarpCpu.AtlasWarp(pts[i], raised, mode, 1.9f, head, Trs);
+                    Assert.AreEqual(pts[i].y, low.y, "no height in the anchor: positionOS.y passes through, the Transform is ignored");
+                    Assert.AreEqual(pts[i].y + 1.25f, high.y, 1e-6f);
+                    Assert.AreEqual(low.x, high.x); Assert.AreEqual(low.z, high.z);
+                    float3 none = AtlasWarpCpu.AtlasWarp(pts[i], raised, 0f, 1.9f, head, Trs);
+                    Assert.AreEqual(math.mul(Trs, new float4(pts[i], 1f)).y, none.y, 1e-6f, "mode 0 is the Transform alone");
+                }
+            }
+        }
+
         public static string StrippedHlsl() => Strip(File.ReadAllText(Path.Combine(ShaderDir, "AtlasWarp.hlsl")));
 
         static int Count(string s, string pattern) => Regex.Matches(s, pattern).Count;

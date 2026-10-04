@@ -34,7 +34,11 @@ session that wrote the code has none of those. It reads `docs/verification/` and
    `tools/headless/verify.py`: 21 in the iOS player configuration, 21 in the Windows Station configuration (the
    others are Editor-only or reference the Editor) and all 48 in the Editor configuration, with 0 errors; `rules`
    (the reference table, F1 to F7) passes with 0 problems.
-4. Verified: 1,968 engine-free NUnit tests run headless in 24 test assemblies: 1,967 pass, 1 is skipped (the
+4. Verified in Unity 6000.3.25f1 batch mode (EditMode, Metal): the project imports, compiles with 0 errors and passes
+   2,114 tests (1 skipped), the Unity-only tests and a compile of every Atlas shader included. Steps below that ask
+   for import, compile, shader compile or the Test Runner are therefore re-checks; play mode, the Frame Debugger
+   and everything on a device are still first checks.
+   Verified headless: 1,995 engine-free NUnit tests run in 24 test assemblies: 1,994 pass, 1 is skipped (the
    `[Ignore]`d PH-39 four-fork test) and none fails (counts per assembly in step 3d; the run is
    `python3 tools/headless/verify.py all --tag docs`, which takes about four minutes).
 5. Verified: the Hub (.NET 8), the Forge (Python, procedural generator) and the Console pass their own suites;

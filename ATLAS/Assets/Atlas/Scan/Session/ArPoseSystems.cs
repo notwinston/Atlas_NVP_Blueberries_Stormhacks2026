@@ -127,7 +127,7 @@ namespace Atlas.Scan
             PoseLogReplaySource replay;
             try
             {
-                replay = PoseLogReplaySource.FromFile(path, ReplayMode.RealTime, loop);
+                replay = OpenReplay(path, loop);
             }
             catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is FormatException ||
                                       e is ArgumentException || e is NotSupportedException)
@@ -137,6 +137,26 @@ namespace Atlas.Scan
             }
             StartReplay(replay);
             return true;
+        }
+
+        /// <summary>
+        /// A recorded walk as the app plays it: by the clock, and interpolated between its samples. A render
+        /// frame that falls between two samples (replay.speed below 1, a frame rate above the log's) then
+        /// gets the head where the walk had it, not the last sample again: a repeated position reads as a
+        /// walker who stands, and a curved kernel ramps its curvature and unlocks the dial on that (Master
+        /// Plan section 0.5, rule 4). A recorded jump or tracking change is never blended.
+        /// </summary>
+        public static PoseLogReplaySource NewReplay(PoseLog log, bool loop)
+        {
+            return new PoseLogReplaySource(log, ReplayMode.RealTime, loop) { Interpolate = true };
+        }
+
+        /// <summary>NewReplay of a pose-log file. Throws what PoseLogReplaySource.FromFile throws.</summary>
+        public static PoseLogReplaySource OpenReplay(string path, bool loop)
+        {
+            PoseLogReplaySource replay = PoseLogReplaySource.FromFile(path, ReplayMode.RealTime, loop);
+            replay.Interpolate = true;
+            return replay;
         }
 
         /// <summary>Replaces the head with a replay source from the next frame.</summary>

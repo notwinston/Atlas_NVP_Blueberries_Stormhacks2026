@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using Atlas.Input;
 using Atlas.Kernel;
 using Atlas.Link;
 using Atlas.World;
 using NUnit.Framework;
 using Unity.Mathematics;
+using UnityEngine;
 using static Atlas.Spaces.SmallPlanet.Tests.SmallPlanetTestUtil;
 
 namespace Atlas.Spaces.SmallPlanet.Tests
@@ -53,6 +55,125 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             }
 
             public void Stand(double2 head, int frames) { for (int i = 0; i < frames; i++) Frame(head); }
+        }
+
+        /// <summary>The engine-free input core behind the service's interface: no devices, gaze and contexts only.</summary>
+        sealed class CoreInput : IAtlasInput
+        {
+            public readonly AtlasInputCore Core = new AtlasInputCore();
+            public void Tick(Vector3 headPosition, Quaternion headRotation, float deltaTime)
+            {
+                Core.Tick(default(RawInput), new float3(headPosition.x, headPosition.y, headPosition.z),
+                    new quaternion(headRotation.x, headRotation.y, headRotation.z, headRotation.w), deltaTime);
+            }
+            public InputContext Context { get { return Core.Context; } }
+            public void PushContext(InputContext context) { Core.PushContext(context); }
+            public void PopContext(InputContext context) { Core.PopContext(context); }
+            public bool Pressed(AtlasAction action) { return Core.Pressed(action); }
+            public bool Held(AtlasAction action) { return Core.Held(action); }
+            public float Axis(AtlasAxis axis) { return Core.Axis(axis); }
+            public InputSource LastSource(AtlasAction action) { return Core.LastSource(action); }
+            public int LastTag(AtlasAction action) { return Core.LastTag(action); }
+            public event Action<AtlasAction, InputSource, int> ActionFired
+            {
+                add { Core.ActionFired += value; }
+                remove { Core.ActionFired -= value; }
+            }
+            public float DwellSeconds { get { return Core.DwellSeconds; } set { Core.DwellSeconds = value; } }
+            public GazeTargetId RegisterGazeTarget(in GazeTarget target)
+            {
+                GazeTargetData data = target.ToData();
+                return Core.Targets.Add(in data);
+            }
+            public void MoveGazeTarget(GazeTargetId id, Vector3 centre) { Core.Targets.Move(id, new float3(centre.x, centre.y, centre.z)); }
+            public void SetGazeTargetEnabled(GazeTargetId id, bool enabled) { Core.Targets.SetEnabled(id, enabled); }
+            public void UnregisterGazeTarget(GazeTargetId id) { Core.Targets.Remove(id); }
+            public GazeState Gaze { get { return new GazeState { Focused = Core.GazeFocused, Progress = Core.GazeProgress }; } }
+            public void CopyActionsWithoutGazeTwin(List<AtlasAction> into) { Core.CopyActionsWithoutGazeTwin(into); }
+            public bool TryGetTap(out Vector2 screenPosition) { screenPosition = default(Vector2); return false; }
+            public bool GamepadPresent { get { return false; } }
+            public void SetRumble(float lowFrequency, float highFrequency) { }
+            public WalkerInput Walker { get { return default(WalkerInput); } }
+        }
+
+        // ---- The dial by gaze (P1-C10; MP §0.5 rule 5) -----------------------------------------------------
+
+        // A walker with no gamepad turns the dial up from the planet: the twin goes live once they stand still, a dwell on
+        // it fires DialRight once, and the planet asks for Curved Walk. The real input core, the real S4 logic and kernel,
+        // in the frame's order (input, kernel step, the space's Tick, the space's Upload).
+        [Test]
+        public void Dial_ByGazeAlone_AsksForCurvedWalk()
+        {
+            var head = new double2(0.2, -0.1);
+            var eyes = new float3((float)head.x, 1.6f, (float)head.y);
+            var rig = new Rig(RoomFixtures.Sample3x3, head);
+            var input = new CoreInput();
+            input.PushContext(InputContext.Space);
+            var dial = new SmallPlanetDial(input);
+            var missing = new List<AtlasAction>();
+            quaternion look = quaternion.identity;
+            int liveFrame = -1, pressedFrame = -1, presses = 0, asked = 0;
+            for (int i = 0; i < 240 && asked == 0; i++)
+            {
+                input.Tick((Vector3)eyes, (Quaternion)look, (float)Dt);
+                bool right = input.Pressed(AtlasAction.DialRight);
+                if (right) { presses++; pressedFrame = i; }
+                rig.Frame(head, false, right);
+                if (rig.Core.SwitchWanted) { asked++; Assert.AreEqual(4, rig.Core.SelectedQ); }
+                dial.Place(eyes, quaternion.identity);
+                dial.SetLive(rig.Core.Driving && rig.Kernel.Still);
+                if (dial.Live)
+                {
+                    if (liveFrame < 0) liveFrame = i;
+                    look = quaternion.LookRotation(math.normalize(dial.Centre - eyes), new float3(0f, 1f, 0f));
+                    input.CopyActionsWithoutGazeTwin(missing);
+                    Assert.That(missing, Is.Empty, "frame " + i + ": every action S4 reads has a live twin while it can act");
+                }
+            }
+            Assert.GreaterOrEqual(liveFrame, 0, "the detent goes live once the walker stands still");
+            Assert.AreEqual(1, presses, "one dwell, one step");
+            Assert.GreaterOrEqual((pressedFrame - liveFrame) * Dt, 0.69, "not before the dwell");
+            Assert.AreEqual(1, asked, "q left 3: the planet asks for Curved Walk");
+            Assert.AreEqual(4, rig.Registry.Find(CurvedDialParams.ParamQ).Int);
+
+            dial.Dispose();
+            input.Pressed(AtlasAction.DialRight);
+            input.CopyActionsWithoutGazeTwin(missing);
+            Assert.That(missing, Is.EquivalentTo(new[] { AtlasAction.DialRight }), "the report is not vacuous, and Dispose removed the target");
+        }
+
+        // The dial acts only on a still frame (MP §10.1.4): its twin is live only then, and stands where S2's right detent stands.
+        [Test]
+        public void Dial_TwinIsLiveOnlyWhileTheWalkerStandsStill()
+        {
+            var rig = new Rig(RoomFixtures.Sample3x3, double2.zero);
+            var input = new CoreInput();
+            input.PushContext(InputContext.Space);
+            var dial = new SmallPlanetDial(input);
+            Assert.IsTrue(dial.Target.IsValid);
+            Assert.IsFalse(input.Core.Targets.HasEnabled(AtlasAction.DialRight, InputContext.Space), "dead until the space says the dial can act");
+            int moving = 0, still = 0;
+            for (int i = 0; i < 300; i++)
+            {
+                var head = new double2(i < 120 ? 0.005 * i : 0.6, 0);
+                rig.Frame(head);
+                var eyes = new float3((float)head.x, 1.6f, 0f);
+                dial.Place(eyes, quaternion.identity);
+                dial.SetLive(rig.Core.Driving && rig.Kernel.Still);
+                Assert.AreEqual(rig.Kernel.Still, dial.Live, "frame " + i);
+                Assert.AreEqual(dial.Live, input.Core.Targets.HasEnabled(AtlasAction.DialRight, InputContext.Space), "frame " + i);
+                Assert.AreEqual(eyes.x + SmallPlanetDial.Chip.x, dial.Centre.x, 1e-5f);
+                Assert.AreEqual(eyes.z + SmallPlanetDial.Chip.z, dial.Centre.z, 1e-5f);
+                if (dial.Live) still++; else moving++;
+            }
+            Assert.Greater(moving, 60); Assert.Greater(still, 60);
+
+            // No input service (the Station): still placed and judged, nothing registered.
+            var none = new SmallPlanetDial(null);
+            none.Place(new float3(1f, 1.6f, 2f), quaternion.identity);
+            Assert.IsTrue(none.SetLive(true));
+            Assert.AreEqual(1f + SmallPlanetDial.Chip.x, none.Centre.x, 1e-5f);
+            Assert.DoesNotThrow(none.Dispose);
         }
 
         // ---- Registration ----------------------------------------------------------------------------------
@@ -388,6 +509,75 @@ namespace Atlas.Spaces.SmallPlanet.Tests
                 UnityEngine.Object.DestroyImmediate(space.gameObject);
                 if (oldPool != null) AtlasServices.Register(oldPool); else AtlasServices.Unregister(pool);
                 if (oldKernel != null) AtlasServices.Register(oldKernel); else AtlasServices.Unregister<IDialKernel>(kernel);
+                pool.Dispose();
+                Atlas.Rendering.AtlasLook.ResetForSpace();
+            }
+        }
+
+        // The component with an input service: the twin and its chip exist exactly while the space is entered, the space
+        // reads DialRight and nothing it cannot offer by gaze, and a still walker finds the twin live.
+        [Test, Category("Unity")]
+        public void Module_RegistersTheDialTwin()
+        {
+            var pool = Atlas.Rendering.MaterialPool.CreateDefault(16);
+            var kernel = new HolonomyWalkerKernel();
+            var input = new CoreInput();
+            input.PushContext(InputContext.Space);
+            RoomModel room = Room(RoomFixtures.Sample3x3);
+            kernel.Configure(KernelConfig.Flat(room.LapSide));
+            Atlas.Rendering.MaterialPool oldPool = AtlasServices.Replace(pool);
+            IDialKernel oldKernel = AtlasServices.Replace<IDialKernel>(kernel);
+            IAtlasInput oldInput = AtlasServices.Replace<IAtlasInput>(input);
+            ISpaceModule module = SmallPlanetSpace.Create();
+            var space = (SmallPlanetSpace)module;
+            try
+            {
+                module.Configure(room, new ParamRegistry());
+                Assert.IsNull(space.Dial, "nothing before Enter");
+                module.Enter(kernel.Pose);
+                Assert.IsNotNull(space.Dial);
+                Assert.IsTrue(space.Dial.Target.IsValid);
+                Assert.AreEqual(10, pool.Rented, "six tiles, the beacon, the two lap markers, the dial chip");
+                Assert.IsFalse(space.DialChip.activeSelf);
+
+                var missing = new List<AtlasAction>();
+                var eyes = new float3(0f, 1.6f, 0f);
+                for (int i = 0; i < 120; i++)
+                {
+                    input.Tick((Vector3)eyes, Quaternion.identity, 1f / 60f);
+                    var frame = new FrameContext
+                    {
+                        FrameIndex = i, Time = (i + 1) / 60.0, DeltaTime = 1f / 60f, Tracking = TrackingState.Normal,
+                        HeadPosition = eyes, HeadRotation = quaternion.identity
+                    };
+                    frame.Kernel = kernel.Step(double2.zero, true, frame.Time);
+                    frame.Walker = kernel.Pose;
+                    module.Tick(in frame);
+                    ((IUploadStep)module).Upload(in frame);
+                    Assert.AreEqual(kernel.Still, space.Dial.Live, "frame " + i);
+                    Assert.AreEqual(space.Dial.Live, space.DialChip.activeSelf, "frame " + i);
+                    if (!space.Dial.Live) continue;
+                    input.CopyActionsWithoutGazeTwin(missing);
+                    Assert.That(missing, Is.Empty, "frame " + i);
+                }
+                Assert.IsTrue(space.Dial.Live, "the walker stood still");
+                Assert.IsTrue(input.Core.Targets.HasEnabled(AtlasAction.DialRight, InputContext.Space));
+                Vector3 centre = space.DialChip.transform.position;
+                Assert.AreEqual(SmallPlanetDial.Chip.x, centre.x, 1e-5f);
+                Assert.AreEqual(1.6f + SmallPlanetDial.Chip.y, centre.y, 1e-5f);
+                Assert.AreEqual(SmallPlanetDial.Chip.z, centre.z, 1e-5f);
+
+                module.Exit();
+                Assert.IsNull(space.Dial);
+                Assert.IsFalse(input.Core.Targets.HasEnabled(AtlasAction.DialRight, InputContext.Space), "unregistered at Exit");
+                Assert.AreEqual(0, pool.Rented);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(space.gameObject);
+                if (oldPool != null) AtlasServices.Register(oldPool); else AtlasServices.Unregister(pool);
+                if (oldKernel != null) AtlasServices.Register(oldKernel); else AtlasServices.Unregister<IDialKernel>(kernel);
+                if (oldInput != null) AtlasServices.Register(oldInput); else AtlasServices.Unregister<IAtlasInput>(input);
                 pool.Dispose();
                 Atlas.Rendering.AtlasLook.ResetForSpace();
             }

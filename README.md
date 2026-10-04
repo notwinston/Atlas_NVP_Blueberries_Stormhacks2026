@@ -26,8 +26,9 @@ Station, Forge). One walker kernel serves all seven spaces. What Phase 1 still l
 `documents/ATLAS_Whats_Left.md`.
 
 The code compiles for the phone, the Station and the Editor, and its engine-free tests pass, without the Unity
-Editor (`tools/headless/verify.py all`: 1,968 tests in 24 test assemblies, none failing, one skipped by decision). It has not yet been opened in Unity or run on a phone, no
-shader has been compiled, and no curved walk has been done by a person:
+Editor (`tools/headless/verify.py all`: 1,995 tests in 24 test assemblies, none failing, one skipped by decision). In Unity
+6000.3.25f1 batch mode it imports, compiles, and passes the EditMode suite (2,114 tests, every shader compiled). It has not
+yet been looked at in play mode or run on a phone, and no curved walk has been done by a person:
 `docs/verification/UNITY_SIDE_BRIEF.md` is the list of what to check there, in order.
 
 ## First time

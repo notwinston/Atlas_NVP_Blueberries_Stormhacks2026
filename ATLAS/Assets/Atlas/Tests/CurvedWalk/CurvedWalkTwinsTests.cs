@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using Atlas.App;
+using Atlas.App.Menu;
 using Atlas.Input;
+using Atlas.Link;
 using Atlas.Kernel;
 using Atlas.World;
 using NUnit.Framework;
@@ -186,6 +189,150 @@ namespace Atlas.Spaces.CurvedWalk.Tests
             input.CopyActionsWithoutGazeTwin(missing);
             Assert.That(missing, Is.EquivalentTo(new[] { AtlasAction.DialLeft, AtlasAction.DialRight, AtlasAction.Primary }),
                 "the report is not vacuous, and Dispose removed the targets");
+        }
+
+        // ---- S2's chips next to the app's own gaze targets ----
+
+        // Every gaze target that is live while S2 runs: the three chips in the chips' frame, the four SpaceLab signs in
+        // the signs' frame and the menu chip in the menu's. Each frame keeps the head's place and a heading of its own.
+        struct Spot
+        {
+            public string Name; public int Frame; public float3 Centre; public float Radius;
+            public Spot(string name, int frame, float3 centre, float radius) { Name = name; Frame = frame; Centre = centre; Radius = radius; }
+            /// <summary>Half the angle under which the gaze takes the target (GazeDwell.RaySphere).</summary>
+            public float Cone { get { return math.max(math.atan(Radius / math.length(Centre)), math.radians(GazeDwell.MinAngleDeg)); } }
+        }
+
+        static List<Spot> SpotsOfS2()
+        {
+            var spots = new List<Spot>
+            {
+                new Spot("dial-", 0, CurvedWalkChips.DialLeft, CurvedWalkChips.Radius),
+                new Spot("dial+", 0, CurvedWalkChips.DialRight, CurvedWalkChips.Radius),
+                new Spot("mode", 0, CurvedWalkChips.Mode, CurvedWalkChips.Radius),
+                new Spot("menu chip", 2, MenuLayout.OpenChip, MenuLayout.OpenChipRadius),
+            };
+            for (int i = 0; i < SpaceSignLayout.Count; i++)
+                spots.Add(new Spot(SpaceSignLayout.LabelOf(i), 1, SpaceSignLayout.Centre(i), SpaceSignLayout.Radius));
+            return spots;
+        }
+
+        static float Angle(float3 a, float3 b)
+        {
+            return math.acos(math.clamp(math.dot(math.normalize(a), math.normalize(b)), -1f, 1f));
+        }
+
+        // No chip of S2 lies within the dwell cones of another target, whatever the headings of the frames: the chips'
+        // frame turns only after 50 degrees of head yaw while the signs and the menu chip trail the head, so two frames
+        // can stand at any angle to each other and only the elevation keeps two targets apart.
+        [Test]
+        public void NoChip_SharesADwellConeWithAnotherGazeTarget_WhateverTheHeadings()
+        {
+            List<Spot> spots = SpotsOfS2();
+            int pairs = 0;
+            for (int a = 0; a < spots.Count; a++)
+            {
+                for (int b = a + 1; b < spots.Count; b++)
+                {
+                    Spot p = spots[a], q = spots[b];
+                    if (p.Frame != 0 && q.Frame != 0 && p.Frame != q.Frame) continue;   // two of the app's frames: the app's own layout tests
+                    float nearest = float.MaxValue, at = 0f;
+                    if (p.Frame == q.Frame) nearest = Angle(p.Centre, q.Centre);
+                    else
+                    {
+                        for (float yaw = -180f; yaw <= 180f; yaw += 0.125f)
+                        {
+                            float angle = Angle(p.Centre, math.mul(quaternion.RotateY(math.radians(yaw)), q.Centre));
+                            if (angle < nearest) { nearest = angle; at = yaw; }
+                        }
+                    }
+                    pairs++;
+                    Assert.Greater(math.degrees(nearest), math.degrees(p.Cone + q.Cone),
+                        p.Name + " and " + q.Name + " are on one gaze ray with the frames " + at + " degrees apart");
+                }
+            }
+            Assert.AreEqual(3 + 3 * 5 + 6, pairs, "chip to chip, chip to sign and menu chip, sign to sign");
+        }
+
+        sealed class Host : ISpaceHost
+        {
+            public readonly List<string> Calls = new List<string>();
+            public SpaceHostState State { get { return SpaceHostState.Running; } }
+            public bool HasSpace { get { return true; } }
+            public SpaceId Current { get { return SpaceId.CurvedWalk; } }
+            public ISpaceModule Module { get { return null; } }
+            public RoomModel Room { get { return null; } }
+            public bool Standing { get { return false; } }
+            public ushort WorldVersion { get { return 0; } }
+            public bool IsAvailable(SpaceId id) { return id == SpaceId.Home || id == SpaceId.CurvedWalk; }
+            public bool RequestSwitch(SpaceId target) { Calls.Add("switch " + SpaceIds.Code(target)); return true; }
+            public bool ReturnHome() { Calls.Add("home"); return true; }
+            public void SetRoom(RoomModel room) { }
+            public void BumpWorldVersion() { }
+#pragma warning disable 67
+            public event Action<SpaceId> SpaceEntered;
+            public event Action<SpaceId> SpaceExited;
+            public event Action<RoomModel> RoomChanged;
+#pragma warning restore 67
+        }
+
+        // The walker looks at the right detent, then at the mode chip, and dwells: Mode 2 is asked for and nobody is sent
+        // home. The chips and the app's signs are on one input core, each in its own frame, as in the headset: by the time
+        // the gaze leaves the detent the signs have turned to stand under it.
+        [Test]
+        public void DwellOnTheModeChip_AfterTheRightDetent_FiresPrimary_NotReturnHome()
+        {
+            var input = new CoreInput();
+            input.PushContext(InputContext.Space);
+            var host = new Host();
+            var registry = new ParamRegistry();
+            registry.DeclareBool(CommandRouter.ParamDemoLock, "app", false);
+            var actions = new SpaceActions(host, registry);
+            var signs = new SpaceSigns(input, actions, host, null);
+            var step = new SpaceActionStep(input, actions);
+            var twins = new CurvedWalkTwins(input);
+            float3 head = new float3(0.3f, 1.6f, -0.4f);
+            int frame = 0, primary = 0, dial = 0;
+            bool onMode = false, onASign = false;
+
+            void Frames(quaternion look, int count)
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    var f = new FrameContext
+                    {
+                        FrameIndex = frame++, DeltaTime = Dt, RawHeadPosition = head, RawHeadRotation = look,
+                        HeadPosition = head, HeadRotation = look
+                    };
+                    // Steps 1, 5, 6 and 8b of the frame, in the loop's order.
+                    input.Tick((Vector3)head, (Quaternion)look, Dt);
+                    if (input.Pressed(AtlasAction.Primary)) primary++;
+                    if (input.Pressed(AtlasAction.DialLeft) || input.Pressed(AtlasAction.DialRight)) dial++;
+                    GazeTargetId focused = input.Gaze.Focused;
+                    onMode |= focused.IsValid && focused.Equals(twins.Target(CurvedWalkTwins.Mode));
+                    for (int k = 0; k < SpaceSignLayout.Count; k++) onASign |= focused.IsValid && focused.Equals(signs.TargetOf(k));
+                    twins.Place(head, look);
+                    twins.Update(5, true);
+                    signs.Upload(in f);
+                    step.AfterFrame(in f);
+                    signs.AfterFrame(in f);
+                }
+            }
+
+            Frames(quaternion.identity, 3);
+            Assert.IsTrue(signs.IsLive(SpaceSignLayout.Home), "the home beacon is live in a running space");
+            Assert.IsTrue(twins.IsLive(CurvedWalkTwins.Mode));
+            // 0.4 s on the detent: less than the dwell, and long enough for the signs to come round under it.
+            Frames(Toward(head, twins.Centre(CurvedWalkTwins.DialRight)), 24);
+            Assert.AreEqual(0, dial, "the detent was only looked at");
+            Frames(Toward(head, twins.Centre(CurvedWalkTwins.Mode)), 60);
+
+            Assert.IsTrue(onMode, "the gaze was on the mode chip");
+            Assert.IsFalse(onASign, "and never on a sign");
+            Assert.That(host.Calls, Is.Empty, "nobody was sent home");
+            Assert.AreEqual(1, primary, "Mode 2 was asked for once");
+            twins.Dispose();
+            signs.Shutdown();
         }
 
         [Test]

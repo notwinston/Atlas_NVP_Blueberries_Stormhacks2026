@@ -43,7 +43,8 @@ float3 AtlasWarp(float3 positionOS)
     float2 t;
     [branch] if (_WarpMode < 1.5) t = LogH2(mul(a, ExpH2(positionOS.xz / _HypL))) * _HypL;
     else                          t = LogS2(mul(a, ExpS2(positionOS.xz / _HypL))) * _HypL;
-    return float3(_HeadPosWS.x + t.x, positionOS.y, _HeadPosWS.z + t.y);
+    // _Anchor._m13 is the height of the object's base above the floor (0 for tiles and the shell): the Transform is not read here
+    return float3(_HeadPosWS.x + t.x, positionOS.y + _Anchor._m13, _HeadPosWS.z + t.y);
 }
 // kernel.md §6.3 (P1-B08), fragment stage: on the sphere, discard beyond 2.6 rad of geodesic distance from the head
 // (smeared triangles near the antipode). The log map puts positionWS at its true distance from _HeadPosWS.
