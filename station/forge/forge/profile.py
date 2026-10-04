@@ -159,9 +159,9 @@ def _ray_heights(x: np.ndarray, y: np.ndarray, z: np.ndarray, w: float, h: float
         to_c = _edge_function(ax, az, bx, bz, px, pz)  # the weight of corner c
         to_a = _edge_function(bx, bz, cx, cz, px, pz)
         to_b = _edge_function(cx, cz, ax, az, px, pz)
-        total = to_a + to_b + to_c
+        total = to_c + to_a + to_b  # in the order the phone adds them (ObjectProfile.cs)
         inside = ((to_a >= 0) & (to_b >= 0) & (to_c >= 0)) | ((to_a <= 0) & (to_b <= 0) & (to_c <= 0))
-        # A triangle that stands upright has no footprint: the ray runs along it and does not hit it.
+        # A triangle that stands upright has no area in plan: no ray hits it, not even one that runs along it.
         inside &= total != 0
         safe = np.where(total != 0, total, 1.0)
         # Measured from corner a, so a level triangle gives its own height exactly.
@@ -180,14 +180,15 @@ def of_mesh(vertices: np.ndarray, faces: np.ndarray, dims: Sequence[float]) -> n
     compares cell by cell with the profile the phone sent.
 
     The rays, the inclusive edges, the 0.02 m rule and the byte are those of
-    the scan side. No triangle is left out: a generated mesh has no floor.
+    the scan side (``ObjectProfile.cs`` on the phone): a ray through an edge or
+    a vertex of a triangle hits it, a triangle with no area in plan is never
+    hit, and a box with a side that is not above 0 gives 256 zeros. No triangle
+    is left out: a generated mesh has no floor.
     """
     w, h, d = (float(v) for v in dims)
-    if not (w > 0.0 and h > 0.0 and d > 0.0):
-        raise ValueError(f"invalid box size {list(dims)}")
     v = np.asarray(vertices, dtype=np.float64).reshape(-1, 3)
     f = np.asarray(faces, dtype=np.int64).reshape(-1, 3)
-    if len(f) == 0:
+    if len(f) == 0 or not (w > 0.0 and h > 0.0 and d > 0.0):
         return np.zeros(CELLS, dtype=np.uint8)
 
     corners = v[f]  # (T, 3 corners, 3 axes)

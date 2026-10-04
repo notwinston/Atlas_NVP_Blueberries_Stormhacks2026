@@ -200,10 +200,42 @@ def test_frame_the_tall_side_is_on_unitys_plus_x():
     assert (p[:12, :12] == 64).all()
 
 
-def test_rejects_a_box_without_extent():
-    v, f = vector_a()
-    with pytest.raises(ValueError):
-        profile.of_mesh(v, f, (0.5, 0.0, 0.5))
+def wall(points, top=0.5):
+    """An upright wall over a line of the plan, given in Unity's (x, z), as two triangles in the GLB frame."""
+    (x0, z0), (x1, z1) = points
+    v = np.array([[-x0, 0.0, z0], [-x1, 0.0, z1], [-x1, top, z1], [-x0, top, z0]])
+    return v, np.array([[0, 1, 2], [0, 2, 3]])
+
+
+def test_an_upright_triangle_is_never_hit():
+    # As on the phone: a triangle with no area in plan has nothing for a ray from above to hit,
+    # also when the ray runs exactly inside it.
+    dims = (0.5, 1.0, 0.5)
+    rays = [-0.25 + (m // 2 + (0.25, 0.75)[m % 2]) * 0.5 / 16 for m in range(32)]
+    in_a_plane_of_rays = wall(((rays[11], -0.25), (rays[11], 0.25)))  # x is that of 32 rays
+    across = wall(((-0.25, rays[20]), (0.25, rays[20])))  # z likewise
+    diagonal = wall(((-0.25, -0.25), (0.25, 0.25)))  # holds the rays with i = j and a = b
+    between = wall(((0.1, -0.25), (0.1, 0.25)))  # holds no ray
+    slanted = wall(((-0.2, -0.25), (0.17, 0.22)))
+    for v, f in (in_a_plane_of_rays, across, diagonal, between, slanted):
+        assert not profile.of_mesh(v, f, dims).any()
+        assert not profile.of_mesh(v, f[:, ::-1], dims).any()
+    # Lean the same wall across that plane, its foot a millimetre to one side and its top a millimetre
+    # to the other, and it has plan area: those rays meet it half-way up.
+    v, f = in_a_plane_of_rays
+    leaning = v + [[0.001, 0.0, 0.0], [0.001, 0.0, 0.0], [-0.001, 0.0, 0.0], [-0.001, 0.0, 0.0]]
+    leaned = grid(profile.of_mesh(leaning, f, dims))
+    assert (leaned[:, 5] == 64).all() and np.count_nonzero(leaned) == 16  # ray 11 is the second of column 5
+    # Vector A is made of level tops and upright sides; the sides change nothing.
+    a_v, a_f = vector_a()
+    walls = join((a_v, a_f), in_a_plane_of_rays, diagonal)
+    assert np.array_equal(profile.of_mesh(*walls, dims), profile.of_mesh(a_v, a_f, dims))
+
+
+@pytest.mark.parametrize("dims", [(0.5, 0.0, 0.5), (0.0, 1.0, 0.5), (0.5, 1.0, -0.5), (0.5, float("nan"), 0.5)])
+def test_a_box_with_a_side_that_is_not_above_zero_gives_no_profile(dims):
+    p = profile.of_mesh(*vector_a(), dims)
+    assert p.shape == (256,) and p.dtype == np.uint8 and not p.any()
 
 
 # --------------------------------------------------------------------------- the bytes
