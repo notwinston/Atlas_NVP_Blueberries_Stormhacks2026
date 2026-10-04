@@ -10,6 +10,7 @@
         "Atlas.Safety",
         "Atlas.Input",
         "Atlas.Telemetry",
+        "Atlas.Hands",
         "Unity.XR.ARFoundation",
         "Unity.XR.ARSubsystems",
         "Unity.XR.CoreUtils",

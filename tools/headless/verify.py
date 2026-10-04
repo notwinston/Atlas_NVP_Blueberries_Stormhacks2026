@@ -83,8 +83,11 @@ ALLOWED = {
     "Atlas.Safety": ["Atlas.World"],
     "Atlas.Input": [],
     "Atlas.Telemetry": ["Atlas.Kernel", "Atlas.Link", "Atlas.World"],
+    # Tracked hands (documents/ATLAS_Hands_Design.md 3.2). Link for parameter types only, as a space.
+    "Atlas.Hands": ["Atlas.Kernel", "Atlas.Link", "Atlas.World", "Atlas.Rendering", "Atlas.Input"],
+    "Atlas.Hands.ARKit": ["Atlas.Kernel", "Atlas.World", "Atlas.Hands"],
     "Atlas.App": ["Atlas.Kernel", "Atlas.Link", "Atlas.World", "Atlas.Rendering", "Atlas.Scan", "Atlas.Safety",
-                  "Atlas.Input", "Atlas.Telemetry"],
+                  "Atlas.Input", "Atlas.Telemetry", "Atlas.Hands"],
     SPACES: ["Atlas.Kernel", "Atlas.Link", "Atlas.World", "Atlas.Rendering", "Atlas.Input", "Atlas.Telemetry"],
     "Atlas.Spectator": ["Atlas.Kernel", "Atlas.Link", "Atlas.World", "Atlas.Rendering", "Atlas.Telemetry", SPACES],
     # World lint (lane B): the generator and the real tile meshes, in the Editor only.

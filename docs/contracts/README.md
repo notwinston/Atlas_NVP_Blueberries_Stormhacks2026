@@ -33,7 +33,9 @@ Master Plan §6.2, with six clarifications marked ◆.
 | `Atlas.Safety` | C | World | RoomModel types only. **Never Link or Telemetry**, and no source file uses a type from either |
 | `Atlas.Input` | C | none | Input System only |
 | `Atlas.Telemetry` | D | Kernel, Link, World | Parameter binding, perf probe, HUD, event log, asset client, link client glue, flat-twin map. ◆ Kernel is added to the §6.2 row for the vertex format (`AtlasVertex`) used by the built-in fallback meshes |
-| `Atlas.App` | A | Kernel, Link, World, Rendering, Scan, Safety, Input, Telemetry | ◆ Link is added to the §6.2 row: `ISpaceModule` carries `ParamRegistry` and `StateMessage`, so the caller needs the reference. ◆ Also holds the on-device menu (`App/Menu/`, lane D files) and onboarding (`App/Onboarding/`, lane C files), which need Input, Scan and Telemetry together |
+| `Atlas.Hands` | lead | Kernel, Link, World, Rendering, Input | Tracked hands (`documents/ATLAS_Hands_Design.md`). From Link: parameter types only, as a space. Engine-free core, the hand mesh, the sources. Compiles on every platform; referenced by `Atlas.App` only |
+| `Atlas.Hands.ARKit` | lead | Kernel, World, Hands | Editor and iOS only. The phone's hand source over the native plugin `AtlasHands.swift`. Registers itself at start-up; nothing references it |
+| `Atlas.App` | A | Kernel, Link, World, Rendering, Scan, Safety, Input, Telemetry, Hands | ◆ Link is added to the §6.2 row: `ISpaceModule` carries `ParamRegistry` and `StateMessage`, so the caller needs the reference. ◆ Also holds the on-device menu (`App/Menu/`, lane D files) and onboarding (`App/Onboarding/`, lane C files), which need Input, Scan and Telemetry together |
 | `Atlas.Spaces.*` | per space | Kernel, Link, World, Rendering, Input, Telemetry | Spaces never reference each other, Scan, Safety or App |
 | `Atlas.Spectator` | D | Kernel, Link, World, Rendering, Telemetry, Spaces.* | Windows only (`ATLAS_SPECTATOR`) |
 | `Atlas.World.Lint.Editor` | B | Kernel, World, Rendering | Editor only. WorldLint (`World/Lint/`): the generator checked against the real tile meshes. Nothing references it but its tests |

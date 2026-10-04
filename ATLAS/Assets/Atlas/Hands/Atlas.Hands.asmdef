@@ -1,0 +1,17 @@
+{
+    "name": "Atlas.Hands",
+    "rootNamespace": "Atlas.Hands",
+    "references": [
+        "Atlas.Kernel",
+        "Atlas.Link",
+        "Atlas.World",
+        "Atlas.Rendering",
+        "Atlas.Input",
+        "Unity.InputSystem",
+        "Unity.Mathematics",
+        "Unity.Burst",
+        "Unity.Collections"
+    ],
+    "allowUnsafeCode": true,
+    "_tests": "Atlas.Hands.Tests"
+}
