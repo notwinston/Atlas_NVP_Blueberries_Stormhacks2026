@@ -25,6 +25,8 @@ namespace Atlas.Telemetry
         /// <summary>A room for which no scan announces itself this long after it was built came from a file.</summary>
         public const float LoadedRoomGraceSeconds = 2f;
         public const float HealthTimeout = 2f, RoomTimeout = 10f, ObjectTimeout = 15f, PollTimeout = 5f, DownloadTimeout = 20f;
+        /// <summary>A light copy that could not be fetched is asked for again after this long, doubling each time up to the cap.</summary>
+        public const float LightRetrySeconds = 15f, LightRetryCapSeconds = 120f;
         public const float PollInterval = 2f, ProbeInterval = 4f, JobSilenceSeconds = 30f, WorkTimeout = 10f;
         /// <summary>The worst frame is watched this long after a mesh was handed over (test L17).</summary>
         public const float AckWindowSeconds = 0.5f;
@@ -64,6 +66,11 @@ namespace Atlas.Telemetry
             public string LightSha = string.Empty, LightUrl = string.Empty;
             /// <summary>A light copy is known and not yet handed over, dropped or on its way.</summary>
             public bool LightPending;
+            /// <summary>The light file is wrong for good (hash, validation, load, refusal): it is not asked for again.</summary>
+            public bool LightCondemned;
+            /// <summary>A light download that could not be had is tried again from this time on, and how often it failed.</summary>
+            public double LightRetryAt;
+            public int LightFails;
             public bool AckPending;
             public double AckAt;
             public float LoadMs, WorstFrameMs;
@@ -236,7 +243,8 @@ namespace Atlas.Telemetry
                 // The views are new: whatever was shown is a placeholder box again, and the first shape is due.
                 FirstShapeDue(e);
                 // The views are new, so the light mesh is gone with them; it follows the full one again.
-                e.LightPending = e.LightSha.Length > 0;
+                e.LightPending = e.LightSha.Length > 0 && !e.LightCondemned;
+                e.LightRetryAt = 0.0;
                 if (e.State == ObjectAssetState.Ready || (e.State == ObjectAssetState.Placeholder && e.Sha.Length > 0))
                 {
                     // From the cache: the pre-scan path needs no Station, and no job waits for an answer.
@@ -338,7 +346,10 @@ namespace Atlas.Telemetry
                 _deleteHandle = _transport.Begin("DELETE", _forgeUrl + "/rooms/" + roomId, null, null, RoomTimeout);
             if (roomId != _roomId) return;
             for (int i = 0; i < _entries.Length; i++)
+            {
                 if (_entries[i].Sha.Length > 0) _cache.Delete(_entries[i].Sha);
+                if (_entries[i].LightSha.Length > 0) _cache.Delete(_entries[i].LightSha);
+            }
             RoomCleared();
         }
 
@@ -725,6 +736,7 @@ namespace Atlas.Telemetry
             _lastJobNews = _now;
             _nextPollAt = _now;
             LogStep("reachable", null, JsonValue.Object().Set("roomId", _roomId));
+            for (int i = 0; i < _entries.Length; i++) _entries[i].LightRetryAt = 0.0;     // a light copy that waited for it
             for (int i = 0; i < _entries.Length; i++)
             {
                 Entry e = _entries[i];
@@ -824,9 +836,10 @@ namespace Atlas.Telemetry
         void NoteLight(Entry e, string lightSha, string lightUrl)
         {
             if (!ForgeProtocol.IsSha256(lightSha)) return;
+            if (e.LightSha != lightSha) { e.LightCondemned = false; e.LightFails = 0; e.LightRetryAt = 0.0; }
             e.LightSha = lightSha;
             e.LightUrl = string.IsNullOrEmpty(lightUrl) ? ForgeProtocol.AssetPath(lightSha) : lightUrl;
-            e.LightPending = true;
+            e.LightPending = !e.LightCondemned;
         }
 
         void BeginDownload(Entry e, string sha, string url)
@@ -856,8 +869,9 @@ namespace Atlas.Telemetry
                 // Only when no full copy waits: the walker is in Home, which shows the full ones.
                 for (int i = 0; _download == null && _built && i < _entries.Length; i++)
                 {
-                    if (_entries[i].State != ObjectAssetState.Ready || !_entries[i].LightPending) continue;
-                    _download = _entries[i];
+                    Entry candidate = _entries[i];
+                    if (candidate.State != ObjectAssetState.Ready || !candidate.LightPending || _now < candidate.LightRetryAt) continue;
+                    _download = candidate;
                     _downloadLight = true;
                 }
                 if (_download == null) return;
@@ -871,7 +885,7 @@ namespace Atlas.Telemetry
                 case DownloadPhase.Work:
                     if (!_work.Done)
                     {
-                        if (_now - _workStartedAt > WorkTimeout) Fail(e, "load_failed");
+                        if (_now - _workStartedAt > WorkTimeout) Fail(e, "work_timeout");
                         return;
                     }
                     if (_work.Outcome == WorkOutcome.Rejected) { Fail(e, _work.Reason); return; }
@@ -880,7 +894,7 @@ namespace Atlas.Telemetry
                         if (_reach == Reach.Unreachable || _backend == BackendOff || _forgeUrl.Length == 0)
                         {
                             // A saved room whose mesh is not in the cache, and no Forge to ask.
-                            if (_downloadLight) DropLight(e, "no_cache");
+                            if (_downloadLight) DeferLight(e, "no_cache");
                             else ToBuiltIn(e, "no_cache", false);
                             return;
                         }
@@ -1021,15 +1035,32 @@ namespace Atlas.Telemetry
         // A copy that fails ends the object's full copy (Reject) or, for a light copy, only itself.
         void Fail(Entry e, string reason)
         {
-            if (_downloadLight) DropLight(e, reason);
-            else Reject(e, reason);
+            if (!_downloadLight) Reject(e, reason == "work_timeout" ? "load_failed" : reason);
+            // The Forge could not be reached or answered too slowly: the file may be fine, so it is asked for again.
+            else if (reason == "download_failed" || reason == "work_timeout") DeferLight(e, reason);
+            else DropLight(e, reason);
         }
 
-        // The light copy is given up: logged, never counted against the object, which keeps its full mesh.
+        // The light copy is wrong for good: logged, never counted against the object, which keeps its full mesh.
         void DropLight(Entry e, string reason)
         {
             LogStep("light_dropped", e, JsonValue.Object().Set("sha256", e.LightSha).Set("reason", reason ?? string.Empty));
             e.LightPending = false;
+            e.LightCondemned = true;
+            EndDownload();
+        }
+
+        // The light copy could not be had now. It stays pending and is asked for again after 15 s, then 30, 60 and
+        // 120 s at the longest: a Forge that stays away costs one attempt of three requests per object per two
+        // minutes, one object at a time, and never before every full copy has been served.
+        void DeferLight(Entry e, string reason)
+        {
+            float wait = LightRetrySeconds;
+            for (int i = 0; i < e.LightFails && wait < LightRetryCapSeconds; i++) wait *= 2f;
+            e.LightFails++;
+            e.LightRetryAt = _now + math.min(wait, LightRetryCapSeconds);
+            LogStep("light_deferred", e, JsonValue.Object().Set("sha256", e.LightSha).Set("reason", reason ?? string.Empty)
+                .Set("retryIn", math.min(wait, LightRetryCapSeconds)));
             EndDownload();
         }
 
@@ -1037,6 +1068,7 @@ namespace Atlas.Telemetry
         {
             if (!_roomView.PlaceGeneratedLight(e.Id, _work.Mesh, e.LightSha)) { DropLight(e, "load_failed"); return; }
             e.LightPending = false;
+            e.LightFails = 0;
             LogStep("light_placed", e, JsonValue.Object().Set("sha256", e.LightSha).Set("tris", _work.Mesh.TriangleCount));
             _download = null;
             _downloadLight = false;

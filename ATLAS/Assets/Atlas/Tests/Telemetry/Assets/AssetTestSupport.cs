@@ -86,7 +86,11 @@ namespace Atlas.Telemetry.Tests
 
         public bool PlaceGeneratedLight(int objectId, MeshData mesh, string sha256)
         {
-            if (RefuseLight || ShownFor(objectId) != "generated") return false;
+            if (RefuseLight || ShownFor(objectId) != "generated")
+            {
+                Calls.Add("lightrefused:" + objectId);
+                return false;
+            }
             GeneratedLight[objectId] = sha256;
             GeneratedLightTriangles[objectId] = mesh.TriangleCount;
             Calls.Add("light:" + objectId);
@@ -169,6 +173,8 @@ namespace Atlas.Telemetry.Tests
         public readonly Dictionary<string, byte[]> Assets = new Dictionary<string, byte[]>();
         /// <summary>Boxes the Forge answers with a cached asset at once: boxId -> hash.</summary>
         public readonly Dictionary<int, string> Cached = new Dictionary<int, string>();
+        /// <summary>Boxes whose cached answer also names a light copy: boxId -> its hash.</summary>
+        public readonly Dictionary<int, string> CachedLight = new Dictionary<int, string>();
         public int Cancelled;
 
         readonly Dictionary<int, Pending> _pending = new Dictionary<int, Pending>();
@@ -278,7 +284,14 @@ namespace Atlas.Telemetry.Tests
                 {
                     job.State = "ready";
                     job.Sha = cached;
-                    Reply(pending, 200, JsonValue.Object().Set("jobId", job.JobId).Set("cached", true).Set("sha256", cached));
+                    JsonValue answer = JsonValue.Object().Set("jobId", job.JobId).Set("cached", true).Set("sha256", cached);
+                    string cachedLight;
+                    if (CachedLight.TryGetValue(job.BoxId, out cachedLight))
+                    {
+                        job.LightSha = cachedLight;
+                        answer.Set("lightSha256", cachedLight).Set("lightUrl", "/assets/" + cachedLight + ".glb");
+                    }
+                    Reply(pending, 200, answer);
                 }
                 else Reply(pending, 202, JsonValue.Object().Set("jobId", job.JobId));
             }
