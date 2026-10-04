@@ -93,10 +93,7 @@
 the agents. A design to build now. The decisions in section 2 were taken by the team lead on 4 October 2026. Facts about the
 code were read from this tree; anything that could not be checked says so. The same text is in \cd{ATLAS_Mesh_Design.md}.\par}
 \vspace{1mm}
-{\small\color{mute}Corrected on 4 October 2026 after the first build, so that it says what the code does. Nothing in it has run
-on a phone, and the real generator (TripoSG) has never run. When this text was corrected, the Forge's fit, attempts, colour per
-face and light copy existed as separate modules (\cd{forge/profile.py}, \cd{forge/colour.py}) and were not yet wired into
-clean-up (section 5.3).\par}
+{\small\color{mute}Corrected on 4 October 2026 after the builds and the reviews, so that it says what the code does. Nothing in it has run on a phone, and the real generator (TripoSG) has never run. The Forge's fit, attempts, colour per face and light copy are built and tested on built shapes only (section 5.3, section 10).\par}
 
 % =====================================================================
 \section{The problem and the outcome}
@@ -273,8 +270,7 @@ Installing & TripoSG's \cd{requirements.txt} pins numpy 1.22.3, which has no bui
 \cd{transformers} is not pinned: 4.57.0 fails to load the model, 4.56.2 works, the official demo pins 4.49.0 & Read & The
 Forge keeps its own pinned list, \cd{requirements-triposg.txt}. The README's install line, which fails as written, is
 corrected\\
-The weights & 7.95 GB. A folder that was only partly downloaded breaks loading & Read & The adapter looks for
-\cd{model_index.json}, not for the folder\\
+The weights & 7.95 GB. A folder that was only partly downloaded breaks loading & Read; the resume also seen once on a small public repository & The adapter looks for \cd{model_index.json} and for a leftover \cd{.incomplete} file. A folder with a gap is fetched before the load, and an interrupted download resumes; a folder that shows no gap and still does not load is fetched once and read again\\
 The result & Vertices inside a cube of $\pm$1.005, with no real-world scale. Shape only: no colour, no texture. The authors'
 texturing route needs more memory than this card has and does not run on Windows & Read & Scale to the box as today. Colour
 by our own projection (section 5.3)\\
@@ -315,9 +311,9 @@ every pin has a Windows wheel except \cd{antlr4-python3-runtime}, which is pure 
 processor, the TripoSG package imported with \cd{diso} replaced by a stub, and \cd{rembg} cut four of TripoSG's example
 pictures, which the Forge framed. No weights were downloaded and nothing was generated. The Windows commands of the run-book are
 written from reading, not from running.
-\item \textbf{What exists to run it.} The adapter's fallback decoder, the \cd{model_index.json} and \cd{diso} checks, the model
-loaded when the service starts, the run-book, \cd{tools/check_station.py} (checks the install) and \cd{tools/first_run.py} (posts
-a room and one photo, follows the job, validates the GLB and reads the frame).
+\item \textbf{What exists to run it.} The adapter's fallback decoder, the \cd{model_index.json} and \cd{diso} checks, the model loaded when the service starts, the run-book, \cd{tools/check_station.py} (checks the install) and \cd{tools/first_run.py} (posts a room and one photo, follows the job, validates the GLB and reads the frame).
+\item \textbf{The weights rule.} An interrupted download is resumed. \cd{huggingface_hub} writes each file as \cd{.incomplete} and moves it into place only when whole, and \cd{model_index.json} arrives within seconds, so its presence says nothing about the weights. The adapter fetches a folder that shows a gap (no \cd{model_index.json}, or an \cd{.incomplete} file) before the load, and fetches once more a folder that shows none but does not load. \cd{tools/check_station.py} reports the gap, and a folder under 7 GB, as a note.
+\item \textbf{Winding.} \cd{FORGE_TRIPOSG_INSIDE_OUT} (default off): with \cd{1} the adapter reverses every face. \cd{tools/first_run.py} reports whether the faces of a finished job are wound \cd{outwards}, \cd{inwards} or \cd{unclear}, from the sign of the volume they enclose, and the run-book says what to do for each. TripoSG's two decoders are different code and may wind differently, and one flag cannot serve both; that is not known.
 \end{itemize}
 
 \textbf{The input picture.} The Forge prepares the crop the way the repository's own script does:
@@ -333,13 +329,7 @@ side.
 trained on: a view's score is halved when the camera stands in the back half of the object, or more than 30\textdegree{}
 above its centre. A view from behind is still taken when there is no other.
 
-\textbf{The output frame.} Which way is up, and where the mesh's front is, is measured once on the Station with a test photo
-of an object that is clearly not symmetric (a chair seen from the front-left). The answer is set as \cd{triposg_up} and
-\cd{triposg_front} in \cd{forge/config.py}; they are settings, read from \cd{FORGE_TRIPOSG_UP} and \cd{FORGE_TRIPOSG_FRONT}
-(defaults \cd{Y} and \cd{unknown}) and checked at start-up, and nothing reads them yet because the fit is not wired into
-clean-up. \cd{tools/first_run.py} reads the frame from a finished job. \cd{triposg_front} is \cd{canonical} (the front is on the
-mesh's own +Z, which after section 5.2 is also the box's front), \cd{view} (the front follows the camera) or \cd{unknown}.
-Section 5.3 uses the scan to choose the orientation in any case; this setting only breaks ties.
+\textbf{The output frame.} Which way is up, and where the mesh's front is, is measured once on the Station with a test photo of an object that is clearly not symmetric (a chair seen from the front-left); \cd{tools/first_run.py} reads both from a finished job. The answer is set as \cd{triposg_up} and \cd{triposg_front} in \cd{forge/config.py}: settings read from \cd{FORGE_TRIPOSG_UP} and \cd{FORGE_TRIPOSG_FRONT} (defaults \cd{Y} and \cd{unknown}) and checked at start-up. \cd{triposg_up} is the only up axis tried for a TripoSG mesh; if TripoSG's up is another axis, every job fails with \cd{asset contract: [frame.bounds]} until the setting is measured, and a mesh standing on its head is not among the candidates. \cd{triposg_front} is \cd{canonical} (the front is on the mesh's own +Z, which after section 5.2 is also the box's front), \cd{view} (the front is on the side the generating view's camera saw) or \cd{unknown}; it only breaks ties of the fit, and decides alone when a job has no profile (section 5.3).
 
 \textbf{Loading.} The model is loaded when the service starts, not on the first job, so the first object does not pay for it.
 \cd{GET /health} reports \cd{generatorReady} only when the load succeeded.
@@ -385,8 +375,7 @@ swapped on an odd turn, and the profile is turned with them. No reader of the Ro
 That strip has at least a quarter of its cells seen, and its mean height exceeds the next side's by 0.15 of the box height\\
 \cd{table} & The front is the side whose outward normal points most towards the centre of the nearest table & A table's box
 lies within 1.0 m of the object's box\\
-\cd{clearance} & The front is the side with the most free floor in front of it: the room's distance field sampled 0.30 m
-outside the middle of each side & The best side exceeds the opposite side by 0.10 m\\
+\cd{clearance} & The front is the one side that has free floor in front of it and blocked floor behind it, which means the object stands with its back against a wall or another object: the room's distance field read 0.30 m outside the middle of each side & Exactly one side can be the front and its reading is at least 0.10 m; a reading within 0.025 m of zero counts as neither free nor blocked\\
 \cd{box} & The box's own axis, as today & Always\\
 \bottomrule
 \end{longtable}}
@@ -404,13 +393,9 @@ table, lamp, plant, stairs, keyboard, mouse, laptop, other, unknown & \cd{box}\\
 \bottomrule
 \end{longtable}}
 
-\textbf{Ties in \cd{clearance}.} An object's own box limits what any open side can read: the probe is 0.30 m out but the free
-region stops one cell (0.05 m) short, so every open side reads at most 0.25 m. A deep appliance against a wall then reads the
-same on all three open sides, and ``the most free floor'' is an exact three-way tie, which taken literally goes to the lowest
-side: right only when RoomPlan's axis happens to point into the room, and \cd{box} otherwise, which is the case the rule exists
-for. So the sides that read within one cell (0.05 m, \cd{ClearanceTie}) of the best count as equally free, and of those the
-side that exceeds its opposite side by most is taken. The 0.10 m acceptance is unchanged, and an exact tie that remains (a
-square box in a corner) goes to the lowest quarter turn.
+\textbf{The \cd{clearance} rule.} The room's distance field is read 0.30 m outside the middle of each side of the box. A side can be the front when the floor there is free and the floor outside the opposite side is blocked, which means the object stands with its back against a wall or another object. A reading within half a cell (0.025 m) of zero counts as neither free nor blocked. The rule answers when exactly one side can be the front and its reading is at least 0.10 m. When two sides can, as in a room corner, the floor cannot tell which is the front: the rule gives no answer and the box keeps its axis. (\cd{ObjectFacing.ClearanceSlack}, \cd{ClearanceProbe}, \cd{ClearanceMargin}.) The rule never compares two readings, so neither the depth of blocked floor nor the proportions of the box can decide anything; a first version that took the larger of two readings turned a toilet, a bed and a refrigerator in a corner the wrong way, with the scanned box right and the file saying \cd{facing: clearance}.
+
+Consequences. The floor gives no answer for an object in a room corner, for one with a neighbour within roughly 0.3 m of exactly one side (a wall and a close neighbour make a corner), or for one standing more than roughly 0.3 m off the wall behind it. \textbf{A corner object whose scanned box is wrong stays wrong}: putting it right would need a rule about proportions per category (the long face for storage, couch, sink and screen; the short face for toilet and bed), which is a new rule and is not built. A wall-mounted screen above a sideboard gets no answer either, because the floor in front of it is blocked by the furniture below; it stays facing the wall as its box says.
 
 \textbf{Two readings} that the table leaves open. In \cd{profile}, ``the next side's'' mean is the highest mean of the other
 three strips (a tie gives no answer); the strips share their corner cells, so a scan that saw only the back gives no answer; the
@@ -424,6 +409,12 @@ The rule that answered is written to \cd{objects[k].facing} (optional key; absen
 Facing can be switched off by a scan option, \cd{ScanOptions.DecideFacing} (true in \cd{ScanOptions.Default}). With it off the
 profile is still computed, because the first shapes and the Forge read it, and only the turning and \cd{facing} are left out. \cd{ScanFlow.Start} forwards the option to both \cd{ScanSolver.Solve} calls, so setting it false switches facing off in the app
 too (tests in \cd{ScanObjectShapeTests}).
+
+\textbf{A row of touching boxes.} FloorScan counted an obstacle blob as explained only when one supplied box covered at least half of it, so three or more touching boxes (an oven, a cupboard and a refrigerator side by side) produced an unknown box round the whole row: the largest object, first in the Forge's queue, drawn over the real three. That was a defect on \cd{main}, not of this work. A blob is now explained when at least half of its cells lie under the supplied boxes taken together, each grown by one cell (rule G13); something the provider did not report, standing against a supplied box and larger than it, is still an object.
+
+\textbf{A half turn is stored so that the room reads back.} Pi rounds to 3.141593 at six decimals, past the reader's bound of 3.1415928 and the schema's. Every yaw the builder writes goes through \cd{RoomModelBuilder.StoredYaw}, which clamps it to [$-$3.141592, 3.141592]; a half turn from yaw 0 is stored as $-$3.141592, the same direction. Rule R16 refuses a yaw outside the readable range, so a room that validates reads back.
+
+\textbf{A room saved by an earlier build} gets today's targets on load: \cd{RoomStore.TryLoad} calls \cd{RoomStore.RefreshTargets}, which assigns the current triangle rule unless the room holds stand-ins. The file is not rewritten; the next save writes the new targets.
 
 \subsubsection{First shapes}
 
@@ -456,75 +447,58 @@ the Forge (\cd{SpectatorRooms.cs}), so it has the profile.
 
 \subsection{Area C \texorpdfstring{\textperiodcentered}{·} The Forge fits, colours and levels the mesh}
 
-The job's \cd{meta} gains \cd{profile} (as in the RoomModel) and \cd{triTargetLight}. Clean-up becomes, in order:
+The job's \cd{meta} gains \cd{profile} (as in the RoomModel) and \cd{triTargetLight}. What follows is built and tested on built shapes (the procedural furniture, boxes, an armchair of three boxes, a sphere of 320,000 triangles) and has never been run on a mesh that TripoSG made; what is unproven is listed in section 10. Clean-up runs in two halves. While the job is \cd{generating}, each generation is welded, reduced to the full target, turned and scaled (\cd{orient}, under the cleaning time-out of 60 s, which was 20 s), and that gives its fit. In \cd{cleaning}, only the attempt that is published is finished (\cd{finish}), so no attempt that is thrown away is coloured or baked. The states stay \cd{matting}, \cd{generating}, \cd{cleaning}, \cd{ready}. In order:
+
 \begin{enumerate}[leftmargin=6mm]
-\item Weld, decimate to the full target, drop detached fragments (as today, with the new target).
+\item Weld, decimate to the full target, drop detached fragments.
 \item \textbf{Orient by the fit.}
-\item Scale to the box, at most $\pm$15\,\% of stretch per axis (as today).
-\item Regrid so no edge exceeds 0.25 m and the count ends at or below the target (as today).
+\item Scale to the box, at most $\pm$15\,\% of stretch per axis.
+\item Regrid so no edge exceeds 0.25 m and the count ends at or below the target.
 \item \textbf{Colour per face.}
-\item Bake face shade $\times$ ambient occlusion (as today).
-\item \textbf{Make the light copy} from the full one: decimate to the light target, then steps 4 to 6.
-\item Validate both, publish both.
+\item Bake face shade $\times$ ambient occlusion.
+\item \textbf{Make the light copy} from the full one.
+\item Validate both (60 s each), publish both.
 \end{enumerate}
 
-Clean-up now casts rays and makes two copies, so its time-out rises from 20 s to 60 s.
+Steps 1 to 3 are \cd{orient}, run for every attempt during \cd{generating}; steps 4 to 8 are \cd{finish}, run for the attempt that is published.
 
 \subsubsection{The fit}
+
 \begin{itemize}
-\item \textbf{Candidates.} The up axes the Forge tries today, times four yaws (0\textdegree, 90\textdegree, 180\textdegree,
-270\textdegree), keeping those whose bounds match the box within the stretch limit.
-\item \textbf{Score.} For a candidate, the mesh's own profile is made with the same downward rays as section 5.2. The score is
-the mean of $|\textrm{generated} - \textrm{scanned}|$ over the cells the scan saw, in fractions of the box height; a cell where
-the mesh has no surface counts as height 0. Lower is better; 0 is a perfect match.
-\item \textbf{Choice.} The lowest score. When the two best differ by less than 0.02, \cd{triposg_front} breaks the tie:
-\cd{canonical} prefers yaw 0\textdegree, \cd{view} prefers the yaw implied by view 0's \cd{camToBox}, \cd{unknown} keeps the
-lower score.
-\item \textbf{No profile.} \cd{triposg_front} alone decides among the candidates: yaw 0\textdegree{} for \cd{canonical}, the
-camera's yaw for \cd{view}. With \cd{unknown}, today's rule.
-\item \textbf{Report.} \cd{fit}, \cd{fitYaw}, \cd{fitUp} and \cd{attempts} are added to the clean-up report and to \cd{JobStatus}.
+\item \textbf{Candidates.} The up axes times four quarter turns, kept when the largest stretch one axis needs beyond the uniform scale is at most 15\,\%. For a TripoSG mesh the only up axis is the one in \cd{FORGE_TRIPOSG_UP} (\cd{Y} until measured); for any other generator it is Y, Z and X. When no candidate is kept, the orientation the bounds choose and the same turned by a half turn.
+\item \textbf{Score.} For a candidate, the mesh's own profile is made with the same downward rays as section 5.2. The score is the mean of |generated $-$ scanned| over the cells the scan saw, in fractions of the box height; a cell where the mesh has no surface counts as height 0. Lower is better; 0 is a perfect match.
+\item \textbf{Choice.} Every candidate whose score is within 0.02 of the lowest (\cd{FIT_TIE}) is a tie, and a tie is broken in this order: the candidate with the preferred front; then the earliest up axis, which is the generator's own; then the lower score. The second rule is an addition to the design: without it a cube on a plinth lay on its side, because that fitted a flat scan better by 0.002. Another up axis has to fit better by 0.02 to be taken. The preferred front comes from \cd{triposg_front}: \cd{canonical} prefers no turn, \cd{view} prefers the turn implied by the camera of the view the mesh was generated from (not view 0's, when the mesh came from view 1 or 2), \cd{unknown} prefers nothing.
+\item \textbf{No profile.} A profile that covers under 0.10 of the box (\cd{MIN_FIT_COVERAGE}) counts as no profile for the fit; the job still stores the one the phone sent. With none, there is no score, no candidates and one generation, and \cd{triposg_front} alone decides the turn: none for \cd{canonical}, the camera's for \cd{view}, and with \cd{unknown} the orientation the bounds choose.
+\item \textbf{Report.} \cd{fit} (absent when there is no profile), \cd{fitYaw}, \cd{fitUp}, \cd{candidates} and \cd{attempts} are added to the clean-up report and to \cd{JobStatus}. \cd{fitYaw} is the turn as a yaw in the box's frame, (360 $-$ the quarter turns of clean-up) mod 360.
 \end{itemize}
 
 \subsubsection{Attempts (decision M7)}
 
-A fit above \textbf{0.20} is poor. The Forge then generates again from view 1, then from view 2, when those exist, and
-publishes the attempt with the lowest score. A mesh is always published (decision M6); a poor fit is reported, never hidden.
-At most three generations per object.
+A fit above \textbf{0.20} (\cd{FORGE_POOR_FIT}) is poor. With a profile and a poor fit the Forge generates the next view, up to three generations per object, and finishes the attempts in order of fit, lowest first: the first that gives a full copy that meets the contract is published. A job fails only when no attempt does. A mesh is always published (decision M6); a poor fit is reported, never hidden. How failures count: a failed generation is one of the three; after two failures with no mesh the generator is given up for the object, as before, and the hosted service is tried if it is armed; a failure after a poor mesh does not stop the third view; a view that cannot be matted makes no generation and is not a failure; a raw mesh that clean-up cannot use is a failed generation. The hosted service is never sent a second photo for a poor fit: those attempts are made by the Station's own generator only, and the hosted service keeps one generation. With no profile there is one generation, and one retry with view 1 if it fails.
 
 \subsubsection{Colour per face (decision M8)}
+
 \begin{itemize}
-\item For each face and each view: the face is seen when it turns towards the camera (cosine above 0.2), its centre projects
-inside the crop, the matte is solid there, and a ray from the camera to the face centre meets no other triangle first. The
-crop's own \cd{intrinsics} and \cd{camToBox} give the projection; both are already in the job.
-\item The face's colour is the mean of the 5 $\times$ 5 pixels around the projected centre, weighted by the cosine, over the views
-that see it.
+\item For each face and each view: the face is seen when it turns towards the camera (cosine above 0.2), its centre projects inside the crop, the matte is solid there, and a ray from the camera to the face centre meets no other triangle first. The crop's own \cd{intrinsics} and \cd{camToBox} give the projection; both are already in the job.
+\item \textbf{Colour needs a matte.} A view that is not matted gives no colour, because nothing tells the object from the room; on a machine with no matting model every object keeps one cell, from the dominant colour, as before. A view also needs \cd{intrinsics} and \cd{camToBox}, and a camera that cannot be one is left out. The colours are read from every photo the phone sent, not only from those a generation used.
+\item The face's colour is the mean of the 5 $\times$ 5 pixels around the projected centre, weighted by the cosine, over the views that see it.
 \item It is mapped to the nearest object cell of the palette (cells 64 to 127), with today's \cd{nearest_entry}.
-\item Smoothing: three passes in which a face takes the cell that two of its three neighbours share; then regions under 2\,\%
-of the surface merge into their largest neighbour, and the smallest regions merge until at most 6 cells remain.
-\item A face no view saw takes the cell of the nearest seen face along the surface. With no seen face at all, the object keeps
-one cell from the dominant colour, as today.
-\item Vertices are split only where two faces of different cells meet, and every vertex of a face points at the centre of that
-face's cell. The shader, the palette and the vertex format do not change. \cd{AssetReady.palette} reports the cell that covers
-the most surface.
+\item Smoothing: three passes in which a face takes the cell that two of its three neighbours share; then regions under 2\,\% of the surface merge into their largest neighbour, and the smallest regions merge until at most 6 cells remain.
+\item A face no view saw takes the cell of the nearest seen face along the surface. With no seen face at all, the object keeps one cell from the dominant colour, as today.
+\item Vertices are split only where two faces of different cells meet, and every vertex of a face points at the centre of that face's cell. The shader, the palette and the vertex format do not change. \cd{AssetReady.palette} reports the cell that covers the most surface.
+\item The faces must be wound counter-clockwise seen from outside, as the GLB stores them. If a generator winds them the other way, no face is seen and every object takes one cell (section 10).
 \end{itemize}
 
-\textbf{Four departures in \cd{forge/colour.py}} (a module with tests; not yet wired into clean-up). Speckle is counted after the
-three passes and the 2\,\% merge, not after the limit to 6 cells, because counted after the limit a clean object of eight equal
-stripes limited to three cells looks speckled and collapses to one cell. A face no view saw takes the cell of the nearest seen
-face by distance along the surface, centre to centre over faces that share a corner or an edge, not by a count of edges crossed,
-because the count ran the border between two colours at 45\textdegree{} across an unseen back. After the unseen faces are
-filled, the 2\,\% merge and the limit run a second time over the whole mesh, so a small island of seen faces surrounded by unseen
-ones cannot survive. And ``no other triangle first'' is an exact ray test from the camera to each face centre, with triangles
-binned by their footprint in the picture, not a depth buffer (tolerance 0.01 m; a view that would need more than 12,000,000
-ray-triangle tests sees nothing).
+\textbf{Four departures in \cd{forge/colour.py}.} Speckle is counted after the three passes and the 2\,\% merge, not after the limit to 6 cells, because counted after the limit a clean object of eight equal stripes limited to three cells looks speckled and collapses to one cell. A face no view saw takes the cell of the nearest seen face by distance along the surface, centre to centre over faces that share a corner or an edge, not by a count of edges crossed, because the count ran the border between two colours at 45\textdegree{} across an unseen back. After the unseen faces are filled, the 2\,\% merge and the limit run a second time over the whole mesh, so a small island of seen faces surrounded by unseen ones cannot survive. And ``no other triangle first'' is an exact ray test from the camera to each face centre, with triangles binned by their footprint in the picture, not a depth buffer (tolerance 0.01 m; a view that would need more than 12,000,000 ray-triangle tests sees nothing).
 
 \subsubsection{Two levels (decision M10)}
+
 \begin{itemize}
 \item The full copy meets the object's full target (section 5.4); the light copy meets the room's light target.
-\item \cd{AssetReady} gains \cd{lightSha256}, \cd{lightUrl}, \cd{lightBytes} and \cd{lightTris}. A reader that ignores them
-shows the full copy everywhere, as today.
+\item The light copy is made from the full one by decimation and is then put back on the full copy's bounds (a linear map per axis), so that both fill the same box. When the full copy is already within the light target, the light copy is the same file: \cd{lightSha256} equals \cd{sha256}. If the light copy cannot keep every edge under 0.25 m inside its target, there is none, the report says why, and the full copy is published all the same.
+\item \cd{AssetReady} gains \cd{lightSha256}, \cd{lightUrl}, \cd{lightBytes} and \cd{lightTris}, present when there is a light copy; a Forge cache hit answers with the same four. A reader that ignores them shows the full copy everywhere, as today.
 \item \cd{objects[k].assetHashLight} records the light copy beside \cd{assetHash}.
-\item The phone downloads the full copy first, since the walker is in Home when meshes arrive, then the light one.
+\item The phone downloads the full copy first, since the walker is in Home when meshes arrive, then the light one. A transport failure of the light copy (the download after its three attempts, a work time-out, no cache with no Forge) keeps it pending and tries again after 15 s, then 30, 60 and 120 s, and at once when the Forge returns; a content failure (the hash, the validation, the load, the room content refusing it) drops it for good, and the object keeps its full copy. When \cd{lightSha256} equals \cd{sha256} there is no second download. A first shape that a mesh replaces is destroyed only when the room content no longer draws it (\cd{IRoomContent.IsMeshDrawn}).
 \end{itemize}
 
 \subsection{Area D \texorpdfstring{\textperiodcentered}{·} The furniture budget}
@@ -609,8 +583,7 @@ check M3, is open for all. Three further controls:
 \begin{itemize}
 \item \textbf{The quality ladder.} The quality table gains one column, furniture level. It is a table in
 \cd{Rendering/Quality/QualityFurniture.cs}, not a field of \cd{QualityRow}, which lives in \cd{Atlas.World}. Nominal and High
-allow Full; Fair, Serious and Critical force Light in every space, so the first step below nominal drops the furniture to its
-light copies before any step lowers the render scale. \cd{QualityApplier.FurnitureCap} and \cd{QualityLadder.FurnitureCap}
+allow Full; Fair, Serious and Critical force Light in every space, The first step below nominal, Fair, forces Light in the same step in which it lowers the eye-texture scale from 0.8 to 0.7 (\cd{World/Quality/QualityTier.cs}); the table has no step that changes only the furniture. \cd{QualityApplier.FurnitureCap} and \cd{QualityLadder.FurnitureCap}
 publish the column, and \cd{FurnitureLevelPolicy} (\cd{App/Spaces/FurnitureLevels.cs}) puts the resulting level on the room when
 a space is entered, when the tier changes, when the parameter changes and when the room is rebuilt.
 \item \textbf{A parameter.} \cd{render.furniture} = \cd{auto}, \cd{light} or \cd{full}, so the Console can force a level:
@@ -662,6 +635,10 @@ side is really the front. Because the raw generator output is kept, clean-up can
 
 \cd{tools/meshcheck/check.py} reads the record and prints the numbers below. Only those numbers, and pictures rendered from
 the meshes, go into \cd{docs/evidence/mesh/}. No camera frame leaves the Station.
+
+\textbf{As built.} \cd{python tools/meshcheck/check.py --data DIR --room ID [--truth FILE] [--poor-fit X] [--json FILE] [--pictures DIR]}, with the Forge's interpreter; the truth defaults to \cd{rooms/<roomId>/truth.json} of the data folder. \cd{truth.json} maps each object id to \cd{+Z}, \cd{+X}, \cd{-Z}, \cd{-X} or \cd{none}: the side of the box, as the RoomModel holds it, that is really the front. Per object it prints the facing rule that answered and whether it was right, whether the first shape is a plain box, the fit and the seconds of each attempt and which one was published, and both copies' triangles and validator verdicts; then the totals of M1 and M2 against their thresholds (90\,\% facing, median fit 0.12, 60 s per attempt, poor fit 0.20). A line has a verdict only where the record settles it: an object that cannot be judged (not in the truth, a mesh whose front cannot be read, no fit, no timed attempt) counts against a pass and against a fail alike and is named, so nothing passes on what was not measured. A mesh's front is read by the phone's own profile rule, so a cupboard or anything flat on top is named, not judged. The last line counts the lines that pass, fail and are not settled. Exit codes: 0 only when every line that asks for something passes, 1 when one fails, 3 when none fails but one is not settled, 2 when the record cannot be read. \cd{--pictures} writes the scan's profile beside the mesh's for each object.
+
+\cd{python -m forge.reclean <jobId or folder> [--data DIR] [--out DIR] [--json]} runs clean-up again from the kept record without the generator (exit 0 when a copy was made, 1 otherwise). Under the settings the job ran with it gives the published bytes, so a change to clean-up, or to \cd{FORGE_TRIPOSG_UP}, \cd{FORGE_TRIPOSG_FRONT} or \cd{FORGE_MAX_ANISOTROPY}, can be tried on recorded objects without the card. \cd{FORGE_DEBUG_KEEP} keeps the crops, their mattes, each attempt's raw output, both GLBs and the report. No record has been taken yet.
 
 \subsubsection{The checks}
 
@@ -839,6 +816,10 @@ The wall bridge cannot share the AR session with the box provider, or does not b
 walls are as today\\
 A second RoomModel reader rejects the new keys & The keys are optional and every reader in the tree ignores unknown keys
 except \cd{validate_room.py}, which is changed with the schema\\
+A corner object's scanned box is wrong & In a room corner facing gives no answer and the box keeps its axis, so a wrong box stays wrong. Check M1 counts it. A rule about proportions per category would put it right and is a new rule, not built\\
+A wall-mounted screen stands above furniture & The floor in front of it is blocked by the furniture below, so facing gives no answer and it stays facing the wall as its box says\\
+The fit's thresholds meet a real LiDAR profile & 0.20 for a poor fit and 0.02 for a tie were tested only on clean cases. Both are settings or constants; the record keeps every candidate's score and \cd{forge.reclean} runs clean-up again, so they can be tuned without the card\\
+TripoSG's up axis or winding is not what the settings say & A wrong \cd{FORGE_TRIPOSG_UP} fails every job with \cd{asset contract: [frame.bounds]} until it is measured; a mesh on its head is not among the candidates. Inside-out faces give every object one cell and invert the baked shade; \cd{FORGE_TRIPOSG_INSIDE_OUT} reverses them, and \cd{tools/first_run.py} reports the winding\\
 \bottomrule
 \end{longtable}}
 
@@ -846,8 +827,7 @@ except \cd{validate_room.py}, which is changed with the schema\\
 \section{Open points}
 
 \begin{enumerate}[leftmargin=6mm]
-\item TripoSG's output frame is inferred, not documented (section 5.1), and is measured on area A's first run. The design
-works with any of the three settings; the setting only breaks ties.
+\item TripoSG's output frame is inferred, not documented (section 5.1), and is measured on area A's first run. The fit decides the turn, so the front setting only breaks ties; the up axis is not tried, so a wrong \cd{FORGE_TRIPOSG_UP} fails every job until it is measured (section 9).
 \item The thresholds are starting values: 0.15 and 0.10 m for facing, 0.20 for a poor fit, 0.30 for coverage, 6 cells per
 object. Checks M1 and M2 on the record are where they are tuned.
 \item Unity's support for ray tracing on the target phones is unchecked. It matters only for section 6.2, step 3.
@@ -858,6 +838,12 @@ The shared test vectors do not reach it.
 \item Three Playground tests fail in the Unity Editor on \cd{main}, for a reason outside this work:
 \cd{Blades/Playground/Shell/Cards/HudPanel.cs:117} calls \cd{Destroy} in edit mode. They are not touched by the mesh design and
 are listed so that nobody takes them for a failure of it.
+\item The fit has only seen clean cases. A mesh scored against a profile of itself gives 0.0 and every wrong turn at least 0.11; other procedural shapes against a chair's profile give 0.15 to 0.46. Not known: the score of a TripoSG mesh against a real LiDAR profile (noise, cells seen in part, the floor seen through a chair's legs, a shape that only resembles the object), nor whether 0.20 separates good from poor and 0.02 is a sensible tie.
+\item The bounds filter: candidates must fill the box within 15\,\% of stretch. A real mesh of an object photographed at an angle may fit no way round; then the bounds choose and the fit only chooses between that orientation and its half turn. Tested on one armchair in a box half as deep. The fit is measured after the mesh was reduced to the full target, and a raw TripoSG mesh (its size, inner surfaces, non-manifold parts) was never reduced here.
+\item Colour is proven only where the mesh matches the photo and the camera is exact: two colours land on the right faces, also after the fit turned the mesh. Not known: real photos with ARKit's intrinsics and \cd{camToBox}, a mesh that does not line up with its photo (the speckle fallback was tested on noise), rembg's matte of a real room photo, thin parts, and TripoSG's winding (inside out gives one cell per object).
+\item The light copy is proven on a sphere (15,000 to 1,875 and to 5,000) and on procedural shapes. Not known: what reducing a real 15,000-triangle chair to 1,875 does to its legs, or how often no light copy results because an edge stays over 0.25 m.
+\item Attempts are proven with a generator that returns named shapes. On the Station three generations of one object take three times its time, and with 32 objects of poor fit the queue is long. Not measured.
+\item A corner object whose scanned box is wrong stays wrong, and a wall-mounted screen above furniture gets no answer (section 5.2, section 9). Whether M1 on the real record makes a per-category rule about proportions worth building is open.
 \end{enumerate}
 
 % =====================================================================
@@ -875,17 +861,15 @@ One row per task. ``Needs'' lists tasks that must be done first; tasks with none
 \endhead
 MQ-D01 & D & Install TripoSG from our own pinned list and run one object through the Forge; correct the README's install
 line; record versions.\newline \cd{station/forge/requirements-triposg.txt} (new), \cd{station/forge/README.md},
-\cd{docs/versions.md} & A GLB from a real photo passes the validator. Built so far: the pinned list, the run-book and
-\cd{tools/first_run.py}; the validator has accepted procedural output only, and \cd{docs/versions.md} is not yet written & --\\
+\cd{docs/versions.md} & A GLB from a real photo passes the validator. Built so far: the pinned list, the run-book with the weights rule, \cd{tools/check_station.py} and \cd{tools/first_run.py} (which also reports the winding); the validator has accepted procedural output only, and \cd{docs/versions.md} is not yet written & --\\
 MQ-D02 & D & Adapter: the fallback decoder, the checks for \cd{model_index.json} and \cd{diso}, the model loaded at start,
 and whatever else the first run shows.\newline \cd{forge/generators/triposg.py},
-\cd{forge/service.py} & \cd{GET /health} reports ready; three different photos give three meshes. Built so far: the adapter,
-tested with a fake pipeline & MQ-D01\\
+\cd{forge/service.py} & \cd{GET /health} reports ready; three different photos give three meshes. Built so far: the adapter and the weights rule, tested with a fake pipeline and a fake download & MQ-D01\\
 MQ-D03 & D & Input picture: matting required, cut to the matte, white, padded square.\newline \cd{forge/imaging.py},
 \cd{forge/service.py} & A test photo's prepared picture is square with the object centred & --\\
 MQ-D04 & D & Measure and record the output frame.\newline \cd{forge/config.py} & \cd{triposg_up} and \cd{triposg_front} are
 set from a non-symmetric test object. Built so far: the two settings (environment variables, defaults \cd{Y} and \cd{unknown})
-and the tool that reads the frame & MQ-D02\\
+and the tool that reads the frame and the winding & MQ-D02\\
 MQ-C01 & C & The object profile in the scan solver.\newline \cd{Scan/Build/ObjectProfile.cs} (new),
 \cd{Scan/Routes/ScanSolver.cs} & Synthetic rooms give the expected bytes. Built instead of ``\cd{roommath.py} agrees'': the Forge's \cd{forge/profile.py} and
 the phone's \cd{ObjectProfile} pass the same three test vectors (A, B and C of the shared brief, S3); \cd{roommath.py} has no
@@ -894,7 +878,7 @@ MQ-C02 & C & \cd{profile}, \cd{facing}, \cd{assetHashLight} in the RoomModel, th
 R21.\newline \cd{World/Room/RoomModel.cs}, \cd{RoomModelJson.cs}, \cd{RoomModelValidator.cs}, \cd{roommodel.schema.json},
 \cd{tools/rooms/} & Round trip on a room with profiles; fixtures still valid & --\\
 MQ-C03 & C & The facing rule and the quarter-turn normalisation.\newline \cd{Scan/Build/ObjectFacing.cs} (new),
-\cd{RoomModelBuilder.cs} & Synthetic chair, stool, storage, deep-appliance and table cases face as designed, with the tie rule of section 5.2 &
+\cd{RoomModelBuilder.cs} & Synthetic chair, stool, storage, appliance and table cases face as designed, and an object in a room corner gets no answer (section 5.2) &
 MQ-C01, MQ-C02\\
 MQ-C05 & C & Photo selection prefers views from the front half and from no more than 30\textdegree{} above.\newline
 \cd{Scan/Photo/PhotoScore.cs} & Of a front and a back view of equal quality, the front one is view 0 & MQ-C03\\
@@ -907,17 +891,13 @@ MQ-A01 & A, C, D & The triangle rule in all three places, and the validators.\ne
 \cd{forge/budget.py}, \cd{tools/rooms/roommath.py}, \cd{GlbValidator.cs}, \cd{forge/validator.py} & The table of section 5.4
 from all three; the fixtures regenerate & --\\
 MQ-D07 & D & The fit: the mesh's profile, candidates, choice, report; cleaning time-out 60 s.\newline \cd{forge/cleanup.py},
-\cd{forge/profile.py} (new), \cd{forge/models.py}, \cd{forge/config.py} & A test mesh turned by each quarter turn is turned back. Built so far: \cd{forge/profile.py} with its tests (the mesh's profile,
-the fit score, the turning); the fit is not yet in clean-up & MQ-C02\\
-MQ-D08 & D & Attempts on a poor fit.\newline \cd{forge/service.py} & A forced poor fit runs views 1 and 2 and publishes the
-best & MQ-D07\\
+\cd{forge/profile.py} (new), \cd{forge/models.py}, \cd{forge/config.py} & A test mesh turned by each quarter turn is turned back. Built, and met on built shapes: \cd{forge/profile.py} and the fit in \cd{forge/cleanup.py} (\cd{test_fit.py} turns a mesh by each quarter turn and gets it back); the fit has not seen a TripoSG mesh & MQ-C02\\
+MQ-D08 & D & Attempts on a poor fit.\newline \cd{forge/service.py} & A forced poor fit runs views 1 and 2 and publishes the best. Built, and met with a generator that returns named shapes (\cd{test_attempts.py}); the rules for failures and for the hosted service are in section 5.3 & MQ-D07\\
 MQ-D09 & D & Colour per face.\newline \cd{forge/colour.py} (new), \cd{forge/cleanup.py}, \cd{forge/palette.py} & A two-colour
-test object gives two cells in the right places. Built so far: \cd{forge/colour.py} with its tests, which include a two-colour
-object; it is not yet in clean-up & MQ-D07\\
+test object gives two cells in the right places. Built, and met on a rendered two-colour object, also after the fit turned the mesh; not tried on a real photo or on a TripoSG mesh & MQ-D07\\
 MQ-D10 & D & The light copy; \cd{AssetReady} light fields; two downloads.\newline \cd{forge/cleanup.py},
 \cd{forge/service.py}, \cd{Link/Messages/JsonMessages.cs}, \cd{AssetClientCore.cs} & Both copies validate; an old reader
-still shows the full one. Built so far: the phone's side (the message fields, the Hub pass-through, the validator levels, the
-light download) and the Forge's validator and \cd{JobStatus} fields; the Forge does not yet make a light copy & MQ-A01\\
+still shows the full one. Built: the phone's side (the message fields, the Hub pass-through, the validator levels, the light download with its retry) and the Forge's light copy, stored under its own hash and named in a cache answer; met on built shapes only & MQ-A01\\
 MQ-A02 & A, C & Two meshes per object and a level in the room content; each space's level; the ladder column;
 \cd{render.furniture}.\newline \cd{World/Room/IRoomContent.cs}, \cd{Rendering/Room/RoomContent.cs}, \cd{Rendering/Quality/},
 the space modules & Entering a light space swaps meshes; the ladder's first step forces light & MQ-D10\\
@@ -930,7 +910,7 @@ MQ-C04 & C & Build the Swift plugin into the Xcode project; switch the bridge on
 off. Built so far: the post-build step, tested headless, and the \cd{UnityFramework} target built from a copy of an earlier
 export; the app target stopped at storyboards on this Mac (section 5.5); the parameter is tested headless & --\\
 MQ-F01 & D & The record and \cd{tools/meshcheck/check.py}; raw generator output kept under debug-keep.\newline
-\cd{forge/service.py}, \cd{tools/meshcheck/} (new) & The script prints the numbers of M1 and M2 from a record & MQ-D07\\
+\cd{forge/service.py}, \cd{tools/meshcheck/} (new) & The script prints the numbers of M1 and M2 from a record. Built, with \cd{python -m forge.reclean}, and tested on built records (\cd{test_meshcheck.py}); no real record exists & MQ-D07\\
 MQ-F02 & Lead & Take the record; write \cd{truth.json}; run M1 to M4; fill \cd{docs/evidence/mesh/} & The four checks have a
 result each & All\\
 \bottomrule
@@ -950,10 +930,11 @@ $-$Z: rows 13 to 15. Of $-$X: columns 13 to 15. A strip's mean is over its seen 
 of the box height, and $g = 0$ where the mesh has no surface:
 \[ \textrm{score} = \frac{1}{|S|} \sum_{c \in S} |g_c - p_c| . \]
 
-\textbf{The view's yaw.} With \cd{camToBox} the camera-to-box transform of view 0, the camera stands at $c$, its translation.
+\textbf{The view's yaw.} With \cd{camToBox} the camera-to-box transform of the view the mesh was generated from (view 0, 1 or 2), the camera stands at $c$, its translation.
 The azimuth of the view is $\mathrm{atan2}(c_x, c_z)$ in the box's frame; the nearest quarter turn to it is the candidate the
 tie-break prefers when \cd{triposg_front} is \cd{view}. Its elevation is the angle of $c - (0, h/2, 0)$ above the horizontal.
 
+\needspace{40mm}
 \section{Where things are}
 
 {\small
