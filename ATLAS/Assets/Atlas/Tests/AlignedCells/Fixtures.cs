@@ -105,6 +105,8 @@ namespace Atlas.Spaces.AlignedCells.Tests
         // The asset client's swap: the state and the triangle count change, the object and its place do not.
         public bool SetGeneratedMesh(int objectId, UnityEngine.Mesh mesh, string assetHash, float fadeSeconds = 0.3f)
             => Swap(objectId, MeshState.Ready, assetHash);
+        public FurnitureLevel FurnitureLevel { get; set; }
+        public bool SetGeneratedLightMesh(int objectId, UnityEngine.Mesh mesh, string assetHashLight) => false;
         public bool SetBuiltInMesh(int objectId, UnityEngine.Mesh sharedMesh, UnityEngine.Vector3 scale, float fadeSeconds = 0.3f)
             => Swap(objectId, MeshState.BuiltIn, "");
         bool Swap(int objectId, MeshState state, string hash)

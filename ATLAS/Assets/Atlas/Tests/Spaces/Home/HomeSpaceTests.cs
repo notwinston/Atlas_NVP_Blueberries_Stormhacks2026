@@ -52,6 +52,8 @@ namespace Atlas.Spaces.Tests.Home
                 Calls.Add("SetGeneratedMesh");
                 return false;
             }
+            public FurnitureLevel FurnitureLevel { get; set; }
+            public bool SetGeneratedLightMesh(int objectId, UnityEngine.Mesh mesh, string assetHashLight) { return false; }
             public bool SetBuiltInMesh(int objectId, UnityEngine.Mesh sharedMesh, UnityEngine.Vector3 scale, float fadeSeconds = 0.3f)
             {
                 Calls.Add("SetBuiltInMesh");
@@ -334,8 +336,8 @@ namespace Atlas.Spaces.Tests.Home
             Assert.That(cost.MarkTriangles, Is.EqualTo(HomeMarks.Triangles(room)));
             Assert.That(cost.DrawCallsPerEye, Is.EqualTo(cost.Room.DrawCallsPerEye + 1));
             Assert.That(cost.TrianglesPerEye, Is.EqualTo(cost.Room.TrianglesPerEye + cost.MarkTriangles));
-            Assert.That(cost.DrawCallsPerFrame, Is.LessThanOrEqualTo(60));
-            Assert.That(cost.TrianglesPerFrame, Is.LessThanOrEqualTo(130000));
+            Assert.That(cost.DrawCallsPerFrame, Is.LessThanOrEqualTo(80));
+            Assert.That(cost.TrianglesPerFrame, Is.LessThanOrEqualTo(250000));
             Assert.That(HomeBudget.Fits(cost), Is.True);
             TestContext.WriteLine("Home on budget_room: " + cost.DrawCallsPerFrame + " draw calls, " +
                                   cost.TrianglesPerFrame + " triangles per frame");

@@ -22,7 +22,13 @@ namespace Atlas.Rendering.Room
         internal bool OwnsMesh;
         internal RoomObject DataInternal;
         internal MeshState ShownInternal;
+        // Triangles of Mesh, the full copy (or whatever else is shown while no light copy is drawn).
         internal int Triangles;
+
+        // The light copy of a generated mesh, always owned here. ShowingLight: the filter holds it, not Mesh.
+        internal Mesh LightMesh;
+        internal int LightTriangles;
+        internal bool ShowingLight;
 
         // The mesh that is fading out, on its own rented material.
         internal GameObject OutObject;
@@ -41,6 +47,8 @@ namespace Atlas.Rendering.Room
         internal bool PendingOwned;
         internal MeshState PendingState;
         internal string PendingHash;
+        internal Mesh PendingLightMesh;
+        internal string PendingLightHash;
         internal Vector3 PendingScale;
         internal float PendingSeconds;
 
@@ -53,7 +61,8 @@ namespace Atlas.Rendering.Room
         public Transform Transform { get { return AnchorObject.transform; } }
         public Renderer Renderer { get { return MeshRenderer; } }
         public Material Material { get { return MaterialInternal; } }
-        public int TriangleCount { get { return Triangles; } }
+        /// <summary>Of the mesh actually drawn: the light copy while it is shown, else the full one.</summary>
+        public int TriangleCount { get { return ShowingLight ? LightTriangles : Triangles; } }
 
         /// <summary>The child that carries the mesh; a built-in mesh's fitting scale is on it.</summary>
         public Transform MeshTransform { get { return MeshTransformInternal; } }

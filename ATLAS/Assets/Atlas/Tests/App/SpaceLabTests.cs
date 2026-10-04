@@ -65,6 +65,18 @@ namespace Atlas.App.Tests
         }
 
         [Test]
+        public void Stage_IsToldWhichSpaceComesNext()
+        {
+            var rig = new Rig(SpaceId.Home, SpaceId.Glued);
+            rig.GiveRoom();
+            rig.Lab.RequestSwitch(SpaceId.Home);
+            rig.RunUntilRunning();
+            rig.Lab.RequestSwitch(SpaceId.Glued);
+            rig.RunUntilRunning();
+            Assert.That(rig.Stage.Nexts, Is.EqualTo(new SpaceId?[] { SpaceId.Home, SpaceId.Glued }));
+        }
+
+        [Test]
         public void NoRoom_IsRefused()
         {
             var rig = new Rig(SpaceId.Home);

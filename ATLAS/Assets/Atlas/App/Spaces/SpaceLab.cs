@@ -24,8 +24,9 @@ namespace Atlas.App
     {
         /// <summary>The world fade: 1 shows the world, 0 is black. The head-locked layer ignores it.</summary>
         void SetFade(float fade);
-        /// <summary>Between two spaces: default fog and background, room content back to its default mode.</summary>
-        void ResetForSpace();
+        /// <summary>Between two spaces: default fog and background, room content back to its default mode, then
+        /// the furniture level of the space about to be entered (null when none is).</summary>
+        void ResetForSpace(SpaceId? next);
     }
 
     /// <summary>
@@ -319,7 +320,7 @@ namespace Atlas.App
                 _exited = true;
                 if (_stage != null)
                 {
-                    _stage.ResetForSpace();
+                    _stage.ResetForSpace(_toEmpty ? (SpaceId?)null : _target);
                     _stage.SetFade(0f);
                 }
             }

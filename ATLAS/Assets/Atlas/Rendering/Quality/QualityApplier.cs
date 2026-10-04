@@ -70,6 +70,9 @@ namespace Atlas.Rendering
         public float CullRho { get; set; }
         /// <summary>Glued copies per side of the tier. May be set by hand between two tier changes.</summary>
         public int GluedCopies { get; set; }
+        /// <summary>The highest furniture level of the tier: Light from Fair down, Full on Nominal and High. The
+        /// room's level is this limit applied to the space's own level (QualityFurniture.Limit).</summary>
+        public FurnitureLevel FurnitureCap { get; private set; }
         /// <summary>Frames per second of the tier: 60, or 30 on Critical.</summary>
         public int FrameRate => _row.FrameRate;
 
@@ -140,6 +143,7 @@ namespace Atlas.Rendering
             _row = QualityTable.Row(tier);
             CullRho = _row.CullRho;
             GluedCopies = _row.GluedCopies;
+            FurnitureCap = QualityFurniture.Cap(tier);
             FramePacing.TargetFrameRate = _row.FrameRate;
             if (_eyes != null)
                 _eyes.Select(_row.RenderScale, _row.Msaa);

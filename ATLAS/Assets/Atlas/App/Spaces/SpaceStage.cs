@@ -12,17 +12,26 @@ namespace Atlas.App
         readonly IRoomContent _room;
 
         /// <param name="room">The room content; may be null (a sandbox with no room).</param>
-        public SpaceStage(IRoomContent room) { _room = room; }
+        readonly FurnitureLevelPolicy _furniture;
+
+        /// <param name="furniture">Sets the furniture level of the room on entering a space; may be null.</param>
+        public SpaceStage(IRoomContent room, FurnitureLevelPolicy furniture = null)
+        {
+            _room = room;
+            _furniture = furniture;
+        }
 
         public void SetFade(float fade)
         {
             AtlasLook.SetFade(fade);
         }
 
-        public void ResetForSpace()
+        public void ResetForSpace(SpaceId? next)
         {
             AtlasLook.ResetForSpace();
             if (_room != null && _room.IsBuilt) _room.ResetPresentation();
+            // After the reset, which returns the room to Full: the level of the space about to be entered.
+            if (_furniture != null) _furniture.EnterSpace(next);
         }
     }
 }

@@ -173,7 +173,8 @@ namespace Atlas.App.Tests
         public int Resets;
         public float Fade = 1f;
         public void SetFade(float fade) { Fade = fade; Fades.Add(fade); }
-        public void ResetForSpace() { Resets++; }
+        public readonly List<SpaceId?> Nexts = new List<SpaceId?>();
+        public void ResetForSpace(SpaceId? next) { Resets++; Nexts.Add(next); }
     }
 
     sealed class FakeModule : ISpaceModule, IUploadStep

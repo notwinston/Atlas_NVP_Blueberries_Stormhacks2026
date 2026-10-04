@@ -28,12 +28,14 @@ namespace Atlas.Rendering.Room
     /// </remarks>
     public static class RoomBudget
     {
-        /// <summary>Home, per frame, both eyes (Master Plan section 8.5).</summary>
-        public const int HomeDrawCallsPerFrame = 60, HomeTrianglesPerFrame = 130000;
+        /// <summary>Home, per frame, both eyes (Master Plan section 8.5; raised from 60 and 130,000 by the mesh design
+        /// section 5.4, because Home shows the full furniture copies).</summary>
+        public const int HomeDrawCallsPerFrame = 80, HomeTrianglesPerFrame = 250000;
 
-        /// <summary>The cost of the room as RoomContent draws it in the given presentation.</summary>
+        /// <summary>The cost of the room as RoomContent draws it in the given presentation. At Light a generated
+        /// object counts the room's light target instead of its full target.</summary>
         public static RoomDrawCost Estimate(RoomModel room, WallMode walls = WallMode.Full, bool floorVisible = true,
-                                            bool objectsVisible = true)
+                                            bool objectsVisible = true, FurnitureLevel level = FurnitureLevel.Full)
         {
             if (room == null) throw new ArgumentNullException(nameof(room));
             var cost = new RoomDrawCost();
@@ -57,7 +59,8 @@ namespace Atlas.Rendering.Room
             if (objectsVisible)
             {
                 RoomObject[] objects = room.Objects;
-                for (int k = 0; k < objects.Length; k++) cost.ObjectTriangles += RoomObjectMeshes.Triangles(objects[k]);
+                int light = level == FurnitureLevel.Light ? RoomObjectMeshes.LightTarget(objects) : 0;
+                for (int k = 0; k < objects.Length; k++) cost.ObjectTriangles += RoomObjectMeshes.Triangles(objects[k], level, light);
                 cost.DrawCallsPerEye += objects.Length;
             }
             cost.TrianglesPerEye = cost.ShellTriangles + cost.ObjectTriangles;

@@ -72,6 +72,8 @@ namespace Atlas.Blades.Playground.Tests.ShellFlow
             }
 
             public bool SetGeneratedMesh(int objectId, UnityEngine.Mesh mesh, string assetHash, float fadeSeconds = 0.3f) { return false; }
+            public FurnitureLevel FurnitureLevel { get; set; }
+            public bool SetGeneratedLightMesh(int objectId, UnityEngine.Mesh mesh, string assetHashLight) { return false; }
             public bool SetBuiltInMesh(int objectId, UnityEngine.Mesh sharedMesh, UnityEngine.Vector3 scale, float fadeSeconds = 0.3f) { return false; }
             public event Action<RoomModel> Built;
             public event Action<int> ObjectChanged;
