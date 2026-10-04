@@ -73,8 +73,10 @@ def meta_for(obj: dict, tri_target: int, backend: str = "local") -> dict:
         "yaw": obj.get("yaw", 0.0),
         "triTarget": tri_target,
         "backend": backend,
+        # The camera stands 1.5 m in front of the box (on +Z), 0.4 m up, and looks back at it:
+        # camToBox row by row, the translation at indices 3, 7 and 11.
         "views": [{"score": 0.9, "azimuthDeg": 0.0, "intrinsics": [600, 600, 384, 384],
-                   "camToBox": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1.5, 1]}],
+                   "camToBox": [-1, 0, 0, 0, 0, 1, 0, 0.4, 0, 0, -1, 1.5, 0, 0, 0, 1]}],
     }
 
 

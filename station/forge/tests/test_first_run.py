@@ -31,8 +31,8 @@ def turn(points, degrees):
 
 def chair(front_azimuth=0.0):
     """A chair, upright and right-handed, whose front points at ``front_azimuth`` of Unity's box frame."""
-    v, f = build_furniture("chair", DIMS)  # as built its back is on +Z: the front is at 180
-    return turn(v, front_azimuth - 180.0), f
+    v, f = build_furniture("chair", DIMS)  # as built its back is on -Z: the front is at 0
+    return turn(v, front_azimuth), f
 
 
 def test_a_chair_with_its_front_on_plus_z_reads_canonical():
@@ -163,15 +163,15 @@ def test_the_round_trip_against_a_running_forge(served, tmp_path, capsys):
     record = json.loads((out / "first_run.json").read_text())
     assert record["job"]["state"] == "ready" and record["validator"]["ok"] is True
     assert (out / "asset.glb").read_bytes()[:4] == b"glTF" and (out / "raw_view0.npz").is_file()
-    # The procedural chair has its back on +Z, which is no frame the settings name: the tool says so.
+    # The procedural chair is built upright with its front on +Z, and that is what the tool reads.
     assert record["reading"]["source"] == "raw" and record["reading"]["up"] == "Y"
-    assert record["reading"]["front"] == "unknown" and abs(abs(record["reading"]["frontAzimuth"]) - 180) < 1
-    assert "FORGE_TRIPOSG_UP=Y" in printed and "FORGE_TRIPOSG_FRONT=unknown" in printed
+    assert record["reading"]["front"] == "canonical" and abs(record["reading"]["frontAzimuth"]) < 1
+    assert "FORGE_TRIPOSG_UP=Y" in printed and "FORGE_TRIPOSG_FRONT=canonical" in printed
 
     # Reading the saved files again, without the service.
     assert first_run.main(["--analyse", str(out / "raw_view0.npz")]) == 0
     assert first_run.main(["--analyse", str(out / "asset.glb"), "--up-axis", "Y"]) == 0
-    assert capsys.readouterr().out.count("FORGE_TRIPOSG_FRONT=unknown") == 2
+    assert capsys.readouterr().out.count("FORGE_TRIPOSG_FRONT=canonical") == 2
 
 
 def test_a_forge_that_is_not_there_or_not_ready_stops_the_tool(tmp_path, capsys):
