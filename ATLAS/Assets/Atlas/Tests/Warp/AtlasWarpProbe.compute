@@ -1,0 +1,6 @@
+#pragma kernel WarpProbe
+float4x4 _Anchor; float _WarpMode; float4x4 _ProbeObjectToWorld; uint _Count;
+float3 TransformObjectToWorld(float3 p) { return mul(_ProbeObjectToWorld, float4(p, 1.0)).xyz; }
+#include "Assets/Atlas/Rendering/Shaders/AtlasWarp.hlsl"
+StructuredBuffer<float4> _In; RWStructuredBuffer<float4> _Out;
+[numthreads(64,1,1)] void WarpProbe(uint id : SV_DispatchThreadID) { if (id < _Count) _Out[id] = float4(AtlasWarp(_In[id].xyz), 0); }
