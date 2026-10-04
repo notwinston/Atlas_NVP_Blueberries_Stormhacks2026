@@ -486,13 +486,13 @@ namespace Atlas.Scan.Tests.Objects
         [Test]
         public void BetweenTwoNeighbours_OnlyTheRoomSideIsFree_AndIsTheFront()
         {
-            // An oven in a row of kitchen units: furniture 10 cm from both its sides, the wall behind.
+            // An oven in a row of kitchen units: furniture flush on both its sides, the wall behind.
             for (int turnedBy = 0; turnedBy < 4; turnedBy++)
             {
                 RoomModel room = Room4x5(
                     FacingNorth(ObjectCategory.Oven, 2f, 0.3f, 0.6f, 0.9f, 0.6f, turnedBy),
-                    FacingNorth(ObjectCategory.Storage, 1.2f, 0.3f, 0.8f, 0.9f, 0.6f),
-                    FacingNorth(ObjectCategory.Refrigerator, 2.75f, 0.35f, 0.7f, 1.8f, 0.7f));
+                    FacingNorth(ObjectCategory.Storage, 1.3f, 0.3f, 0.8f, 0.9f, 0.6f),
+                    FacingNorth(ObjectCategory.Refrigerator, 2.65f, 0.35f, 0.7f, 1.8f, 0.7f));
                 ObjectFacingRule rule;
                 float2 front = FrontAfterFacing(room, Find(room, ObjectCategory.Oven), null, out rule);
                 Assert.That(rule, Is.EqualTo(ObjectFacingRule.Clearance), "turned by " + turnedBy);
