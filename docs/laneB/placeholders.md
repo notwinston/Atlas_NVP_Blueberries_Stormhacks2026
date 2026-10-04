@@ -1,5 +1,7 @@
 # Lane B placeholders for lanes A, C and D
 
+> Integrating Lane B with the real lane A/C/D code? Start with [INTEGRATION_NOTES.md](INTEGRATION_NOTES.md).
+
 Branch `laneB/placeholders` = `laneB/ph-A` + `laneB/ph-C` + `laneB/ph-D` (merged without conflicts) + `P1-B01`
 (lane B's own kernel stubs: `Iso2`, `TileId`, `WalkerPose`, which `ISpaceModule` and `SpaceLab` need). Every placeholder
 carries the header `// PLACEHOLDER (lane X, task): contract surface only; replaced by lane X's implementation` and is
