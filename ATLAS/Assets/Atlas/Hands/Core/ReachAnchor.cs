@@ -23,7 +23,7 @@ namespace Atlas.Hands
     /// every frame: carried along with the camera, so it is never left behind and never walked through, while its
     /// place relative to the walker eases to the one that belongs to the heading now. It never moves while a
     /// fingertip is within ReachFreezeMetres of it or a press is under way: an ease in progress waits, and goes
-    /// on when the finger has gone.
+    /// on when the finger has gone. <see cref="Near"/> does not change while a press is under way either.
     ///
     /// The room. The anchor keeps 5 cm in front of every surface of the room: where its line would end within 5 cm
     /// of one, or behind it, it is pulled back along the line. If that leaves it nearer than 0.30 m, where hands
@@ -133,12 +133,15 @@ namespace Atlas.Hands
         /// is the tracked rear camera in world space and headRotation its orientation (only the heading is
         /// used); headFloorSpeed is the head's speed over the floor in metres per second; each fingertip is the
         /// index tip in world space, valid or not; pressing says a press is under way; surfaces is the room's,
-        /// or null. While near is false the pose is left as it was, and the scale reads 1.
+        /// or null. While near is false the pose is left as it was, and the scale reads 1. <see cref="Near"/>
+        /// changes only while no press is under way: the panels register their targets anew when it changes,
+        /// which they must not do under a finger, so a press holds it as it is until the press ends.
         /// </summary>
         public void Update(double now, float deltaTime, bool near, float3 cameraPosition, quaternion headRotation,
                            float headFloorSpeed, bool leftTipValid, float3 leftTip, bool rightTipValid, float3 rightTip,
                            bool pressing, RoomSurfaces surfaces)
         {
+            if (pressing) near = _near;
             if (!near)
             {
                 _near = false;

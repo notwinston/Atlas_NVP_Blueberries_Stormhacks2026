@@ -281,6 +281,39 @@ namespace Atlas.Hands.Tests
         }
 
         [Test]
+        public void Hands_Reach_Anchor_NearDoesNotChange_WhileAPressIsUnderWay()
+        {
+            // Panels register their targets anew when Near changes, which they must not do under a finger.
+            var rig = new Rig();
+            rig.Step();
+            float3 placed = rig.Anchor.Position;
+            rig.Pressing = true;
+            rig.Near = false;                      // the gate drops in mid-press
+            rig.Step(10);
+            Assert.That(rig.Anchor.Near, Is.True, "it waits for the press to end");
+            Assert.That(rig.Anchor.Scale, Is.EqualTo(HandsConstants.ReachPanelScale));
+            Assert.That(rig.Anchor.Position, Is.EqualTo(placed));
+            rig.Pressing = false;
+            rig.Step();
+            Assert.That(rig.Anchor.Near, Is.False, "and then it follows the gate");
+            Assert.That(rig.Anchor.Scale, Is.EqualTo(1f));
+            Assert.That(rig.Anchor.Position, Is.EqualTo(placed), "keeping the pose it had");
+
+            // The other way: a press on something else as the gate comes up.
+            var coming = new Rig { Near = false };
+            coming.Step();
+            Assert.That(coming.Anchor.Near, Is.False);
+            coming.Pressing = true;
+            coming.Near = true;
+            coming.Step(10);
+            Assert.That(coming.Anchor.Near, Is.False, "not while a press is under way");
+            coming.Pressing = false;
+            coming.Step();
+            Assert.That(coming.Anchor.Near, Is.True);
+            AssertNear(Placed(coming.Camera, 0f), coming.Anchor.Position, 1e-4f, "set at once when it comes");
+        }
+
+        [Test]
         public void Hands_Reach_Anchor_IsSetAgain_WhenMoreThanAMetreFromTheCamera()
         {
             var rig = new Rig();
