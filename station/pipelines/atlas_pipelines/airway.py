@@ -2,20 +2,39 @@
 
 The tree is a model. It is not derived from any scan and every node carries ``source: "model"``.
 
-Rule "atlas.airway/1" (docs/case_contract.md section 10 states it for the C# re-implementation)
+Rule "atlas.airway/2" (docs/case_contract.md section 10 states it for the C# re-implementation)
 ----------------------------------------------------------------------------------------------
 A node is one branch. Its address is a string over {L, R}; the trachea is the empty string and
 ``gen = len(address)``. Every value of a node is a pure function of ``(seed, address)``:
 
+    hash of a node X (X not the trachea)
+                   h(X) = SHA-256(ASCII "atlas.airway/2|<seed>|<X>")
+                   u_k(X) = (big-endian u64 of h(X)[8(k-1) : 8k] >> 11) / 2^53,  k = 1..4,  in [0, 1)
+                   q(X)   = 2^(-1/3) * (0.9 + 0.2 * u1(X))                 diameter ratio 0.794, jitter +/- 10 %
     trachea ("")   radius 9 mm, length 120 mm, start (0, 0, 0), dir (0, 0, -1), normal (1, 0, 0)
-    child A + c    h   = SHA-256(ASCII "atlas.airway/1|<seed>|<A + c>")
-                   u1  = (big-endian u64 of h[0:8]  >> 11) / 2^53          in [0, 1)
-                   u2  = (big-endian u64 of h[8:16] >> 11) / 2^53          in [0, 1)
-                   radius = radius(A) * 2^(-1/3) * (0.9 + 0.2 * u1)        diameter ratio 0.794, jitter +/- 10 %
-                   len    = 2 * radius * (2 + 2 * u2)                      length / diameter = 3 +/- 1
-                   normal = dir(A) x normal(A)                             branching plane turned 90 degrees
-                   dir    = dir(A) * cos(37 deg) + s * (normal x dir(A)) * sin(37 deg),  s = +1 for L, -1 for R
+    child A + c    (o = the other letter, so A + o is the sibling)
+                   radius = radius(A) * q(A + c)
+                   len    = 2 * radius * (2 + 2 * u2(A + c))               length / diameter = 3 +/- 1
+                   rho    = 90 deg                                         when A is the trachea
+                          = clamp(90 + 41.6 * z, 0, 180) deg               otherwise, with
+                            z = sqrt(-2 ln(1 - u3(A))) * cos(2 pi u4(A))   (standard normal, Box-Muller)
+                   normal = normal(A) * cos(rho) + (dir(A) x normal(A)) * sin(rho)
+                                                                           branching plane turned by rho about dir(A);
+                                                                           the same for both children of A
+                   theta  = 37 deg + mw(q(A + c), q(A + o)) - mw(2^(-1/3), 2^(-1/3))
+                            mw(a, b) = arccos((1 + a^4 - b^4) / (2 a^2))   minimum-work branching angle
+                   dir    = dir(A) * cos(theta) + s * (normal x dir(A)) * sin(theta),  s = +1 for L, -1 for R
                    pos    = pos(A) + len * dir
+
+Where the numbers come from (R2 C.4; fixed before any Two Compasses search was run): diameter ratio 2^(-1/3)
+and length / diameter 3 +/- 1 (Montesantos 2016, Eq. 3 and 4); rotation between successive branching planes
+measured 88.1 +/- 41.6 degrees, modelled as 90 (the modelling convention, here the mean) with the measured
+standard deviation, clamped to the range of the angle, 0 to 180 degrees; branching angle "usually below 60
+degrees; optimum 37.28 degrees", here 37 degrees for a symmetric fork and, for an asymmetric one, shifted by the
+minimum-work angle of the fork's own two diameter ratios (the relation of which R2 C.4 checks the symmetric case,
+arccos(2^(-1/3)) = 37.5 degrees). With the ratios limited to 0.794 * (0.9 .. 1.1) the angle stays between
+11.0 and 49.2 degrees (two small children leave at a small angle, two large ones at a wide one); measured over
+generations 1 to 16 of seed 101: mean 36.34, median 36.66, standard deviation 7.62 degrees. The first fork keeps rho = 90 so that L is the left main bronchus (+x).
 
 ``pos_mm`` is the distal end of the branch, which is the point where it forks into its two children;
 the branch starts at its parent's ``pos_mm``. The frame is the model's own, in millimetres, axes named
@@ -34,7 +53,8 @@ from typing import Iterable, Sequence
 
 from . import contract, labels
 
-RULE = "atlas.airway/1"
+VERSION = "airwaylib/2"  #: bump when this module changes what it writes (the step puts it in its cache key)
+RULE = "atlas.airway/2"
 GREEDY_RULE = "atlas.greedy/1"
 
 DEFAULT_SEED = 101
@@ -51,11 +71,19 @@ DIAMETER_RATIO = 2.0 ** (-1.0 / 3.0)  # 0.7937
 DIAMETER_JITTER = 0.1  # ratio * (1 - j .. 1 + j)
 LENGTH_OVER_DIAMETER = 3.0
 LENGTH_OVER_DIAMETER_SPREAD = 1.0  # 3 +/- 1
-BRANCH_ANGLE_DEG = 37.0
-PLANE_ROTATION_DEG = 90.0
+BRANCH_ANGLE_DEG = 37.0  # angle of a child of a symmetric fork against its parent's axis
+BRANCH_ANGLE_LIMIT_DEG = 60.0  # "usually below 60 degrees": every child stays below it (checked in the tests)
+PLANE_ROTATION_DEG = 90.0  # mean rotation between successive branching planes
+PLANE_ROTATION_SD_DEG = 41.6  # measured spread (88.1 +/- 41.6 degrees, Montesantos 2016 via R2 C.4)
+PLANE_ROTATION_CLIP_DEG = (0.0, 180.0)  # the rotation is clamped to the range of the angle
 
-_COS = math.cos(math.radians(BRANCH_ANGLE_DEG))
-_SIN = math.sin(math.radians(BRANCH_ANGLE_DEG))
+
+def minimum_work_angle(a: float, b: float) -> float:
+    """Minimum-work branching angle (radians) of a child with diameter ratio ``a`` whose sibling has ratio ``b``."""
+    return math.acos((1.0 + a ** 4 - b ** 4) / (2.0 * a * a))
+
+
+_MW_SYMMETRIC = minimum_work_angle(DIAMETER_RATIO, DIAMETER_RATIO)  # arccos(2^(-1/3)) = 37.47 degrees
 _TWO53 = float(2**53)
 
 Vec = tuple[float, float, float]
@@ -72,7 +100,7 @@ class Node:
     len_mm: float
     pos_mm: Vec  # distal end = fork point
     dir: Vec  # unit vector, proximal to distal
-    normal: Vec  # normal of the plane in which this branch left its parent (not written to the file)
+    normal: Vec  # normal of the plane in which this branch left its parent (unit; not written to the file)
 
     @property
     def gen(self) -> int:
@@ -108,11 +136,33 @@ def node_index(address: str) -> int:
     return (1 << len(address)) - 1 + v
 
 
-def uniforms(seed: int, address: str) -> tuple[float, float]:
+def uniforms(seed: int, address: str) -> tuple[float, float, float, float]:
+    """u1..u4 of a node: the four big-endian u64 of the first 32 bytes of its hash, each >> 11 and / 2^53."""
     h = hashlib.sha256(f"{RULE}|{seed}|{address}".encode("ascii")).digest()
-    u1 = (int.from_bytes(h[0:8], "big") >> 11) / _TWO53
-    u2 = (int.from_bytes(h[8:16], "big") >> 11) / _TWO53
-    return u1, u2
+    return tuple((int.from_bytes(h[8 * k:8 * k + 8], "big") >> 11) / _TWO53 for k in range(4))  # type: ignore[return-value]
+
+
+def diameter_ratio(seed: int, address: str) -> float:
+    """q(address): the node's diameter over its parent's."""
+    return DIAMETER_RATIO * (1.0 - DIAMETER_JITTER + 2.0 * DIAMETER_JITTER * uniforms(seed, address)[0])
+
+
+def plane_rotation_deg(seed: int, fork_address: str) -> float:
+    """Rotation of the branching plane of fork ``fork_address`` against the plane in which that branch
+    left its own parent, about the branch's axis. 90 at the trachea's fork."""
+    if not fork_address:
+        return PLANE_ROTATION_DEG
+    _, _, u3, u4 = uniforms(seed, fork_address)
+    z = math.sqrt(-2.0 * math.log(1.0 - u3)) * math.cos(2.0 * math.pi * u4)
+    lo, hi = PLANE_ROTATION_CLIP_DEG
+    return min(hi, max(lo, PLANE_ROTATION_DEG + PLANE_ROTATION_SD_DEG * z))
+
+
+def branch_angle_deg(seed: int, address: str) -> float:
+    """Angle of the branch ``address`` (not the trachea) against its parent's axis."""
+    sibling = address[:-1] + ("R" if address[-1] == "L" else "L")
+    mw = minimum_work_angle(diameter_ratio(seed, address), diameter_ratio(seed, sibling))
+    return BRANCH_ANGLE_DEG + math.degrees(mw - _MW_SYMMETRIC)
 
 
 def _cross(a: Vec, b: Vec) -> Vec:
@@ -141,13 +191,16 @@ def trachea() -> Node:
 
 def child(seed: int, parent: Node, letter: str) -> Node:
     address = parent.address + letter
-    u1, u2 = uniforms(seed, address)
-    radius = parent.radius_mm * DIAMETER_RATIO * (1.0 - DIAMETER_JITTER + 2.0 * DIAMETER_JITTER * u1)
+    u2 = uniforms(seed, address)[1]
+    radius = parent.radius_mm * diameter_ratio(seed, address)
     length = 2.0 * radius * (LENGTH_OVER_DIAMETER - LENGTH_OVER_DIAMETER_SPREAD + 2.0 * LENGTH_OVER_DIAMETER_SPREAD * u2)
-    normal = _unit(_cross(parent.dir, parent.normal))
+    rho = math.radians(plane_rotation_deg(seed, parent.address))
+    turned = _cross(parent.dir, parent.normal)
+    normal = _unit(tuple(parent.normal[i] * math.cos(rho) + turned[i] * math.sin(rho) for i in range(3)))
     side = _cross(normal, parent.dir)
-    s = _SIN if letter == "L" else -_SIN
-    d = _unit(tuple(parent.dir[i] * _COS + side[i] * s for i in range(3)))
+    theta = math.radians(branch_angle_deg(seed, address))
+    s = math.sin(theta) if letter == "L" else -math.sin(theta)
+    d = _unit(tuple(parent.dir[i] * math.cos(theta) + side[i] * s for i in range(3)))
     pos = tuple(parent.pos_mm[i] + length * d[i] for i in range(3))
     return Node(address=address, radius_mm=radius, len_mm=length, pos_mm=pos, dir=d, normal=normal)
 
@@ -219,6 +272,19 @@ def compass_choice(fork_pos, target_pos, dir_l, dir_r) -> str:
     return "L" if sl > sr else "R" if sr > sl else ""
 
 
+def compass_margin(resolver: Resolver, fork_address: str, target_address: str) -> float:
+    """(score of the child off the route - score of the child on the route) / distance from the fork to the
+    target: the difference of the cosines of the two children's directions against the straight line to the
+    target. Positive when the Euclidean compass is wrong at this fork, 0 on a tie, in [-2, 2]."""
+    fork = resolver.node(fork_address)
+    target = resolver.node(target_address)
+    sl, sr = compass_scores(fork.pos_mm, target.pos_mm,
+                            resolver.node(fork_address + "L").dir, resolver.node(fork_address + "R").dir)
+    on, off = (sl, sr) if beacon_choice(fork_address, target_address) == "L" else (sr, sl)
+    t = tuple(target.pos_mm[i] - fork.pos_mm[i] for i in range(3))
+    return (off - on) / math.sqrt(_dot(t, t))
+
+
 def compass_wrong(resolver: Resolver, fork_address: str, target_address: str) -> bool:
     fork = resolver.node(fork_address)
     target = resolver.node(target_address)
@@ -236,14 +302,34 @@ def wrong_forks(resolver: Resolver, target_address: str) -> list[str]:
     return [f for f in route_forks(target_address) if compass_wrong(resolver, f, target_address)]
 
 
-def choose_target(resolver: Resolver, forks: int = ROUTE_FORKS, target_gen: int = ROUTE_FORKS) -> tuple[str, str] | None:
-    """The first address of generation ``target_gen`` (in ``node_index`` order) for which exactly one of the
-    first ``forks`` forks on its route is a fork at which the Euclidean compass is wrong.
-    Returns (target address, that fork's address) or None when no address qualifies."""
+def target_candidates(resolver: Resolver, forks: int = ROUTE_FORKS, target_gen: int = ROUTE_FORKS) -> list[tuple[str, str, float]]:
+    """Every address of generation ``target_gen`` (in ``node_index`` order) for which exactly one of the first
+    ``forks`` forks on its route is a fork at which the Euclidean compass is wrong, as
+    (target address, that fork's address, compass margin at that fork)."""
+    out = []
     for a in addresses_of_gen(target_gen):
         w = [f for f in route_forks(a)[:forks] if compass_wrong(resolver, f, a)]
         if len(w) == 1:
-            return a, w[0]
+            out.append((a, w[0], compass_margin(resolver, w[0], a)))
+    return out
+
+
+def choose_target(resolver: Resolver, forks: int = ROUTE_FORKS, target_gen: int = ROUTE_FORKS) -> tuple[str, str, float] | None:
+    """Among ``target_candidates`` the one at whose fork the compass is most clearly wrong (largest margin;
+    the first in ``node_index`` order on an exact tie). None when no address qualifies."""
+    best = None
+    for c in target_candidates(resolver, forks, target_gen):
+        if best is None or c[2] > best[2]:
+            best = c
+    return best
+
+
+def first_seed_with_target(start: int = 101, limit: int = 10000) -> int | None:
+    """The smallest seed >= ``start`` whose tree has a generation-4 target with exactly one Two Compasses fork
+    on its four-fork route (how a default seed other than 101 would be selected)."""
+    for seed in range(start, start + limit):
+        if choose_target(Resolver(seed)) is not None:
+            return seed
     return None
 
 
@@ -326,12 +412,15 @@ def build_tree(seed: int = DEFAULT_SEED, materialised_gen: int = MATERIALISED_GE
     The target is a node of generation ``target_gen``; the four-fork route is the first four forks from the
     trachea towards it (with the default ``target_gen`` = 4 it ends at the target). When no target has
     exactly one Two Compasses fork on that route, ``compass_fork.address`` is null and the target is
-    ``fallback_target``: the file never names a fork at which the compass is not actually wrong."""
+    ``fallback_target``: the file never names a fork at which the compass is not actually wrong.
+
+    ``target_choice.seed_selected`` is false: the seed is the one given (default 101), it is not searched for.
+    Seed 101 has a qualifying target, so no selection of a seed was needed."""
     if not ROUTE_FORKS <= target_gen <= MAX_ADDRESS_LEN:
         raise ValueError(f"target_gen must be {ROUTE_FORKS}..{MAX_ADDRESS_LEN}")
     resolver = Resolver(seed)
     chosen = choose_target(resolver, ROUTE_FORKS, target_gen)
-    target, fork = chosen if chosen is not None else (fallback_target(target_gen), None)
+    target, fork, margin = chosen if chosen is not None else (fallback_target(target_gen), None, None)
     four = route_forks(target)[:ROUTE_FORKS]
     wrong = [f for f in four if compass_wrong(resolver, f, target)]
     nodes = materialise(resolver, materialised_gen)
@@ -357,14 +446,36 @@ def build_tree(seed: int = DEFAULT_SEED, materialised_gen: int = MATERIALISED_GE
             "length_over_diameter": LENGTH_OVER_DIAMETER,
             "length_over_diameter_spread": LENGTH_OVER_DIAMETER_SPREAD,
             "branch_angle_deg": BRANCH_ANGLE_DEG,
+            "branch_angle_rule": "37 degrees at a symmetric fork, shifted by the minimum-work angle "
+                                 "arccos((1 + a^4 - b^4) / (2 a^2)) of the child's (a) and its sibling's (b) "
+                                 "diameter ratios minus arccos(2^(-1/3))",
+            "branch_angle_limit_deg": BRANCH_ANGLE_LIMIT_DEG,
             "plane_rotation_deg": PLANE_ROTATION_DEG,
+            "plane_rotation_sd_deg": PLANE_ROTATION_SD_DEG,
+            "plane_rotation_clip_deg": list(PLANE_ROTATION_CLIP_DEG),
+            "plane_rotation_rule": "normal distribution, mean 90 and standard deviation 41.6 degrees, clamped to "
+                                   "0..180 degrees; exactly 90 degrees at the trachea's fork",
+            "sources": "R2 C.4: diameter ratio and length / diameter, Montesantos 2016 Eq. 3 and 4; rotation "
+                       "between successive branching planes measured 88.1 +/- 41.6 degrees, Montesantos 2016; "
+                       "branching angle usually below 60 degrees, optimum 37.28 degrees, Montesantos 2016; "
+                       "trachea, Weibel",
         },
         "addressable_gen": ADDRESSABLE_GEN,
         "max_address_len": MAX_ADDRESS_LEN,
         "materialised_gen": int(materialised_gen),
         "nodes": node_list,
         "target": {"address": target},
-        "compass_fork": {"address": fork},
+        "compass_fork": {"address": fork, "margin": None if margin is None else float(margin)},
+        "target_choice": {
+            "rule": "among the targets of generation target_gen with exactly one Two Compasses fork among the "
+                    "four forks of the route, the one with the largest margin at that fork; margin = (dot of the "
+                    "direction of the child off the route with t - dot of the direction of the child on the "
+                    "route with t) / |t|, t = pos_mm(target) - pos_mm(fork)",
+            "target_gen": int(target_gen),
+            "candidates": [{"target": a, "compass_fork": f, "margin": float(m)}
+                           for a, f, m in target_candidates(resolver, ROUTE_FORKS, target_gen)],
+            "seed_selected": False,
+        },
         "routes": {
             "four_forks": {"forks": four, "end": target[:ROUTE_FORKS], "compass_wrong_forks": wrong},
             "one_fork": {"forks": [target[:-1]], "end": target},

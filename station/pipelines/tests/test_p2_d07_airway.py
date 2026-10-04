@@ -6,8 +6,10 @@ exactly 1 Two Compasses fork on the 4-fork route.
 
 from __future__ import annotations
 
+import hashlib
 import math
 import random
+import statistics
 
 import pytest
 
@@ -44,14 +46,63 @@ def _dot(a, b):
     return sum(x * y for x, y in zip(a, b))
 
 
-def _compass_wrong_from_file(by_address, fork: str, target: str) -> bool:
-    """Independent of the library: the Euclidean compass at `fork` towards `target`, from file values only."""
+def _margin_from_file(by_address, fork: str, target: str) -> float:
+    """Independent of the library: the Euclidean compass at `fork` towards `target`, from file values only.
+    (score of the child off the route - score of the child on the route) / distance fork to target."""
     f, t = by_address[fork], by_address[target]
     line = [t["pos_mm"][i] - f["pos_mm"][i] for i in range(3)]
     score = {c: _dot(by_address[fork + c]["dir"], line) for c in "LR"}
     right = target[len(fork)]
     wrong = "R" if right == "L" else "L"
-    return score[wrong] > score[right]
+    return (score[wrong] - score[right]) / math.sqrt(_dot(line, line))
+
+
+def _compass_wrong_from_file(by_address, fork: str, target: str) -> bool:
+    return _margin_from_file(by_address, fork, target) > 0.0
+
+
+def _cross(a, b):
+    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+
+
+def _rule_node(seed: int, address: str):
+    """Rule atlas.airway/2 written out again from docs/case_contract.md 10.2, without the library."""
+    def u(x):
+        h = hashlib.sha256(f"atlas.airway/2|{seed}|{x}".encode("ascii")).digest()
+        return [(int.from_bytes(h[8 * k:8 * k + 8], "big") >> 11) / 2.0 ** 53 for k in range(4)]
+
+    def q(x):
+        return 2.0 ** (-1.0 / 3.0) * (0.9 + 0.2 * u(x)[0])
+
+    def mw(a, b):
+        return math.acos((1.0 + a ** 4 - b ** 4) / (2.0 * a * a))
+
+    radius, pos, d, normal = 9.0, [0.0, 0.0, -120.0], [0.0, 0.0, -1.0], [1.0, 0.0, 0.0]
+    length = 120.0
+    for k in range(len(address)):
+        par, x = address[:k], address[:k + 1]
+        sib = par + ("R" if x[-1] == "L" else "L")
+        radius = radius * q(x)
+        length = 2.0 * radius * (2.0 + 2.0 * u(x)[1])
+        if par == "":
+            rho = 90.0
+        else:
+            up = u(par)
+            z = math.sqrt(-2.0 * math.log(1.0 - up[2])) * math.cos(2.0 * math.pi * up[3])
+            rho = min(180.0, max(0.0, 90.0 + 41.6 * z))
+        rho = math.radians(rho)
+        turned = _cross(d, normal)
+        normal = [normal[i] * math.cos(rho) + turned[i] * math.sin(rho) for i in range(3)]
+        nn = math.sqrt(_dot(normal, normal))
+        normal = [v / nn for v in normal]
+        side = _cross(normal, d)
+        theta = math.radians(37.0) + mw(q(x), q(sib)) - math.acos(2.0 ** (-1.0 / 3.0))
+        sgn = 1.0 if x[-1] == "L" else -1.0
+        d = [d[i] * math.cos(theta) + sgn * side[i] * math.sin(theta) for i in range(3)]
+        dn = math.sqrt(_dot(d, d))
+        d = [v / dn for v in d]
+        pos = [pos[i] + length * d[i] for i in range(3)]
+    return radius, length, pos, d
 
 
 def _all_keys(obj):
@@ -189,26 +240,83 @@ def test_length_over_diameter_3_pm_1(tree):
     assert abs(sum(x) / len(x) - 3.0) < 0.1
 
 
-def test_branch_angle_37_and_plane_rotation_90(tree, by_address):
-    def cross(a, b):
-        return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+def test_rule_is_the_one_in_the_contract(tree):
+    """tree.json against an independent re-implementation of rule atlas.airway/2 (what lane B will write)."""
+    assert tree["rule"] == "atlas.airway/2" == airway.RULE
+    rng = random.Random(11)
+    sample = [n for n in tree["nodes"] if n["gen"] <= 5] + rng.sample(tree["nodes"], 200)
+    for n in sample:
+        radius, length, pos, d = _rule_node(tree["seed"], n["address"])
+        assert abs(radius - n["radius_mm"]) <= 1e-6 and abs(length - n["len_mm"]) <= 1e-6
+        for i in range(3):
+            assert abs(pos[i] - n["pos_mm"][i]) <= 1e-6 and abs(d[i] - n["dir"][i]) <= 1e-6
+    for a in ("LRLRLRLRLRLRLRLR", "RRRRRRRRRRRRRRRR", "LLRRLRRLLLRLRRLR"):
+        radius, length, pos, d = _rule_node(tree["seed"], a)
+        m = airway.resolve(tree["seed"], a)
+        assert abs(radius - m.radius_mm) <= 1e-9 and abs(length - m.len_mm) <= 1e-9
+        assert all(abs(pos[i] - m.pos_mm[i]) <= 1e-9 and abs(d[i] - m.dir[i]) <= 1e-9 for i in range(3))
 
+
+def test_generator_parameters_are_the_literature_values(tree):
+    g = tree["generator"]
+    assert g["diameter_ratio"] == pytest.approx(2.0 ** (-1.0 / 3.0), abs=1e-6)
+    assert g["length_over_diameter"] == 3.0 and g["length_over_diameter_spread"] == 1.0
+    assert g["branch_angle_deg"] == 37.0 and g["branch_angle_limit_deg"] == 60.0
+    assert g["plane_rotation_deg"] == 90.0 and g["plane_rotation_sd_deg"] == 41.6
+    assert g["plane_rotation_clip_deg"] == [0.0, 180.0]
+    assert "R2 C.4" in g["sources"]
+
+
+def test_branch_angle_centred_on_37_and_below_60(tree, by_address):
+    angles = []
     for n in tree["nodes"]:
         a = n["address"]
         if not a:
             continue
         p = by_address[a[:-1]]
-        ang = math.degrees(math.acos(max(-1.0, min(1.0, _dot(n["dir"], p["dir"])))))
-        assert abs(ang - 37.0) < 1e-3
+        angles.append(math.degrees(math.acos(max(-1.0, min(1.0, _dot(n["dir"], p["dir"]))))))
         # the branch starts where its parent ends
         for i in range(3):
             assert abs(p["pos_mm"][i] + n["len_mm"] * n["dir"][i] - n["pos_mm"][i]) < 1e-4
-        if a + "L" in by_address and len(a) >= 1:
-            # normal of the plane of this fork against the normal of the parent's fork
-            n_here = cross(by_address[a + "L"]["dir"], by_address[a + "R"]["dir"])
-            n_par = cross(by_address[a[:-1] + "L"]["dir"], by_address[a[:-1] + "R"]["dir"])
-            c = _dot(n_here, n_par) / math.sqrt(_dot(n_here, n_here) * _dot(n_par, n_par))
-            assert abs(math.degrees(math.acos(max(-1.0, min(1.0, c)))) - 90.0) < 1e-2
+        # the angle is the stated function of the two diameter ratios of the fork
+        sib = by_address[a[:-1] + ("R" if a[-1] == "L" else "L")]
+        qa, qb = n["radius_mm"] / p["radius_mm"], sib["radius_mm"] / p["radius_mm"]
+        want = 37.0 + math.degrees(math.acos((1 + qa ** 4 - qb ** 4) / (2 * qa * qa)) - math.acos(2.0 ** (-1.0 / 3.0)))
+        assert abs(angles[-1] - want) < 1e-3
+    assert max(angles) < 60.0
+    assert 11.0 <= min(angles) and max(angles) <= 49.2  # the range the +/- 10 % diameter jitter allows (10.2)
+    mean = sum(angles) / len(angles)
+    assert abs(mean - 37.0) < 1.0  # 37 exactly at a symmetric fork; the relation is not linear, so the mean is near it
+    print(f"branching angle: mean {mean:.4f}, sd {statistics.pstdev(angles):.4f}, min {min(angles):.4f}, "
+          f"max {max(angles):.4f}, n {len(angles)}")
+
+
+def test_plane_rotation_mean_90_sd_from_the_measurement(tree, by_address):
+    rot = []
+    for n in tree["nodes"]:
+        a = n["address"]
+        if not a or a + "L" not in by_address:
+            continue
+        # both children of a fork lie in one plane with the parent's axis
+        n_here = _cross(by_address[a + "L"]["dir"], by_address[a + "R"]["dir"])
+        assert abs(_dot(n_here, n["dir"])) < 1e-5
+        # normal of the plane of this fork against the normal of the parent's fork
+        n_par = _cross(by_address[a[:-1] + "L"]["dir"], by_address[a[:-1] + "R"]["dir"])
+        c = _dot(n_here, n_par) / math.sqrt(_dot(n_here, n_here) * _dot(n_par, n_par))
+        r = math.degrees(math.acos(max(-1.0, min(1.0, c))))
+        assert abs(r - airway.plane_rotation_deg(tree["seed"], a)) < 1e-2
+        rot.append(r)
+    assert len(rot) == 2 ** tree["materialised_gen"] - 2
+    assert all(0.0 <= r <= 180.0 for r in rot)
+    mean, sd = sum(rot) / len(rot), statistics.pstdev(rot)
+    clipped = sum(1 for r in rot if r < 1e-2 or r > 180.0 - 1e-2)
+    print(f"plane rotation: mean {mean:.4f}, sd {sd:.4f}, min {min(rot):.4f}, max {max(rot):.4f}, "
+          f"clamped {clipped} of {len(rot)}")
+    assert abs(mean - 90.0) < 5.0
+    assert 35.0 < sd < 41.6 + 2.0  # the clamp to 0..180 takes a little off 41.6
+    # the trachea's fork is turned exactly 90 degrees: the main bronchi are in the x-z plane
+    assert airway.plane_rotation_deg(tree["seed"], "") == 90.0
+    assert abs(by_address["L"]["dir"][1]) < 1e-6 and abs(by_address["R"]["dir"][1]) < 1e-6
 
 
 def test_first_fork_left_child_goes_left(by_address):
@@ -232,6 +340,31 @@ def test_exactly_one_two_compasses_fork_on_the_4_fork_route(tree, by_address):
     f, t = by_address[fork], by_address[target]
     compass = airway.compass_choice(f["pos_mm"], t["pos_mm"], by_address[fork + "L"]["dir"], by_address[fork + "R"]["dir"])
     assert compass in ("L", "R") and compass != airway.beacon_choice(fork, target)
+    assert tree["routes"]["four_forks"]["end"] == target and tree["routes"]["four_forks"]["compass_wrong_forks"] == [fork]
+    margin = _margin_from_file(by_address, fork, target)
+    assert margin > 0 and tree["compass_fork"]["margin"] == pytest.approx(margin, abs=1e-5)
+    print(f"target {target!r}, Two Compasses fork {fork!r}, margin {margin:.6f}, seed {tree['seed']}")
+
+
+def test_target_is_the_clearest_of_the_qualifying_targets(tree, by_address):
+    """Recomputed from the file: every generation-4 target with exactly one wrong fork, and the largest margin."""
+    found = []
+    for a in airway.addresses_of_gen(4):
+        m = [(f, _margin_from_file(by_address, f, a)) for f in (a[:k] for k in range(4))]
+        w = [(f, x) for f, x in m if x > 0]
+        if len(w) == 1:
+            found.append((a, w[0][0], w[0][1]))
+    listed = tree["target_choice"]["candidates"]
+    assert [(c["target"], c["compass_fork"]) for c in listed] == [(a, f) for a, f, _ in found]
+    for c, (_, _, x) in zip(listed, found):
+        assert c["margin"] == pytest.approx(x, abs=1e-5)
+    best = max(found, key=lambda c: c[2])
+    assert (tree["target"]["address"], tree["compass_fork"]["address"]) == best[:2]
+    assert tree["target_choice"]["target_gen"] == 4
+    # the default seed is the plan's 101 and was not searched for
+    assert airway.DEFAULT_SEED == 101 == tree["seed"] and tree["target_choice"]["seed_selected"] is False
+    assert airway.first_seed_with_target(101) == 101
+    print(f"qualifying targets: {[(a, f, round(x, 6)) for a, f, x in found]}")
 
 
 def test_compass_fork_is_never_a_false_claim(tree, by_address):
@@ -292,6 +425,26 @@ def test_two_runs_are_byte_identical(run_atlas, airway_dir, tmp_out):
     forced = run_atlas("airway", "--force", out=tmp_out)
     assert "built" in forced.stdout
     assert {name: (other / name).read_bytes() for name in before} == before
+
+
+def test_cache_key_follows_the_library_version():
+    from atlas_pipelines.steps import airway as step
+
+    assert airway.VERSION and step.CODE_VERSION.endswith("+" + airway.VERSION)
+
+
+def test_library_edit_invalidates_the_cache(run_atlas, tmp_out, monkeypatch, capsys):
+    run_atlas("airway", out=tmp_out)
+    assert "up to date" in run_atlas("airway", out=tmp_out).stdout
+    from atlas_pipelines import cli
+    from atlas_pipelines.steps import airway as step
+
+    assert cli.main(["case", "airway", "--out", str(tmp_out)]) == 0
+    assert "up to date" in capsys.readouterr().out  # same library version: still cached
+    monkeypatch.setattr(airway, "VERSION", airway.VERSION + "-edited")
+    monkeypatch.setattr(step, "CODE_VERSION", "airway/2+" + airway.VERSION)
+    assert cli.main(["case", "airway", "--out", str(tmp_out)]) == 0
+    assert "airway: built" in capsys.readouterr().out  # a bumped library version rebuilds
 
 
 def test_seed_changes_the_tree(run_atlas, airway_dir, tmp_out):

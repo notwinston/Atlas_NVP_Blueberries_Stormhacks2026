@@ -9,7 +9,7 @@ from ..cli import StepError
 
 NAME = "airway"
 HELP = "model-generated airway: airway/tree.json (atlas.tree/2) and airway/greedy.json (atlas.greedy/1)"
-CODE_VERSION = "airway/1"
+CODE_VERSION = "airway/2+" + airway.VERSION
 
 
 def add_arguments(parser) -> None:
@@ -56,7 +56,10 @@ def run(args) -> int:
     print(f"airway: {'built' if ran else 'up to date (cached)'} {out_dir}")
     print(f"  tree    seed {tree['seed']}, {len(tree['nodes'])} nodes written (generations 0..{tree['materialised_gen']}), "
           f"addresses resolvable to length {tree['max_address_len']}")
-    print(f"  target  {tree['target']['address']!r}, Two Compasses fork {tree['compass_fork']['address']!r}")
+    margin = tree["compass_fork"]["margin"]
+    print(f"  target  {tree['target']['address']!r}, Two Compasses fork {tree['compass_fork']['address']!r}"
+          + ("" if margin is None else f", margin {margin:.6f}")
+          + f", {len(tree['target_choice']['candidates'])} qualifying target(s)")
     print(f"  greedy  {greedy['wrong_forks']} of {greedy['forks']} forks wrong "
           f"(share {greedy['wrong_share']:.6f}) over {greedy['n_targets']} targets, seed {greedy['seed']}")
     if tree["compass_fork"]["address"] is None:
