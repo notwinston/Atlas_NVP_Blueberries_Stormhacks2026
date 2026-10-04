@@ -240,7 +240,8 @@ def validate_glb(
             f"for the {level} copy",
         )
     if tri_target is not None and result.triangles > tri_target:
-        result.add("triangles.target", f"{result.triangles} triangles; the job's target for the {level} copy is {tri_target}")
+        result.add("triangles.target",
+                   f"{result.triangles} triangles; the job's target for the {level} copy is {tri_target}")
     if result.longest_edge > MAX_EDGE_METRES + EDGE_EPSILON:
         result.add("edge.long", f"longest edge {result.longest_edge:.4f} m; the limit is {MAX_EDGE_METRES} m")
 
@@ -300,7 +301,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     parser.add_argument("files", nargs="+", help="GLB files to check")
     parser.add_argument("--target", type=int, default=None,
-                        help="triangle target of the job for this copy (triTarget, or triTargetLight with --level light)")
+                        help="triangle target of the job for this copy (triTarget; triTargetLight with --level light)")
     parser.add_argument("--level", choices=LEVELS, default="full",
                         help="which copy the files are: full (to 15,000 triangles, 2 MB) or light (to 5,000, 1 MB)")
     parser.add_argument("--box", type=float, nargs=3, metavar=("W", "H", "D"), default=None,

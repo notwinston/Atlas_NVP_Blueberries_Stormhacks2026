@@ -209,7 +209,8 @@ def test_on_a_machine_with_nothing_installed_everything_missing_is_named(tmp_pat
 
 def test_each_missing_piece_is_reported(tmp_path, matting):
     settings = station(tmp_path)
-    assert TripoSGGenerator(settings, FakeRuntime(modules=("diso",))).availability() == (False, "PyTorch is not installed")
+    no_torch = TripoSGGenerator(settings, FakeRuntime(modules=("diso",)))
+    assert no_torch.availability() == (False, "PyTorch is not installed")
     ready, note = TripoSGGenerator(settings, FakeRuntime(modules=("torch",))).availability()
     assert ready is False and note.startswith("diso is not installed")
     nowhere = make_settings(tmp_path / "data", generator="triposg", triposg_repo=str(tmp_path / "nowhere"))
@@ -459,7 +460,8 @@ def test_the_model_is_loaded_when_the_service_starts_and_a_job_gets_a_framed_pic
         rows, columns = np.flatnonzero(block.any(axis=1)), np.flatnonzero(block.any(axis=0))
         long_side = max(len(rows), len(columns))
         assert 165 <= long_side <= 180 and abs(sent.size[0] - (long_side + 2 * int(long_side * 0.1))) <= 4
-        assert abs(rows[0] - (sent.size[1] - 1 - rows[-1])) <= 2 and abs(columns[0] - (sent.size[0] - 1 - columns[-1])) <= 2
+        assert abs(rows[0] - (sent.size[1] - 1 - rows[-1])) <= 2  # centred, top to bottom
+        assert abs(columns[0] - (sent.size[0] - 1 - columns[-1])) <= 2  # and left to right
         assert (pixels[0] == 255).all() and (pixels[-1] == 255).all() and (pixels[:, 0] == 255).all()
         assert not (np.abs(pixels - 96).max(axis=2) < 12).any()  # no grey background anywhere
 

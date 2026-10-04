@@ -104,8 +104,8 @@ def diso_decoder() -> str:
     dmc = DiffDMC(dtype=torch.float32).to("cuda")
     vertices, faces = dmc(sdf, deform=None, return_quads=False, normalize=False)
     if len(vertices) < 100 or len(faces) < 100:
-        raise RuntimeError(f"a sphere gave {len(vertices)} vertices and {len(faces)} faces: the CUDA part does not work "
-                           "(was CUDA_HOME set when diso was built?)")
+        raise RuntimeError(f"a sphere gave {len(vertices)} vertices and {len(faces)} faces: the CUDA part does not "
+                           "work (was CUDA_HOME set when diso was built?)")
     return f"diso {version_of('diso')}: a sphere gave {len(vertices)} vertices and {len(faces)} faces on the card"
 
 
@@ -118,7 +118,8 @@ def matting() -> str:
     try:
         import onnxruntime
 
-        VERSIONS.append(("onnxruntime", f"{onnxruntime.__version__}, providers {onnxruntime.get_available_providers()}"))
+        providers = onnxruntime.get_available_providers()
+        VERSIONS.append(("onnxruntime", f"{onnxruntime.__version__}, providers {providers}"))
     except ImportError:
         pass
     session = rembg.new_session()  # downloads the matting model on its first use

@@ -76,7 +76,8 @@ def _samples(vertices: np.ndarray, faces: np.ndarray) -> tuple[np.ndarray, np.nd
     i, j = np.meshgrid(np.arange(steps + 1), np.arange(steps + 1), indexing="ij")
     inside = (i + j) <= steps
     u, w = i[inside] / steps, j[inside] / steps
-    points = a[:, None, :] * (1.0 - u - w)[None, :, None] + b[:, None, :] * u[None, :, None] + c[:, None, :] * w[None, :, None]
+    points = (a[:, None, :] * (1.0 - u - w)[None, :, None] + b[:, None, :] * u[None, :, None]
+              + c[:, None, :] * w[None, :, None])
     return points.reshape(-1, 3), np.repeat(area / len(u), len(u))
 
 
@@ -162,7 +163,8 @@ def find_front(points: np.ndarray, weights: np.ndarray) -> tuple[Optional[float]
         return None, f"the top of the mesh sits over its middle ({x:+.2f}, {z:+.2f}): no back rest was found"
     back = math.degrees(math.atan2(x, z))
     front = (back + 360.0) % 360.0 - 180.0
-    return front, f"the back rest is towards azimuth {back:+.0f} (x {x:+.2f}, z {z:+.2f}), so the front is at {front:+.0f}"
+    return front, (f"the back rest is towards azimuth {back:+.0f} (x {x:+.2f}, z {z:+.2f}), "
+                   f"so the front is at {front:+.0f}")
 
 
 def read_frame(vertices: np.ndarray, faces: np.ndarray, up_axis: Optional[str] = None, yaw_degrees: int = 0) -> dict:
@@ -179,7 +181,8 @@ def read_frame(vertices: np.ndarray, faces: np.ndarray, up_axis: Optional[str] =
         reading["notes"].append(f"up: {why}")
         if sign <= 0:
             reading.update(up=None, front=None, frontAzimuth=None)
-            reading["notes"].append("no value of FORGE_TRIPOSG_UP describes this; leave it at Y and write down what you see")
+            reading["notes"].append("no value of FORGE_TRIPOSG_UP describes this; leave it at Y and write down "
+                                    "what you see")
             return reading
         points = upright(points, axis)
     else:
@@ -205,12 +208,13 @@ def read_frame(vertices: np.ndarray, faces: np.ndarray, up_axis: Optional[str] =
         reading["notes"].append("the front is on the mesh's own +Z, whatever side the photo was taken from")
     elif VIEW_FROM <= abs(front) <= VIEW_TO:
         reading["front"] = "view"
-        reading["notes"].append("the front is about 45 degrees off +Z, as in the photo: the mesh is turned as the camera "
-                                "saw it. A second photo from the front-right must give the same angle with the other sign")
+        reading["notes"].append("the front is about 45 degrees off +Z, as in the photo: the mesh is turned as the "
+                                "camera saw it. A second photo from the front-right must give the same angle with "
+                                "the other sign")
     else:
         reading["front"] = "unknown"
-        reading["notes"].append("the front is neither on +Z nor where the photo's camera stood: the Forge has no setting "
-                                "for this; leave FORGE_TRIPOSG_FRONT at unknown and write the azimuth down")
+        reading["notes"].append("the front is neither on +Z nor where the photo's camera stood: the Forge has no "
+                                "setting for this; leave FORGE_TRIPOSG_FRONT at unknown and write the azimuth down")
     return reading
 
 
@@ -282,7 +286,8 @@ def prepare_photo(path: Path) -> bytes:
 
 def multipart(meta: dict, photo: bytes) -> bytes:
     def part(name: str, head: str, body: bytes) -> bytes:
-        return (f"--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"{name}\"{head}\r\n\r\n").encode() + body + b"\r\n"
+        start = f"--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"{name}\"{head}\r\n\r\n"
+        return start.encode() + body + b"\r\n"
 
     return (part("meta", "", json.dumps(meta).encode())
             + part("view0", '; filename="view0.jpg"\r\nContent-Type: image/jpeg', photo)
@@ -316,7 +321,8 @@ def run(args: argparse.Namespace) -> int:
 
     health = wait_until_ready(url, args.wait)
     if health is None:
-        print("stopped: the generator is not ready. GET /health says why; the README's run-book lists what each note means.")
+        print("stopped: the generator is not ready. GET /health says why; the README's run-book lists what each "
+              "note means.")
         return 2
     record["health"] = health
     print(f"health: generator {health['generator']} ready on {health.get('gpuName') or 'no GPU'}, "
@@ -381,8 +387,9 @@ def run(args: argparse.Namespace) -> int:
         (out / "asset.glb").write_bytes(glb)
         verdict = validate_glb(glb, tri_target=job["triTarget"], box=args.dims, level="full")
         record["validator"] = verdict.to_dict()
+        faults = "; ".join(f"[{v.code}] {v.message}" for v in verdict.violations)
         print(f"asset.glb: {verdict.triangles} triangles, {len(glb)} bytes; the validator "
-              + ("accepts it" if verdict.ok else "rejects it: " + "; ".join(f"[{v.code}] {v.message}" for v in verdict.violations)))
+              + ("accepts it" if verdict.ok else "rejects it: " + faults))
         result = 0 if verdict.ok else 1
     else:
         print(f"the job ended as {job['state']}: {job.get('error')}")
@@ -407,20 +414,26 @@ def run(args: argparse.Namespace) -> int:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="Send one object through a running Forge and read the generator's frame.")
-    parser.add_argument("photo", nargs="?", help="a photo of the object: a chair seen from the front and one side, at about 45 degrees")
+    parser = argparse.ArgumentParser(
+        description="Send one object through a running Forge and read the generator's frame.")
+    parser.add_argument("photo", nargs="?",
+                        help="a photo of the object: a chair seen from the front and one side, at about 45 degrees")
     parser.add_argument("--dims", type=float, nargs=3, metavar=("W", "H", "D"),
                         help="the object's box in metres: width, height, depth, measured with a tape")
     parser.add_argument("--category", default="chair")
     parser.add_argument("--url", default="http://127.0.0.1:8000", help="the Forge")
     parser.add_argument("--target", type=int, default=15000, help="triangle target of the full copy")
     parser.add_argument("--out", default="first_run", help="folder for the answer, the GLB and the reading")
-    parser.add_argument("--data", default=str(FORGE_DIR / "data"), help="the Forge's data folder, when it is on this machine")
+    parser.add_argument("--data", default=str(FORGE_DIR / "data"),
+                        help="the Forge's data folder, when it is on this machine")
     parser.add_argument("--wait", type=float, default=0.0, help="seconds to wait for the generator to become ready")
     parser.add_argument("--timeout", type=float, default=600.0, help="seconds to wait for the job")
-    parser.add_argument("--analyse", metavar="FILE", help="only read the frame from a raw_view0.npz or a .glb; no service is called")
-    parser.add_argument("--up-axis", choices=("Y", "Z", "X"), help="with --analyse of a .glb: `upAxis` of its clean-up report")
-    parser.add_argument("--yaw-degrees", type=int, choices=(0, 90), default=0, help="with --analyse of a .glb: `yawDegrees` of its report")
+    parser.add_argument("--analyse", metavar="FILE",
+                        help="only read the frame from a raw_view0.npz or a .glb; no service is called")
+    parser.add_argument("--up-axis", choices=("Y", "Z", "X"),
+                        help="with --analyse of a .glb: `upAxis` of its clean-up report")
+    parser.add_argument("--yaw-degrees", type=int, choices=(0, 90), default=0,
+                        help="with --analyse of a .glb: `yawDegrees` of its report")
     args = parser.parse_args(argv)
 
     if args.analyse:
