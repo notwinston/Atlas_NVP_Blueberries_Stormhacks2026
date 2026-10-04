@@ -92,6 +92,21 @@ namespace Atlas.App.Tests
             public void ResetWalker(in Atlas.Kernel.WalkerPose pose) { }
         }
 
+        /// <summary>The stereo rig as the menu reads it: the display mode.</summary>
+        sealed class Display : IStereoRig
+        {
+            public DisplayMode Mode { get; set; }
+            public void SetMode(DisplayMode mode) { Mode = mode; }
+            public float Ipd { get; set; }
+            public float3 HeadOffset { get; set; }
+            public quaternion PredictionOffset { get; set; }
+            public Transform Head { get { return null; } }
+            public Transform Hud { get { return null; } }
+            public Camera GetEyeCamera(Eye eye) { return null; }
+            public float3 GetEyePosition(Eye eye) { return float3.zero; }
+            public void GetEyeFrustumPlanes(Eye eye, Plane[] planes) { }
+        }
+
         /// <summary>The near layout as Atlas.Hands publishes it, with every number in the test's hands.</summary>
         sealed class Reach : IReachLayout
         {
@@ -144,13 +159,14 @@ namespace Atlas.App.Tests
             public float3 Position = Head;
             public int Frame;
 
-            public Rig()
+            /// <param name="display">The stereo rig; null is a menu with no rig, which counts as the headset.</param>
+            public Rig(IStereoRig display = null)
             {
                 Registry.DeclareFloat("render.scale", "render", 0.6f, 0.8f, 0.8f);
                 Registry.DeclareBool("hud.visible", "hud", false);
                 Model = new MenuModel(Registry, new FakeHost());
                 Input.PushContext(InputContext.Space);
-                Menu.Compose(Input, null, Loop, Model, View);
+                Menu.Compose(Input, display, Loop, Model, View);
             }
 
             public void Step(quaternion rotation, int frames = 1)
@@ -610,6 +626,37 @@ namespace Atlas.App.Tests
             w.Menu.OnModeChanged(DisplayMode.Headset);
             w.Step(quaternion.identity);
             Assert.That(w.View.Near, Is.True, "and within reach again in the headset");
+        }
+
+        [Test]
+        public void InTheHand_TheMenuNeverComesWithinReach_WhateverTheLayoutSays()
+        {
+            Publish();
+            var display = new Display { Mode = DisplayMode.Hand };
+            var w = new Rig(display);
+            w.Step(quaternion.identity, 3);
+            Assert.That(w.View.Near, Is.False, "step 6 does not run for the menu in the hand");
+            Assert.That(w.View.Reaches, Is.EqualTo(0));
+            Assert.That(w.Data(w.Menu.ChipTarget).Radius, Is.EqualTo(MenuLayout.OpenChipRadius));
+
+            // Opened all the same: where it has always stood, on the head-locked layer.
+            w.Menu.Open();
+            Assert.That(w.Menu.IsOpen, Is.True);
+            Assert.That(w.View.Near, Is.False);
+            quaternion frame = quaternion.RotateY(0f);
+            Assert.That(w.View.Panel, Is.EqualTo(Head + math.mul(frame, MenuLayout.PanelCentre)));
+            for (int i = 0; i < MenuLayout.TargetCount; i++)
+            {
+                GazeTargetData d = w.Data(w.Menu.TargetOf(i));
+                Assert.That(d.Centre, Is.EqualTo(Head + math.mul(frame, MenuLayout.PanelCentre + MenuLayout.TargetCentre(i, 0))), "target " + i);
+                Assert.That(d.HalfSize, Is.EqualTo(MenuLayout.TargetHalfSize(i)), "target " + i);
+            }
+
+            // In the headset, with the layout still saying near, it comes within reach at the next frame.
+            display.Mode = DisplayMode.Headset;
+            w.Step(quaternion.identity);
+            Assert.That(w.View.Near, Is.True);
+            Assert.That(w.Data(w.Menu.TargetOf(0)).HalfSize, Is.EqualTo(MenuLayout.NearTargetHalfSize(0, 0.75f)));
         }
 
         [Test]
