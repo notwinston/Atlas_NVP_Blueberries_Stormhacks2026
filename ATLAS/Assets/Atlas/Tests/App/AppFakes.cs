@@ -304,10 +304,9 @@ namespace Atlas.App.Tests
         public void SetRoom(RoomModel room) { Room = room; Calls.Add("room"); if (RoomChanged != null) RoomChanged(room); }
         public void BumpWorldVersion() { WorldVersion++; }
         public void RaiseEntered(SpaceId id) { Current = id; HasSpace = true; if (SpaceEntered != null) SpaceEntered(id); }
+        public void RaiseExited(SpaceId id) { if (SpaceExited != null) SpaceExited(id); }
         public event Action<SpaceId> SpaceEntered;
-#pragma warning disable 67
         public event Action<SpaceId> SpaceExited;
-#pragma warning restore 67
         public event Action<RoomModel> RoomChanged;
     }
 

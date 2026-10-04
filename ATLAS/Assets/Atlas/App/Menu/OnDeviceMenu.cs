@@ -187,7 +187,12 @@ namespace Atlas.App.Menu
             }
             if (_input.Pressed(AtlasAction.NavLeft)) _model.Step(-1);
             if (_input.Pressed(AtlasAction.NavRight)) _model.Step(1);
-            if (_input.Pressed(AtlasAction.Confirm)) _model.Confirm();
+            if (_input.Pressed(AtlasAction.Confirm))
+            {
+                // The corner chip's dwell carries its tag; Apply and the gamepad carry none.
+                if (_input.LastTag(AtlasAction.Confirm) == MenuLayout.RescanTag) Rescan();
+                else _model.Confirm();
+            }
 
             // A row may have closed the menu itself (rescan), or asked for it (a space, Close).
             if (!_open) return;
@@ -320,6 +325,7 @@ namespace Atlas.App.Menu
                 else if (i == MenuLayout.Minus) { action = AtlasAction.NavLeft; label = "menu minus"; }
                 else if (i == MenuLayout.Plus) { action = AtlasAction.NavRight; label = "menu plus"; }
                 else if (i == MenuLayout.Apply) { action = AtlasAction.Confirm; label = "menu apply"; }
+                else if (i == MenuLayout.Rescan) { action = AtlasAction.Confirm; tag = MenuLayout.RescanTag; label = "menu rescan"; }
                 else { action = AtlasAction.Back; label = "menu close"; }
 
                 GazeTarget target = GazeTarget.WorldRect(action, head + _offsets[i], rotation, new Vector2(half.x, half.y), tag);

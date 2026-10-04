@@ -123,7 +123,7 @@ namespace Atlas.App.Menu
     public sealed class MenuModel
     {
         /// <summary>Rows shown at once; the list scrolls with the focus.</summary>
-        public const int VisibleRows = 8;
+        public const int VisibleRows = 9;
         public const int PageCount = 4;
         /// <summary>A float parameter moves by this fraction of its range per step.</summary>
         public const float FloatStepFraction = 1f / 20f;

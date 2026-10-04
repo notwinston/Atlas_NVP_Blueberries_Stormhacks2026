@@ -83,6 +83,7 @@ namespace Atlas.App.Menu
                 float footer = MenuLayout.FooterY - capCentre;
                 NewText(_panel.transform, "Close", font, new Vector3(MenuLayout.CloseX, footer, TextZ), TextAnchor.UpperCenter).text = "Close";
                 NewText(_panel.transform, "Apply", font, new Vector3(MenuLayout.ApplyX, footer, TextZ), TextAnchor.UpperCenter).text = "Apply";
+                NewText(_panel.transform, "Rescan", font, new Vector3(MenuLayout.RescanX, MenuLayout.RescanY - capCentre, TextZ), TextAnchor.UpperCenter).text = "Rescan";
                 NewText(_chip.transform, "Label", font, new Vector3(0f, -capCentre, TextZ), TextAnchor.UpperCenter).text = "Menu";
             }
 
@@ -143,6 +144,7 @@ namespace Atlas.App.Menu
                 if (steps) AddRect(MenuLayout.PlusX, y, TextZ, 0.002f, 0.010f, GlyphCell);
             }
             AddCapsule(MenuLayout.CloseX, MenuLayout.FooterY, MarkZ, MenuLayout.ChipHalfWidth, MenuLayout.ChipHalfHeight, ChipCell);
+            AddCapsule(MenuLayout.RescanX, MenuLayout.RescanY, MarkZ, MenuLayout.RescanHalfWidth, MenuLayout.RescanHalfHeight, ChipCell);
             AddCapsule(MenuLayout.ApplyX, MenuLayout.FooterY, MarkZ, MenuLayout.ChipHalfWidth, MenuLayout.ChipHalfHeight,
                 model.ApplyReady ? FocusCell : ChipCell);
             AtlasMesh.Apply(_builder, _panelMesh);
@@ -168,7 +170,7 @@ namespace Atlas.App.Menu
 
         void AddPanel()
         {
-            AddRimmed(0f, 0f, MenuLayout.Width * 0.5f, MenuLayout.Height * 0.5f, PanelRadius, PanelCell);
+            AddRimmed(0f, MenuLayout.PanelY, MenuLayout.Width * 0.5f, MenuLayout.Height * 0.5f, PanelRadius, PanelCell);
         }
 
         // A squircle with its rim showing round it, the rim one layer behind.

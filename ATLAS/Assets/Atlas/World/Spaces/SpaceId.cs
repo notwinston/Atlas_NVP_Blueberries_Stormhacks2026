@@ -10,39 +10,40 @@ namespace Atlas.World
         SmallPlanet = 4,
         Portal = 5,
         Slicer = 6,
+        Network = 7,
     }
 
     /// <summary>Names and wire values derived from a <see cref="SpaceId"/>. Every method returns a constant: no allocation.</summary>
     public static class SpaceIds
     {
-        public const int Count = 7;
+        public const int Count = 8;
         /// <summary>State.spaceId while no space is entered (onboarding, scan).</summary>
         public const byte NoSpace = 255;
         /// <summary>State.sceneId while no space is entered.</summary>
         public const ushort NoScene = 0xFFFF;
 
-        static readonly string[] s_codes = { "S0", "S1", "S2", "S3", "S4", "S5", "S6" };
+        static readonly string[] s_codes = { "S0", "S1", "S2", "S3", "S4", "S5", "S6", "S7" };
 
         static readonly string[] s_scenes =
         {
             "Space_Home", "Space_Glued", "Space_CurvedWalk", "Space_AlignedCells", "Space_SmallPlanet",
-            "Space_Portal", "Space_Slicer"
+            "Space_Portal", "Space_Slicer", "Space_Network"
         };
 
-        static readonly string[] s_groups = { "home", "glued", "curved", "cells", "planet", "portal", "slicer" };
+        static readonly string[] s_groups = { "home", "glued", "curved", "cells", "planet", "portal", "slicer", "net" };
 
         static readonly string[] s_display =
         {
-            "Home", "Glued", "Curved Walk", "Aligned Cells", "Small Planet", "Impossible Rooms", "Slicer"
+            "Home", "Glued", "Curved Walk", "Aligned Cells", "Small Planet", "Impossible Rooms", "Slicer", "Network"
         };
 
         /// <summary>True for the seven defined values.</summary>
         public static bool IsDefined(SpaceId id) { return (int)id < Count; }
 
-        /// <summary>"S0" to "S6": the code used by SceneCmd (Appendix B.2) and in logs.</summary>
+        /// <summary>"S0" to "S7": the code used by SceneCmd (Appendix B.2) and in logs.</summary>
         public static string Code(SpaceId id) { return IsDefined(id) ? s_codes[(int)id] : "S?"; }
 
-        /// <summary>Parses "S0" to "S6". False for anything else.</summary>
+        /// <summary>Parses "S0" to "S7". False for anything else.</summary>
         public static bool TryParseCode(string code, out SpaceId id)
         {
             id = SpaceId.Home;

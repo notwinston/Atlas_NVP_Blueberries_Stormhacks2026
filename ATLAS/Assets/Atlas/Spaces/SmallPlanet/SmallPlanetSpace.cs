@@ -107,7 +107,8 @@ namespace Atlas.Spaces.SmallPlanet
             }
             else SmallPlanetSky.ApplyLook(core.View3d);
             // The furniture is laid out about where the walker stands at entry, so it is where the real furniture is until the first step.
-            if (room != null && room.IsBuilt) roomView = new CurvedRoomView(room) { ObjectOrigin = head };
+            // The Small Planet draws no obstacles, only the kerbs (the room outline).
+            if (room != null && room.IsBuilt) roomView = new CurvedRoomView(room) { ObjectOrigin = head, ShowObjects = false };
             ApplyView();
             // Rule 5: the dial is read in Tick, so its gaze twin lives as long as the space is entered.
             ReleaseDial();

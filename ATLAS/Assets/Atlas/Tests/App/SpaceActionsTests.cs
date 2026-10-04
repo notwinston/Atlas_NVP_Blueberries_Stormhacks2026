@@ -72,16 +72,16 @@ namespace Atlas.App.Tests
         }
 
         [Test]
-        public void Stepping_VisitsAllSevenSpacesInOrder_BothWays()
+        public void Stepping_VisitsAllSpacesInOrder_BothWays()
         {
             var rig = new Rig(SpaceId.Home, SpaceId.Glued, SpaceId.CurvedWalk, SpaceId.AlignedCells, SpaceId.SmallPlanet,
-                SpaceId.Portal, SpaceId.Slicer);
+                SpaceId.Portal, SpaceId.Slicer, SpaceId.Network);
             SpaceId target;
             rig.Host.Current = SpaceId.Home;
             for (int i = 1; i <= SpaceIds.Count; i++)
             {
                 Assert.That(SpaceActions.TryNeighbour(rig.Host, 1, out target), Is.True);
-                Assert.That(target, Is.EqualTo((SpaceId)(i % SpaceIds.Count)), "S0 to S6 and round to Home");
+                Assert.That(target, Is.EqualTo((SpaceId)(i % SpaceIds.Count)), "S0 to S7 and round to Home");
                 rig.Host.Current = target;
             }
             for (int i = SpaceIds.Count - 1; i >= 0; i--)

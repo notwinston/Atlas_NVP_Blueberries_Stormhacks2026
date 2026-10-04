@@ -99,7 +99,9 @@ namespace Atlas.App.Menu
     {
         /// <summary>Centre of the panel in the menu frame.</summary>
         public static readonly float3 PanelCentre = new float3(0f, 0f, 1.2f);
-        public const float Width = 0.70f, Height = 0.50f;
+        public const float Width = 0.70f, Height = 0.542f;
+        /// <summary>The panel grew down by one row (nine rows): its centre sits half a row below the frame's.</summary>
+        public const float PanelY = -0.021f;
 
         public const float RowPitch = 0.042f;
         /// <summary>Centre of the first row.</summary>
@@ -115,17 +117,21 @@ namespace Atlas.App.Menu
         public const float StepLift = 0.01f;
 
         /// <summary>The two chips under the list.</summary>
-        public const float FooterY = -0.205f;
+        public const float FooterY = -0.247f;
         public const float CloseX = -0.13f, ApplyX = 0.13f;
         public const float ChipHalfWidth = 0.10f, ChipHalfHeight = 0.024f;
+        /// <summary>The rescan chip in the top right corner, beside the title.</summary>
+        public const float RescanX = 0.28f, RescanY = TitleY, RescanHalfWidth = 0.065f, RescanHalfHeight = 0.020f;
+        /// <summary>Tag the rescan chip's gaze target carries on its Confirm, to tell it from Apply's.</summary>
+        public const int RescanTag = 1;
 
         /// <summary>The chip that opens the menu, in the menu frame (lane D contract, section 5.7).</summary>
         public static readonly float3 OpenChip = new float3(-0.55f, -0.40f, 1.0f);
         public const float OpenChipRadius = 0.06f;
 
         // Gaze targets while open: one per visible row, then these.
-        public const int Minus = MenuModel.VisibleRows, Plus = Minus + 1, Apply = Minus + 2, Close = Minus + 3;
-        public const int TargetCount = Minus + 4;
+        public const int Minus = MenuModel.VisibleRows, Plus = Minus + 1, Apply = Minus + 2, Close = Minus + 3, Rescan = Minus + 4;
+        public const int TargetCount = Minus + 5;
 
         public static float RowY(int slot)
         {
@@ -141,6 +147,7 @@ namespace Atlas.App.Menu
                 case Minus: return new float3(MinusX, RowY(focusedSlot), -StepLift);
                 case Plus: return new float3(PlusX, RowY(focusedSlot), -StepLift);
                 case Apply: return new float3(ApplyX, FooterY, 0f);
+                case Rescan: return new float3(RescanX, RescanY, 0f);
                 default: return new float3(CloseX, FooterY, 0f);
             }
         }
@@ -149,6 +156,7 @@ namespace Atlas.App.Menu
         {
             if (target < Minus) return new float2(RowHalfWidth, RowHalfHeight);
             if (target == Minus || target == Plus) return new float2(StepHalfWidth, StepHalfHeight);
+            if (target == Rescan) return new float2(RescanHalfWidth, RescanHalfHeight);
             return new float2(ChipHalfWidth, ChipHalfHeight);
         }
     }

@@ -52,6 +52,24 @@ namespace Atlas.App.Tests
             return -1;
         }
 
+        sealed class FakeExhibit : IHomeExhibit
+        {
+            public bool Ready = true, IsActive;
+            public int Begins, Ends;
+            public string Label { get { return "Network"; } }
+            bool IHomeExhibit.Ready { get { return Ready; } }
+            public bool Active { get { return IsActive; } }
+            public bool Begin() { Begins++; IsActive = true; return true; }
+            public void End() { Ends++; IsActive = false; }
+        }
+
+        static string RowText(MenuModel model, int index)
+        {
+            var sb = new StringBuilder();
+            MenuText.AppendValue(sb, model, index);
+            return sb.ToString();
+        }
+
         [Test]
         public void EveryPage_StartsWithThePageRow_AndSteppingItChangesThePage()
         {
@@ -245,11 +263,12 @@ namespace Atlas.App.Tests
             var requested = new List<SpaceId>();
             model.SpaceRequested += requested.Add;
 
-            // Seven available spaces, then Return to Home.
+            // Seven available spaces, then Return to Home (rescan is the panel's corner chip, not a row).
             Assert.That(model.RowCount, Is.EqualTo(1 + SpaceIds.Count + 1));
             Assert.That(model.IsCurrent(SpaceId.Home), Is.True);
-            model.Select(2);
-            Assert.That(model.Row(2).Space, Is.EqualTo(SpaceId.Glued));
+            int glued = 2;
+            model.Select(glued);
+            Assert.That(model.Row(glued).Space, Is.EqualTo(SpaceId.Glued));
             model.Step(-1);
             Assert.That(host.Calls, Is.Empty, "minus does not run a row");
             model.Step(1);
@@ -262,7 +281,8 @@ namespace Atlas.App.Tests
 
             model.NoteOpened();
             Assert.That(model.CloseRequested, Is.False);
-            model.Select(1);
+            model.Select(glued - 1);
+            Assert.That(model.Row(glued - 1).Space, Is.EqualTo(SpaceId.Home));
             Assert.That(model.ApplyReady, Is.False, "Apply has nothing to do on the space the walker is in");
             model.Select(RowOf(model, MenuCommand.ReturnHome));
             model.Step(1);
@@ -270,7 +290,7 @@ namespace Atlas.App.Tests
 
             // A refused switch leaves the menu open.
             model.NoteOpened();
-            model.Select(2);
+            model.Select(glued);
             host.Accept = false;
             model.Confirm();
             Assert.That(host.Calls[host.Calls.Count - 1], Is.EqualTo("switch S1"));
@@ -347,7 +367,7 @@ namespace Atlas.App.Tests
             Assert.That(right[5], Is.EqualTo("-1"));
             Assert.That(left[6], Is.EqualTo("render.scale *"));
             Assert.That(right[6], Is.EqualTo("0.700"));
-            Assert.That(title.ToString(), Is.EqualTo("ATLAS  Parameters   1-8 of " + model.RowCount));
+            Assert.That(title.ToString(), Is.EqualTo("ATLAS  Parameters   1-" + MenuModel.VisibleRows + " of " + model.RowCount));
 
             model.Move(1000);
             MenuText.BuildNames(names, model);
@@ -487,7 +507,7 @@ namespace Atlas.App.Tests
                 float3 centre = MenuLayout.TargetCentre(target, 7);
                 float2 half = MenuLayout.TargetHalfSize(target);
                 Assert.That(math.abs(centre.x) + half.x, Is.LessThanOrEqualTo(MenuLayout.Width * 0.5f + 1e-5f), "target " + target);
-                Assert.That(math.abs(centre.y) + half.y, Is.LessThanOrEqualTo(MenuLayout.Height * 0.5f + 1e-5f), "target " + target);
+                Assert.That(math.abs(centre.y - MenuLayout.PanelY) + half.y, Is.LessThanOrEqualTo(MenuLayout.Height * 0.5f + 1e-5f), "target " + target);
             }
             Assert.That(MenuLayout.TargetCentre(MenuLayout.Plus, 3).y, Is.EqualTo(MenuLayout.RowY(3)));
             Assert.That(MenuLayout.TargetCentre(MenuLayout.Minus, 3).z, Is.LessThan(0f), "in front of the row, so the gaze meets it first");

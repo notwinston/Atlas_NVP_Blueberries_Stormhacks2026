@@ -90,7 +90,7 @@ namespace Atlas.App.Menu
             }
         }
 
-        static void AppendValue(StringBuilder sb, MenuModel model, int index)
+        public static void AppendValue(StringBuilder sb, MenuModel model, int index)
         {
             MenuRow row = model.Row(index);
             switch (row.Kind)
