@@ -1415,7 +1415,7 @@ Events in this build. A lane adds a name by adding a row.
 | `onboarding.step` | `{step}` | C (onboarding) | Onboarding moved to another step |
 | `headset.on`, `headset.off` | `{}` | A | The display mode changed |
 | `portal.cross`, `rooms.loop`, `slicer.object` | `{from, to}`, `{room, laps}`, `{object}` | A (S5, S6) | Space milestones |
-| `asset` | `{step, boxId, …}`; `step`: `room`, `upload`, `requested`, `cached`, `ready`, `placed`, `builtin`, `failed`, `rejected`, `unreachable`, `reachable`, `light_placed`, `light_dropped`; with `jobId`, `sha256`, `reason`, `attempt`, `tris`, `loadMs` and, for `builtin`, `placed`, `kept` and `shape`, as the step has them (§4.3, step 8) | D (`AssetClientCore`) | Asset client (§4.3; §11.4.7 reads these) |
+| `asset` | `{step, boxId, …}`; `step`: `room`, `upload`, `requested`, `cached`, `ready`, `placed`, `builtin`, `failed`, `rejected`, `unreachable`, `reachable`, `light_placed`, `light_dropped`, `light_deferred`, `light_same`; with `jobId`, `sha256`, `reason`, `attempt`, `tris`, `loadMs` and, for `builtin`, `placed`, `kept` and `shape`, as the step has them (§4.3, step 8) | D (`AssetClientCore`) | Asset client (§4.3; §11.4.7 reads these) |
 | `menu` | `{state: "open" \| "close"}` | D (`MenuModel`) | On-device menu opened or closed |
 | `perf.runBegin`, `perf.runEnd`, `perf.summary`, `perf.note` | the perf tour's | A (`App/PerfTour`) | The scripted performance tour |
 | `fms`, `seq`, `pg.fmsAlert`, `note`, `asset_ack` | `{score}` (0 to 20), `{score}` (1 to 7), `{score, stop}`, `{text}`, the `AssetAck` body | Hub | Console entries (§3.5) and acknowledgements; written by the Hub with the Hub clock and `"scene": "hub"`, never sent to the phone. `pg.fmsAlert` is written right after an `fms` whose score is at or above `pg.fmsStop` (the phone's value from the manifest and snapshot; 4 until the phone declares it); the phone never writes `fms`, `seq` or `pg.fmsAlert` (P2-C09, P2-C17) |
@@ -2293,7 +2293,7 @@ validate the list of what is wrong.
 | `PUT /rooms/{roomId}/mesh` | Binary mesh, at most 2 MB | 204; 404; 413. Optional (§7.4); the app does not send it in Phase 1 |
 | `GET /rooms/{roomId}` | – | 200: the exact bytes that were posted; 404 |
 | `DELETE /rooms/{roomId}` | – | 204: the room record, its mesh, its jobs and the GLBs made for it alone, both copies of each, are removed (§13.5); 404 |
-| `POST /rooms/{roomId}/objects` | `multipart/form-data`: field `meta` (JSON, below); files `view0` (required), `view1`, `view2`, each at most 1 MB | 202 `{"jobId": "1a2b3c4d5e6f7a8b"}`; or 200 `{"jobId": "…", "cached": true, "sha256": "…"}` with `lightSha256`, `lightUrl`, `lightBytes` and `lightTris` when the cached mesh has a light copy (the phone learns of a cached mesh from this answer alone); or 200 `{"jobId": "…", "placeholder": true}` for a box beyond the room's 32. 422 bad `meta`, missing or empty view; 404 unknown room or a `boxId` the room does not have; 413 |
+| `POST /rooms/{roomId}/objects` | `multipart/form-data`: field `meta` (JSON, below); files `view0` (required), `view1`, `view2`, each at most 1 MB | 202 `{"jobId": "1a2b3c4d5e6f7a8b"}`; or 200 `{"jobId": "…", "cached": true, "sha256": "…"}` with `lightSha256`, `lightUrl`, `lightBytes` and `lightTris` when the cached mesh has a light copy (the phone learns of a cached mesh from this answer alone; a cache entry from before the light copy answers as before, with the full mesh only); or 200 `{"jobId": "…", "placeholder": true}` for a box beyond the room's 32. 422 bad `meta`, missing or empty view; 404 unknown room or a `boxId` the room does not have; 413 |
 | `GET /jobs/{jobId}` | – | 200: the job object below; 404 |
 | `GET /jobs?room={roomId}` | – | 200: a JSON **array** of the same objects, in order of submission; without `room`, every job |
 | ✚ `GET /queue` | – | 200 `{"active": {…} \| null, "queued": […], "placeholders": […], "generator": "triposg"}`; `queued` is in the order the worker takes it. Entries are `{jobId, roomId, boxId, volume, state}` |
@@ -2357,7 +2357,7 @@ matting model could not be loaded: …`.
 
 | State | Work | Time-out | Next |
 |---|---|---|---|
-| (at upload) | Cache lookup by a key made of the SHA-256 of every view's bytes, the job's `triTarget` and `triTargetLight`, `pipelineVer`, the box (`dims`, `yaw`), the category, the generator's name, the profile, every view's `intrinsics` and `camToBox`, and the settings `FORGE_TRIPOSG_UP`, `FORGE_TRIPOSG_FRONT`, `FORGE_POOR_FIT` and `FORGE_MAX_ANISOTROPY` | – | hit → `ready` (source `cache`, 200 `cached`); `backend` `cache` and miss → `failed`; a box in `placeholders` → `placeholder`; else `queued` |
+| (at upload) | Cache lookup by a key made of the SHA-256 of every view's bytes, the job's `triTarget` and `triTargetLight`, `pipelineVer`, the box (`dims`, `yaw`), the category, the generator's name, the profile, every view's `intrinsics` and `camToBox`, and the settings `FORGE_TRIPOSG_UP`, `FORGE_TRIPOSG_FRONT`, `FORGE_POOR_FIT` and `FORGE_MAX_ANISOTROPY` | – | hit → `ready` (source `cache`, 200 `cached` with the four light members when the cached mesh has a light copy; `GET /jobs/{jobId}` and `GET /jobs?room=` carry them too; an older entry answers as before); `backend` `cache` and miss → `failed`; a box in `placeholders` → `placeholder`; else `queued` |
 | `queued` | Waits for the worker | – | `matting` (or `ready` when the cache gained the asset meanwhile) |
 | `matting` | Decode the JPEG of `view0`; background removal (`rembg` when installed). A removal that fails is skipped, and the plain crop goes on, for a generator that does not need matting; for `triposg` that view is not sent to the model. Another view is decoded and matted when an attempt or the colours need it | 10 s per view | `generating`; `failed` for a crop that cannot be decoded or a time-out |
 | `generating` | The attempts, below: one generation per view, at most three. Each generated mesh is welded, reduced, turned and scaled to the box at once (§3.9, steps 1 to 5), which gives its fit | 90 s per generation, 120 s for the hosted service; 60 s for the turn and scale of each mesh | `cleaning`; `failed` |
@@ -2935,7 +2935,7 @@ namespace Atlas.Telemetry
 
 `AssetClientCore` holds the constants of the tables below (`MaxAttempts`, `HealthTimeout`, `RoomTimeout`,
 `ObjectTimeout`, `PollTimeout`, `DownloadTimeout`, `PollInterval`, `ProbeInterval`, `JobSilenceSeconds`,
-`WorkTimeout`, `AckWindowSeconds`, `BuiltInPerTick`, `FirstShapeReason`) and `ForgeUrl`, `Backend`, `AckSink`, `RoomBuilt`,
+`WorkTimeout`, `AckWindowSeconds`, `BuiltInPerTick`, `FirstShapeReason`, `LightRetrySeconds`, `LightRetryCapSeconds`) and `ForgeUrl`, `Backend`, `AckSink`, `RoomBuilt`,
 `RoomCleared`, `Tick(double timeSeconds, float frameMs)`. `ForgeProtocol` builds the `meta` JSON and the
 multipart body.
 
@@ -2992,7 +2992,9 @@ multipart body.
    | `room`, `upload`, `requested`, `cached`, `ready`, `placed`, `rejected`, `failed`, `unreachable`, `reachable` | Unchanged | The round trip above |
    | `builtin` | `reason`, `placed`, `kept`, `shape`, `tris` | A first shape was placed or could not be, or an object that shows one is given up for good |
    | `light_placed` | `sha256`, `tris` | The light copy was handed to the room content |
-   | `light_dropped` | `sha256`, `reason` | The light copy was given up (step 10) |
+   | `light_dropped` | `sha256`, `reason` | The light copy was given up for good (step 10) |
+   | `light_deferred` | `sha256`, `reason`, `retryIn` | A transport failure; the light copy is tried again after `retryIn` seconds |
+   | `light_same` | `sha256`, `reason` (`same_as_full`) | The light copy is the full copy; nothing is fetched |
 
    For `builtin`: `reason` is `first_shape` for the shape every object gets when the room content is built, and
    otherwise why the object will have nothing else (`unreachable`, `no_photo`, `no_scan`, `backend_off`, `job_failed`,
@@ -3004,8 +3006,8 @@ multipart body.
 9. **First shapes.** On the main thread at step 8b, at most two (`BuiltInPerTick`) per frame, in the order of the
    objects (the followed ones, largest first, then the others): `FittedShapes.Build` makes the mesh from the category's
    template, fitted by the object's profile for a chair, couch or bed, or cut from the profile (§4.4); the adapter
-   makes the `UnityEngine.Mesh` and calls `IRoomContent.SetBuiltInMesh`. The adapter keeps it and destroys it one
-   second after the object's mesh is replaced, or when the room is built again. An object that reached `Ready` first
+   makes the `UnityEngine.Mesh` and calls `IRoomContent.SetBuiltInMesh`. The adapter keeps it, and destroys a
+   mesh that was replaced only once the room content no longer draws it (§4.4, Hand-over). An object that reached `Ready` first
    gets none.
 10. **The light copy.** One download slot serves the objects. Every full copy that waits goes first; only when none
     waits, and the room is built, does the slot take the light copy of the first `Ready` object that has one pending:
@@ -3014,8 +3016,15 @@ multipart body.
     `ObjectMeshRules.LightTarget(n)` (so at most `min(5,000, LightTarget(n))` triangles and 1,048,576 bytes), the same
     reader, and the hand-over at step 8b, one mesh per frame, through `IAssetRoom.PlaceGeneratedLight` to
     `IRoomContent.SetGeneratedLightMesh`. Any failure (`hash_mismatch`, `too_large`, `validate:<code>`,
-    `download_failed`, `load_failed`, or `no_cache` for a saved room with no Forge) drops only the light copy:
-    `light_dropped`, no `AssetAck`, no change of state; the object stays `Ready` and shows its full mesh. A message
+    `download_failed`, a work time-out, `load_failed`, or `no_cache` for a saved room with no Forge) never disturbs
+    the full copy: no `AssetAck`, no change of state; the object stays `Ready` and shows its full mesh. A transport
+    failure (a failed download after the usual attempts, a work time-out, no Forge and nothing cached) keeps the light
+    copy pending with a back-off (`light_deferred`, `retryIn`: 15 s, then 30, 60, at most 120 s, reset by a success, and
+    cleared when the Forge is reachable again). A content failure (wrong hash, failed validation, cannot be loaded, the
+    room content refuses it) gives it up for good: `light_dropped`, and a room built again does not re-arm it. When
+    `lightSha256` equals `sha256` nothing further is fetched and `SetGeneratedLightMesh` is not called: the room content
+    draws the full mesh at the Light level, `AssetHashLight` is recorded, and `light_same` is logged with reason
+    `same_as_full`. A message
     with no light fields behaves exactly as before. The Spectator fetches no light copy (§5.8).
 
 `forge.backend`: `local`, `hosted` and `cache` are sent in `meta.backend`. `off`: nothing is sent to the Forge;
@@ -3034,7 +3043,7 @@ every followed object with no cached mesh becomes `BuiltIn` at once.
 | `GET /assets/<sha256>.glb` | 20 s | 2 more | `AssetAck` `download_failed`; `BuiltIn` |
 | Hash and validator | – | – | `AssetAck` `hash_mismatch`, `too_large` or `validate:<code>`; `BuiltIn` |
 | Worker (hash, validate, read) | 10 s | – | `AssetAck` `load_failed`; `BuiltIn` |
-| The same four rows for a light copy | as the full copy | as the full copy | `light_dropped` with the reason; the object stays `Ready` with its full mesh |
+| The same four rows for a light copy | as the full copy | as the full copy | A transport failure (`download_failed` after the 3 attempts, a work time-out, `no_cache`) is `light_deferred` and is tried again after 15 s, then 30, 60 and at most 120 s; a content failure (`hash_mismatch`, `too_large`, `validate:<code>`, `load_failed`) is `light_dropped`. The object stays `Ready` with its full mesh |
 
 An object that is `BuiltIn` because its job failed, its asset was rejected, or it had no photo stays `BuiltIn`, with its
 first shape.
@@ -3071,7 +3080,7 @@ Spectator.
 | Placement | `FallbackMeshBuilder.Build(template, size, yaw, into)` (engine-free, `Telemetry/Assets/FallbackMeshBuilder.cs`) fills a `MeshData` (lane A §10.2) for **this** box: scale the template to the box's `Size`; cut every face into a grid of cells no longer than 0.1767 m, so no edge passes 0.25 m and two faces that share an edge cut it alike (no crack); bisect what is still too long; normals from the template; palette coordinate = the cell centre of the colour below; shade = `AtlasShading.FaceShade` of the normal turned by the box's `Yaw`, times an occlusion of 0.7 at the floor rising to 1.0 at 0.3 m; line weight 255; line coordinates (0, 0) |
 | Colour | A template: an object colour (cells 64 … 127), not the placeholder's tint, so that a built-in mesh can be told from a placeholder. A scan-cut shape: the category's placeholder tint, as the box had it. `manifest.json` gives the cell per category (`templates.<name>.palette`); the script's table is the source **(decided here)** |
 | The `Mesh` | `AssetClient` builds a `UnityEngine.Mesh` from the `MeshData` with the five vertex attributes of lane A §10.2 in one stream. One mesh per object, already at the box's size. At most two are built and placed per frame (`BuiltInPerTick`) |
-| Hand-over | `IRoomContent.SetBuiltInMesh(objectId, mesh, Vector3.one)`. Room content does not destroy a built-in mesh (lane C §9.1): the asset client keeps it and destroys it one second after the object's mesh is replaced, or when the room is built again |
+| Hand-over | `IRoomContent.SetBuiltInMesh(objectId, mesh, Vector3.one)`. Room content does not destroy a built-in mesh (lane C §9.1): the asset client keeps it and destroys it only when the room content no longer draws it (`IRoomContent.IsMeshDrawn(Mesh)`; the engine-free `RetiredMeshes<T>` in `Telemetry/Assets` keeps the replaced meshes and sweeps them each frame; `SpectatorFurniture` does the same), or at shutdown |
 | Limits | At most 1,500 triangles and no edge over 0.25 m **after** scaling (§8.4, test L19). A template on a box so large that the split passes 1,500 triangles gives way to the shape cut from the scan, and when that is too large too, or has no profile to be cut from, the object keeps its placeholder box, with an `asset` event `builtin` and `kept` `too_large` |
 | When | Always, as a first shape, as soon as the room content is built (`reason` `first_shape`). It then stays for good where (b) there is no photo; (c) the job `failed`, was lost or refused; (d) the asset was rejected; (g) the object is not one of the 32 the Forge meshes; and it stands until the generated mesh arrives where (a) the Forge is unreachable after 3 failed attempts; (e) `forge.backend` is `off`; (f) a room was loaded from a file with no mesh named for the object, or whose named mesh is not in the cache and no Forge answers |
 | Tagging | The RoomModel object's `mesh` is `builtIn`; the `asset` event has step `builtin` with its `reason` and `shape` (§4.3, step 8) |
@@ -3416,7 +3425,7 @@ keeps one folder.)
 - `UIFileSharingEnabled` makes the folder readable from the Mac (C.5).
 - No camera frame and no crop is ever written (rule 10).
 - §13.5: `LogFileWriter.DeleteSession(sessionId)` removes the three log files of a session;
-  `AssetClient.ForgetRoom` removes a room's GLBs.
+  `AssetClient.ForgetRoom` removes a room's GLBs from the cache, the light copies as well as the full ones.
 
 **Events.** §2.6 has the format, the names and `IEventLog`. The tracking, jump and bump events are taken from
 `State` at step 8a (§5.1), so they need no reference to `Atlas.Safety`. Lane C's and lane A's own events are
