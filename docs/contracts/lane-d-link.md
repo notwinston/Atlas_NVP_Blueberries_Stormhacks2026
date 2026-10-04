@@ -315,6 +315,7 @@ lane A's rows are those of lane A §9.6 and §14.
 | `render.screenToLens` | Float | 0.025 … 0.060 | 0.039 | m | | `render` | `AppParams` · `LensModel.ScreenToLens` |
 | `render.lensOffsetY` | Float | −0.02 … 0.02 | 0 | m | | `render` | `AppParams` · `LensModel.VerticalOffset` |
 | `render.headOffsetX`, `…Y`, `…Z` | Float | −0.10 … 0.10 | 0 | m | | `render` | `AppParams` · `StereoRig.HeadOffset` |
+| `render.furniture` | Enum | `auto`, `light`, `full` | 0 | – | | `render` | `AppParams.DeclareRender` · `FurnitureLevelPolicy.Mode`: which copy of the furniture is drawn (§4.1). `auto`: the entered space's level (Full in Home and Curved Walk, Light in the others), held to Light by the quality ladder from its first step below nominal; `light`: Light in every space; `full`: Full in every space, whatever the ladder says |
 | `curved.cullRho` | Float | 2 … 3.5 | 3 | kernel units | K | `curved` | `AppParams` · `IWalkerKernel.CullRho`; written by the ladder |
 | `glued.copies` | Int | 3 … 7 | 5 | per side | K R | `glued` | `AppParams`, then S1 · S1; written by the ladder |
 | `curved.mode` | Enum | `Mode 1 Curved Walk`, `Mode 2 Aligned Cells` | 0 | – | K R | `curved` | `AppParams.DeclareUnownedKillSwitches` · read by S2 (which asks SpaceLab for S3 when it becomes Mode 2) and S3 |
@@ -334,6 +335,7 @@ lane A's rows are those of lane A §9.6 and §14.
 | `pose.record` | Bool | | false | – | | `pose` | `AppParams` · the pose-log recorder (lane C §7.6) |
 | `scan.route` | Int | 1 … 4 | 3 | – | K | `scan` | `AppParams.DeclareScan` · `ScanSettings.Route` |
 | `scan.teamPrescan` | Bool | | false | – | | `scan` | `AppParams` · `ScanSettings.TeamPrescan` |
+| `scan.wallBridge` | Bool | | true | – | | `scan` | `AppParams.DeclareScan` · `WallBridge.Apply`: `WallBridge.Enabled` becomes the parameter and the registered bridge's own `Available`. Off gives the outline's walls, as before the bridge was switched on |
 | `input.dwell` | Float | 0.6 … 0.8 | 0.7 | s | | `input` | `AppParams.DeclareInput` · `IAtlasInput.DwellSeconds` |
 | `home.marks` | Bool | | true | – | | `home` | S0 |
 | `glued.mode` | Enum | `t2`, `klein`, `t3` | 0 | – | K R | `glued` | S1 |
@@ -392,6 +394,13 @@ through `SpaceRegistry.DeclareAllParams` at boot, so the menu lists all 21 from 
 view range of `SightLines`), `planet.R` Float 0 … 4 m (0 = the loop-fit value, on release) and `planet.fogRho` Float 0.5π … 0.8π rad
 (default 0.8π, the opaque end of the fog; the start is 0.3π below it). The dial's own `curved.q` (Int 3 … 6, default 5) and
 `curved.strong` (Bool, on release) are declared once by `CurvedDialParams` for S2 and S4 and are not kill switches.
+
+The list stays these 21 names. `scan.wallBridge` (§1.4) does what a kill switch does, since the Console or the menu can
+switch the RoomPlan wall bridge off and the walls are then the outline's, but it is not in the list: the list is by
+definition the union of the "Switch" column of §12.2 and the list of §12.4, and `MenuModelTests` asserts its length
+(21) against this section. `render.furniture` is not in it either. Both are on the menu's Parameters page, which shows
+every group of the registry, and in the Console. Putting either on the menu's Quality page is a change to this
+section, to `MenuModel.KillSwitchIds` and to that test together (open item 14).
 
 Rules (§12.4):
 
@@ -1337,7 +1346,18 @@ person, not a code (§3.7).
 
 `url` is a path on the Forge, to which the client prepends the Forge URL, or an absolute `http://` URL when
 the Forge was started with `FORGE_PUBLIC_URL`. `bounds` is the size of the mesh's bounding box `[x, y, z]` in
-metres. `palette` is the palette entry (§4.1). `maxEdge` is in metres.
+metres. `palette` is the palette cell that covers the most surface of the mesh (§4.1). `maxEdge` is in metres.
+
+When the job has a light copy (§4.1) four more members follow, together, and only then:
+
+```json
+ ,"lightSha256":"7c1d…64 hexadecimal digits…02ab","lightUrl":"/assets/7c1d…02ab.glb","lightBytes":61240,"lightTris":1875
+```
+
+`lightSha256`, `lightUrl`, `lightBytes` and `lightTris` describe the light copy as `sha256`, `url`, `bytes` and `tris`
+describe the full one. They are written only when `AssetReadyMessage.LightSha256` is not empty. A message without
+them reads as `""` and 0, and a reader that ignores them shows the full copy everywhere. `lightSha256` can equal
+`sha256`: a full copy that is already within the light target is also the light copy.
 
 **`AssetAck` (0x52), phone → Hub.**
 
@@ -1395,7 +1415,7 @@ Events in this build. A lane adds a name by adding a row.
 | `onboarding.step` | `{step}` | C (onboarding) | Onboarding moved to another step |
 | `headset.on`, `headset.off` | `{}` | A | The display mode changed |
 | `portal.cross`, `rooms.loop`, `slicer.object` | `{from, to}`, `{room, laps}`, `{object}` | A (S5, S6) | Space milestones |
-| `asset` | `{step, boxId, …}`; `step`: `room`, `upload`, `requested`, `cached`, `ready`, `placed`, `builtin`, `failed`, `rejected`, `unreachable`, `reachable`; with `jobId`, `sha256`, `reason`, `attempt`, `tris`, `loadMs` as the step has them | D (`AssetClientCore`) | Asset client (§4.3; §11.4.7 reads these) |
+| `asset` | `{step, boxId, …}`; `step`: `room`, `upload`, `requested`, `cached`, `ready`, `placed`, `builtin`, `failed`, `rejected`, `unreachable`, `reachable`, `light_placed`, `light_dropped`; with `jobId`, `sha256`, `reason`, `attempt`, `tris`, `loadMs` and, for `builtin`, `placed`, `kept` and `shape`, as the step has them (§4.3, step 8) | D (`AssetClientCore`) | Asset client (§4.3; §11.4.7 reads these) |
 | `menu` | `{state: "open" \| "close"}` | D (`MenuModel`) | On-device menu opened or closed |
 | `perf.runBegin`, `perf.runEnd`, `perf.summary`, `perf.note` | the perf tour's | A (`App/PerfTour`) | The scripted performance tour |
 | `fms`, `seq`, `pg.fmsAlert`, `note`, `asset_ack` | `{score}` (0 to 20), `{score}` (1 to 7), `{score, stop}`, `{text}`, the `AssetAck` body | Hub | Console entries (§3.5) and acknowledgements; written by the Hub with the Hub clock and `"scene": "hub"`, never sent to the phone. `pg.fmsAlert` is written right after an `fms` whose score is at or above `pg.fmsStop` (the phone's value from the manifest and snapshot; 4 until the phone declares it); the phone never writes `fms`, `seq` or `pg.fmsAlert` (P2-C09, P2-C17) |
@@ -1993,7 +2013,7 @@ The Editor twin: the ATLAS app in play mode runs the same `LinkClient` as role `
 | 1 | Safety never touches the network. Bump Guard, tracking, the kernel and rendering never read link state. `cue` is an extra trigger, never the only one | `Atlas.Safety` references neither `Atlas.Link` nor `Atlas.Telemetry` (README F1, test `Safety_Independence`). Operator commands end in `Atlas.App.CommandRouter` (§2.9) |
 | 2 | Nothing in `Update`, `LateUpdate` or a render callback waits for the link | Sockets on LiteNetLib's threads. HTTP through `UnityWebRequest`, never awaited in a frame. Hashing, GLB checks and file writes on worker threads (§4.3, §5.5). Received commands are applied at step 8b |
 | 3 | Every remote parameter is clamped on the phone. Bump Guard has no registry parameter and no off switch | `ParamRegistry.Set` (1.3) |
-| 4 | Hub unplugged: the app behaves identically apart from the link indicator. Forge unplugged: apart from the furniture, which is the built-in set | Tests L13, L14, L19 |
+| 4 | Hub unplugged: the app behaves identically apart from the link indicator. Forge unplugged: apart from the furniture, which stays at its first shapes | Tests L13, L14, L19 |
 | 5 | A receiver ignores unknown ids and trailing bytes; a `proto` major mismatch is refused with a readable reason | §2.2 |
 | 6 | `Atlas.Link` allocates 0 B per frame in steady state | §2.10; test L13 |
 
@@ -2069,7 +2089,7 @@ the firewall rule for UDP 9050 (station/setup_firewall.ps1)" (R4 §9).
 | Phone | `RoomOutline` | Keeps it. Writes `outline.bin`. Relays to spectators and editors. WebSocket `outline` |
 | Phone | `AssetAck` | Forgets the `AssetReady` of that job. An `asset_ack` line in `events.jsonl`. WebSocket `job` |
 | Second phone | `Hello` | `Bye`, then disconnect (§2.11) |
-| Forge (`/internal/job`) | `JobStatus`, `AssetReady` | Sends to the phone and to every spectator and editor (channel 0). WebSocket `job`. Keeps each `AssetReady` until its `AssetAck`. One line in `hub.log` |
+| Forge (`/internal/job`) | `JobStatus`, `AssetReady` | Sends to the phone and to every spectator and editor (channel 0). WebSocket `job`. Keeps each `AssetReady`, with its light members when it has them, until its `AssetAck`. One line in `hub.log` |
 | Console | `param`, `preset` | Refused while the demo lock is on. Else `ParamSet` to the phone; the value the phone will hold after its clamp goes into the snapshot. One line in `hub.log` |
 | Console | `scene`, `op` | `SceneCmd` / `OperatorCmd` to the phone. One line in `hub.log`, with the Hub's time |
 | Editor, console (link) | `ParamSet`, `SceneCmd`, `OperatorCmd` | Forwarded to the phone; `hub.log` |
@@ -2126,7 +2146,7 @@ bad body.
           "device":"iPhone16,2","build":"0.1.0","address":"192.168.0.23","worldHash":"141060c2fc138145","roomId":"sample_3x3"},
  "sources":[{"peer":1,"role":"phone","device":"iPhone16,2","active":true}],
  "spectators":1,"editors":0,"consoles":1,
- "forge":{"up":true,"queue":2,"debugKeep":false,"hosted":false,"gpu":true,"pipelineVer":"1"},
+ "forge":{"up":true,"queue":2,"debugKeep":false,"hosted":false,"gpu":true,"pipelineVer":"3"},
  "demoLock":false,"station":"192.168.0.10","udpPort":9050,"httpPort":8080,"pair":"atlas://192.168.0.10:9050",
  "uptimeS":812.4,"telemetryRows":812,"events":57}
 ```
@@ -2216,21 +2236,33 @@ banner when the Console has lost the Hub.
 ```
 station/forge/
   requirements.txt, requirements.lock   Python 3.11; FastAPI, uvicorn, pydantic v2, python-multipart, numpy, pillow,
-                                        trimesh, fast-simplification. requirements-gpu.txt: what TripoSG needs on the Station
+                                        trimesh, fast-simplification. The lock is compiled with `uv pip compile
+                                        --universal`, so it installs on Windows as well (uvloop is skipped there,
+                                        colorama added). requirements-triposg.txt: what TripoSG needs, pinned.
+                                        requirements-gpu.txt: rembg, the matting model TripoSG cannot run without
   forge/app.py             the routes below (create_app)
-  forge/service.py         rooms, jobs, the queue and its one worker, the cache, the Hub notifications (§3.7)
+  forge/service.py         rooms, jobs, the queue and its one worker, the attempts, the cache, the Hub notifications (§3.7)
+  forge/attempts.py        what the service and reclean share: the settings of the fit for a job, the photos the colours
+                           come from, the order in which a job's attempts are offered for publishing (§3.7, §3.9)
   forge/models.py          request and response bodies
-  forge/budget.py          the furniture budget: 20 meshes, 60,000 triangles
-  forge/imaging.py         crop decoding, background removal (rembg when installed), dominant colour
+  forge/budget.py          the furniture budget: 32 meshes, 120,000 triangles, and the light target (§4.1)
+  forge/imaging.py         crop decoding, background removal (rembg when installed), the picture framed for a
+                           generator, dominant colour
   forge/generators/        base.py (Generator, GenerationRequest, RawMesh, GeneratorError), triposg.py, hosted.py, procedural.py (§3.8)
   forge/cleanup.py         §3.9
+  forge/profile.py         the object profile of a mesh and the fit score (§3.9)
+  forge/colour.py          colour per face from the photos (§3.9)
+  forge/reclean.py         clean-up again from a kept record (§3.9)
   forge/validator.py       the checks of §4.2; also a command line
   forge/glb.py             the deterministic GLB writer and reader
   forge/palette.py         the 64 object colours of lane A's palette and the vertex-colour encoding (§4.1)
   forge/config.py          every setting
   tests/                   pytest; needs no GPU
-  data/                    rooms/<roomId>/room.json, room.meta.json, mesh.bin · jobs/<jobId>/job.json ·
-                           assets/<sha256>.glb, <sha256>.json · cache/<key>.json (not committed)
+  tools/                   check_station.py (checks an install), first_run.py (one object through a running Forge;
+                           reads the generator's frame, §3.8)
+  data/                    rooms/<roomId>/room.json, room.meta.json, mesh.bin · jobs/<jobId>/job.json (and the record
+                           of §3.9 under FORGE_DEBUG_KEEP) · assets/<sha256>.glb, <sha256>.json (both copies of a mesh) ·
+                           cache/<key>.json (not committed)
 ```
 
 Run from `station/forge`: `uvicorn forge.app:app --host 0.0.0.0 --port 8000` (C.7). One process; one worker
@@ -2240,47 +2272,71 @@ thread owns the GPU.
 |---|---|---|
 | `FORGE_GENERATOR` | `triposg` | `triposg`, `procedural` or `hosted` |
 | `FORGE_HOSTED_ENABLED`, `FORGE_HOSTED_URL`, `FORGE_HOSTED_KEY` | off, unset | The hosted fallback (§3.10). Unless all three are set, no request ever leaves the Station |
-| `FORGE_DEBUG_KEEP` | unset | `1` keeps crops in `data/jobs/<jobId>/view<i>.jpg`; reported as `debugKeep` |
+| `FORGE_DEBUG_KEEP` | unset | `1` keeps the record of each job on disk (§3.9): crops, mattes, the generator's raw output, both copies and their reports. Reported as `debugKeep` |
 | `FORGE_HUB_URL` | `http://127.0.0.1:8080/internal/job` | Where job changes are posted; empty switches the notifications off |
 | `FORGE_PUBLIC_URL` | empty | Prefix of the asset URL in `AssetReady`; empty gives the path `/assets/<sha256>.glb` |
 | `FORGE_DATA_DIR` | `station/forge/data` | Storage root |
-| `FORGE_MATTING_TIMEOUT_S`, `FORGE_GENERATE_TIMEOUT_S`, `FORGE_HOSTED_TIMEOUT_S`, `FORGE_CLEANING_TIMEOUT_S` | 10, 90, 120, 20 | Stage time-outs (§3.7) |
+| `FORGE_MATTING_TIMEOUT_S`, `FORGE_GENERATE_TIMEOUT_S`, `FORGE_HOSTED_TIMEOUT_S`, `FORGE_CLEANING_TIMEOUT_S` | 10, 90, 120, 60 | Stage time-outs (§3.7) |
 | `FORGE_MAX_ANISOTROPY` | 0.15 | Stretch allowed per axis when fitting a mesh to its box |
+| `FORGE_POOR_FIT` | 0.20 | A fit to the scanned profile above this is poor, in fractions of the box height: the next photo is then tried (§3.7) |
 | `FORGE_TRIPOSG_REPO`, `_WEIGHTS`, `_STEPS`, `_GUIDANCE`, `_SEED`, `_FP16`; `FORGE_RMBG_WEIGHTS` | empty, empty, 50, 7.0, 42, on; empty | TripoSG checkout, weights and inference settings |
+| `FORGE_TRIPOSG_FALLBACK_DECODER` | on | `1`, `true`, `yes` or `on` (anything else is off): when TripoSG's default decoder fails, generate once more with `use_flash_decoder=False` (§3.8) |
+| `FORGE_TRIPOSG_UP`, `FORGE_TRIPOSG_FRONT` | `Y`, `unknown` | Which axis of TripoSG's own frame is up, and where the front of its meshes is (§3.8). Read and checked at start-up; another value stops it |
 
 Appendix B.4, with status codes. Errors are FastAPI's `{"detail": …}`: a sentence, or for a body that does not
 validate the list of what is wrong.
 
 | Route | Request | Response |
 |---|---|---|
-| `GET /health` | – | 200 `{"ok": true, "gpu": true, "gpuName": "NVIDIA GeForce RTX 5070", "queue": 2, "pipelineVer": "1", "debugKeep": false, "generator": "triposg", "generatorReady": true, "generatorNote": "", "hosted": false, "hostedEnabled": false, "matting": "rembg"}`. `gpu` is false and `gpuName` null with no CUDA device. `queue` counts jobs not yet `ready`, `failed` or `placeholder`. `hostedEnabled` is the same flag as `hosted` under its older name. `matting` is `rembg` or `none` |
-| `POST /rooms` | RoomModel JSON (`docs/contracts/roommodel.schema.json`), at most 2 MB. The Forge checks `version` 1, `id`, and each object's `id` (1 … 255, unique) and `size`; at most 64 objects | 201 `{"roomId": "…", "roomHash": "…", "generated": [ids], "placeholders": [ids], "triTarget": 5000}`, also when the id existed (the record is replaced). 422 when it does not validate; 413 |
+| `GET /health` | – | 200 `{"ok": true, "gpu": true, "gpuName": "NVIDIA GeForce RTX 5070", "queue": 2, "pipelineVer": "3", "debugKeep": false, "generator": "triposg", "generatorReady": true, "generatorNote": "", "hosted": false, "hostedEnabled": false, "matting": "rembg"}`. Answers at once and never waits for the model. `gpu` is false and `gpuName` null with no CUDA device, and for `triposg` until the model load has imported PyTorch. `queue` counts jobs not yet `ready`, `failed` or `placeholder`. `hostedEnabled` is the same flag as `hosted` under its older name. `matting` is `rembg` or `none`. For `triposg`, `generatorReady` is true only after the model has loaded and with a matting model; `generatorNote` is then empty, and otherwise says what is missing or going on (below) |
+| `POST /rooms` | RoomModel JSON (`docs/contracts/roommodel.schema.json`), at most 2 MB. The Forge checks `version` 1, `id`, and each object's `id` (1 … 255, unique) and `size`; at most 64 objects | 201 `{"roomId": "…", "roomHash": "…", "generated": [ids], "placeholders": [ids], "triTarget": 15000, "triTargets": {"4": 15000, "7": 6120}, "triTargetLight": 5000}`, also when the id existed (the record is replaced). 422 when it does not validate; 413 |
 | `PUT /rooms/{roomId}/mesh` | Binary mesh, at most 2 MB | 204; 404; 413. Optional (§7.4); the app does not send it in Phase 1 |
 | `GET /rooms/{roomId}` | – | 200: the exact bytes that were posted; 404 |
-| `DELETE /rooms/{roomId}` | – | 204: the room record, its mesh, its jobs and the GLBs made for it alone are removed (§13.5); 404 |
-| `POST /rooms/{roomId}/objects` | `multipart/form-data`: field `meta` (JSON, below); files `view0` (required), `view1`, `view2`, each at most 1 MB | 202 `{"jobId": "1a2b3c4d5e6f7a8b"}`; or 200 `{"jobId": "…", "cached": true, "sha256": "…"}`; or 200 `{"jobId": "…", "placeholder": true}` for a box beyond the room's 20. 422 bad `meta`, missing or empty view; 404 unknown room or a `boxId` the room does not have; 413 |
+| `DELETE /rooms/{roomId}` | – | 204: the room record, its mesh, its jobs and the GLBs made for it alone, both copies of each, are removed (§13.5); 404 |
+| `POST /rooms/{roomId}/objects` | `multipart/form-data`: field `meta` (JSON, below); files `view0` (required), `view1`, `view2`, each at most 1 MB | 202 `{"jobId": "1a2b3c4d5e6f7a8b"}`; or 200 `{"jobId": "…", "cached": true, "sha256": "…"}` with `lightSha256`, `lightUrl`, `lightBytes` and `lightTris` when the cached mesh has a light copy (the phone learns of a cached mesh from this answer alone); or 200 `{"jobId": "…", "placeholder": true}` for a box beyond the room's 32. 422 bad `meta`, missing or empty view; 404 unknown room or a `boxId` the room does not have; 413 |
 | `GET /jobs/{jobId}` | – | 200: the job object below; 404 |
 | `GET /jobs?room={roomId}` | – | 200: a JSON **array** of the same objects, in order of submission; without `room`, every job |
 | ✚ `GET /queue` | – | 200 `{"active": {…} \| null, "queued": […], "placeholders": […], "generator": "triposg"}`; `queued` is in the order the worker takes it. Entries are `{jobId, roomId, boxId, volume, state}` |
-| `GET /assets/{sha256}.glb` | – | 200 `model/gltf-binary`, `ETag: "<sha256>"`, `Cache-Control: public, max-age=31536000, immutable`; 304 for a matching `If-None-Match`; 404 |
+| `GET /assets/{sha256}.glb` | – | 200 `model/gltf-binary`, `ETag: "<sha256>"`, `Cache-Control: public, max-age=31536000, immutable`; 304 for a matching `If-None-Match`; 404. The light copy is an asset of its own under its own hash |
 
 The job object of `GET /jobs/…`: `{"jobId", "roomId", "boxId", "state", "source", "error", "triTarget",
-"cached", "generator"}`, with `queuePosition` while `queued`, and when `ready` the `AssetReady` members
-(`sha256`, `url`, `bytes`, `tris`, `maxEdge`, `bounds`, `palette`) and `report` (§3.9).
+"cached", "generator"}`, with `triTargetLight` when the job has one, `decoder` (`flash` or `hierarchical`, for a
+generator that has two decoders) and `queuePosition` while `queued`. When `ready` it holds the `AssetReady` members
+(`sha256`, `url`, `bytes`, `tris`, `maxEdge`, `bounds`, `palette`), the four light members (`lightSha256`,
+`lightUrl`, `lightBytes`, `lightTris`) when there is a light copy, `fitUp` and `fitYaw` (how clean-up turned the
+mesh, §3.9), `fit` when the job had a profile, `attempts` (the generations made for the object, failed ones
+included; absent for an answer from the cache) and `report` (§3.9). Members with no value are absent, not `null`.
 
 - `roomId` is the RoomModel's `id` (lane C's schema: `[A-Za-z0-9_]{1,40}`). The body is lane C's canonical text
   (`RoomModelJson.Write`). `roomHash` is the SHA-256 of the posted bytes, 64 lower-case hexadecimal digits: a
   receipt for the upload. It is **not** the hash inside `worldHash`, which is lane C's geometry hash (§2.5).
 - Lane C keeps a RoomModel file under 300 kB (§7.4; lane C §2.6). The Forge accepts up to 2 MB, so the limit
   is the phone's to enforce and a larger grid does not need a Forge change **(decided here)**.
-- At `POST /rooms` the Forge ranks the room's boxes by volume (`size[0] · size[1] · size[2]`; equal volumes
-  keep the lower id first). The 20 largest are `generated`; the rest are `placeholders`. `triTarget` is the
-  rule of plan §4.5 for the `generated` count.
+- At `POST /rooms` the Forge ranks the room's boxes by volume (`size[0] · size[1] · size[2]`, in whole cubic
+  millimetres; equal volumes keep the lower id first). The 32 largest are `generated`; the rest are
+  `placeholders`. `triTargets` gives every box its full target by the rule of §4.1 (0 for a box in `placeholders`),
+  `triTarget` is the largest of them (0 for an empty room) and `triTargetLight` is the room's light target (0 for
+  an empty room). `forge/budget.py` writes the rule in whole numbers, as `ObjectMeshRules` does on the phone and
+  `tools/rooms/roommath.py` in the tools.
+- A job works to `min(triTarget sent, the box's own target of the room)` and to `min(triTargetLight sent, the
+  room's light target)`, or the room's light target when none was sent.
+
+`generatorNote` of `GET /health`, for `triposg`: empty when the model is loaded. Otherwise one or more of these,
+joined by `"; "`: `PyTorch is not installed`; `FORGE_TRIPOSG_REPO does not point at a TripoSG checkout`; `diso is not
+installed (TripoSG's decoder; it is built from source, see the README)`; `no matting model is installed (rembg; pip
+install -r requirements-gpu.txt)`; `CUDA is not available to PyTorch`; while the worker loads, `PyTorch is being
+imported`, `diso is being imported`, `the weights are being downloaded to <dir>` or `the model is being loaded`; before
+the load has begun, `the model is not loaded yet`, with `, and the weights are not complete (no model_index.json in
+<dir>): they are downloaded first` when that is so; and after a failed load `PyTorch cannot be imported: …`, `diso
+cannot be imported: …`, `the TripoSG package cannot be imported from <repo>: …`, `the weights could not be downloaded
+to <dir>: …`, `the download left no model_index.json in <dir>`, `the model could not be loaded from <dir>: …` or `the
+matting model could not be loaded: …`.
 
 `meta`:
 
 ```json
-{"boxId": 4, "category": "table", "dims": [1.2, 0.75, 0.8], "yaw": 0.0, "triTarget": 5000, "backend": "local",
+{"boxId": 4, "category": "table", "dims": [1.2, 0.75, 0.8], "yaw": 0.0, "triTarget": 15000, "triTargetLight": 5000,
+ "profile": "<344 characters: 256 bytes as standard base64>", "backend": "local",
  "views": [{"score": 0.82, "azimuthDeg": 35.0, "intrinsics": [612.0, 612.0, 384.0, 384.0],
             "camToBox": [1,0,0,0, 0,1,0,0.4, 0,0,1,-1.5, 0,0,0,1]}]}
 ```
@@ -2288,43 +2344,64 @@ The job object of `GET /jobs/…`: `{"jobId", "roomId", "boxId", "state", "sourc
 | Member | Type | Meaning |
 |---|---|---|
 | `boxId` | int 1 … 255 | `RoomObject.Id` |
-| `category` | string | `ObjectCategories.Name(Category)`: `couch`, `table`, … (lane C §6) |
+| `category` | string, at most 32 characters | `ObjectCategories.Name(Category)`: `couch`, `table`, … (lane C §6) |
 | `dims` | 3 numbers, m | `RoomObject.Size`: `[w, h, d]` = extent along the box's local X, Y (up), Z |
 | `yaw` | number, rad | `RoomObject.Yaw` |
-| `triTarget` | int 1500 … 5000 | The phone sends `ObjectMeshRules.TriTarget(n)` = `clamp(floor(60000 / n), 3000, 5000)`, n = objects of this room that receive meshes (plan §4.5): 5,000 up to twelve objects, 3,000 at twenty. The Forge works to the smaller of this and its own figure for the room |
+| `triTarget` | int 1500 … 15000 | The full target of this object: the phone sends its own `RoomObject.TriTarget`, which `ObjectMeshRules.Targets` gave it by the rule of §4.1 (15,000 for an object when few share the budget, 3,000 at the floor). 422 outside the range. The Forge works to the smaller of this and its own figure for the box |
+| `triTargetLight` | int 1500 … 5000, optional | The light copy's target: the phone sends `ObjectMeshRules.LightTarget(n)` = `clamp(60000 ÷ n, 1500, 5000)`, n = objects the client follows. 422 outside the range; `null` reads as absent. An older phone sends none and the Forge uses its own figure for the room |
+| `profile` | string, optional | The object profile of the scan as the RoomModel holds it (lane C §2.1): standard base64 with padding of exactly 256 bytes, 344 characters. Anything else, the empty string included, is a 422; `null` reads as absent. Without it the Forge cannot fit (§3.9): the job makes one generation and orients by the bounds |
 | `backend` | string | `local`, `hosted` or `cache`: the phone's `forge.backend`. `off` is never sent; it is a 422 |
-| `views[i]` | one per file `view<i>`, at most 3 | Lane C's `ObjectView` (lane C §11.4). `score` 0 … 1; `azimuthDeg`: direction from the box centre to the camera in the box's local frame, `atan2(x, z)`; `intrinsics`: `fx, fy, cx, cy` of the crop, pixels; `camToBox`: 4 × 4 row by row, camera frame (Unity: +X right, +Y up, +Z forward) to the box-local frame of §4.1, metres |
+| `views[i]` | one per file `view<i>`, at most 3 | Lane C's `ObjectView` (lane C §11.4). `score` 0 … 1; `azimuthDeg`: direction from the box centre to the camera in the box's local frame, `atan2(x, z)`; `intrinsics`: `fx, fy, cx, cy` of the crop, pixels (four numbers); `camToBox`: 4 × 4 row by row, 16 numbers, camera frame (Unity: +X right, +Y up, +Z forward) to the box-local frame of §4.1, metres. The colours of the mesh are projected through `intrinsics` and `camToBox` (§3.9) |
 
 ## 3.7 Forge: job lifecycle and queue
 
 | State | Work | Time-out | Next |
 |---|---|---|---|
-| (at upload) | Cache lookup by a key made of the SHA-256 of the `view0` bytes, the job's triangle target, `pipelineVer`, the box (`dims`, `yaw`), the category and the generator's name | – | hit → `ready` (source `cache`, 200 `cached`); `backend` `cache` and miss → `failed`; a box in `placeholders` → `placeholder`; else `queued` |
+| (at upload) | Cache lookup by a key made of the SHA-256 of every view's bytes, the job's `triTarget` and `triTargetLight`, `pipelineVer`, the box (`dims`, `yaw`), the category, the generator's name, the profile, every view's `intrinsics` and `camToBox`, and the settings `FORGE_TRIPOSG_UP`, `FORGE_TRIPOSG_FRONT`, `FORGE_POOR_FIT` and `FORGE_MAX_ANISOTROPY` | – | hit → `ready` (source `cache`, 200 `cached`); `backend` `cache` and miss → `failed`; a box in `placeholders` → `placeholder`; else `queued` |
 | `queued` | Waits for the worker | – | `matting` (or `ready` when the cache gained the asset meanwhile) |
-| `matting` | Decode the JPEG; background removal (`rembg` when installed). A removal that fails is skipped: the plain crop goes on | 10 s | `generating`; `failed` for a crop that cannot be decoded or a time-out |
-| `generating` | The generator (§3.8). `local`: the configured generator with `view0`, 90 s; then once more with `view1` when there is one, 90 s; then the hosted service if it is armed, 120 s. `hosted`: the hosted service at once, 120 s | as stated | `cleaning`; `failed` |
-| `cleaning` | §3.9, then the validator of §4.2 | 20 s | `ready`; `failed` |
-| `ready` | The GLB is stored under its hash; the cache index is updated | – | – |
-| `failed` | `error` holds a sentence for a person, for example `view 0: …`, `clean-up: …`, `asset contract: [edge.long] …` | – | – |
-| `placeholder` | The box is beyond the 20 largest of its room and receives no mesh | – | – |
+| `matting` | Decode the JPEG of `view0`; background removal (`rembg` when installed). A removal that fails is skipped, and the plain crop goes on, for a generator that does not need matting; for `triposg` that view is not sent to the model. Another view is decoded and matted when an attempt or the colours need it | 10 s per view | `generating`; `failed` for a crop that cannot be decoded or a time-out |
+| `generating` | The attempts, below: one generation per view, at most three. Each generated mesh is welded, reduced, turned and scaled to the box at once (§3.9, steps 1 to 5), which gives its fit | 90 s per generation, 120 s for the hosted service; 60 s for the turn and scale of each mesh | `cleaning`; `failed` |
+| `cleaning` | The other views are matted for the colours. The attempts are finished, the best fit first, until one gives a full copy that meets the contract: regrid, colour, shade, then the light copy, both validated by §4.2 (§3.9, steps 6 to 12) | 60 s for each attempt finished | `ready`; `failed` |
+| `ready` | Both copies are stored under their hashes; the cache entry holds the whole answer | – | – |
+| `failed` | `error` holds a sentence for a person, for example `view 0: …`, `clean-up: …`, `asset contract: [edge.long] …`; the sentences of several attempts are joined by `"; "` | – | – |
+| `placeholder` | The box is beyond the 32 largest of its room and receives no mesh; `error` says `beyond the 32 largest boxes of the room; it receives no mesh and keeps its first shape` | – | – |
+
+**Attempts** (decision M7). With a profile, a fit above `FORGE_POOR_FIT` (0.20) is poor and sends the next view to
+the generator, view 1 and then view 2 when they exist; any other fit stops. The rules:
+
+- At most **three generations** are made for an object, and a failed one is one of the three. A job with no profile
+  has no fit, so it makes one generation and does not look at the other views.
+- **A mesh is always published** (decision M6). The attempt that fits best is finished and published, however poor
+  its fit; a poor fit is reported in `fit` and never hidden. Equal fits keep the earlier view first. When the best
+  cannot be finished (clean-up cannot use it, or its full copy violates the contract) the next best is tried; the
+  job fails only when no attempt gives a valid full copy.
+- **How failures count.** A generation that raises, times out or returns a mesh clean-up cannot use is a failure.
+  After two failures with no mesh the generator is given up for the object and the hosted service is tried if it
+  is armed (§3.10), else the job fails. A failure after a poor mesh does not stop the third view. A view that
+  cannot be matted, or whose matte is empty, makes no generation and is not a failure; the next view is tried.
+- **The Station's own generator only** (`source` `local`) is sent another photo for a poor fit. The hosted service
+  is given one view, `view0`, once.
 
 - **Queue order:** largest box first, by volume `dims[0] · dims[1] · dims[2]`; ties in arrival order. One job on
   the GPU at a time. The order is across all rooms.
-- **At most 20 objects per room** receive meshes (plan §4.5). The phone sends at most 20; a job for a box
-  outside the Forge's own 20 is answered with `placeholder: true` and is never generated.
+- **At most 32 objects per room** receive meshes (plan §4.5). The phone sends at most 32; a job for a box
+  outside the Forge's own 32 is answered with `placeholder: true` and is never generated.
 - A second upload for a `boxId` whose job is still waiting or running returns that job.
 - **Notification.** At every change of state the Forge posts `{"type": "JobStatus", "jobId", "roomId",
   "boxId", "state", "source", "error"}` to `FORGE_HUB_URL`; at `ready` it posts `{"type": "AssetReady", …}`
-  as well. A post that fails is not retried: the phone polls (§4.3).
-- **Crops** are held in memory and dropped when the job ends. `FORGE_DEBUG_KEEP=1` is the only thing that
-  writes one to disk (§7.4, test L20).
-- **Restart.** Rooms, finished jobs and assets are read back from `data/`. A job that was waiting or running is
-  marked `failed` (its crops are gone) and the phone sends it again; with `FORGE_DEBUG_KEEP=1` it runs again
-  by itself.
-- `jobId` is sixteen hexadecimal digits. `pipelineVer` is a version string (`"1"`), part of the cache key:
-  raising it makes every earlier cache entry a miss.
+  as well, with the light members when there is a light copy. A post that fails is not retried: the phone polls (§4.3).
+- **Crops and mattes** are held in memory and dropped when the job ends. `FORGE_DEBUG_KEEP=1` is the only thing that
+  writes one to disk (§7.4, test L20); what it writes is the record of §3.9.
+- **Restart.** Rooms, finished jobs and assets are read back from `data/`. A ready job whose full copy's file is gone
+  is `failed`; one whose light copy's file is gone keeps its full copy and loses its light members. A job that was
+  waiting or running is marked `failed` (its crops are gone) and the phone sends it again; with `FORGE_DEBUG_KEEP=1`
+  it runs again by itself. A room record from before the furniture budget is planned again.
+- `jobId` is sixteen hexadecimal digits. `pipelineVer` is a version string (`"3"`), part of the cache key and of
+  `asset.generator`: raising it makes every earlier cache entry a miss. It was raised to `"2"` when the picture TripoSG
+  receives changed and to `"3"` with the fit, the colours and the light copy.
 - A corrupt image ends as `failed`; the worker goes on with the next job (`P1-D08`).
-- `DELETE /rooms/{roomId}` removes that room's jobs; one that is on the GPU is dropped when its stage ends.
+- `DELETE /rooms/{roomId}` removes that room's jobs and both copies of each mesh made for it alone; one that is on
+  the GPU is dropped when its stage ends.
 
 ## 3.8 Forge: generator adapter
 
@@ -2340,7 +2417,7 @@ class GeneratorUnavailable(GeneratorError): ...
 
 @dataclass
 class GenerationRequest:
-    image: Image.Image          # the matted crop, RGBA
+    image: Image.Image          # the matted crop, RGBA; for a generator with needs_matting, the framed picture, RGB
     category: str
     dims: Sequence[float]       # scanned box [w, h, d], metres
     seed: int = 42
@@ -2349,63 +2426,210 @@ class GenerationRequest:
 class RawMesh:
     vertices: np.ndarray        # (N, 3), the generator's own frame and scale
     faces: np.ndarray           # (M, 3)
+    decoder: str = ""           # which of the generator's decoders made it ("flash", "hierarchical"); "" when it has one
 
 class Generator(Protocol):
     name: str      # "triposg", "hosted" or "procedural"
     source: str    # what JobStatus.source reports: "local" or "hosted"
+    needs_matting: bool         # true for "triposg": never given a picture that is not matted
 
     def availability(self) -> tuple[bool, str]: ...     # (usable, reason), without loading any model
+    def warm_up(self) -> None: ...                      # loads what generate needs; nothing once loaded; raises GeneratorUnavailable
     def gpu(self) -> Optional[str]: ...                 # the GPU's name, or None
     def generate(self, request: GenerationRequest) -> RawMesh: ...
 ```
 
 Contract of `generate`:
 
-- Input: the matted crop, RGBA; alpha is the object.
+- Input: the matted crop, RGBA; alpha is the object. A generator with `needs_matting` receives instead the picture
+  framed for it (below), RGB.
 - Output: one triangle mesh, any scale, any triangle count, in the generator's own frame. Clean-up finds the
   up axis and the quarter turn that fit the box (§3.9).
 - The worker runs it on a helper thread and gives up after the stage's time-out; any failure is a
-  `GeneratorError`. One call at a time.
+  `GeneratorError`. One call at a time. `warm_up` is called when the service starts, on the worker, and again
+  before each generation.
 - It writes no file and keeps no reference to the image.
 - `seed` is the fixed `FORGE_TRIPOSG_SEED` (42).
 
 | Adapter | `source` | What it is | Usable when |
 |---|---|---|---|
-| `triposg` | `local` | TripoSG (MIT) on the RTX 5070. Written from the public repository's inference script and not yet run on a GPU | PyTorch, a CUDA device and the TripoSG checkout are present |
+| `triposg` | `local` | TripoSG (MIT) on the RTX 5070. Written from the public repository's inference script. **It has never run**: not on a GPU, not on Windows, not with its weights; its tests drive a fake pipeline | PyTorch, a CUDA device, the TripoSG checkout, `diso` and a matting model are present and the model has loaded |
 | `hosted` | `hosted` | A hosted image-to-3D service: open item 8. The interface exists; no vendor is wired (`HostedGenerator._request` raises `GeneratorUnavailable`) | `FORGE_HOSTED_ENABLED=1` and `FORGE_HOSTED_URL` and `FORGE_HOSTED_KEY` both set |
-| `procedural` | `local` | Deterministic, no GPU, no network: a plausible mesh for the category built from the box size alone (table, chair, couch, bed, storage, lamp, plant, screen, stairs, basin, toilet, plain box), returned normalised to a unit cube. The photo is not looked at. For the Forge's own tests, for a Station with no GPU, and for cache tests (L18) | Always |
+| `procedural` | `local` | Deterministic, no GPU, no network: a plausible mesh for the category built from the box size alone (table, chair, couch, bed, storage, lamp, plant, screen, stairs, basin, toilet, plain box), returned normalised to a unit cube. Every shape faces local +Z: the back of a chair, a couch, a bed and a toilet is on −Z, a cupboard's doors on +Z. The photo is not looked at, and it needs no matting. For the Forge's own tests, for a Station with no GPU, and for cache tests (L18) | Always |
+
+**What the `triposg` adapter does around the model** (mesh design §5.1). None of it has run on the Station.
+
+- **Matting is required.** TripoSG is never given a picture that is not matted. With no matting model, `generatorReady`
+  is false and a job fails with `TripoSG cannot run: no matting model is installed …`. A view whose matting fails, whose
+  matte is empty (`the matte is empty: no object was found in the crop`) or holds an object under 16 pixels on its long
+  side is not sent; the error names the view and ends `triposg is given matted pictures only` where matting was missing.
+- **The picture is framed** as TripoSG's own script frames it (`imaging.frame_for_generator`): detached pieces of
+  matte under 0.5 % of it are left out, the crop is cut to the bounding box of the matte, put on white, and padded to a
+  square with a margin of `int(0.10 × the long side)` pixels on every side, the object in the middle. The model's
+  processor resizes the short edge to 256 and keeps the central 224 × 224, so only a square reaches it whole. The crop
+  and its matte stay in memory for the colours (§3.9).
+- **The model is loaded when the service starts**, by the worker, so the first object does not pay for it; the matting
+  model is loaded then too. Jobs wait in `queued` meanwhile. A load that failed is tried again by each generation.
+  The weights are complete when their folder holds `model_index.json`; a folder without it is downloaded again.
+- **Two decoders.** The default (`flash`, which needs `diso`) is called exactly as upstream calls it. If it raises or
+  returns nothing, the object is generated once more with `use_flash_decoder=False` (`hierarchical`) when
+  `FORGE_TRIPOSG_FALLBACK_DECODER` is on, and the job reports which decoder made its mesh. Both calls share the one
+  generation time-out. After two objects in a row on which the default decoder failed and the fallback made the mesh,
+  the fallback is tried first; one success of the default decoder switches back. A job whose two decoders both fail
+  ends `TripoSG inference failed: flash decoder: …; hierarchical decoder: …`.
+
+`triposg_up` and `triposg_front` are settings, read from `FORGE_TRIPOSG_UP` and `FORGE_TRIPOSG_FRONT`, case
+ignored, and describe TripoSG's meshes only; for any other generator clean-up assumes nothing about the frame.
+
+| Setting | Values | Meaning |
+|---|---|---|
+| `triposg_up` (default `Y`) | `Y`, `Z`, `X` | The axis of TripoSG's own output frame that points up. It is the **only** up axis clean-up tries for a TripoSG mesh (another generator's meshes are tried with all three). Not measured: `Y` is the guess of the design |
+| `triposg_front` (default `unknown`) | `canonical`, `view`, `unknown` | Where the front of a TripoSG mesh is. `canonical`: on the mesh's own +Z, so clean-up prefers no turn. `view`: towards the camera of the photo, so it prefers the turn that puts the mesh's +Z side on the side of the box that view 0's `camToBox` places the camera on. `unknown`: nothing is preferred. It breaks ties of the fit (§3.9) and, for a job with no profile, decides alone among the orientations the bounds allow; with `unknown` and no profile the bounds choose |
+
+**Unmeasured.** TripoSG's output frame has never been seen, so both settings are guesses until the first run on the
+Station; `tools/first_run.py --analyse FILE --up-axis Y|Z|X --yaw-degrees 0|90|180|270` and the raw output kept under
+`FORGE_DEBUG_KEEP` are how it is read (README, "First run on the Station", step 6). The fit chooses the orientation
+by the scan whatever these say, so a wrong `triposg_front` costs only a worse tie-break, or a wrong turn for a job
+with no profile. A wrong `FORGE_TRIPOSG_UP` costs more, because no other axis is tried: a mesh whose up is another axis
+does not fill the box within the stretch limit, the bounds then decide, and the full copy is likely to fail the
+validator's `frame.bounds` (`asset contract: [frame.bounds]`) for every job until the setting is corrected; a mesh that
+stands on its head is not among the candidates at all, and a scan seen from above cannot tell it. Also unmeasured:
+the time and memory per object, the size of the raw mesh, whether `diso` builds and runs on the Station, and whether
+the fallback decoder works where the default one fails (it is inferred from the source and one open report).
 
 ## 3.9 Forge: mesh clean-up and its report
 
-In this order (§7.4, `P1-D09`; `forge/cleanup.py`, `clean(…)`). Every step is deterministic: the same raw mesh
-and box give the same bytes, and so the same hash.
+In this order (§7.4, `P1-D09`; mesh design §5.3; `forge/cleanup.py`, `clean(…)`, which is `orient` for steps 1 to 5
+and `finish` for steps 6 to 12). Every step is deterministic: the same raw mesh, box and photos give the same bytes,
+and so the same hash.
 
 | # | Step | Detail |
 |---:|---|---|
 | 1 | Weld | Merge coincident vertices; drop degenerate, duplicate and unreferenced elements |
-| 2 | Decimate | When the mesh has more triangles than the target (quadric collapse through `fast-simplification`; vertex clustering when that cannot do it) |
+| 2 | Decimate | To the full target, when the mesh has more triangles than that (quadric collapse through `fast-simplification`; vertex clustering when that cannot do it). A raw TripoSG mesh is probably several hundred thousand triangles (inferred from its 505³ grid, never seen) |
 | 3 | Drop floaters | Remove connected pieces holding less than 0.5 % of the surface area |
-| 4 | Orient and scale to the box | Up axis among Y, Z, X and yaw among 0° and 90° (bounds cannot tell 0° from 180°): the generator's own frame unless another fits the box clearly better. One uniform scale, then a correction per axis of at most ± 15 %. Centre on x and z; lowest point at y = 0 |
-| 5 | Regrid | Split every edge longer than 0.25 m (against 0.2499 m, so float32 storage cannot push one over). If the count then exceeds the target, decimate lower and split again, in up to six rounds. If it is under 1,500, split the longest edges until it is not |
-| 6 | Normals | Vertex normals that stay sharp across creases of more than 40° |
-| 7 | Shade | Per vertex: ambient occlusion (32 directions, mapped to 0.35 … 1) times the face shade of lane A's `AtlasShading`, with the normal turned into the room frame by `yaw`. Written to `COLOR_0` (§4.1) |
-| 8 | Palette | The dominant colour of the matted `view0`; the nearest of the 64 object colours (cells 64 to 127) in OKLab; `TEXCOORD_0` of every vertex is that cell's centre |
-| 9 | Export | GLB with a fixed layout (§4.1), 16-bit indices, `asset.generator` `"ATLAS Forge <pipelineVer>"`; SHA-256 of the bytes |
-| 10 | Validate | Every check of §4.2. A failure is `failed` with `asset contract: [<code>] …` |
+| 4 | Orient | By the fit to the scan, below |
+| 5 | Scale to the box | One uniform scale, then a correction per axis of at most ± 15 % (`FORGE_MAX_ANISOTROPY`). Centre on x and z; lowest point at y = 0 |
+| 6 | Regrid | Split every edge longer than 0.25 m (against 0.2499 m, so float32 storage cannot push one over). If the count then exceeds the target, decimate lower and split again, in up to six rounds. If it is under 1,500, split the longest edges until it is not |
+| 7 | Colour per face | A palette cell for every face from the photos, below |
+| 8 | Normals | Vertex normals that stay sharp across creases of more than 40°. Vertices are split at creases and again where two faces of different cells meet, so that every vertex of a face points at that face's cell |
+| 9 | Shade | Per vertex: ambient occlusion (32 directions, mapped to 0.35 … 1) times the face shade of lane A's `AtlasShading`, with the normal turned into the room frame by `yaw`. Written to `COLOR_0` (§4.1) |
+| 10 | Export | GLB with a fixed layout (§4.1), 16-bit indices, `asset.generator` `"ATLAS Forge <pipelineVer>"`; SHA-256 of the bytes |
+| 11 | Light copy | From the full copy, below; steps 6 to 10 run again on it |
+| 12 | Validate | Every check of §4.2, each copy at its own level. A violation of the full copy makes the attempt unusable (`asset contract: [<code>] …`); a light copy that violates its level is left out |
 
-`report`, returned by `GET /jobs/{jobId}` when `ready` and kept beside the asset for §11.4.7:
+**The fit** (steps 4 and 5; `orient_by_fit`). The orientation is chosen by the scanned profile (the `profile` of
+`meta`, lane C §2.1) and not by the bounds alone.
+
+- **Candidates.** Every up axis of the generator, times four quarter turns about it (0°, 90°, 180°, 270°). The
+  generator's up axes are Y, Z and X, or only `triposg_up` for TripoSG (§3.8). A candidate is kept when the largest
+  stretch beyond the uniform scale that one axis needs to fill the box is at most `FORGE_MAX_ANISOTROPY`. When none is
+  kept, the orientation the bounds choose and the same turned by a half are the candidates.
+- **Score.** Each candidate is scaled to the box and given its own profile, made from the mesh by the same downward
+  rays as the phone's (`forge/profile.py`; the mesh as it is after step 2). The score is `fit_score(scan, generated)`:
+  the mean of |generated − scanned| ÷ 255 over the cells the scan saw, in fractions of the box height; a cell where the
+  mesh has no surface counts as height 0. Lower is better; 0 is a perfect match.
+- **Choice.** The lowest score wins, except that scores within `FIT_TIE` = 0.02 of the lowest are a tie, which is
+  broken in this order: the turn `triposg_front` prefers (§3.8); then the generator's own up axis (the first of its up
+  axes); then the lower score. The last two rules are an addition of the Forge **(decided here)**: a scan seen from
+  above cannot tell a cube on a plinth from the same cube on its side, so another up axis must fit better by 0.02 to be
+  taken.
+- **No profile**, or a profile in which the scan saw no cell: the turn `triposg_front` prefers decides among the
+  candidates the bounds allow (the one with the better bounds, if several); with nothing preferred, the bounds alone
+  choose, as before the fit existed: the up axis among Y, Z and X and a yaw of 0° or 90° (bounds cannot tell 0° from
+  180°), the generator's own frame winning unless another fits the box clearly better. `fit` is then absent.
+- **Direction of the turn.** One quarter turn of clean-up is a right-handed +90° about +Y in the GLB frame, which is a
+  yaw of −90° in Unity's box frame. The report's `yawDegrees` counts the turn in the GLB frame; `fitYaw` is the same
+  turn as a yaw in Unity's box frame, `(360 − yawDegrees) mod 360`: the azimuth of the box at which the mesh's own +Z
+  side stands.
+
+**Colour per face** (step 7; `forge/colour.py`, decision M8). One cell of the palette's object colours (64 … 127) per
+face, from every photo the phone sent whose crop is matted and whose `intrinsics` and `camToBox` make a camera. A view
+that is not matted gives no colour, so on a machine with no matting model every object keeps one cell from the dominant
+colour of the matted `view0`, as before.
+
+1. A face is seen by a view when it turns towards the camera (cosine above 0.2), its centre projects inside the crop,
+   the matte is solid there (0.5), and nothing lies between: an exact ray test from the camera to the face centre,
+   tolerance 0.01 m, both sides of a triangle blocking. A view that would need more than 12,000,000 ray-triangle tests
+   sees nothing.
+2. The face's colour is the mean, in linear light, of the 5 × 5 pixels around its projected centre that belong to the
+   matte, weighted by the cosine, over the views that see it. It is mapped to the nearest object cell with
+   `nearest_entry`.
+3. Smoothing: three passes in which a face takes the cell that two of its three neighbours share (each pass reads
+   the one before); regions under 2 % of the surface merge into their largest neighbour; then the smallest regions
+   merge until at most 6 cells remain.
+4. A face no view saw takes the cell of the nearest seen face along the surface, centre to centre over faces that
+   share a corner or an edge. The 2 % merge and the limit to 6 cells then run again over the whole mesh.
+5. If more than half of the seen faces changed cell in the passes of step 3 and the 2 % merge, the photo and the mesh do not
+   line up, and the object takes one cell, from the dominant colour of the matted `view0`.
+
+`AssetReady.palette` and `report.colour.paletteIndex` are the cell that covers the most surface. The shader, the
+palette and the vertex format do not change. Only faces wound counter-clockwise seen from outside count as seen.
+
+**The light copy** (step 11; decision M10). It is made when the job has a light target: the full copy's surface is
+decimated to the light target (1,500 … 5,000), put back on the full copy's bounds so that both fill the same box, then
+regridded, coloured, shaded and exported as for the full copy, and validated at the light level. It is published under
+its own SHA-256. When the full copy is already within the light target the light copy is the same file, and
+`lightSha256` equals `sha256`. When a light copy cannot be made, or violates its level, there is none: the full copy is
+published alone, the `light` member of the report says `{"error": "…"}`, and the light members are absent.
+
+`report`, returned by `GET /jobs/{jobId}` when `ready` and kept beside the asset for §11.4.7. It describes the full
+copy; the numbers here are an example, made up for the layout:
 
 ```json
-{"triangles": 4998, "vertices": 2601, "longestEdge": 0.2496, "size": [1.2, 0.75, 0.8], "box": [1.2, 0.75, 0.8],
- "scaleError": [0.0, 0.0, 0.0], "maxScaleError": 0.0, "sourceTriangles": 21344, "triTarget": 5000,
- "upAxis": "Y", "yawDegrees": 90,
- "colour": {"paletteIndex": 110, "name": "wood", "rgb": [148, 122, 96], "photoRgb": [151, 120, 90]},
- "bytes": 183220, "sha256": "3f0a…9c1e", "notes": ["decimated from 21344 triangles"]}
+{"triangles": 14998, "vertices": 9120, "longestEdge": 0.2496, "size": [1.2, 0.75, 0.8], "box": [1.2, 0.75, 0.8],
+ "scaleError": [0.0, 0.0, 0.0], "maxScaleError": 0.0, "sourceTriangles": 321344, "triTarget": 15000,
+ "upAxis": "Y", "yawDegrees": 90, "level": "full", "fit": 0.0814, "fitYaw": 270, "fitUp": "Y",
+ "candidates": [{"up": "Y", "yawDegrees": 90, "fit": 0.0814, "stretch": 0.0412}],
+ "colour": {"paletteIndex": 110, "name": "wood", "rgb": [148, 122, 96], "photoRgb": [151, 120, 90],
+            "cells": [{"index": 110, "share": 0.8213}, {"index": 79, "share": 0.1787}], "views": 3},
+ "bytes": 410220, "sha256": "3f0a…9c1e", "violations": [],
+ "light": {"sha256": "7c1d…02ab", "bytes": 61240, "triangles": 1875},
+ "attempts": 1, "notes": ["decimated from 321344 triangles"]}
 ```
 
-`scaleError[i]` is `(size[i] − box[i]) / box[i]`, and `maxScaleError` its largest magnitude (must: ≤ 0.10;
-should: ≤ 0.05, §11.2). The time each stage took is kept in the job record (`timings`: `matting`,
-`generating`, `cleaning`, seconds), not in the report.
+| Key | Meaning |
+|---|---|
+| `triangles`, `vertices`, `longestEdge`, `size`, `box`, `bytes`, `sha256` | What the file holds, as stored (float32); the box is the scanned one |
+| `scaleError`, `maxScaleError` | `scaleError[i]` is `(size[i] − box[i]) / box[i]`, and `maxScaleError` its largest magnitude (must: ≤ 0.10; should: ≤ 0.05, §11.2) |
+| `sourceTriangles`, `triTarget` | The raw mesh after welding, and the target this copy worked to |
+| `level` | `full` or `light`: which copy the report describes |
+| `upAxis`, `fitUp` | The axis of the generator's frame taken as up: `Y`, `Z` or `X` |
+| `yawDegrees` | Clean-up's own quarter turns, 0, 90, 180 or 270, right-handed in the GLB frame |
+| `fitYaw` | The same turn as a yaw in Unity's box frame, `(360 − yawDegrees) mod 360` |
+| `fit` | The score of the chosen orientation, 4 decimals; `null` for a job with no profile |
+| `candidates` | Every orientation that was scored, best first: `{up, yawDegrees, fit, stretch}`; empty with no profile |
+| `colour` | `paletteIndex`, `name`, `rgb`: the cell that covers the most surface; `photoRgb`: the dominant colour of the photo; `cells`: `[{index, share}]`, every cell of the mesh and the share of the surface it covers, largest first; `views`: how many photos the colours were read from, 0 meaning one cell from the dominant colour |
+| `violations` | What the validator found at the copy's level; empty for a published copy |
+| `light` | In the full copy's report: `{sha256, bytes, triangles}` of the light copy, or `{error}` when there is none |
+| `attempts` | The generations made for the object (added by the service) |
+| `notes` | Sentences for a person, for example `decimated from 321344 triangles` |
+
+The time each stage took is kept in the job record (`timings`: `matting`, `generating`, `cleaning`, seconds), not in
+the report. The job record also holds `attemptLog`: one object per generation, `{view, generator, decoder, seconds,
+fit, fitYaw, fitUp, error, published}`.
+
+**The record** (decision M14). Under `FORGE_DEBUG_KEEP=1` a job's folder `data/jobs/<jobId>/` holds, beside
+`job.json`: `view<i>.jpg`, the crops as uploaded (camera frames: they never leave the Station); `matte<i>.png`, the
+matte of each matted crop; `raw_view<i>.npz` for the attempt from view `i` (`vertices` float64, `faces` int32,
+`decoder`), the generator's output as it came; `full.glb` and `light.glb` (when there is one), the published copies; and
+`report.json`, `{"full": …, "light": … or null}`. `job.json` holds the box, the targets, the profile, the cameras and
+the attempt log. None of it enters git (`station/forge/.gitignore` holds `data/`); only the numbers of
+`tools/meshcheck/check.py` and pictures rendered from the meshes go into `docs/evidence/mesh/`.
+
+- `python -m forge.reclean <jobId or folder> [--data DIR] [--out DIR] [--json]` reads such a folder and runs clean-up
+  again as the service did, without the generator, with the settings of the present environment: every kept
+  attempt is turned and scored, the best is finished. It prints the fit of each attempt, the new report and whether the
+  copies are the bytes that were published (`sameBytesAsPublished` with `--json`). It writes nothing into the record;
+  `--out` names a folder for the new `full.glb`, `light.glb` and `report.json`. Exit 0 when a copy was made, 1 otherwise.
+- `tools/meshcheck/check.py --data DIR --room ID [--truth FILE] [--poor-fit X] [--json FILE] [--pictures DIR]` reads a
+  whole room's record and prints the numbers of checks M1 and M2 of the mesh design (§5.6 there), per object and in
+  total. `truth.json` (`rooms/<roomId>/truth.json` of the data folder unless `--truth` names another) is written by
+  hand: for each object id the side of its box, as the RoomModel holds it, that is really the front (`+Z`, `+X`, `-Z`,
+  `-X`) or `none`; the phone's facing is right when it is `+Z`. Thresholds: 90 % facing, median fit 0.12, 60 s per
+  attempt, poor fit 0.20. Exit 0 when no line that could be judged failed, 1 when one did, 2 when the record cannot be
+  read. It reads a mesh's front by the phone's own profile rule, so an object that is flat on top is named, not
+  judged. `--pictures` writes the scan's profile beside the mesh's for each object.
 
 ## 3.10 Forge: the hosted fallback and its disclosure
 
@@ -2415,7 +2639,7 @@ The hosted service receives a crop of the walker's room. Its retention is not ou
 |---:|---|
 | 1 | Unless `FORGE_HOSTED_ENABLED=1` and a URL and a key are configured, no request ever leaves the Station, whatever `backend` says (test L21). `GET /health` reports `"hosted": false` |
 | 2 | When it is armed, `"hosted": true`, and the Console shows the amber "hosted fallback armed" banner on every page |
-| 3 | A crop is sent to the hosted service only when the job's `backend` is `hosted`, or it is `local` and the local tries failed. Never when it is `cache` |
+| 3 | A crop is sent to the hosted service only when the job's `backend` is `hosted`, or it is `local` and the local tries gave no mesh (§3.7). It is sent `view0` and nothing else, once: a poor fit never sends it a second photo. Never when the `backend` is `cache` |
 | 4 | Before a walker from outside the team scans, the operator tells them (the booth sign's data line says the same). If they decline, `forge.backend` is set to `cache` on the Tuner page: their objects come from the cache or the built-in set |
 | 5 | Every hosted job says so: `JobStatus.source` is `hosted`, the Console's job list tags it, and the Forge's log records each use with the host, never the image |
 | 6 | Hosted output is credited in the licence ledger (§8.4) |
@@ -2428,28 +2652,54 @@ The hosted service receives a crop of the walker's room. Its retention is not ou
 
 What every mesh the Forge serves must satisfy (§6.4, §7.4, §8.4). The validators of §4.2 check it.
 
+Every object comes in **two copies**, each held to its own level: the **full** copy, drawn in Home and Curved Walk, and a
+**light** copy, drawn in the other spaces and whenever the quality ladder or `render.furniture` asks for it (§1.4).
+The rows below hold for both except where a row names the level.
+
+| | Full copy | Light copy |
+|---|---|---|
+| Triangles | 1,500 … 15,000, and at most the `triTarget` of its job | 1,500 … 5,000, and at most the `triTargetLight` of its job |
+| File | At most 2 MB (2,097,152 B) | At most 1 MB (1,048,576 B) |
+
 | Topic | Rule |
 |---|---|
-| Container | GLB, glTF 2.0: one JSON chunk, one BIN chunk. At most 1 MB (1,048,576 B) |
+| Container | GLB, glTF 2.0: one JSON chunk, one BIN chunk. At most 2 MB (2,097,152 B) for the full copy, 1 MB (1,048,576 B) for the light copy |
 | Content | Exactly one scene, one node, one mesh, one primitive. The node has no translation, rotation, scale or matrix. Primitive mode 4 (triangles) |
 | Forbidden | `materials`, `textures`, `images`, `samplers`, `skins`, `animations`, `cameras`, `extensionsUsed`, `extensionsRequired`. The primitive has no `material`. No Draco, no meshopt, no KTX |
 | Attributes | Exactly `POSITION`, `NORMAL`, `TEXCOORD_0`, `COLOR_0`, with the same count. Indices `UNSIGNED_SHORT` (the Forge writes nothing else; the phone also reads `UNSIGNED_INT`) |
 | `POSITION` | `VEC3` `FLOAT`, metres, with the accessor's `min` and `max` |
 | `NORMAL` | `VEC3` `FLOAT`, unit length within 0.01 |
-| `TEXCOORD_0` | `VEC2` `FLOAT`: the **palette coordinate** of lane A's vertex format (lane A §10.2, §10.7). The same value on every vertex: the centre of cell `palette`, one of the object colours 64 … 127. Unity UV of cell i: `((i mod 16 + 0.5) / 16, (i div 16 + 0.5) / 16)`. Written in glTF's convention (v downwards): `(u, 1 − v)` |
+| `TEXCOORD_0` | `VEC2` `FLOAT`: the **palette coordinate** of lane A's vertex format (lane A §10.2, §10.7): the centre of a palette cell, one of the object colours 64 … 127. An asset uses **one or more** cells, and a face is one flat colour: every vertex of a face has the same value, the centre of that face's cell, so a vertex shared by faces of different cells is split. `AssetReady.palette` is the cell that covers the most surface. Unity UV of cell i: `((i mod 16 + 0.5) / 16, (i div 16 + 0.5) / 16)`. Written in glTF's convention (v downwards): `(u, 1 − v)` |
 | `COLOR_0` | `VEC4` `UNSIGNED_BYTE`, normalised, linear: lane A's vertex colour. **R = shade**: ambient occlusion times the face shade, `round(255 · saturate(ao · shade))`. **G = 255** (line weight; furniture has no line coordinates), **B = 255, A = 255** (reserved) |
 | Units and axes | Metres, +Y up |
 | Frame | The **box-local frame** of the object: origin at the centre of the box's base (RoomModel `objects[].base`), +X along the box's `w`, +Y up, +Z along its `d`, as lane C defines the box in Unity's left-handed convention |
 | Handedness | A GLB is right-handed. The file stores `x_glTF = −x_box`, `y` and `z` unchanged, with counter-clockwise front faces. The phone's reader (`GlbMeshReader`) negates X on positions and normals, flips v and re-winds the triangles, which gives the box-local frame exactly. A mesh that looks mirrored on the phone means one side skipped this |
 | Size | The mesh fills its box: on each axis the extent differs from `dims` by at most 10 % (should: 5 %). The Forge measures against that axis's own side, with 5 mm of slack; the phone against the longest side of the box |
 | Placement | The Forge: footprint centre within 0.01 m of the origin on x and z, lowest point within 0.01 m of y = 0. The phone accepts 5 % of the longest side and 0.02 m (proposed) |
-| Triangles | 1,500 … 5,000, and never more than the `triTarget` of its job |
+| Triangles | Per copy, as in the table above, and never more than the target of its job for that copy |
 | Edges | No triangle edge longer than 0.25 m, so the mesh can bend in a curved space |
 | Identity | The SHA-256 of the file is its name (`<sha256>.glb`), its cache key and its `ETag` |
 | Material | None in the file. The phone draws it with a pooled instance of the shared look material (README F7) |
 
-The room's furniture is at most 20 such meshes and 60,000 triangles (plan §4.5): `triTarget = clamp(floor(60000 /
-n), 3000, 5000)` (`ObjectMeshRules.TriTarget` on the phone, `forge/budget.py` on the Station).
+The room's furniture is at most 32 such objects and 120,000 triangles of full copies (plan §4.5; mesh design §5.4). The
+32 largest boxes by volume (whole cubic millimetres, ties to the lower id) receive meshes and share the budget by surface
+area, in whole numbers so that the phone (`ObjectMeshRules`), the Forge (`forge/budget.py`) and `tools/rooms/roommath.py`
+give the same figures:
+
+```text
+a_i    2·(w·h + h·d + w·d), with w, h, d in whole millimetres: mm(v) = floor(v·1000 + 0.5)
+t_i    clamp( floor(120000 · a_i / A), 3000, 15000 )        A = the sum of a_i: the full target of object i
+if the sum of t_i is above 120000:
+    E = sum of (t_i − 3000)        B = 120000 − 3000·N      N = the objects that receive meshes
+    t_i = 3000 + floor( (t_i − 3000) · B / E )
+light  clamp( 60000 ÷ N, 1500, 5000 ), whole-number division, the same for every object
+```
+
+An object beyond the 32 has a target of 0 and keeps its first shape (§4.4). Twelve equal boxes get 10,000 each and a
+light target of 5,000; thirty-two get 3,750 and 1,875. A room that is all stand-ins keeps 5,000 on each
+(`ObjectMeshRules.StandInTriangles`). The total of the full copies never passes 120,000, and of the light copies
+never 60,000. The worst full copy, every vertex split, is 45,000 vertices of 36 bytes and 90,000 bytes of indices:
+1.71 MB, inside the 2 MB.
 
 The shade, as the Forge bakes it (lane A's `AtlasShading`, the same formula every mesh generator uses):
 
@@ -2477,7 +2727,9 @@ are changed in both places.
 
 The contract is checked twice: in the Forge before a job may become `ready` (`forge/validator.py`,
 `validate_glb`), and on the phone on the downloaded bytes, on a worker thread, before a mesh is built from
-them (`GlbValidator.Validate`). The two are separate implementations with their own code names. The phone
+them (`GlbValidator.Validate`). The two are separate implementations with their own code names. Both check a copy
+at its **level**, full or light (§4.1): the phone takes it from `GlbExpectation.Level` (the default is the full copy),
+the Forge from the `level` argument of `validate_glb`. The phone
 stops at the first failed check, in the order of the table; its code is what appears in `AssetAck.reason`
 (`validate:<code>`, except `hash_mismatch` and `too_large`). The Forge collects every violation; its codes
 appear in `JobStatus.error` as `asset contract: [<code>] <sentence>`.
@@ -2485,34 +2737,44 @@ appear in `JobStatus.error` as `asset contract: [<code>] <sentence>`.
 | # | Check | Phone code | Forge code |
 |---:|---|---|---|
 | 1 | Magic `glTF`, version 2, the declared length equals the file length, a JSON chunk then a BIN chunk | `container` | `glb.malformed` |
-| 2 | File size ≤ 1,048,576 B | `size` (`AssetAck` `too_large`) | `glb.size` |
+| 2 | File size ≤ 2,097,152 B (full) or ≤ 1,048,576 B (light) | `size` (`AssetAck` `too_large`) | `glb.size` |
 | 3 | SHA-256 of the file equals `AssetReady.sha256` | `hash` (`AssetAck` `hash_mismatch`) | – |
 | 4 | One scene, one node with no transform, one mesh, one primitive, mode triangles | `structure` | `mesh.count`, `frame.transform`, `mesh.mode` |
 | 5 | None of the forbidden members of §4.1 | `no_material` | `material.present`, `texture.present`, `glb.extension`, `mesh.count` |
 | 6 | Exactly the four attributes with the types of §4.1 and equal counts; the index count is a multiple of 3; every index is below the vertex count | `attributes` | `attributes.missing`, `glb.malformed` |
 | 7 | Triangles ≥ 1,500 | `tris_min` | `triangles.range` |
-| 8 | Triangles ≤ 5,000 | `tris_max` | `triangles.range` |
-| 9 | Triangles ≤ the job's `triTarget` | `tris_target` | `triangles.target` |
+| 8 | Triangles ≤ 15,000 (full) or ≤ 5,000 (light) | `tris_max` | `triangles.range` |
+| 9 | Triangles ≤ the job's target for that copy: `triTarget` (full) or `triTargetLight` (light) | `tris_target` | `triangles.target` |
 | 10 | Every position and normal is finite; no triangle of area under 10⁻¹⁰ m² | `finite` | `glb.malformed` (finite positions only) |
 | 11 | Longest triangle edge ≤ 0.25 m (phone: 0.5 mm of slack; Forge: 0.01 mm) | `edge` | `edge.long` |
 | 12 | Each bounding-box side within 10 % of the box (§4.1, Size) | `bounds` | `frame.bounds`; with no box given, `frame.units` for an extent over 6.6 m |
 | 13 | Centred on x and z; lowest y at 0 (§4.1, Placement) | `origin` | `frame.origin` |
+| 14 | Every vertex's palette cell (from `TEXCOORD_0`) is an object cell, 64 … 127, and the three vertices of a face are in one cell | – | `palette.cell`, `palette.face` |
 
-Unit normals, the palette cell of `TEXCOORD_0` and `COLOR_0`'s G = B = A = 255 are the Forge's to write
-(`forge/palette.py`, `encode_vertex_attributes`) and are covered by its clean-up tests; neither validator
-checks them.
+Unit normals and `COLOR_0`'s G = B = A = 255 are the Forge's to write (`forge/palette.py`,
+`encode_vertex_cells`) and are covered by its clean-up tests; neither validator checks them.
 
-On the phone, `triTarget` is `ObjectMeshRules.TriTarget(n)` for the n objects the client follows and `dims`
+Check 14 is the Forge's alone: the phone's checks stay 1 to 13, and its validator checks no palette cell. The Forge's
+codes are new for the palette (`palette.cell`, `palette.face`); `triangles.range`, `glb.size` and the others keep their
+names and follow the level. Its result holds the `level` and the `paletteCells` the mesh uses.
+`python -m forge.validator FILE --target N --box W H D --level full|light` runs it from the command line (`--level`
+defaults to `full`).
+
+On the phone, `triTarget` is the object's own `RoomObject.TriTarget` for a full copy and
+`ObjectMeshRules.LightTarget(n)`, n being the objects the client follows, for a light one; `dims`
 is the object's `Size`.
 
 ```csharp
 // File: ATLAS/Assets/Atlas/Telemetry/Assets/GlbValidator.cs   (engine-free: System and Atlas.Link only)
 namespace Atlas.Telemetry
 {
+    public enum GlbLevel : byte { Full = 0, Light = 1 }
+
     public struct GlbExpectation
     {
         public float DimX, DimY, DimZ;        // RoomModel size [w, h, d], metres
-        public int TriTarget;                 // 3000..5000; 0 skips check 9
+        public int TriTarget;                 // the job's target for this copy (3000..15000 full, 1500..5000 light); 0 skips check 9
+        public GlbLevel Level;                // Full (the default) or Light
         public string Sha256;                 // null: skip check 3
     }
 
@@ -2527,7 +2789,8 @@ namespace Atlas.Telemetry
 
     public static class GlbValidator
     {
-        public const int MaxBytes = 1048576, MinTriangles = 1500, MaxTriangles = 5000;
+        public const int MaxBytes = 2097152, MinTriangles = 1500, MaxTriangles = 15000;      // the full copy
+        public const int MaxBytesLight = 1048576, MaxTrianglesLight = 5000;                  // the light copy
         public const float MaxEdgeMetres = 0.25f, EdgeSlack = 0.0005f;
         public const float BoundsTolerance = 0.10f, CentreTolerance = 0.05f, BaseTolerance = 0.02f;
         public const double MinTriangleArea = 1e-10;
@@ -2540,6 +2803,8 @@ namespace Atlas.Telemetry
         /// <summary>The template row of section 4.4: POSITION and NORMAL only, at most 300 triangles, the unit box.</summary>
         public static GlbReport ValidateTemplate(byte[] glb);
         public static string Sha256Hex(byte[] bytes, int length);
+        public static int MaxBytesOf(GlbLevel level);          // MaxBytes or MaxBytesLight
+        public static int MaxTrianglesOf(GlbLevel level);      // MaxTriangles or MaxTrianglesLight
     }
 }
 ```
@@ -2561,7 +2826,7 @@ It is driven from three sides, all on the main thread:
 
 | From | Call | Meaning |
 |---|---|---|
-| Room content (lane C §9.1) | event `IRoomContent.Built(room)` (`AssetClient.Bind(content)`, once the app has booted) | A room is active and its placeholder boxes exist. The client starts a room: cached meshes are placed |
+| Room content (lane C §9.1) | event `IRoomContent.Built(room)` (`AssetClient.Bind(content)`, once the app has booted) | A room is active and its placeholder boxes exist. The client starts a room: every object gets its first shape, and cached meshes are placed |
 | Photo capture (lane C §11.4) | `IObjectPhotoSink.BeginRoom(room, roomJson)`, `Submit(photos)`, `ReportNoPhoto(objectId)`, `EndRoom()` | A fresh scan: the RoomModel text to post, then the crops of each object, largest first |
 | The link | `LinkClient.JobStatusReceived`, `AssetReadyReceived` → `AssetClient.OnJobStatus`, `OnAssetReady` | Job progress from the Hub |
 
@@ -2572,25 +2837,33 @@ The Forge's base URL is `Welcome.forgeUrl` when the Hub gave one, else `http://<
 
 | State | Meaning | RoomModel `mesh` (`MeshState`) | On screen |
 |---|---|---|---|
-| `Placeholder` | Not one of the objects the client follows, or nothing sent yet | `Placeholder` | Placeholder box |
-| `Uploading` | Its crops are waiting to be sent or being sent: attempt 1, 2 or 3 | `Placeholder` | Placeholder box |
-| `Requested` | The Forge holds a job for it | `Requested` | Placeholder box |
-| `Downloading` | `AssetReady` known; the GLB is being read from the cache or fetched, hashed, validated and read | `Requested` | Placeholder box |
-| `Loading` | The mesh data is ready and waits for its hand-over | `Requested` | Placeholder box |
-| `Ready` | The generated mesh is placed; `AssetAck ok` follows 0.5 s later | `Ready`, with `AssetHash` | Generated mesh |
-| `BuiltIn` | The built-in mesh of its category stands in (§4.4) | `BuiltIn` | Built-in mesh, or the box when there is none |
+| `Placeholder` | Not one of the objects the client follows, or nothing sent yet | `Placeholder` | First shape (§4.4); the placeholder box until it is placed |
+| `Uploading` | Its crops are waiting to be sent or being sent: attempt 1, 2 or 3 | `Placeholder` | The same |
+| `Requested` | The Forge holds a job for it | `Requested` | The same |
+| `Downloading` | `AssetReady` known; the GLB is being read from the cache or fetched, hashed, validated and read | `Requested` | The same |
+| `Loading` | The mesh data is ready and waits for its hand-over | `Requested` | The same |
+| `Ready` | The generated mesh is placed; `AssetAck ok` follows 0.5 s later | `Ready`, with `AssetHash`, and `AssetHashLight` once the light copy is placed | Generated mesh: the full copy, or the light one where the room content's level is Light |
+| `BuiltIn` | The object keeps its first shape for good: no photo, a failed job or a rejected asset (§4.4) | `BuiltIn` | First shape, or the box when none could be made |
 
-The objects the client follows are those with `TriTarget > 0` whose `Mesh` is not `MeshState.StandIn`, the 20
-largest by volume at most (`AssetClientCore.MaxObjects`). A stand-in object (the fixtures' own furniture) is
-left alone.
+Every object the client follows, and every other object of the room, gets its first shape as soon as the room content is
+built, whatever state the Forge is in (§4.4); the generated mesh replaces it. A first shape is placed with
+`SetBuiltInMesh`, so the RoomModel's `mesh` reads `BuiltIn` from then on, and `SetObjectState(Requested)` is
+refused for an object that shows one: the `mesh` column above holds only while the box is still the object's mesh.
 
-The RoomModel entry is changed only by room content, through the three calls the asset client makes:
-`IRoomContent.SetObjectState(objectId, MeshState.Requested)`, `SetGeneratedMesh(objectId, mesh, assetHash)` and
-`SetBuiltInMesh(objectId, mesh, Vector3.one)` (lane C §9.1). Saving the RoomModel when an object changes,
+The objects the client follows are those with `TriTarget > 0` whose `Mesh` is not `MeshState.StandIn`, the 32
+largest by volume at most (`AssetClientCore.MaxObjects` = `ObjectMeshRules.MaxMeshedObjects`; ties to the lower id).
+Every other object, one with `TriTarget` 0 or beyond the 32, is not sent to the Forge and keeps its first shape for good
+(state `BuiltIn`). A stand-in object (the fixtures' own furniture) is left alone.
+
+The RoomModel entry is changed only by room content, through the four calls the asset client makes:
+`IRoomContent.SetObjectState(objectId, MeshState.Requested)`, `SetGeneratedMesh(objectId, mesh, assetHash)`,
+`SetGeneratedLightMesh(objectId, mesh, assetHashLight)` and `SetBuiltInMesh(objectId, mesh, Vector3.one)` (lane C §9.1).
+Room content keeps a full and a light mesh per object and draws one by its `FurnitureLevel`; an object that has no
+light mesh draws its full one at either level. Saving the RoomModel when an object changes,
 which keeps the `boxId → sha256` record of §7.4, is lane C's.
 
 ```csharp
-// Files: ATLAS/Assets/Atlas/Telemetry/Assets/AssetClient.cs, AssetClientCore.cs, AssetClientInstaller.cs, ForgeTransport.cs
+// Files: ATLAS/Assets/Atlas/Telemetry/Assets/AssetClient.cs, AssetClientCore.cs, AssetClientInstaller.cs, ForgeTransport.cs, FittedShapes.cs
 namespace Atlas.Telemetry
 {
     public enum ObjectAssetState : byte
@@ -2647,7 +2920,8 @@ namespace Atlas.Telemetry
     {
         bool SetRequested(int objectId);
         bool PlaceGenerated(int objectId, Atlas.Kernel.MeshData mesh, string sha256);
-        bool PlaceBuiltIn(int objectId, Atlas.Kernel.MeshData mesh);
+        bool PlaceGeneratedLight(int objectId, Atlas.Kernel.MeshData mesh, string sha256);   // the light copy
+        bool PlaceBuiltIn(int objectId, Atlas.Kernel.MeshData mesh);                          // a first shape
     }
     public interface IAssetCache              // FileAssetCache: persistentDataPath/assets/<sha256>.glb
     {
@@ -2661,34 +2935,43 @@ namespace Atlas.Telemetry
 
 `AssetClientCore` holds the constants of the tables below (`MaxAttempts`, `HealthTimeout`, `RoomTimeout`,
 `ObjectTimeout`, `PollTimeout`, `DownloadTimeout`, `PollInterval`, `ProbeInterval`, `JobSilenceSeconds`,
-`WorkTimeout`, `AckWindowSeconds`, `BuiltInPerTick`) and `ForgeUrl`, `Backend`, `AckSink`, `RoomBuilt`,
+`WorkTimeout`, `AckWindowSeconds`, `BuiltInPerTick`, `FirstShapeReason`) and `ForgeUrl`, `Backend`, `AckSink`, `RoomBuilt`,
 `RoomCleared`, `Tick(double timeSeconds, float frameMs)`. `ForgeProtocol` builds the `meta` JSON and the
 multipart body.
 
 ### The round trip
 
-1. **`Built`.** Every followed object whose `AssetHash` is set goes straight to step 5 and is read from the
-   cache (`persistentDataPath/assets/<sha256>.glb`): the pre-scan path needs no Station (D21). A `Built` for
-   another room ends the previous one: its requests are cancelled and late answers are dropped.
+1. **`Built`.** The first shapes are due: every object of the room, followed or not, is given its first shape
+   (step 9). Every followed object whose `AssetHash` is set goes straight to step 5 and is read from the
+   cache (`persistentDataPath/assets/<sha256>.glb`): the pre-scan path needs no Station (D21). When its
+   `AssetHashLight` is set too, the light copy is read from the cache after the full one (step 10). A `Built` for
+   another room ends the previous one: its requests are cancelled and late answers are dropped. A `Built` for the
+   same room again (the room content rebuilt its views) makes every first shape due again and puts the light
+   copies behind the full ones again.
 2. **`BeginRoom(room, roomJson)`.** `POST /rooms` with `roomJson` as UTF-8, before the first object, unless
    `forge.backend` is `off`. If no `BeginRoom` for this room has come within 2 s of `Built` (proposed), the
    room came from a file or a fixture and no photo will follow: every followed object that is still
-   `Placeholder` becomes `BuiltIn`.
+   `Placeholder` becomes `BuiltIn` (reason `no_scan`) and keeps its first shape.
 3. **`Submit(photos)`.** `POST /rooms/{roomId}/objects`, one upload at a time, in the order received (largest
    box first). `meta` is built from the `ObjectPhotoSet`: `boxId` = `ObjectId`, `category` =
-   `ObjectCategories.Name(Category)`, `dims` = `Size`, `yaw`, `triTarget`, `backend`, and per view `score`,
-   `azimuthDeg`, `intrinsics` (`x, y, z, w` = fx, fy, cx, cy) and `camToBox` row by row (row r, column c =
+   `ObjectCategories.Name(Category)`, `dims` = `Size`, `yaw`, `triTarget` = the object's own `RoomObject.TriTarget`,
+   `triTargetLight` = the photo set's when above 0, else `ObjectMeshRules.LightTarget(n)` for the n objects the client
+   follows, `profile` = the object's profile as base64, sent only when the object has one, `backend`, and per view
+   `score`, `azimuthDeg`, `intrinsics` (`x, y, z, w` = fx, fy, cx, cy) and `camToBox` row by row (row r, column c =
    `CamToBox[c][r]`). 202 → `SetObjectState(Requested)`. 200 with `cached` → step 5. 200 with `placeholder` →
-   the box stays. A 404 means the Forge no longer knows the room: it is posted again first. Any other refusal
+   the object keeps its first shape. A 404 means the Forge no longer knows the room: it is posted again first. Any other refusal
    → `BuiltIn`. The JPEG arrays are released when the upload ends. **`ReportNoPhoto(objectId)`**, a
    `Submit` with no view, and at **`EndRoom`** every object neither submitted nor reported → `BuiltIn` at once.
 4. Job progress arrives as `JobStatus` and `AssetReady` through the Hub. While an object is `Requested` the
    client also polls `GET /jobs?room={roomId}` every 2 s (§7.4), whatever the link's state; it reads the
    Forge's array and a `{"jobs": […]}` wrapper alike. A job the Forge no longer lists → `BuiltIn`.
-5. `failed` → `BuiltIn` at once. `ready` → `Downloading`, one object at a time: the worker first looks in the
-   cache; if the file is not there, `GET <forgeUrl><url>` and the worker again: SHA-256,
-   `GlbValidator.Validate`, `GlbMeshReader.TryRead` into a `MeshData` in lane A's vertex format, and the
-   cache write (`<sha256>.glb.part`, then renamed). A damaged file in the cache is fetched again.
+5. `failed` → `BuiltIn` at once (the first shape stays). `ready` → `Downloading`, one object at a time: the worker
+   first looks in the cache; if the file is not there, `GET <forgeUrl><url>` and the worker again: SHA-256,
+   `GlbValidator.Validate` at the full level against the object's own `TriTarget`, `GlbMeshReader.TryRead` into a
+   `MeshData` in lane A's vertex format, and the cache write (`<sha256>.glb.part`, then renamed). A damaged file in
+   the cache is fetched again. An `AssetReady`, a job in the list, or the answer to an upload that the cache satisfied
+   that carries a valid `lightSha256` (and `lightUrl`, default `/assets/<sha256>.glb`) marks the object as having a
+   light copy to fetch (step 10).
 6. Hand-over, on the main thread at step 8b, at most one generated mesh per frame: the adapter makes a
    `UnityEngine.Mesh` from the `MeshData` (`SetVertexBufferData`, `SetIndexBufferData`, one sub-mesh, bounds
    from the data) and calls `IRoomContent.SetGeneratedMesh(objectId, mesh, sha256)`. Room content owns the
@@ -2700,9 +2983,40 @@ multipart body.
    encoding of §4.1.)
 7. `AssetAck`: `ok` true, `loadMs` = download complete → hand-over, `worstFrameMs` = the worst frame time
    from the hand-over until 0.5 s later (must: < 20 ms, test L17). Also sent with `ok` false and a `reason`
-   whenever step 5 or 6 rejects the asset; that object becomes `BuiltIn`. A mesh that came from the cache of
-   a saved room belongs to no job and is not acknowledged.
-8. Every step writes one `asset` event (§2.6). §11.4.7 is read from them.
+   whenever step 5 or 6 rejects the asset; that object becomes `BuiltIn` and keeps its first shape. A mesh that came
+   from the cache of a saved room belongs to no job and is not acknowledged. The light copy is never acknowledged.
+8. Every step writes one `asset` event (§2.6). §11.4.7 is read from them. The steps and their fields:
+
+   | `step` | Fields besides `boxId` | When |
+   |---|---|---|
+   | `room`, `upload`, `requested`, `cached`, `ready`, `placed`, `rejected`, `failed`, `unreachable`, `reachable` | Unchanged | The round trip above |
+   | `builtin` | `reason`, `placed`, `kept`, `shape`, `tris` | A first shape was placed or could not be, or an object that shows one is given up for good |
+   | `light_placed` | `sha256`, `tris` | The light copy was handed to the room content |
+   | `light_dropped` | `sha256`, `reason` | The light copy was given up (step 10) |
+
+   For `builtin`: `reason` is `first_shape` for the shape every object gets when the room content is built, and
+   otherwise why the object will have nothing else (`unreachable`, `no_photo`, `no_scan`, `backend_off`, `job_failed`,
+   `rejected`, …); `placed` is true when a shape stands; `shape` is `template`, `fitted` or `scancut`, or `kept` for the
+   event that gives up an object whose first shape is already there; `kept` is empty when a shape was placed and
+   otherwise says why the box stays: `no_template` (no template and a profile that cannot be used), `too_large`
+   (the template and the scan-cut shape both pass 1,500 triangles) or `no_view`; `tris` is the shape's triangle count.
+   The Spectator ignores the `builtin` events whose reason is `first_shape` (§5.8).
+9. **First shapes.** On the main thread at step 8b, at most two (`BuiltInPerTick`) per frame, in the order of the
+   objects (the followed ones, largest first, then the others): `FittedShapes.Build` makes the mesh from the category's
+   template, fitted by the object's profile for a chair, couch or bed, or cut from the profile (§4.4); the adapter
+   makes the `UnityEngine.Mesh` and calls `IRoomContent.SetBuiltInMesh`. The adapter keeps it and destroys it one
+   second after the object's mesh is replaced, or when the room is built again. An object that reached `Ready` first
+   gets none.
+10. **The light copy.** One download slot serves the objects. Every full copy that waits goes first; only when none
+    waits, and the room is built, does the slot take the light copy of the first `Ready` object that has one pending:
+    the cache first, then `GET <forgeUrl><lightUrl>` with the same 20 s time-out and 3 attempts as the full copy,
+    the SHA-256 against `lightSha256`, `GlbValidator.Validate` at `GlbLevel.Light` against
+    `ObjectMeshRules.LightTarget(n)` (so at most `min(5,000, LightTarget(n))` triangles and 1,048,576 bytes), the same
+    reader, and the hand-over at step 8b, one mesh per frame, through `IAssetRoom.PlaceGeneratedLight` to
+    `IRoomContent.SetGeneratedLightMesh`. Any failure (`hash_mismatch`, `too_large`, `validate:<code>`,
+    `download_failed`, `load_failed`, or `no_cache` for a saved room with no Forge) drops only the light copy:
+    `light_dropped`, no `AssetAck`, no change of state; the object stays `Ready` and shows its full mesh. A message
+    with no light fields behaves exactly as before. The Spectator fetches no light copy (§5.8).
 
 `forge.backend`: `local`, `hosted` and `cache` are sent in `meta.backend`. `off`: nothing is sent to the Forge;
 every followed object with no cached mesh becomes `BuiltIn` at once.
@@ -2714,14 +3028,16 @@ every followed object with no cached mesh becomes `BuiltIn` at once.
 | Reachability, before every upload attempt: `GET /health` | 2 s | – | The attempt has failed |
 | `POST /rooms` | 10 s | 3 attempts in all, waits of 1 s and 2 s between them | Forge unreachable |
 | `POST /rooms/{roomId}/objects` | 15 s | 3 attempts in all, waits of 1 s and 2 s | Forge unreachable |
-| Forge unreachable | – | `GET /health` every 4 s | Every object not yet `Ready` takes its built-in mesh. At most 9 s after the first attempt (3 × 2 s + 1 s + 2 s), so within the 10 s of test L19. When `/health` answers again, the client posts the room and the crops it still holds again, and each generated mesh replaces its built-in one |
+| Forge unreachable | – | `GET /health` every 4 s | Every object not yet `Ready` keeps its first shape, which stood from the moment the room content was built; the reason `unreachable` is logged at most 9 s after the first attempt (3 × 2 s + 1 s + 2 s), so within the 10 s of test L19. When `/health` answers again, the client posts the room and the crops it still holds again, and each generated mesh replaces its first shape |
 | Job silence: no `JobStatus` and no successful poll | 30 s | – | Forge unreachable |
 | `GET /jobs?room=` | 5 s | every 2 s while needed | – |
 | `GET /assets/<sha256>.glb` | 20 s | 2 more | `AssetAck` `download_failed`; `BuiltIn` |
 | Hash and validator | – | – | `AssetAck` `hash_mismatch`, `too_large` or `validate:<code>`; `BuiltIn` |
 | Worker (hash, validate, read) | 10 s | – | `AssetAck` `load_failed`; `BuiltIn` |
+| The same four rows for a light copy | as the full copy | as the full copy | `light_dropped` with the reason; the object stays `Ready` with its full mesh |
 
-An object that is `BuiltIn` because its job failed, its asset was rejected, or it had no photo stays `BuiltIn`.
+An object that is `BuiltIn` because its job failed, its asset was rejected, or it had no photo stays `BuiltIn`, with its
+first shape.
 Only "Forge unreachable" is retried. For that retry the client keeps the crops of objects it could not upload,
 in memory, until they are uploaded or the room ends.
 
@@ -2730,22 +3046,36 @@ writes none to disk. Nothing but crops, the RoomModel text and `meta` leaves the
 
 ## 4.4 The built-in fallback set
 
-One mesh per object category, shipped in the build, placed when the Forge cannot deliver (`P1-D12`, plan §4.5).
+One mesh per object category, shipped in the build (`P1-D12`, plan §4.5), and the first shapes made from them. Every
+object has a **first shape** as soon as the room content is built, whether the Forge is reachable or not and before
+any photo is sent; the generated mesh replaces it when it arrives, and it stays for good where there is none
+(mesh design §5.2). Its mesh state is `builtIn` and its limits are the built-in ones below.
+
+| Object | First shape |
+|---|---|
+| `chair`, `couch`, `bed` | The category's template fitted by the object's profile: the seat or mattress stands at the median height of the seen cells of the front half (rows 8 to 15 of the profile, local +Z being the front), as a fraction of the box height, kept within 0.25 … 0.70 for a chair, 0.25 … 0.65 for a couch and 0.30 … 0.75 for a bed (the templates' own heights are 0.50, 0.45 and 0.55); the back stays on local −Z at the full height. The template is stretched in height, piecewise linear, so that the floor, the seat and the top of the box stay where they are and every rectangle stays a rectangle. With no profile, a profile that sees under 0.30 of the footprint, or an unseen front half, the template is used as it is |
+| Every other category with a template | The template, as before. It faces the right way because lane C turns the box to face local +Z |
+| `unknown`, `other`, and any template that cannot be built within the limits | A shape cut from the scan: the profile reduced to 8 × 8 (the highest of each 2 × 2), unseen cells filled from their seen neighbours (the mean, in passes), one column per cell from the floor to its height, the top and the steps between columns as faces. If that passes 1,500 triangles it is built again at 4 × 4. Tinted with the cell of the category's placeholder box |
+| No profile, or coverage under 0.30, and no template (or a scan-cut shape that is too large too) | The placeholder box stays. This is the only case in which a box is seen once the room content is built; the `builtin` event says `kept` `no_template` or `too_large` |
+
+The same code (`FittedShapes`, `Telemetry/Assets/FittedShapes.cs`, engine-free; `FirstShapeKind`: `None`, `Template`,
+`Fitted`, `ScanCut`) builds the first shapes on the phone and, from the RoomModel it fetches from the Forge, on the
+Spectator.
 
 | Topic | Rule |
 |---|---|
-| Categories | Every `ObjectCategory` of lane C §6 except `Unknown` and `Other`: `couch`, `table`, `bed`, `lamp`, `plant`, `screen`, `storage`, `bathtub`, `chair`, `dishwasher`, `fireplace`, `oven`, `refrigerator`, `sink`, `stairs`, `stove`, `toilet`, `washerDryer`, `keyboard`, `mouse`, `laptop` (21), keyed by `ObjectCategories.Name`. An object of category `Unknown` or `Other` keeps its placeholder box (`asset` event `builtin` with `kept` `no_template`) |
+| Categories | Every `ObjectCategory` of lane C §6 except `Unknown` and `Other` have a template: `couch`, `table`, `bed`, `lamp`, `plant`, `screen`, `storage`, `bathtub`, `chair`, `dishwasher`, `fireplace`, `oven`, `refrigerator`, `sink`, `stairs`, `stove`, `toilet`, `washerDryer`, `keyboard`, `mouse`, `laptop` (21), keyed by `ObjectCategories.Name`. An object of category `Unknown` or `Other` has none and takes the shape cut from the scan; only with no usable profile does it keep its placeholder box (`asset` event `builtin` with `kept` `no_template`) |
 | Files | `ATLAS/Assets/Atlas/Telemetry/Resources/AtlasFallback/<name>.glb.bytes`, loaded with `Resources.Load<TextAsset>("AtlasFallback/<name>.glb")`, and `manifest.json` beside them (`Resources` name `AtlasFallback/manifest`), read by `FallbackSet.Load` |
 | Template | A GLB with one mesh, `POSITION` and `NORMAL` only, in the frame of §4.1, filling the **unit box**: x and z in [−0.5, 0.5], y in [0, 1]. At most 300 triangles. CC0 (`GlbValidator.ValidateTemplate`) |
 | How they are made | `tools/gen_fallback_set.py` (lane D; Python standard library only) builds each one from a short list of boxes (a chair is a seat, a back and four legs) and writes the 21 files and `manifest.json`. Deterministic: running it again changes no byte. The meshes are the team's own work, released CC0; a CC0 kit mesh may replace any file if it meets the template row. `.meta` files come from the repository's own tool |
 | Placement | `FallbackMeshBuilder.Build(template, size, yaw, into)` (engine-free, `Telemetry/Assets/FallbackMeshBuilder.cs`) fills a `MeshData` (lane A §10.2) for **this** box: scale the template to the box's `Size`; cut every face into a grid of cells no longer than 0.1767 m, so no edge passes 0.25 m and two faces that share an edge cut it alike (no crack); bisect what is still too long; normals from the template; palette coordinate = the cell centre of the colour below; shade = `AtlasShading.FaceShade` of the normal turned by the box's `Yaw`, times an occlusion of 0.7 at the floor rising to 1.0 at 0.3 m; line weight 255; line coordinates (0, 0) |
-| Colour | An object colour (cells 64 … 127), not the placeholder's tint, so that a built-in mesh can be told from a placeholder. `manifest.json` gives the cell per category (`templates.<name>.palette`); the script's table is the source **(decided here)** |
-| The `Mesh` | `AssetClient` builds a `UnityEngine.Mesh` from the `MeshData` with the five vertex attributes of lane A §10.2 in one stream. One mesh per object, already at the box's size. At most two are built and placed per frame |
+| Colour | A template: an object colour (cells 64 … 127), not the placeholder's tint, so that a built-in mesh can be told from a placeholder. A scan-cut shape: the category's placeholder tint, as the box had it. `manifest.json` gives the cell per category (`templates.<name>.palette`); the script's table is the source **(decided here)** |
+| The `Mesh` | `AssetClient` builds a `UnityEngine.Mesh` from the `MeshData` with the five vertex attributes of lane A §10.2 in one stream. One mesh per object, already at the box's size. At most two are built and placed per frame (`BuiltInPerTick`) |
 | Hand-over | `IRoomContent.SetBuiltInMesh(objectId, mesh, Vector3.one)`. Room content does not destroy a built-in mesh (lane C §9.1): the asset client keeps it and destroys it one second after the object's mesh is replaced, or when the room is built again |
-| Limits | At most 1,500 triangles and no edge over 0.25 m **after** scaling (§8.4, test L19). A box so large that the split passes 1,500 triangles keeps its placeholder box, with an `asset` event `builtin` and `kept` `too_large` |
-| When | (a) Forge unreachable after 3 failed attempts; (b) no photo; (c) job `failed`, lost or refused; (d) asset rejected; (e) `forge.backend` `off`; (f) a room loaded from a file with no mesh named for the object, or whose named mesh is not in the cache and no Forge answers |
-| Tagging | The RoomModel object's `mesh` is `builtIn`; the `asset` event has step `builtin` with its `reason` |
-| Replacement | In case (a) each built-in mesh is replaced by the generated one when the Forge returns |
+| Limits | At most 1,500 triangles and no edge over 0.25 m **after** scaling (§8.4, test L19). A template on a box so large that the split passes 1,500 triangles gives way to the shape cut from the scan, and when that is too large too, or has no profile to be cut from, the object keeps its placeholder box, with an `asset` event `builtin` and `kept` `too_large` |
+| When | Always, as a first shape, as soon as the room content is built (`reason` `first_shape`). It then stays for good where (b) there is no photo; (c) the job `failed`, was lost or refused; (d) the asset was rejected; (g) the object is not one of the 32 the Forge meshes; and it stands until the generated mesh arrives where (a) the Forge is unreachable after 3 failed attempts; (e) `forge.backend` is `off`; (f) a room was loaded from a file with no mesh named for the object, or whose named mesh is not in the cache and no Forge answers |
+| Tagging | The RoomModel object's `mesh` is `builtIn`; the `asset` event has step `builtin` with its `reason` and `shape` (§4.3, step 8) |
+| Replacement | In case (a) each first shape is replaced by the generated mesh when the Forge returns |
 
 ---
 
@@ -3302,7 +3632,7 @@ line, default `127.0.0.1:9050`.
 | `ParamManifest`, `param` events | Its own registry: each value it knows by name is set with `ParamSource.Remote`; `active` sets the group state. Names that start with `link.` or `telemetry.` are the phone's own and are left alone |
 | `world` event | Room id, world hash and geometry hash to compare with its own |
 | `RoomOutline` | The floor plan while no RoomModel is held, and one of the three things the fetched room is checked against |
-| `asset` events, `JobStatus`, `AssetReady` | The same furniture (`SpectatorAssetsCore`): the generated meshes by their hash, the built-in ones where the phone placed them. It uploads nothing and sends no `AssetAck` |
+| `asset` events, `JobStatus`, `AssetReady` | The same furniture (`SpectatorAssetsCore`): the generated meshes by their hash, and a first shape for every object as soon as its room content is built, made by the Spectator itself from the RoomModel it fetched, profile included (§4.4); the `builtin` events with reason `first_shape` are not news to it, the other `builtin` events are. It shows the **full copy** everywhere: it ignores the light members of `AssetReady`, downloads no light copy and sets no furniture level. It uploads nothing and sends no `AssetAck`. The same 32 objects as the phone get meshes; the rest keep their first shape |
 
 From the Forge: `GET /rooms/{roomId}` for the RoomModel (a fixture room is loaded from `Resources` instead),
 `GET /jobs?room=` and `GET /assets/{sha256}.glb`.
@@ -3321,7 +3651,7 @@ boot in a Station build, so the Spectator composes its own root
 | SpaceLab | `SpectatorHost : ISpaceHost`: enters the space `SpectatorCore` names, with no fade and no scene load; modules come from `SpaceRegistry` |
 | Bump Guard | Nothing. A coloured bar shows `State.bumpLevel` |
 | `CommandRouter`, input, menu, onboarding | Nothing. A spectator receives no command |
-| `AssetClient` | `SpectatorFurniture` (`Atlas.Spectator`) round `SpectatorAssetsCore` |
+| `AssetClient` | `SpectatorFurniture` (`Atlas.Spectator`) round `SpectatorAssetsCore`; its `PlaceGeneratedLight` places nothing and returns false |
 | `TelemetryInstaller.Install(boot)` | The same call, with `boot.IsSpectator`: link client of role `spectator`, event log with no files, probe, no mini-map of its own. Pairing is taken off the link driver; the link dials the address of the options |
 
 `SpectatorCore` (`Telemetry/Map/SpectatorCore.cs`, engine-free) maps what the link delivers to what is shown:
@@ -3500,8 +3830,8 @@ this one is corrected.
 | Palette layout: the cell-centre formula, object colours 64 … 127 | A §10.7 | §4.1, §4.4 |
 | Layers `AtlasHud` (through `boot.Hud`) and `AtlasSpectator` | A §12.1 | §5.4, §5.7, §5.8 |
 | `IWalkerKernel`, `IDialKernel`, `WalkerPose`, `TileId`, `FlatWalkerKernel`, `HolonomyWalkerKernel`, `FlatTileGraph.TryGetCell`, `ISpaceWorld` | B §4.4, §4.5, §4.9 to §4.11; A §2 | World hash, Spectator, mini-map |
-| `RoomModel` (`Id`, `Outline`, `Walls`, `FreeRect`, `Objects`, `DefaultWallHeight`), `RoomObject`, `MeshState` (`StandIn` among them), `ObjectCategory`, `ObjectCategories.Name`, `ObjectMeshRules` (`MaxMeshedObjects`, `TriTarget`), `RoomModelJson` (`TryRead`, `GeometryHash`), `RoomFixtures` | C §2, §6 | `RoomOutline`, world hash, asset client, Spectator |
-| `IRoomContent` (`Built`, `IsBuilt`, `Room`, `SetObjectState`, `SetGeneratedMesh`, `SetBuiltInMesh`) | C §9.1 | §4.3, §4.4 |
+| `RoomModel` (`Id`, `Outline`, `Walls`, `FreeRect`, `Objects`, `DefaultWallHeight`), `RoomObject`, `MeshState` (`StandIn` among them), `ObjectCategory`, `ObjectCategories.Name`, `ObjectMeshRules` (`MaxMeshedObjects`, `Targets`, `LightTarget`), `RoomModelJson` (`TryRead`, `GeometryHash`), `RoomFixtures` | C §2, §6 | `RoomOutline`, world hash, asset client, Spectator |
+| `IRoomContent` (`Built`, `IsBuilt`, `Room`, `SetObjectState`, `SetGeneratedMesh`, `SetGeneratedLightMesh`, `SetBuiltInMesh`, `FurnitureLevel`) | C §9.1 | §4.3, §4.4 |
 | `IObjectPhotoSink`, `ObjectPhotoSet`, `ObjectView` | C §11.4 | §4.3 |
 | `TrackingState`, `TrackingStates.ToWire`, `FromWire` | C §7.1 | `Telemetry.tracking`, the Spectator. The wire coding (0 normal, 1 limited, 2 lost) is not the enum's numbering |
 | `IAtlasInput` (`Pressed`, `LastTag`, `PushContext`, `PopContext`, `RegisterGazeTarget`, `UnregisterGazeTarget`, `MoveGazeTarget`, `SetGazeTargetEnabled`, `Gaze`), `AtlasAction` (`ParamMenu`, `NavUp`, `NavDown`, `NavLeft`, `NavRight`, `Confirm`, `Back`), `InputContext.Menu`, `GazeTarget`, `GazeTargetId`, `GazeMode.Repeat` | C §13 | §5.7 |
@@ -3519,7 +3849,7 @@ are the rows of §11.1. Each row names the test class (the file of the same name
 
 | Test | Assembly | Pass condition |
 |---|---|---|
-| `Link_RoundTrip` (§11.1) | `Atlas.Link.Tests` | Every binary message packs to the documented bytes and reads back (the test holds its golden bytes inline). `State` is 202 B, reads at an offset, ignores trailing bytes and rejects a short or foreign packet; its flags pack into the documented bits. JSON messages give fixed bytes and tolerate missing and unknown members. Every id of Appendix B is declared and `PeerState` has no codec. The six operator commands round-trip. Roles have fixed names |
+| `Link_RoundTrip` (§11.1) | `Atlas.Link.Tests` | Every binary message packs to the documented bytes and reads back (the test holds its golden bytes inline). `State` is 202 B, reads at an offset, ignores trailing bytes and rejects a short or foreign packet; its flags pack into the documented bits. JSON messages give fixed bytes and tolerate missing and unknown members; an `AssetReady` carries its four light members only when `LightSha256` is not empty and reads as `""` and 0 without them. Every id of Appendix B is declared and `PeerState` has no codec. The six operator commands round-trip. Roles have fixed names |
 | `Link_ClockSync` (§11.1) | `Atlas.Link.Tests` | `ClockSync` on a simulated link with loss, delay and jitter (proposed): offset error ≤ 2 ms at p95. A clean link gives the exact offset. The schedule is eight pings 50 ms apart, then one per second. Stale, duplicate and impossible pongs are rejected |
 | `Link_Watchdog` (§11.1) | `Atlas.Link.Tests` | `LinkWatchdog`: `Degraded` at 500 ms of silence; `Connected` again only after 2,000 ms healthy; `Offline` at 3,000 ms; attempts after 0.5, 1, 2, 4, 4 s. With `LinkClient` and `LinkHost` on the loopback network: `ParamSet` is dropped while degraded; after a reconnect the snapshot `ParamSet` and the unacknowledged `AssetReady` arrive |
 | `Link_Exchange` (`P1-D01`) | `Atlas.Link.Tests` | On `LoopbackNetwork`: `Hello`, `Welcome`, eight pings, manifest; `State` at 60 Hz with 2 % loss reaches spectators in order with gaps only; `SendState` and `SendTelemetry` allocate nothing; `StateHz` thins the stream; a value is clamped on the phone and echoed; the six commands arrive in order; the demo lock drops `ParamSet` but not commands; a dropped `ParamSet` is reported and the snapshot goes back; a `Hello` with another major version gets a readable `Bye`; a second phone is refused; unknown ids and trailing bytes are ignored |
@@ -3529,8 +3859,9 @@ are the rows of §11.1. Each row names the test class (the file of the same name
 | `AtlasJsonTests` | `Atlas.Link.Tests` | Objects, arrays, escapes, surrogate pairs, exact `i64`, the depth limit, trailing text with and without `allowTrailing`, the number rules of 1.8 |
 | `Telemetry_Csv` | `Atlas.Link.Tests` | The header and the example row of §5.3, byte for byte |
 | `WorldHash_Vector` | `Atlas.Link.Tests` | The vector of §2.5 gives `141060c2fc138145` |
-| `GlbValidatorTests` | `Atlas.Telemetry.Tests` | The Forge-made fixtures in `Tests/Telemetry/Assets/Fixtures/` pass; the damaged ones each fail with the code of their row in §4.2 |
-| `AssetClientCoreTests` | `Atlas.Telemetry.Tests` | The round trip of §4.3 against a scripted Forge: upload, job, download, hand-over, `AssetAck`; cache; unreachable Forge and its return; `off`; a loaded room; stand-in objects left alone |
+| `GlbValidatorTests` | `Atlas.Telemetry.Tests` | The Forge-made fixtures in `Tests/Telemetry/Assets/Fixtures/` pass; the damaged ones each fail with the code of their row in §4.2 (`bad_too_many_triangles` has 18,000 triangles, over the full limit of 15,000). The triangle and file limits follow the level (1,500 to 15,000 and 2 MB full, 1,500 to 5,000 and 1 MB light), the job's target caps each level, and an expectation with no level is the full copy |
+| `AssetClientCoreTests` | `Atlas.Telemetry.Tests` | The round trip of §4.3 against a scripted Forge: upload, job, download, hand-over, `AssetAck`; cache; unreachable Forge and its return; `off`; a loaded room; stand-in objects left alone. First shapes: every object has one as soon as the room content is built, with the Forge reachable too, and again when the content is built again. Budget: 32 objects at most, largest first, the other 8 of 40 keep their first shape; equal boxes share the triangles (five cubes 15,000 and 5,000; twelve boxes 10,000 and 5,000) and unequal boxes get their own targets, with the light target 1,875 (brief vector 3), each checked in the job's `meta`. `meta` carries the profile and the light target only when there are ones, and the phone sends and expects the object's own target. The light copy: fetched after the full one in order and handed over once; none when the message has no light fields; a wrong hash, a copy over its level's limit (5,001 triangles), over the room's light target (13 objects, 4,616 against 4,615), a failed download (after the usual retries) and a refusal by the room content each drop only the light copy and leave the full mesh; a room built again mid-download hands nothing stale over |
+| `FittedShapesTests` | `Atlas.Telemetry.Tests` | Every category with a full profile builds within 1,500 triangles and 0.25 m; with no profile the template is unchanged; a fitted chair has its seat where the profile says and its back at the full height, clamped to the category's range; couch and bed are fitted too; the shape cut from test vector A is higher at the back than at the front, needs enough coverage, fills unseen cells from their neighbours and falls back to 4 × 4; a template too large for the box falls back to the scan-cut shape or the box |
 | `FallbackSetTests` | `Atlas.Telemetry.Tests` | Each of the 21 files meets the template row of §4.4. Built for boxes of many sizes: at most 1,500 triangles and no edge over 0.25 m, or the builder reports the box too large |
 | `PerfRingTests`, `PerfProbeCoreTests` | `Atlas.Telemetry.Tests` | Nearest-rank percentiles on known data; the 600-frame window; one row per second; no allocation after construction |
 | `TelemetryCsvTests`, `HudTextTests` | `Atlas.Telemetry.Tests` | The phone's CSV equals the link library's; the five HUD lines |
@@ -3538,18 +3869,21 @@ are the rows of §11.1. Each row names the test class (the file of the same name
 | `ParamBinderTests` | `Atlas.Telemetry.Tests` | Field kinds, existing names followed, wrong forms refused, `Dispose` |
 | `LinkPumpTests`, `TelemetryWiringTests` | `Atlas.Telemetry.Tests` | Step 8: edge events, the `param` echo and its once-per-second rule, the world hash and `world` event, commands to `IOperatorCommands`, the row backlog, the manifest re-sent on a version change |
 | `FlatTwinTests`, `FlatTwinDiscTests` | `Atlas.Telemetry.Tests` | With a `FlatWalkerKernel` walked round a square, the trail's tile-id sequence equals the kernel's; the S0 plan contains every outline segment of `sample_3x3`; each space's twin; the disc of {4,5} and {4,6}, and what the builder draws for S2 and S3 |
-| `SpectatorCoreTests`, `SpectatorAssetsTests` | `Atlas.Telemetry.Tests` | Room fetch, world check and mismatch, space following, banners; the bytes of the `State`s of a lap in S2 and of a walk round S4 give the phone's tile and pose; a world generated differently is not shown; furniture from events and job lists |
+| `SpectatorCoreTests`, `SpectatorAssetsTests` | `Atlas.Telemetry.Tests` | Room fetch, world check and mismatch, space following, banners; the bytes of the `State`s of a lap in S2 and of a walk round S4 give the phone's tile and pose; a world generated differently is not shown; furniture from events and job lists; a first shape for every object, including those that get no mesh |
 | `StationReplayTests` | `Atlas.Spaces.CurvedWalk.Tests` | The recorded 5-corner lap through the real Spectator core, host and loop into `CurvedWalkCore.ReadState`: the same tile, pose, tile zero and content hash on every frame; the dial to 6 |
-| `MenuModelTests` | `Atlas.App.Tests` (`Tests/App/Menu/`) | The pages; the kill switches in the order of 1.5; stepping per kind; an `OnRelease` row changes only on `Confirm`; every change goes through the registry with `ParamSource.Local` and logs `param.set` |
-| Forge | `python -m pytest station/forge/tests` | With the `procedural` generator: a crop becomes a GLB that passes `validator.py`; the same input gives the same hash; a corrupt JPEG ends as `failed`; a second identical upload is a cache hit with no job; a 21st box is answered `placeholder`; `backend` `cache` with a miss fails at once; the hosted fallback is off by default and has no vendor; a restart keeps rooms, finished jobs and assets |
-| Hub | `dotnet test station/hub.tests` | Relay of `State` unchanged; `perf.csv` equal to `TelemetryCsv`; presets saved, loaded as one `ParamSet`, baked; `/internal/job` relayed; session adoption and continuation; watchdogs; ReplayPhone against the Hub |
+| `ScanWallBridgeParamTests`, `FurnitureLevelPolicyTests` | `Atlas.App.Tests` (`Tests/App/`) | `scan.wallBridge` is a Bool in group `scan`, declared on, right after `scan.teamPrescan`, and switches the bridge on and off where it is available and not where it is not. `render.furniture` has the three values and defaults to `auto`; the space table is Full in Home and Curved Walk and Light elsewhere; the ladder's first step forces Light and nominal gives Full back; `light` and `full` override; rebuilding the room puts the level back |
+| `MenuModelTests` | `Atlas.App.Tests` (`Tests/App/Menu/`) | The pages; the kill switches in the order of 1.5, 21 of them; stepping per kind; an `OnRelease` row changes only on `Confirm`; every change goes through the registry with `ParamSource.Local` and logs `param.set` |
+| Forge | `python -m pytest station/forge/tests` | With the `procedural` generator, built shapes and a fake TripoSG pipeline (no GPU, no PyTorch): a crop becomes a pair of GLBs that pass `validator.py` at their levels; the same input gives the same hash; a corrupt JPEG ends as `failed`; a second identical upload is a cache hit with no job, whose answer names the light copy; a 33rd box is answered `placeholder`, the queue is largest first and capped at 32; `backend` `cache` with a miss fails at once; the hosted fallback is off by default and has no vendor; a restart keeps rooms, finished jobs and assets, and drops a light copy whose file is gone. `test_budget`: the rule of §4.1 on the vectors of the brief (the fourth sums to 119,990) and the table of equal sizes. `test_validator`: the two levels, file limits per level, `palette.cell` and `palette.face`, `--level`. `test_api`: `meta.profile` and `triTargetLight` and their 422 cases, what a job keeps, the `JobStatus` members, a room record planned again. `test_imaging`: the framed picture is square, centred, white, with a margin of a tenth of the long side. `test_triposg` (fake pipeline): what `GET /health` says for each missing piece, the load at start-up, weights without `model_index.json`, the default call as upstream makes it, the fallback decoder and its order switch, matting required, views that cannot be matted passed over. `test_config`: the settings, their variables and their checks. `test_profile`, `test_colour`: the phone's rays on a mesh (the test vectors of `ObjectProfile`), the fit score, the seen test, smoothing, the speckle fallback. `test_fit`: a mesh turned by each quarter turn is turned back, ties and the up-axis rule, `triposg_front`, two colours in the right places, both copies validate, a full copy within the light target is its own light copy. `test_attempts`: a poor fit runs views 1 and 2 and publishes the best, a mesh is published however poor its fit, how failures count, no second photo for the hosted service, the next best published when the best cannot be finished, the light copy as an asset of its own, `reclean` reproducing the published bytes. `test_meshcheck`, `test_first_run`: the numbers of `tools/meshcheck/check.py` and the reading of the generator's frame. `tools/e2e/station_rehearsal.py` checks the Forge's targets against `tools/rooms/roommath.py` and both copies of every mesh against their limits |
+| Hub | `dotnet test station/hub.tests` | Relay of `State` unchanged; `perf.csv` equal to `TelemetryCsv`; presets saved, loaded as one `ParamSet`, baked; `/internal/job` relayed, with the four light members of an `AssetReady` passed through to the phone and the spectator unchanged (`ForgeJob_LightCopyFields_ArePassedThroughUnchanged`); session adoption and continuation; watchdogs; ReplayPhone against the Hub |
 | Console | `node --test station/console-tests` | The Console's modules: controls, commands, formats, jobs, map maths, telemetry |
 
 Only a device or the Station can confirm: LiteNetLib under IL2CPP with stripping Low, and `LiteNetTransport`
 surviving it through `link.xml`; the Local Network prompt on a clean install; `Application.deepLinkActivated`
 on a warm open; `FrameTimingManager` GPU times on Metal; the render counters in a release player; the
-generated meshes on the phone (mirroring, palette cell, shade); TextMeshPro on the `AtlasHud` layer in both
-eyes; TripoSG on the Station's GPU; the tests L1 to L22 of §7.6.
+generated meshes on the phone (mirroring, the palette cells per face, shade); the first shapes and the swap to the
+light copy on the phone; TextMeshPro on the `AtlasHud` layer in both eyes; TripoSG on the Station's GPU, which has
+never generated a mesh, so also the fit, the colours and the light copy on a real generated mesh; the tests L1 to
+L22 of §7.6.
 
 ---
 
@@ -3579,3 +3913,26 @@ eyes; TripoSG on the Station's GPU; the tests L1 to L22 of §7.6.
    waits for the lead's number.
 10. **Uploading the phone's CSV.** The Hub has `PUT /logs/{session}/perf.csv`; the app has no button or
     automatic upload for it. Decide whether the app sends it after a session or the operator does.
+11. **TripoSG has never generated a mesh, and its output frame is unmeasured.** Every Forge result on this page comes
+    from the procedural generator, built shapes or a fake pipeline. `FORGE_TRIPOSG_UP` (`Y`) and `FORGE_TRIPOSG_FRONT`
+    (`unknown`) are guesses until the first run on the Station reads the frame (§3.8). A wrong `FORGE_TRIPOSG_UP` is the
+    costly one: no other axis is tried, and the likely result is `asset contract: [frame.bounds]` on every job. Also
+    unmeasured: the time and memory per object, the size of the raw mesh, whether `diso` builds and runs on the Station,
+    and whether the fallback decoder works where the default one fails.
+12. **The thresholds are starting values.** The Forge's poor fit 0.20 (`FORGE_POOR_FIT`) and tie width 0.02
+    (`FIT_TIE`), the colour step's 6 cells, 2 % merge and speckle share of one half, and the phone's coverage of 0.30
+    for a first shape are set by reading, not by measurement. Checks M1 and M2 of the mesh design, on a recorded
+    team scan (`tools/meshcheck/check.py`), are where they are tuned.
+13. **What is unproven on a real generated mesh.** The fit has been seen only on perfect or clean cases: how a TripoSG
+    mesh scores against a real LiDAR profile (noise, cells seen in part, the floor seen through a chair's legs, a shape
+    that only resembles the object) is not known, nor whether the 15 % stretch filter leaves a candidate for an object
+    photographed at an angle, nor how a raw mesh of several hundred thousand triangles behaves when reduced. The colours
+    are proven only where the mesh matches the photo and the camera is exact: not with ARKit's intrinsics and
+    `camToBox`, not with rembg on a real room photo, not with a mesh that does not line up with the photo, and a mesh
+    wound clockwise from outside would be seen by no photo (one cell, and an inverted baked shade). What collapsing a
+    real 15,000-triangle chair to its light target does to its legs is not known; the light copy is left out when it
+    cannot keep every edge under 0.25 m. Three generations of one object take three times its time on the Station, and
+    with 32 objects of poor fit the queue is long; neither is measured.
+14. **The kill-switch list and the two new parameters.** `scan.wallBridge` and `render.furniture` are on the menu's
+    Parameters page and in the Console but not in the 21 names of §1.5. Whether they belong on the menu's Quality page
+    is a change to §1.5, to `MenuModel.KillSwitchIds` and to `MenuModelTests` together.
