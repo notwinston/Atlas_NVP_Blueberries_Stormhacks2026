@@ -11,13 +11,13 @@ namespace Atlas.Scan.Tests.Photo
     /// </summary>
     public class PhotoPreferenceTests
     {
-        sealed class SizeEncoder : IPhotoEncoder
+        internal sealed class SizeEncoder : IPhotoEncoder
         {
             public bool RowsBottomUp { get { return false; } }
             public byte[] EncodeJpeg(byte[] rgba, int width, int height, int quality) { return new byte[1000]; }
         }
 
-        sealed class Sink : IObjectPhotoSink
+        internal sealed class Sink : IObjectPhotoSink
         {
             public readonly List<ObjectPhotoSet> Sets = new List<ObjectPhotoSet>();
             public readonly List<int> NoPhoto = new List<int>();
@@ -65,7 +65,7 @@ namespace Atlas.Scan.Tests.Photo
             return PhotoScoreTests.Camera(position, rotation);
         }
 
-        static void AddFrame(PhotoCaptureCore core, in PhotoBox box, float azimuthDeg, float elevationDeg, float distance)
+        internal static void AddFrame(PhotoCaptureCore core, in PhotoBox box, float azimuthDeg, float elevationDeg, float distance)
         {
             float3 position;
             quaternion rotation;
@@ -88,7 +88,7 @@ namespace Atlas.Scan.Tests.Photo
             return sink.Sets.Count > 0 ? sink.Sets[0] : null;
         }
 
-        static PhotoCaptureCore Core(Sink sink)
+        internal static PhotoCaptureCore Core(Sink sink)
         {
             var core = new PhotoCaptureCore(new SizeEncoder()) { Sink = sink, Threaded = false };
             core.BeginSweep();
