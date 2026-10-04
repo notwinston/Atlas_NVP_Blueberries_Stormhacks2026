@@ -8,6 +8,8 @@
         "Atlas.Link",
         "Atlas.World",
         "Atlas.Rendering",
+        "Atlas.Safety",
+        "Atlas.Spaces.AlignedCells",
         "Unity.Mathematics",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
