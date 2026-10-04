@@ -1,0 +1,22 @@
+{
+    "name": "Atlas.PlaceholdersD.Tests",
+    "rootNamespace": "Atlas.PlaceholdersD.Tests",
+    "references": [
+        "Atlas.Link",
+        "Atlas.Telemetry",
+        "Atlas.Blades.Lung",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ]
+}
