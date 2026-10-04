@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Atlas.Kernel;
 using Atlas.Link;
 using Atlas.World;
@@ -12,19 +11,6 @@ namespace Atlas.Spaces.AlignedCells.Tests
     public class DuckMazeRunTests
     {
         static readonly int2[] Step = { new int2(1, 0), new int2(0, 1), new int2(-1, 0), new int2(0, -1) };
-
-        /// <summary>Keeps what was logged. Touches no engine object.</summary>
-        sealed class RecordingLog : IEventLog
-        {
-            public readonly List<string> Events = new List<string>(), Data = new List<string>();
-            public void Log(string ev) { Events.Add(ev); Data.Add(""); }
-            public void Log(string ev, string key, double value) { Events.Add(ev); Data.Add(key); }
-            public void Log(string ev, string key, string value) { Events.Add(ev); Data.Add(key); }
-            public void Log(string ev, string key1, double value1, string key2, double value2) { Events.Add(ev); Data.Add(key1); }
-            public void LogJson(string ev, string dataJson) { Events.Add(ev); Data.Add(dataJson); }
-            public int Count(string ev) { int n = 0; foreach (string e in Events) if (e == ev) n++; return n; }
-            public string Last(string ev) { for (int i = Events.Count - 1; i >= 0; i--) if (Events[i] == ev) return Data[i]; return null; }
-        }
 
         // The phone's core on a free 2.4 m square (0.6 m maze cells), entered in `start`; time goes up 0.5 s per frame.
         sealed class Run
@@ -319,6 +305,76 @@ namespace Atlas.Spaces.AlignedCells.Tests
             Assert.IsFalse(run.Core.NeedsReconfigure);
             Assert.IsFalse(run.Core.MazeMode);
             AssertSameGrid(CellGrid.FromRoom(run.Room), run.Core.Grid);
+        }
+
+        // A head move past a post corner crosses two cell edges in one frame. When the first enters the duck's tile and the
+        // second leaves it, the duck was still found, with the steps counted up to that crossing.
+        [Test]
+        public void Maze_DuckTilePassedMidFrameIsFound()
+        {
+            Run run = null; int last = -1, side = -1;
+            for (int seed = 1; seed <= 200 && side < 0; seed++)
+            {
+                run = new Run(seed: seed, start: new int2(1, 1));
+                int[] path = run.Core.Maze.SolutionDirections();
+                last = path[path.Length - 1];
+                int2 duckCell = run.Core.Maze.StartCell;
+                foreach (int d in path) duckCell += Step[d];
+                for (int k = 1; k <= 3 && side < 0; k += 2)
+                    if (run.Core.Grid.Contains(duckCell + Step[(last + k) & 3])) side = (last + k) & 3;
+            }
+            Assert.GreaterOrEqual(side, 0, "some maze has a cell beside its duck's cell, across its last step");
+
+            int[] dirs = run.Core.Maze.SolutionDirections();
+            int2 c = run.Core.Walker.Cell;
+            run.Stay();
+            for (int i = 0; i < dirs.Length - 1; i++) { c += Step[dirs[i]]; run.GoCell(c); }
+            Assert.IsFalse(run.Core.MazeFound, "one step before the duck");
+
+            // From the centre of the cell before the duck's, diagonally to the cell beside the duck's: a little further along
+            // the last step's axis, so that edge is crossed first (into the duck's tile), then the side edge (out of it).
+            double2 target = run.Core.Grid.CellCentre(c + Step[last] + Step[side]) + 0.01 * (double2)Step[last];
+            run.At(target, run.Time + 0.5);
+            Assert.AreEqual(2, run.Core.Walker.LastCrossingCount, "two crossings in one frame");
+            Assert.AreNotEqual(run.Core.Maze.DuckTile, run.Core.Walker.Frame.Tile, "the frame ends off the duck's tile");
+            Assert.IsTrue(run.Core.MazeFound, "the duck's tile was entered on the way");
+            Assert.AreEqual(run.Core.Maze.DuckDepth, run.Core.MazeSteps, "steps up to the find");
+            Assert.AreEqual(run.Time, run.Core.MazeFoundTime);
+            Assert.AreEqual(1, run.Log.Count(AlignedCellsCore.EventMazeFound));
+            StringAssert.Contains("\"steps\":" + run.Core.Maze.DuckDepth + ",", run.Log.Last(AlignedCellsCore.EventMazeFound));
+        }
+
+        // The Station's maze is the phone's: a State with P7 = 0 (the phone has no maze) takes it away, and the find with it.
+        [Test]
+        public void Maze_StationDropsTheMazeWhenP7IsZero()
+        {
+            var phone = new Run(seed: 777, start: new int2(2, 1));
+            var station = new AlignedCellsCore();
+            station.Configure(phone.Room, new ParamRegistry());
+            station.Enter(WalkerPose.Start, double2.zero);
+            StateMessage Send()
+            {
+                var st = StateMessage.Identity;
+                st.SpaceId = (byte)SpaceId.AlignedCells;
+                phone.Core.WriteState(ref st);
+                return st;
+            }
+
+            phone.Stay();
+            phone.WalkTheSolution();
+            Assert.IsTrue(phone.Core.MazeFound);
+            StateMessage withMaze = Send();
+            station.ReadState(in withMaze);
+            station.Tick(new double2(double.NaN, double.NaN), false, phone.Time);
+            Assert.IsNotNull(station.Maze);
+            Assert.IsTrue(station.MazeFound);
+
+            StateMessage noMaze = Send();
+            noMaze.P7 = 0f;
+            station.ReadState(in noMaze);
+            Assert.IsTrue(station.Tick(new double2(double.NaN, double.NaN), false, phone.Time + 0.5), "the maze went: redraw");
+            Assert.IsNull(station.Maze);
+            Assert.IsFalse(station.MazeFound);
         }
     }
 }
