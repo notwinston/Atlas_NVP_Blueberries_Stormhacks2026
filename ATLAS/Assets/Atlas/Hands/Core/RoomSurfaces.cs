@@ -33,15 +33,20 @@ namespace Atlas.Hands
             public float2 Along;
             /// <summary>Unit, towards the room: the left of A to B.</summary>
             public float2 Normal;
+            /// <summary>The span along the wall from Origin, and the heights above the floor, metres.</summary>
             public float U0, U1, Y0, Y1;
         }
 
         /// <summary>One piece of furniture as an oriented box.</summary>
         struct BoxShape
         {
+            /// <summary>The middle of the box and half its size along each of its own axes, metres, room frame.</summary>
             public float3 Centre, Half;
+            /// <summary>The box's own axes to the room's, and back.</summary>
             public quaternion ToWorld, ToLocal;
+            /// <summary>Of the sphere round the box, metres: nothing of the box is farther from its centre.</summary>
             public float Radius;
+            /// <summary>The box stands on the floor, so its underside is not a surface.</summary>
             public bool OnFloor;
         }
 

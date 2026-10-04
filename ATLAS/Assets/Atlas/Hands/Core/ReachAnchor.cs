@@ -40,6 +40,7 @@ namespace Atlas.Hands
         internal const float WalkEnterSpeed = 0.30f;
         /// <summary>The walker has stopped when the head floor speed has been under this for <see cref="WalkExitSeconds"/>, metres per second.</summary>
         internal const float WalkExitSpeed = 0.15f;
+        /// <summary>How long the head floor speed must stay under <see cref="WalkExitSpeed"/> before the walker counts as having stopped, seconds.</summary>
         internal const float WalkExitSeconds = 0.3f;
         /// <summary>The anchor keeps this far in front of a surface of the room, metres.</summary>
         internal const float SurfaceMarginMetres = 0.05f;
@@ -95,6 +96,7 @@ namespace Atlas.Hands
         /// <summary>World pose of the anchor. It keeps its last value while <see cref="Near"/> is false.</summary>
         public float3 Position { get { return _position; } }
 
+        /// <summary>World orientation of the anchor: +Z points away from the walker along the line the anchor sits on, +Y is up along the panel, so the panel faces the camera.</summary>
         public quaternion Rotation { get { return _rotation; } }
 
         /// <summary>HandsConstants.ReachPanelScale while <see cref="Near"/>, 1 otherwise.</summary>
