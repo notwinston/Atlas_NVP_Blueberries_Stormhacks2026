@@ -52,6 +52,25 @@ namespace Atlas.App.Tests
         }
 
         [Test]
+        public void TheFrontHexagon_HasAFlatEdgeOnTop_AndTurnsAboutAPoleThroughItsMiddle()
+        {
+            int front = s_Dome.TileAt(new float3(0f, 0f, 1f));
+            int sideCorners = 0, topCorners = 0;
+            foreach (float3 c in s_Dome.Corners[front])
+            {
+                float angle = math.degrees(math.atan2(c.y, c.x));
+                // Corners at 0, 60, 120 ... degrees: two level with the centre (left and right), two pairs level
+                // with each other above and below, so the top and the bottom are flat edges.
+                Assert.That(math.abs(angle / 60f - math.round(angle / 60f)), Is.LessThan(0.02f));
+                if (math.abs(c.y) < 1e-3f) sideCorners++;
+                if (c.y > 1e-3f) topCorners++;
+            }
+            Assert.That(sideCorners, Is.EqualTo(2));
+            Assert.That(topCorners, Is.EqualTo(2));
+            Assert.That(math.distance(s_Dome.Axes[front], new float3(0f, 1f, 0f)), Is.LessThan(1e-4f), "a vertical pole");
+        }
+
+        [Test]
         public void Neighbours_AreSixRoundAHexagon_FiveRoundAPentagon_AndMutual()
         {
             for (int i = 0; i < HexDome.TileCount; i++)
@@ -84,7 +103,7 @@ namespace Atlas.App.Tests
             // Gradual: several rings, the furthest straight behind.
             Assert.That(outer, Is.GreaterThanOrEqualTo(5));
             Assert.That(rings[s_Dome.TileAt(new float3(0f, 0f, -1f))], Is.GreaterThanOrEqualTo(outer - 1));
-            Assert.That(HexDome.RevealSeconds(outer), Is.InRange(1.2f, 2.5f));
+            Assert.That(HexDome.RevealSeconds(outer), Is.InRange(3f, 5f), "slow enough to watch it spread");
         }
 
         [Test]

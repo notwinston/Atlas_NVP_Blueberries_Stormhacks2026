@@ -22,9 +22,12 @@ namespace Atlas.App
         /// <summary>Metres from the head. The stills are painted at this distance, so it is about where the walls are.</summary>
         public const float Radius = 2.5f;
         /// <summary>Seconds one tile takes to turn over.</summary>
-        public const float FlipSeconds = 0.5f;
-        /// <summary>Seconds from a tile starting to turn to its neighbours starting: a third of the way over.</summary>
-        public const float RingSeconds = 0.17f;
+        public const float FlipSeconds = 0.6f;
+        /// <summary>Seconds from a tile starting to turn to its neighbours starting: three quarters of the way
+        /// over, so each ring is seen to set off the next.</summary>
+        public const float RingSeconds = 0.45f;
+        /// <summary>A tile's outline comes up over this long just before it turns, and not before.</summary>
+        public const float OutlineSeconds = 0.2f;
 
         /// <summary>Each tile's centre on the unit sphere, local space.</summary>
         public readonly float3[] Centres = new float3[TileCount];
@@ -52,6 +55,7 @@ namespace Atlas.App
             List<int3> triangles;
             Geodesic(out points, out triangles);
             if (points.Count != TileCount) throw new InvalidOperationException("HexDome: " + points.Count + " points");
+            LevelTheFront(points, triangles);
 
             // The triangles round each point; their centres are the corners of its tile.
             var around = new List<int>[TileCount];
@@ -99,6 +103,23 @@ namespace Atlas.App
                 Link(neighbours, tri.z, tri.x);
             }
             for (int i = 0; i < TileCount; i++) Neighbours[i] = neighbours[i].ToArray();
+        }
+
+        // Rolls the sphere about z so the hexagon straight ahead has a flat edge on top: one of its corners on
+        // +x, the others every 60 degrees round, so it turns about a pole through its middle, edge on top.
+        static void LevelTheFront(List<float3> points, List<int3> triangles)
+        {
+            int front = 0;
+            for (int i = 1; i < points.Count; i++) if (points[i].z > points[front].z) front = i;
+            for (int t = 0; t < triangles.Count; t++)
+            {
+                int3 tri = triangles[t];
+                if (tri.x != front && tri.y != front && tri.z != front) continue;
+                float3 c = points[tri.x] + points[tri.y] + points[tri.z];
+                quaternion roll = quaternion.RotateZ(-math.atan2(c.y, c.x));
+                for (int i = 0; i < points.Count; i++) points[i] = math.mul(roll, points[i]);
+                return;
+            }
         }
 
         static void Link(List<int>[] neighbours, int a, int b)

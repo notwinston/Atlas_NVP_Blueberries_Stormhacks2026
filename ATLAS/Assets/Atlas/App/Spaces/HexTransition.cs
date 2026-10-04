@@ -30,8 +30,6 @@ namespace Atlas.App
         public const string ShaderResource = "AtlasHexFlip";
         /// <summary>Pixels on a side of each face of a still: about 5.7 per degree, for a second or two.</summary>
         public const int FaceSize = 512;
-        /// <summary>Seconds the seams take to come up once the dome is up.</summary>
-        public const float SeamSeconds = 0.3f;
 
         static readonly int s_OldStill = Shader.PropertyToID("_OldStill");
         static readonly int s_NewStill = Shader.PropertyToID("_NewStill");
@@ -39,7 +37,6 @@ namespace Atlas.App
         static readonly int s_NewCentre = Shader.PropertyToID("_NewCentre");
         static readonly int s_TileDelays = Shader.PropertyToID("_TileDelays");
         static readonly int s_RevealTime = Shader.PropertyToID("_RevealTime");
-        static readonly int s_SeamGain = Shader.PropertyToID("_SeamGain");
 
         // The faces of a still in the order the shader reads them: +x, -x, +y, -y, +z, -z.
         static readonly Quaternion[] s_Faces =
@@ -65,7 +62,6 @@ namespace Atlas.App
 
         RenderTexture _old, _new;
         bool _covered;
-        float _coveredAt;
 
         HexTransition(IStereoRig rig, Shader shader)
         {
@@ -149,10 +145,8 @@ namespace Atlas.App
             for (int i = 0; i < _delays.Length; i++) _delays[i] = 0f;
             _material.SetFloatArray(s_TileDelays, _delays);
             _material.SetFloat(s_RevealTime, -1f);
-            _material.SetFloat(s_SeamGain, 0f);
             _renderer.enabled = true;
             _covered = true;
-            _coveredAt = Time.realtimeSinceStartup;
             Log("cover", null);
             return true;
         }
@@ -166,10 +160,11 @@ namespace Atlas.App
             Capture(centre, _new);
             _material.SetTexture(s_NewStill, _new);
             _material.SetVector(s_NewCentre, centre);
-            // The tile the walker looks at now turns first, wherever they turned while the space loaded, and
-            // sets off the ripple.
-            Vector3 gaze = _dome.transform.InverseTransformDirection(head.forward).normalized;
-            int outer = _tiles.Rings(_tiles.TileAt(gaze), _rings);
+            // No outline shows before its tile's turn, so the dome can be turned about its centre unseen (the
+            // stills are read by direction from it): the level hexagon straight ahead goes where the walker
+            // looks now, wherever they turned while the space loaded. It turns first and sets off the ripple.
+            _dome.transform.rotation = Quaternion.LookRotation(head.forward, Vector3.up);
+            int outer = _tiles.Rings(_tiles.TileAt(new float3(0f, 0f, 1f)), _rings);
             for (int i = 0; i < _delays.Length; i++) _delays[i] = HexDome.Delay(_rings[i]);
             _material.SetFloatArray(s_TileDelays, _delays);
             _material.SetFloat(s_RevealTime, 0f);
@@ -188,7 +183,6 @@ namespace Atlas.App
                 return false;
             }
             _material.SetFloat(s_RevealTime, revealSeconds);
-            _material.SetFloat(s_SeamGain, math.saturate((Time.realtimeSinceStartup - _coveredAt) / SeamSeconds));
             return true;
         }
 

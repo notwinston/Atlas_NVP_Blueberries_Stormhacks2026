@@ -25,8 +25,9 @@ Shader "Hidden/Atlas/HexFlip"
             #pragma fragment Frag
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
-            // HexDome.FlipSeconds and HexDome.TileCount.
-            #define FLIP_SECONDS 0.5
+            // HexDome.FlipSeconds, HexDome.OutlineSeconds and HexDome.TileCount.
+            #define FLIP_SECONDS 0.6
+            #define OUTLINE_SECONDS 0.2
             #define TILE_COUNT 92
 
             TEXTURE2D_ARRAY(_OldStill);
@@ -38,7 +39,6 @@ Shader "Hidden/Atlas/HexFlip"
             float4 _NewCentre;      // and the new one
             float _TileDelays[TILE_COUNT];  // seconds after the reveal begins that each tile starts to turn
             float _RevealTime;      // seconds since the reveal began; negative before
-            float _SeamGain;        // 0..1: the seams come up as the cover goes on
 
             // The six faces of a still, as HexTransition renders them: forward and up of each camera.
             static const float3 kForward[6] =
@@ -65,7 +65,7 @@ Shader "Hidden/Atlas/HexFlip"
                 float3 normalWS : TEXCOORD1;
                 float3 frontDir : TEXCOORD2;
                 float3 backDir : TEXCOORD3;
-                float2 rimTurn : TEXCOORD4;     // x: rim, y: turn 0..1
+                float3 rimTurn : TEXCOORD4;     // x: rim, y: turn 0..1, z: outline 0..1
             };
 
             float3 Rotate(float3 v, float3 axis, float s, float c)
@@ -94,7 +94,9 @@ Shader "Hidden/Atlas/HexFlip"
                 output.normalWS = TransformObjectToWorldDir(normalOS, false);
                 output.frontDir = TransformObjectToWorld(input.positionOS) - _OldCentre.xyz;
                 output.backDir = TransformObjectToWorld(landed) - _NewCentre.xyz;
-                output.rimTurn = float2(input.rim.x, turn);
+                // No outline until the tile's turn is about to come.
+                float outline = saturate((_RevealTime - delay + OUTLINE_SECONDS) / OUTLINE_SECONDS);
+                output.rimTurn = float3(input.rim.x, turn, outline);
 
                 float4 positionCS = TransformWorldToHClip(output.positionWS);
                 // In front of everything, in order among the tiles: a slab of depth by the near plane.
@@ -135,8 +137,9 @@ Shader "Hidden/Atlas/HexFlip"
                     float3 uvf = FaceUv(input.backDir);
                     colour = SAMPLE_TEXTURE2D_ARRAY(_NewStill, sampler_NewStill, uvf.xy, uvf.z).rgb;
                 }
-                // A light seam round each tile, and a turning tile darkens a little as it goes edge on.
-                half seam = smoothstep(0.88, 0.98, input.rimTurn.x) * _SeamGain;
+                // A light outline round a tile whose turn has come, and a turning tile darkens a little as it
+                // goes edge on.
+                half seam = smoothstep(0.88, 0.98, input.rimTurn.x) * input.rimTurn.z;
                 colour = lerp(colour, half3(1.0, 1.0, 1.0), seam * 0.22);
                 colour *= 1.0 - 0.35 * sin(PI * input.rimTurn.y);
                 return half4(colour, 1.0);
