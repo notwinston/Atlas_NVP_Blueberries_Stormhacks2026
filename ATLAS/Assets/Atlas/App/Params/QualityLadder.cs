@@ -44,7 +44,7 @@ namespace Atlas.App
             _applier.Tick(frame.Time);
         }
 
-        void OnTierChanged(Atlas.Rendering.QualityTier tier)
+        void OnTierChanged(Atlas.World.QualityTier tier)
         {
             Action<WorldTier> changed = TierChanged;
             if (changed != null) changed((WorldTier)(byte)tier);

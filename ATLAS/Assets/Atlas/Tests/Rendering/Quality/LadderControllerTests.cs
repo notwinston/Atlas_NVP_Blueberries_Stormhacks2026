@@ -1,3 +1,4 @@
+using Atlas.World;
 using NUnit.Framework;
 
 namespace Atlas.Rendering.Tests.Quality
@@ -9,7 +10,7 @@ namespace Atlas.Rendering.Tests.Quality
             => new QualityInputs
             {
                 Time = time, ThermalState = thermal, PerfValid = perf,
-                GpuP95Ms = gpu, FrameP95Ms = frame, ForcedTier = forced,
+                GpuP95Ms = gpu, FrameP95Ms = frame, PinTier = forced,
             };
 
         [Test]

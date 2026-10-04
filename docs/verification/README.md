@@ -4,6 +4,7 @@ This folder is the hand-over between the session that writes the code (no Unity,
 session on the Mac that can run them.
 
 - `UNITY_SIDE_BRIEF.md`: the instructions for the Mac-side session. Start at its last section, "Paste this to start".
+  It is rewritten from the code whenever the code moves; its opening lines name the commit it was last checked against.
 - `report-YYYY-MM-DD.md`: what the Mac-side session found, one file per day, with the brief's template
   (step, expected, observed, evidence, fixed or open, severity). The code-writing session reads these and fixes what is open.
 - `shots/`: screenshots, named `YYYYMMDD_<step>_<item>[_<room>].png`.

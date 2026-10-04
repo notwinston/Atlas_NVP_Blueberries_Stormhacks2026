@@ -61,7 +61,7 @@ namespace Atlas.App.Onboarding
 
             Transform tracked = app.Boot.TrackedCamera;
             Camera camera = tracked != null ? tracked.GetComponent<Camera>() : null;
-            _view = new OnboardingView(app.Boot.Systems, Flow, scan.Session, camera);
+            _view = new OnboardingView(app.Boot.Systems, Flow, scan.Session, camera) { Overlay = app.Overlay };
 
             // "Rescan the room" in the menu: onboarding owns the scan, so the row comes here and not to the
             // rehearsal flow, which nobody ticks while onboarding owns the flow (lane C contract, section 14.2).

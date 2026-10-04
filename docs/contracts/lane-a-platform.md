@@ -9,7 +9,7 @@ stencil table, and `Mesh4D`. Names and signatures are binding. Bodies are free.
 | Part | In this build | Later |
 |---|---|---|
 | `SpaceId`, `ISpaceModule`, `FrameContext`, `ISpaceHost`, `SpaceRegistry`, `AtlasServices`, frame hooks | Final | unchanged |
-| `AtlasBootstrap`, `AtlasFrameLoop`, SpaceLab | Built | unchanged |
+| `AtlasBootstrap`, `AtlasApp`, `AtlasFrameLoop`, SpaceLab | Built | unchanged |
 | Stereo rig, eye textures, lens blit, quality ladder | Built; lens numbers are placeholders (open item 1) | Headset numbers baked in |
 | `Atlas/Surface`, `AtlasCore.hlsl`, `AtlasPortalClip.hlsl`, palette, `MaterialPool` | Built | unchanged |
 | `AtlasWarp.hlsl`, `AtlasGates.hlsl` | Identity bodies from lane B's page | Lane B fills them (`P1-B03`, `P1-B10`) |
@@ -39,24 +39,34 @@ stencil table, and `Mesh4D`. Names and signatures are binding. Bodies are free.
 | `SpaceRegistry` | same | `World/Spaces/SpaceRegistry.cs` |
 | `FrameContext` | same | `World/Frame/FrameContext.cs` |
 | `ISenseStep`, `ISafetyStep`, `IPoseFilterStep`, `IUploadStep`, `IStateSink`, `IAfterFrameStep`, `IFrameLoop`, `IOperatorCommands` | same | `World/Frame/FrameHooks.cs` |
-| `AtlasServices`, `AtlasBootContext` | same | `World/Services/AtlasServices.cs`, `World/Services/AtlasBootContext.cs` |
-| `QualityTier`, `QualityRow`, `QualityTable`, `IQualityState`, `IPerfSource`, `QualityInputs`, `QualityLadderCore` | same | `World/Quality/*.cs` |
+| `AtlasServices`, `AtlasBootContext`, `IEventLog` | same | `World/Services/AtlasServices.cs`, `World/Services/AtlasBootContext.cs`, `World/Services/IEventLog.cs` |
+| `QualityTier`, `QualityRow`, `QualityTable`, `IQualityState`, `IPerfSource`, `QualityInputs` | same | `World/Quality/QualityTier.cs`, `World/Quality/QualityInputs.cs` |
 | `MeshData` | same | `World/Meshing/MeshData.cs` |
 | `AtlasVertex`, `AtlasShading` | `Atlas.Kernel` · `Atlas.Kernel` | `Kernel/Mesh/AtlasVertex.cs`, `Kernel/Mesh/AtlasShading.cs` |
-| `Mesh4D`, `Polytopes4D`, `Rotation4D`, `Projector4D`, `Slicer4D`, `SliceJob` | `Atlas.Kernel` · `Atlas.Kernel.FourD` | `Kernel/FourD/*.cs` |
-| `AtlasBoot`, `AtlasThermal` (exist) | `Atlas.Rendering` · `Atlas.Rendering` | `Rendering/AtlasBoot.cs`, `Rendering/AtlasThermal.cs` |
-| `AtlasShaderIDs`, `AtlasLayers`, `AtlasPalette`, `AtlasLook`, `AtlasMesh`, `MaterialPool` | same | `Rendering/Look/*.cs` |
-| `IStereoRig`, `StereoRig`, `DisplayMode`, `Eye`, `EyeTextures`, `LensBlit`, `LensParams` | same | `Rendering/Stereo/*.cs` |
-| `QualityLadder` | same | `Rendering/Quality/QualityLadder.cs` |
-| `PortalRenderer`, `PortalRoom`, `PortalDoor` | same | `Rendering/Portals/*.cs` |
-| Shaders and includes | – | `Rendering/Shaders/*` (§10.1) |
-| `AtlasBootstrap`, `AtlasFrameLoop`, `SpaceLab`, `CommandRouter`, `RenderParams`, `QualityBinding`, `BumpGuardStep`, `InputSenseStep` | `Atlas.App` · `Atlas.App` | `App/*.cs` |
+| `Mesh4D`, `Polytopes4D`, `Rotation4D`, `Projector4D`, `Slicer4D`, `SliceJob` | `Atlas.Kernel` · `Atlas.Kernel.FourD` | `Kernel/Mesh4D/*.cs` |
+| `AtlasBoot`, `AtlasThermal` | `Atlas.Rendering` · `Atlas.Rendering` | `Rendering/AtlasBoot.cs`, `Rendering/AtlasThermal.cs` |
+| `AtlasShaderIDs`, `AtlasPalette`, `AtlasPaletteTexture`, `AtlasLook`, `AtlasLookState`, `AtlasMesh`, `AtlasMeshBuilder`, `AtlasMeshBudget`, `MaterialPool`, `PoolLedger` | same | `Rendering/Look/*.cs` |
+| `IStereoRig`, `DisplayMode`, `Eye`; `StereoRig`; `IEyeTextures`, `EyeTextureSet`; `EyeTextureLayout`; `LensBlit`; `LensParams`, `EyeFrustum`, `LensModel` | same | `Rendering/Stereo/IStereoRig.cs`, `StereoRig.cs`, `EyeTextureSet.cs`, `EyeTextureLayout.cs`, `LensBlit.cs`, `LensBlitPass.cs`, `LensModel.cs` |
+| `QualityApplier`; `LadderController` and its own `QualityInputs`; `FramePacing`; a second `QualityTier`, `QualityRow`, `QualityTable` with the same values as the `Atlas.World` ones (§9.5) | same | `Rendering/Quality/QualityApplier.cs`, `LadderController.cs`, `FramePacing.cs`, `QualityTier.cs` |
+| `PortalRenderer`, `PortalRoom`, `PortalDoor`, `PortalFrameCore`, `PortalSwapRule`, `PortalMath`, `PortalStencilTable`, `PortalSlotAllocator` | same | `Rendering/Portals/*.cs` |
+| Shaders and includes | – | `Rendering/Shaders/Resources/*`, `Rendering/Stereo/Resources/`, `Rendering/Portals/Resources/` (§10.1) |
+| `AtlasBootstrap`; `AtlasApp`, `BootScene` | `Atlas.App` · `Atlas.App` | `App/AtlasBootstrap.cs`, `App/AtlasApp.cs` |
+| `AtlasFrameLoop`; `FrameLoopCore`, `ISpaceFrame`, `IWalkerReset`, `IStateWriter`, `IEyePositions`; `InputSenseStep`, `HeadTransformSenseStep`, `BumpGuardStep`, `LookUploadStep`, `RigUploadStep`, `RigEyePositions` | same | `App/Frame/AtlasFrameLoop.cs`, `App/Frame/FrameLoopCore.cs`, `App/Frame/FrameSteps.cs` |
+| `SpaceLab`, `ISpaceLoader`, `ISpaceStage`; `SceneSpaceLoader`; `SpaceStage`; `GridSpace` | same | `App/Spaces/SpaceLab.cs`, `SceneSpaceLoader.cs`, `SpaceStage.cs`, `GridSpace.cs` |
+| `CommandRouter`; `SpaceActions`, `SpaceActionStep` | same | `App/Commands/CommandRouter.cs`, `App/Commands/SpaceActions.cs` |
+| `AppParams`, `ScanSettings`; `QualityLadder` | same | `App/Params/AppParams.cs`, `App/Params/QualityLadder.cs` |
+| `AppHooks`, `IOnboardingFlow`, `IAppMenu`, `IPerfTour` | same | `App/Hooks/AppHooks.cs` |
+| `RoomHandOver`; `GuardedStereoRig`, `HeadsetGate`; `BootOptions`; `RehearsalFlow`; `PoseSourceSwitch`; `DevOverlay` | same | `App/Room/RoomHandOver.cs`, `App/Flow/*.cs` |
 | `GluedSpace`, `PortalSpace`, `SlicerSpace` | `Atlas.Spaces.Glued`, `.Portal`, `.Slicer` | `Spaces/<Name>/<Name>Space.cs` |
-| `AtlasBuild`, `AtlasPostBuild`, `AtlasProjectSetup`, `AtlasUsageText` (exist) | `Atlas.Editor` · `Atlas.EditorTools` | `Editor/*.cs` |
+| `AtlasBuild`, `AtlasPostBuild`, `AtlasProjectSetup`, `AtlasUsageText` | `Atlas.Editor` · `Atlas.EditorTools` | `Editor/*.cs` |
 
 `Atlas.World` core types use only `System`, `Unity.Mathematics`, `Atlas.Kernel` and `Atlas.Link` (README F1,
 F2). The one exception is `AtlasBootContext`, which carries `UnityEngine.Transform` references and is not a core
 type.
+
+There are two mesh-data classes with the same member names: `Atlas.World.MeshData` (engine-free, for
+`Atlas.Telemetry`, which may not reference `Atlas.Rendering`) and `Atlas.Rendering.AtlasMeshBuilder` (the one
+`AtlasMesh` uploads and every space and the room content use; it has more generators, §10.2).
 
 ### 0.2 Names this page takes from other pages
 
@@ -66,13 +76,15 @@ differently, that page wins and this one is corrected at the freeze.
 | Name | Page | What this page relies on |
 |---|---|---|
 | `WalkerPose`, `WalkerPose.Start`, `TileId`, `Iso2` | lane B §2 | As written there (`Atlas.Kernel`) |
-| `IWalkerKernel`, `KernelStep`, `KernelConfig.Flat(double)`, `FlatWalkerKernel` | lane B §4 | `Step(double2 deltaMetres, bool trackingNormal)`, `ResetToFloor(double2)`, `Reset(in WalkerPose)`, `Configure`, `Pose`, `CullRho`, `MetresPerUnit` |
+| `IWalkerKernel`, `KernelStep`, `KernelConfig.Flat(double)`, `FlatWalkerKernel`, `KernelConstants.DefaultFlatTileSideMetres` | lane B §4 | `Step(double2 headFloorMetres, bool trackingNormal)` (the head's floor point; the kernel forms the displacement itself), `ResetToFloor(double2)`, `Reset(in WalkerPose)`, `Configure(in KernelConfig)`, `Pose`, `CullRho`, `MetresPerUnit`, `StepCount` |
 | `AtlasWarp(float3)`, `AtlasGatesClip(float3)`, `_WarpMode`, `_Anchor`, `_Gate0` to `_Gate3`, `_HeadPosWS`, `_HypL` | lane B §5, §6 | As written there |
 | `RoomModel` | lane C | A class in `Atlas.World` with the fields of `roommodel.schema.json`: `freeRect.wf`, `freeRect.df`, `lapSquare.side`, `cells.glued` (`nx`, `nz`, `sizeX`, `sizeZ`), `standing`, `walls`, `objects`. C# member names are lane C's |
-| `TrackingState` | lane C | An enum in `Atlas.World` with `Normal = 0`, `Limited = 1`, `Lost = 2`, the coding of `State.flags` bits 0 to 1 (name assumed) |
-| `IBumpGuard`, `BumpLevel`, `SensorFrame`, `BumpCue.Fire` | lane C | §6.5 of the plan |
-| `IRoomContent`, wall modes, object category | lane C | A root `Transform` for all room renderers; a mode in which walls are kerbs; objects on or off; a change event; the category as an integer 0 to 31 (the order of `objects[].category` in the schema) |
-| `ParamRegistry`, `StateMessage` | lane D | `Atlas.Link`. Declaring a parameter by name is idempotent and keeps the current value; a group can be marked active or inactive; a parameter can be set locally |
+| `TrackingState`, `TrackingStates.ToWire` | lane C | An enum in `Atlas.World` (`World/Pose/TrackingState.cs`) with `NotTracking = 0`, `Limited = 1`, `Normal = 2`. `State.flags` bits 0 to 1 carry `TrackingStates.ToWire(state)` (0 normal, 1 limited, 2 lost), never the raw enum value |
+| `IBumpGuard`, `BumpLevel`, `SensorFrame`, `BumpCue.Fire`, `CueSource` | lane C | `IBumpGuard.Tick(in SensorFrame)`, `IBumpGuard.Level`, `BumpCue.Fire(BumpLevel, float2, CueSource)`, `BumpCue.Shown` |
+| `IPosePipeline` | lane C | `Atlas.World`. `Sensors` (the `SensorFrame` of this frame, with `RoomActive`), `Source`, `PredictionRotation`, `GyroPredictMs`, `ResetGeometry()` |
+| `IAtlasInput`, `AtlasAction`, `AtlasAxis`, `InputContext`, `GazeTarget` | lane C | `Atlas.Input`. `Tick(Vector3 headPosition, Quaternion headRotation, float deltaTime)`, `Pressed(AtlasAction)`, `Axis(AtlasAxis)`, `Walker`, `DwellSeconds`, `PushContext`, `PopContext`, `RegisterGazeTarget` |
+| `IRoomContent`, `WallMode`, object category | lane C | `Root`, `IsBuilt`, `SetWallMode(WallMode mode, float seconds = 0.5f)` with `WallMode.Full` and `WallMode.Kerbs`, `FloorVisible`, `ObjectsVisible`, `ResetPresentation()`; the category as an integer 0 to 31 (the order of `objects[].category` in the schema) |
+| `ParamRegistry`, `ParamEntry`, `ParamSource`, `StateMessage` | lane D | `Atlas.Link`. `DeclareFloat`, `DeclareInt`, `DeclareBool`, `DeclareEnum` (by name, idempotent, keep the current value; the last argument is `onRelease`), `Find`, `TryGet`, `Set`, `SetGroupActive(string group, bool active)`, `PushAll()` |
 | `AtlasPerfProbe` | lane D | Implements `IPerfSource` (§9.5) |
 
 ---
@@ -103,6 +115,8 @@ namespace Atlas.World
         /// <summary>State.sceneId while no space is entered.</summary>
         public const ushort NoScene = 0xFFFF;
 
+        /// <summary>True for the seven defined values.</summary>
+        public static bool IsDefined(SpaceId id);
         /// <summary>"S0" to "S6": the code used by SceneCmd (Appendix B.2) and in logs.</summary>
         public static string Code(SpaceId id);
         /// <summary>Parses "S0" to "S6". False for anything else.</summary>
@@ -111,6 +125,8 @@ namespace Atlas.World
         public static string SceneName(SpaceId id);
         /// <summary>Lower-case parameter group: "home", "glued", "curved", "cells", "planet", "portal", "slicer".</summary>
         public static string ParamGroup(SpaceId id);
+        /// <summary>The name shown to people: "Home", "Glued", "Curved Walk", "Aligned Cells", "Small Planet", "Impossible Rooms", "Slicer".</summary>
+        public static string DisplayName(SpaceId id);
         /// <summary>State.sceneId of a SpaceLab space: the numeric value of the id.</summary>
         public static ushort SceneId(SpaceId id);
     }
@@ -127,10 +143,16 @@ namespace Atlas.World
 | 5 | S5 | `Portal` | Impossible Rooms | `Space_Portal` | `Atlas.Spaces.Portal` | `PortalSpace` | A | true | yes |
 | 6 | S6 | `Slicer` | Slicer | `Space_Slicer` | `Atlas.Spaces.Slicer` | `SlicerSpace` | A | true | yes |
 
-- The module class is `<Name>Space` in the namespace of its assembly (decided here). `tools/gen_scenes.py` relies
-  on it.
+- The module class is `<Name>Space` in the namespace of its assembly (decided here). `tools/gen_scenes.py` names
+  each script by its path in its manifest.
+- An undefined id gives `"S?"`, `"Space_Unknown"`, `"unknown"` and `"Unknown"` from the four name methods.
+- While no Home space is registered and no `Space_Home` scene is in the build, the composition root registers
+  `Atlas.App.GridSpace` (the room as it stands on a grid ground) under `SpaceId.Home`, so the app always has a
+  space to enter.
 - `State.sceneId`: 0 to 6 for a SpaceLab space, `0xFFFF` with `spaceId = 255` while no space is entered,
-  100 and above reserved for use-case scenes of Phase 2 (decided here).
+  100 and above reserved for use-case scenes of Phase 2 (decided here). The frame loop sends `SpaceIds.NoSpace`
+  and `NoScene` during onboarding and scan, and lane D's Spectator shows its "no space" banner for them.
+  (differs from plan Appendix B.1, which lists only 0 to 6.)
 
 ---
 
@@ -170,12 +192,13 @@ namespace Atlas.World
 }
 ```
 
-A module is a `MonoBehaviour` (README F3). SpaceLab is its only caller.
+A module is a `MonoBehaviour` (README F3). SpaceLab is its only caller on the phone. In the Spectator the host
+is lane D's `SpectatorHost` (`Telemetry/Map/SpectatorHost.cs`), and it is the one that calls `ReadState`.
 
 | Call | When | World visible? | The module may | The module must not |
 |---|---|---|---|---|
 | `Awake`, `OnEnable` | SpaceLab loads the scene or runs the factory | no (black) | Cache its own components | Read the room, the registry or any service; build content |
-| `Configure(room, registry)` | Once per load, straight after creation. `room` is never null | no | Declare parameters (idempotent, §4.3). Build meshes, rent materials, create children under its own transform. Allocate freely | Touch anything outside its own root except through `IRoomContent`, `AtlasLook` and `MaterialPool`. Wait for a file or the network |
+| `Configure(room, registry)` | Once per load, straight after creation. `room` is never null | no | Declare parameters (idempotent, §4.3). Take services from `AtlasServices`. Build meshes, rent materials, create children under its own transform. Allocate freely | Touch anything outside its own root except through `IRoomContent`, `AtlasLook` and `MaterialPool`. Wait for a file or the network |
 | `Enter(in start)` | Once, in the same frame as `Configure`. For a registered space `start` is `IWalkerKernel.Pose` after `ResetToFloor`; otherwise the kernel's pose as it stands | no | Set the wall mode, fog and background; show its content; start its state from `start` | Change `Registered` |
 | `Tick(in frame)` | Every frame from the frame after `Enter` until `Exit`, at step 5, also during the fades | yes | Interaction, simulation, setting material values, scheduling a job | Allocate managed memory. Read the head pose from anywhere but `frame`. Call Bump Guard or read its level. Wait for a job it did not schedule this frame, for the network or for a file |
 | `IUploadStep.Upload(in frame)` (only if the module also implements `IUploadStep`) | Every frame at step 6, after every `Tick` | yes | Complete this frame's jobs and upload mesh and material data | Allocate; simulate |
@@ -202,12 +225,18 @@ Rules:
 8. **One look** (README F7): `Atlas/Surface` through `MaterialPool`, `renderer.sharedMaterial`, no
    `MaterialPropertyBlock`, no other shader except TextMeshPro for text.
 9. **Safety is not a module's business.** A module cannot switch Bump Guard off, hide its cue or delay it.
+10. **A module that throws is taken out.** An exception from `Configure` or `Enter` is logged as `space.error`,
+    the module is unloaded and SpaceLab goes on with Home (§4.2, step 4). An exception from `Tick`, `Upload` or
+    `WriteState` is logged as `space.error`, the module is not called again on the frame path, and at the next
+    step 8b SpaceLab switches to Home, or to no space when Home is the broken one.
 
 What `WriteState` receives and writes:
 
-| Field | Filled by `AtlasFrameLoop` before the call | The module writes |
+| Field | Filled by `FrameLoopCore` before the call | The module writes |
 |---|---|---|
-| `msgType`, `flags`, `sceneId`, `seq`, `t_us`, `headPos`, `headRot`, `spaceId`, `bumpLevel`, `worldVer` | yes | never |
+| `flags` (tracking, pose-jump bit, quality tier), `sceneId`, `headPos`, `headRot`, `spaceId`, `worldVer` | yes | never |
+| `bumpLevel`, the cue flag | yes, by the guard step through `IStateWriter` (§7.1) | never |
+| `msgType`, `seq`, `t_us`, the lock flag | no: lane D's link glue writes them when it sends | never |
 | `p[0]`, `p[1]`, `p[2]` | `(float)MetresPerUnit`, `CullRho − 1`, `CullRho` from `IWalkerKernel` (lane B §8.3) | never |
 | `tileId` | six zeros | Its tile, cell or room id (Appendix B.1) |
 | `sheet` | 0 | Its sheet or cell index |
@@ -218,7 +247,8 @@ What `WriteState` receives and writes:
 
 ## 3 · `FrameContext`
 
-One value per frame, owned by `AtlasFrameLoop`, passed by reference. Nobody keeps a copy across frames.
+One value per frame, owned by the frame loop (`FrameLoopCore`), passed by reference. Nobody keeps a copy across
+frames.
 
 ```csharp
 // File: World/Frame/FrameContext.cs
@@ -257,33 +287,38 @@ namespace Atlas.World
 | Field | Type | Unit · frame | Meaning | Written at | By |
 |---|---|---|---|---|---|
 | `FrameIndex` | `int` | frames | 0 on the loop's first frame, then +1 per frame. Never reset | start of `Update` | A |
-| `Time` | `double` | s | The frame's time on the app clock: `Time.unscaledTimeAsDouble` on the device; the pose log's clock in replay. Monotonic | start of `Update` | A |
-| `DeltaTime` | `float` | s | `Time` minus the previous frame's `Time`, clamped to 0.004 to 0.1. 1/60 on frame 0 | start of `Update` | A |
+| `Time` | `double` | s | The frame's time on the app clock: `Time.unscaledTimeAsDouble`, in replay too; a test passes its own clock to `FrameLoopCore.RunUpdate`. Monotonic | start of `Update` | A |
+| `DeltaTime` | `float` | s | The engine's `Time.unscaledDeltaTime`, clamped to 0.004 to 0.1 (`FrameLoopCore.MinDeltaTime`, `MaxDeltaTime`) | start of `Update` | A |
 | `RawHeadPosition` | `float3` | m · world | The tracked head: the midpoint between the eyes (§9.2). Relocalisation jumps included. What Bump Guard, the cameras and `State.headPos` use | step 1 | C |
 | `RawHeadRotation` | `quaternion` | world | The tracked head's rotation, no prediction | step 1 | C |
-| `Tracking` | `TrackingState` | – | ARKit tracking state of this frame | step 1 | C |
+| `Tracking` | `TrackingState` | – | ARKit tracking state of this frame (`NotTracking`, `Limited`, `Normal`). `Normal` when no sense step is installed | step 1 | C |
 | `HeadPosition` | `float3` | m · world | The geometry head pose: what a space reads. Lane C's page defines how it differs from the raw pose | step 3 | C |
 | `HeadRotation` | `quaternion` | world | Rotation of the geometry head pose | step 3 | C |
-| `FloorDelta` | `float2` | m · world (x, z) | `HeadPosition.xz` minus the previous frame's. Zero on frame 0 and on the frame after a walker reset. It is what step 4 hands to the kernel; the kernel may still reject it (`Kernel.Rejected`) | step 3, by the loop after the filter | A |
-| `PoseJumpRejected` | `bool` | – | The pose filter dropped a jump this frame. `State.flags` bit 2 | step 3 | C |
+| `FloorDelta` | `float2` | m · world (x, z) | The floor displacement of the geometry pose this frame, as the pose filter wrote it. With no filter installed the loop writes `HeadPosition.xz` minus the previous frame's (zero on frame 0). Zero after a walker reset. For spaces to read: step 4 hands the kernel the head's floor point `HeadPosition.xz`, not this delta, and the kernel forms and may reject its own displacement (`Kernel.Rejected`) | step 3 | C (A with no filter) |
+| `PoseJumpRejected` | `bool` | – | The pose filter dropped a jump this frame. `State.flags` bit 2 is this, or `Kernel.Rejected` while tracking is `Normal` | step 3 | C |
 | `Walker` | `WalkerPose` | kernel units | `IWalkerKernel.Pose` after this frame's `Step` | step 4 | A from B |
 | `Kernel` | `KernelStep` | – | What the step did: `Rejected`, `Crossings`, `LastEdge`, `AppliedMetres`, `TileChanged` | step 4 | A from B |
-| `LeftEyePosition`, `RightEyePosition` | `float3` | m · world | Raw head pose with the eye offset: `RawHeadPosition ∓ RawHeadRotation · (ipd / 2, 0, 0)`. Both equal the head position when there is no rig (hand mode, Spectator) | step 1, after the sense steps | A |
+| `LeftEyePosition`, `RightEyePosition` | `float3` | m · world | The world positions of the two eye cameras, from `IStereoRig.GetEyePosition` through `IEyePositions`: the head with the eye offset ∓`ipd` / 2 along the eyes' local x. Both equal `RawHeadPosition` when there is no rig (Spectator) | step 1, after the sense steps | A |
 | `Tier` | `QualityTier` | – | The quality tier in force this frame (§9.5) | start of `Update` | A |
 
-- **Geometry pose** (decided here, to be matched by lane C's page): after a rejected jump the geometry pose
+- **Geometry pose** (decided here; lane C's page §7.5 matches it): after a rejected jump the geometry pose
   follows the raw pose again. The jump is dropped from the displacement, not kept as a standing offset, so a
   registered space stays registered. Registered spaces may therefore read either pose; they read `HeadPosition`.
 - **No input in the context.** `Atlas.World` cannot name a type of `Atlas.Input`. Lane C's input system freezes
-  one snapshot per frame at step 1; a space reads it through the input service (lane C's page).
-- **No Bump Guard level in the context.** Spaces do not react to it. `AtlasFrameLoop` reads it for `State`.
+  one snapshot per frame at step 1; a space reads it through `AtlasServices.Get<IAtlasInput>()`.
+- **No Bump Guard level in the context.** Spaces do not react to it. The guard step writes it into `State`
+  itself (`IStateWriter`, §7.1).
 - `FrameContext` is about 250 bytes. Always pass it with `in` or `ref`.
 
 ---
 
 ## 4 · `ISpaceHost` and SpaceLab
 
-`Atlas.App.SpaceLab` hosts exactly one space at a time. Other lanes see it only as `ISpaceHost`.
+`Atlas.App.SpaceLab` hosts exactly one space at a time. Other lanes see it only as `ISpaceHost`. It is a plain
+engine-free class, `SpaceLab : ISpaceHost, ISpaceFrame, IAfterFrameStep`, built as
+`new SpaceLab(ParamRegistry registry, IWalkerKernel kernel, IWalkerReset walker, ISpaceLoader loader, ISpaceStage stage)`:
+`SceneSpaceLoader` brings the scene-or-factory rule (§5.2) and `SpaceStage` the fade and the reset between two
+spaces. A switch advances once per frame at step 8b.
 
 ```csharp
 // File: World/Spaces/ISpaceHost.cs
@@ -320,7 +355,7 @@ namespace Atlas.World
 
         /// <summary>True when the space has a scene in the build or a registered factory.</summary>
         bool IsAvailable(SpaceId id);
-        /// <summary>Starts a switch with a fade. False when refused; see the table below.</summary>
+        /// <summary>Starts a switch with a fade. False when refused (no room, unavailable, already there).</summary>
         bool RequestSwitch(SpaceId target);
         /// <summary>Return to Home (Master Plan section 4.6): fade, walker reset, Home registered again.</summary>
         bool ReturnHome();
@@ -343,58 +378,80 @@ namespace Atlas.World
 
 | Situation | Result |
 |---|---|
-| `Room` is null | false, event `space.refused` with reason `noRoom` |
+| `Room` is null | false, event `space.refused` with `{"space":"S1","reason":"noRoom"}` |
 | `IsAvailable(target)` is false (S2, S3, S4 in this build) | false, event `space.refused` with reason `unavailable`. Nothing reaches the kernel |
-| `target` is the entered space and `State` is `Running` | false, nothing happens |
-| `State` is `Running` or `Empty` | true, the sequence of §4.2 starts in the same frame |
-| A switch is already under way | true. The newest request replaces the pending one and runs when the current switch reaches `Running` |
+| `target` is the entered space and `State` is `Running` | false, nothing happens (unless the entered module has faulted) |
+| `State` is `Running` or `Empty` | true. The switch state changes at once; its steps (§4.2) run from the next step 8b |
+| A switch is already under way | true. The newest request replaces the pending one and runs when the current switch reaches `Running` or `Empty` |
 
-`ReturnHome()`: when Home is entered and running it resets the walker (`IFrameLoop.ResetWalkerToFloor`) with no
-fade and returns true; otherwise it is `RequestSwitch(SpaceId.Home)`. It is the target of the operator command
-`home` and of the gamepad's Home action.
+`ReturnHome()`: when Home is entered and running it resets the walker (`IWalkerReset.ResetWalkerToFloor`, which
+is the frame loop's) with no fade and returns true; otherwise it is `RequestSwitch(SpaceId.Home)`. It is the
+target of the operator command `home` and of the `AtlasAction.ReturnHome` action (`SpaceActions`, §14.4).
 
 ### 4.2 The switch, step by step
 
 Constants in `SpaceLab` (decided here): `FadeOutSeconds = 0.25f`, `FadeInSeconds = 0.25f`. The fade is the global
-`_AtlasFade` (§10.4): the world and the background go to black, the head-locked cue and HUD do not. A switch with
-a scene in the build is under 1.0 s end to end (proposed, G4). The first fade frame starts within 250 ms of an
-operator command (test L10).
+`_AtlasFade` (§10.4), set through `ISpaceStage.SetFade`: the world and the background go to black, the
+head-locked cue and HUD do not. A switch with a scene in the build is under 1.0 s end to end (proposed, G4). The
+first fade frame starts within 250 ms of an operator command (test L10).
 
 | # | State | What SpaceLab does |
 |---|---|---|
-| 1 | `FadingOut` | Ramps `_AtlasFade` 1 → 0 over `FadeOutSeconds`. The old module keeps ticking. Skipped when `State` was `Empty` |
-| 2 | `Loading` | `old.Exit()`; raises `SpaceExited`; marks the old parameter group inactive; destroys the old root, or `SceneManager.UnloadSceneAsync` for a scene |
-| 3 | `Loading` | `AtlasLook.ResetForSpace()` (§10.8); `IRoomContent` back to its default mode (lane C's page); `PortalRenderer.Clear()` |
-| 4 | `Loading` | Creates the module by the scene-or-factory rule of §5.2. On failure: logs `space.loadFailed` and continues with Home; if Home fails too, ends in `Empty` with the room content visible |
+| 1 | `FadingOut` | Ramps `_AtlasFade` 1 → 0 over `FadeOutSeconds`. The old module keeps ticking. Skipped when no space was entered |
+| 2 | `Loading` | `old.Exit()`; raises `SpaceExited`; marks the old parameter group inactive; `ISpaceLoader.Unload`: destroys the old root, or `SceneManager.UnloadSceneAsync` for a scene |
+| 3 | `Loading` | `ISpaceStage.ResetForSpace()`: `AtlasLook.ResetForSpace()` (§10.8) and `IRoomContent.ResetPresentation()` when the room content is built. A module that uses a `PortalRenderer` clears it in its own `Exit` |
+| – | `Loading` | Waits here while `IWalkerReset.RoomResetPending`: a room was just made active and the head is not in its frame yet, so the walker cannot be placed |
+| 4 | `Loading` | Creates the module by the scene-or-factory rule of §5.2. On failure, or when `Configure` or `Enter` throws: logs `space.loadFailed` and continues once with Home; if Home fails too, ends in `Empty` with the fade at 1 and the room content visible |
 | 5 | `Loading` | `module.Configure(Room, registry)`; `WorldVersion += 1`; marks the new parameter group active |
-| 6 | `Loading` | If `module.Registered`: `IFrameLoop.ResetWalkerToFloor()` (lane B §4.1). Then `module.Enter(kernel.Pose)`; caches `module as IUploadStep`; writes `space.id`; raises `SpaceEntered` |
-| 7 | `FadingIn` | Ramps `_AtlasFade` 0 → 1 over `FadeInSeconds`. The new module ticks from the first frame |
-| 8 | `Running` | Runs a pending request, if any |
+| 6 | `Loading` | If `module.Registered`: `IWalkerReset.ResetWalkerToFloor()` (lane B §4.1). Then `module.Enter(kernel.Pose)`; caches `module as IUploadStep`; raises `SpaceEntered`, on which `AppParams` writes `space.id` back (§9.6) |
+| 7 | `FadingIn` | From the next frame, ramps `_AtlasFade` 0 → 1 over `FadeInSeconds`. The new module ticks from the first frame |
+| 8 | `Running` | `SwitchCount += 1`. Runs a pending request, if any |
 
-Steps 2 to 6 run in one frame when the module comes from a factory, and over the frames of the asynchronous load
-when it comes from a scene. Bump Guard and its cue run in every one of those frames.
+Steps 2 to 6 run in one step 8b when the module comes from a factory, and over the frames of the asynchronous
+load when it comes from a scene. Bump Guard and its cue run in every one of those frames.
 
 SpaceLab never calls `Resources.UnloadUnusedAssets`: a module destroys what it created (rule 5 of §2). Twenty
 switches leave memory within ±5 % (`P1-A08`).
 
 `SetRoom(room)`: stores the room, `WorldVersion += 1`, calls `kernel.Configure(KernelConfig.Flat(s))` with s the
-lap-square side and `IFrameLoop.ResetWalkerToFloor()` (lane B §4.1), raises `RoomChanged` (room content rebuilds
-on it), then reloads the entered space through the sequence above. It does not enter a space by itself: after the
-first scan, onboarding calls `RequestSwitch(SpaceId.Home)`.
+lap-square side (`room.LapSide`, or `KernelConstants.DefaultFlatTileSideMetres` when it is not above 0) and
+`IWalkerReset.LatchRoomReset()`, raises `RoomChanged` (the pose pipeline, Bump Guard, the room content and the
+link take the room on it), then reloads the entered space through the sequence above. The walker is not reset
+in `SetRoom` itself, because the head is still in the old frame: the frame loop resets it straight after step 3
+of the first frame whose `SensorFrame.RoomActive` is set, before that frame's kernel step, and calls
+`IPosePipeline.ResetGeometry()` with it. `SetRoom(null)` leaves the entered space through a fade and ends in
+`Empty`. `SetRoom` does not enter a space by itself. `Atlas.App.RoomHandOver` is the one caller in the app:
+
+```csharp
+// File: App/Room/RoomHandOver.cs   (published in AtlasServices under its own type)
+public sealed class RoomHandOver : IAfterFrameStep
+{
+    public SpaceId EntrySpace { get; set; }      // Home by default
+    public bool AutoEnter { get; set; }          // true by default; false while onboarding owns the flow
+    public bool EnterPending { get; }
+    public event Action<RoomModel> Activated;
+    /// <summary>Gives the anchor to the pose pipeline, calls ISpaceHost.SetRoom, raises Activated.</summary>
+    public void Activate(RoomModel room, object anchor = null);
+    /// <summary>Requests the entry space now if the room frame is in force. For onboarding, after its prompt.</summary>
+    public bool EnterNow();
+}
+```
+
+With `AutoEnter` set it requests `EntrySpace` at the first step 8b after the walker has been placed, never in
+the frame of `Activate`.
 
 ### 4.3 Parameters of a space
 
 | Rule | Detail |
 |---|---|
 | Group | A space's parameters are named `<group>.<name>` with the group of `SpaceIds.ParamGroup` (`glued.mode`) |
-| Declared twice, kept once | Each space gives `SpaceRegistry` a `declareParams` delegate (§5). SpaceLab runs every delegate once at boot, so every parameter of §12.2 and §12.4 exists from the first frame and the on-device menu can change it with any space entered. `Configure` declares the same parameters again; a declaration by an existing name returns the existing entry with its current value |
+| Declared twice, kept once | Each space gives `SpaceRegistry` a `declareParams` delegate (§5). The composition root runs every delegate once at boot (`SpaceRegistry.DeclareAllParams`), so every parameter of §12.2 and §12.4 exists from the first frame and the on-device menu can change it with any space entered. `Configure` declares the same parameters again; a declaration by an existing name returns the existing entry with its current value |
 | Values survive a switch | Nothing is deleted on `Exit`. A value tuned in a space is still there when the space is entered again |
-| "Removed" means inactive | On `Exit` SpaceLab marks the group inactive; on `Enter`, active. The Console and the menu show an inactive group folded and greyed. The kill switches of §12.4 stay active always |
-| `onRelease` | A parameter that regenerates geometry is declared with `onRelease`; its change handler rebuilds and calls `BumpWorldVersion()` |
-| Reading | A module keeps the parameter handles it got in `Configure` and reads their values in `Tick`. No lookup by name on the frame path |
+| "Removed" means inactive | SpaceLab marks all seven space groups inactive when it is created, a group active after `Configure` and inactive again on `Exit` (`ParamRegistry.SetGroupActive`). The Console and the menu show an inactive group folded and greyed. The registry has no kill-switch flag: a kill switch of §12.4 that sits in a space's group (`glued.copies`, `curved.cullRho`, `portal.depth`, `slicer.source`) goes inactive with it, and the menu lists the kill switches by name |
+| `onRelease` | A parameter that regenerates geometry is declared with `onRelease`; the module rebuilds (in the handler, or in the next `Tick` from a kept handle) and calls `BumpWorldVersion()` |
+| Reading | A module keeps the `ParamEntry` handles it got in `Configure` and reads their values in `Tick`. No lookup by name on the frame path |
 
-What this needs from `ParamRegistry` is listed in §0.2. If lane D's registry has no group flag, the fallback is
-that every group stays listed; nothing else changes.
+What this needs from `ParamRegistry` is listed in §0.2.
 
 ### 4.4 Standing mode
 
@@ -416,13 +473,16 @@ namespace Atlas.World
     public static class SpaceRegistry
     {
         /// <summary>Registers or replaces the entry of a space. Safe to call twice (no domain reload in the Editor).</summary>
-        /// <param name="factory">Creates a new GameObject named like the scene, adds the module, returns it.</param>
+        /// <param name="id">One of the seven spaces; ArgumentOutOfRangeException otherwise.</param>
+        /// <param name="factory">Creates a new GameObject named like the scene, adds the module, returns it. Not null.</param>
         /// <param name="declareParams">Declares the space's parameters; may be null.</param>
         public static void Register(SpaceId id, Func<ISpaceModule> factory, Action<ParamRegistry> declareParams = null);
         public static bool IsRegistered(SpaceId id);
+        /// <summary>Number of registered spaces.</summary>
+        public static int RegisteredCount { get; }
         /// <summary>Runs the factory. Null when the space is not registered.</summary>
         public static ISpaceModule Create(SpaceId id);
-        /// <summary>Runs every declareParams delegate, in SpaceId order. Called once by SpaceLab at boot.</summary>
+        /// <summary>Runs every declareParams delegate, in SpaceId order. Called once by the composition root at boot.</summary>
         public static void DeclareAllParams(ParamRegistry registry);
         /// <summary>For tests.</summary>
         public static void Clear();
@@ -432,7 +492,9 @@ namespace Atlas.World
 
 ### 5.1 Registration
 
-One static method per space assembly, and nothing else outside the module class (binding pattern):
+One static registration class per space assembly (binding pattern). The module class exposes
+`public static ISpaceModule Create()` and `public static void DeclareParams(ParamRegistry registry)`. A space may
+keep its logic in engine-free classes beside the module (README F2), as Glued, Portal, Slicer and Home do.
 
 ```csharp
 // File: Spaces/Glued/GluedRegistration.cs
@@ -441,8 +503,10 @@ namespace Atlas.Spaces.Glued
     static class GluedRegistration
     {
         [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.BeforeSceneLoad)]
-        static void Register() =>
+        static void Register()
+        {
             Atlas.World.SpaceRegistry.Register(Atlas.World.SpaceId.Glued, GluedSpace.Create, GluedSpace.DeclareParams);
+        }
     }
 }
 ```
@@ -455,14 +519,15 @@ S2, S3 and S4 register nothing in this build (lane B §8.2).
 ```text
 name = SpaceIds.SceneName(target)
 if Application.CanStreamedLevelBeLoaded(name):
-    load it additively; keep Atlas_Boot the active scene
-    module = the first ISpaceModule on a root object of the loaded scene
+    SceneManager.LoadSceneAsync(name, Additive); keep Atlas_Boot the active scene
+    module = the first ISpaceModule on a root object of the loaded scene (GetComponent on each root)
     if module is null: unload the scene and fall through
 if module is null and SpaceRegistry.IsRegistered(target):
     module = SpaceRegistry.Create(target); parent its GameObject under "Atlas/Space"
 if module is null: the load failed
 ```
 
+This is `Atlas.App.SceneSpaceLoader : ISpaceLoader` (`IsAvailable`, `Begin`, `TryFinish`, `Unload`).
 `IsAvailable(id)` = the scene can be loaded, or the space is registered. A space's scene holds one root object
 named like the scene, with the module component and nothing else; `tools/gen_scenes.py` (lane A) writes it. The
 module behaves the same either way, because it builds its content in `Configure`.
@@ -482,16 +547,22 @@ namespace Atlas.World
     {
         /// <summary>Publishes a service under the type T. Replaces an earlier one. Null: ArgumentNullException.</summary>
         public static void Register<T>(T service) where T : class;
+        /// <summary>Publishes a service under the type T and returns the one it replaced, or null.</summary>
+        public static T Replace<T>(T service) where T : class;
         /// <summary>Removes the service if it is the one published under T.</summary>
         public static void Unregister<T>(T service) where T : class;
         /// <summary>The service, or InvalidOperationException naming T when none is published.</summary>
         public static T Get<T>() where T : class;
         public static bool TryGet<T>(out T service) where T : class;
-        /// <summary>True from the end of AtlasBootstrap until Clear.</summary>
+        /// <summary>True when a service is published under T.</summary>
+        public static bool Has<T>() where T : class;
+        /// <summary>True from the end of the composition root until Clear.</summary>
         public static bool BootCompleted { get; }
         /// <summary>Raised once when the composition root has finished. A late subscriber is called at once.</summary>
         public static event Action Booted;
-        /// <summary>Removes everything. Called first by AtlasBootstrap and by tests.</summary>
+        /// <summary>Called by the composition root as its last step: sets BootCompleted and raises Booted once.</summary>
+        public static void MarkBooted();
+        /// <summary>Removes everything: services, Booted subscribers and the boot flag. Called first by the composition root and by tests.</summary>
         public static void Clear();
     }
 }
@@ -507,24 +578,28 @@ Services of lane A, and the slots this page reserves for the others:
 
 | Key | Declared in | Published by | Present in the Spectator |
 |---|---|---|---|
-| `ParamRegistry` | `Atlas.Link` | `AtlasBootstrap` (the one instance) | yes |
-| `IFrameLoop` | `Atlas.World` | `AtlasFrameLoop` | yes |
-| `ISpaceHost` | `Atlas.World` | `SpaceLab` | yes |
-| `IQualityState` | `Atlas.World` | `QualityLadder` | yes (always `Nominal`) |
-| `IOperatorCommands` | `Atlas.World` | `CommandRouter` | no |
-| `IWalkerKernel` | `Atlas.Kernel` | `AtlasBootstrap` (`new FlatWalkerKernel()`, lane B §4.1) | yes |
-| `MaterialPool` | `Atlas.Rendering` | `AtlasBootstrap` | yes |
-| `IStereoRig` | `Atlas.Rendering` | `StereoRig` | no |
-| `PortalRenderer` | `Atlas.Rendering` | `AtlasBootstrap` | yes |
-| `IPerfSource` | `Atlas.World` | lane D's perf probe | no |
-| `IRoomContent`, the pose source, the scan session, the input service, `IBumpGuard`, the asset client, the event log | their pages | their installers | their pages |
+| `AtlasApp` | `Atlas.App` | `AtlasApp` itself (everything the root built, as properties, §8) | no |
+| `ParamRegistry` | `Atlas.Link` | `AtlasApp` (the one instance) | yes |
+| `IFrameLoop` | `Atlas.World` | `AtlasApp`: the `AtlasFrameLoop` component | yes (lane D's own loop) |
+| `ISpaceHost` | `Atlas.World` | `AtlasApp`: `SpaceLab` | yes (lane D's own host) |
+| `IQualityState` | `Atlas.World` | `AtlasApp`: `Atlas.App.QualityLadder` | no |
+| `IOperatorCommands` | `Atlas.World` | `AtlasApp`: `CommandRouter` | no |
+| `IWalkerKernel` | `Atlas.Kernel` | `AtlasApp` (`new FlatWalkerKernel()`, lane B §4.1) | yes |
+| `MaterialPool` | `Atlas.Rendering` | `AtlasApp` (`MaterialPool.CreateDefault(256)`) | yes |
+| `IStereoRig` | `Atlas.Rendering` | `AtlasApp`: a `GuardedStereoRig` round the `StereoRig` (§9.2) | no |
+| `PortalRenderer` | `Atlas.Rendering` | Nobody in this build. `PortalSpace` uses a published one if there is one, and otherwise creates and drives its own (§12.2) | no |
+| `RoomHandOver` | `Atlas.App` | `AtlasApp` (§4.2) | no |
+| `IAtlasInput` | `Atlas.Input` | `AtlasApp`, from `AtlasInput.Install` | lane D's page |
+| `IPerfSource`, `IEventLog` | `Atlas.World` | lane D's telemetry installer | lane D's page |
+| `IRoomContent`, `IPosePipeline`, `IScanSession`, `IBumpGuard`, `IObjectPhotoSink` | their pages | their installers | their pages |
 
 ---
 
 ## 7 · The frame loop
 
 `Atlas.App.AtlasFrameLoop` is the only script that reads the head pose, steps the kernel or ticks a space
-(README F5).
+(README F5). The component brings the engine's clock and callbacks; the order itself is the engine-free
+`Atlas.App.FrameLoopCore`, which tests drive with their own clock.
 
 ### 7.1 Hooks
 
@@ -567,7 +642,7 @@ namespace Atlas.World
         void SetStateSink(IStateSink sink);
         /// <summary>Step 8b hooks run in the order they were added.</summary>
         void AddAfterFrame(IAfterFrameStep step);
-        /// <summary>kernel.ResetToFloor(geometry head floor point); the next FloorDelta is zero (lane B section 4.2).</summary>
+        /// <summary>kernel.ResetToFloor(geometry head floor point); the next FloorDelta is zero.</summary>
         void ResetWalkerToFloor();
         /// <summary>kernel.Reset(pose); the next FloorDelta is zero.</summary>
         void ResetWalker(in Atlas.Kernel.WalkerPose pose);
@@ -576,55 +651,112 @@ namespace Atlas.World
     /// <summary>The six operator commands as local calls (Master Plan section 7.3.2). No link type appears here.</summary>
     public interface IOperatorCommands
     {
-        /// <summary>SceneCmd. variant may be null; its meaning per space is in section 14.</summary>
+        /// <summary>SceneCmd. variant may be null; its meaning is the space's own.</summary>
         void SwitchSpace(SpaceId space, string variant);
         void Home();
         void Recentre();
         /// <summary>-1 automatic, 0 to 3 the ladder rungs, 4 the high tier.</summary>
         void SetQuality(int tier);
-        /// <summary>The Console's STOP button: BumpCue.Fire at STRONG.</summary>
+        /// <summary>The Console's STOP button: the warning cue at STRONG.</summary>
         void Cue();
         void SetLock(bool on);
     }
 }
 ```
 
-`Atlas.Input` references no Atlas assembly (README F1), so it cannot implement `ISenseStep`. `Atlas.App` adds a
-small adapter that calls lane C's input poll at step 1. The same holds for step 2 when `SensorFrame` is declared
-in `Atlas.Safety`: `Atlas.App.BumpGuardStep` implements `ISafetyStep`, copies the raw pose, the tracking state and
-lane C's newest depth frame into a `SensorFrame`, and calls `IBumpGuard.Tick(in sensors)`.
+`Atlas.Input` references no Atlas assembly (README F1), so it cannot implement `ISenseStep`.
+`Atlas.App.InputSenseStep` is the adapter: at step 1, after the pose pipeline, it calls
+`IAtlasInput.Tick(frame.RawHeadPosition, frame.RawHeadRotation, frame.DeltaTime)` and hands the keyboard walker
+its input. `Atlas.App.BumpGuardStep` implements `ISafetyStep` and builds nothing itself: the pose pipeline fills
+its `SensorFrame` at step 1 (raw pose, tracking, depth), and the step calls
+`IBumpGuard.Tick(in pipeline.Sensors)`.
+
+Four more interfaces, in `App/Frame/FrameLoopCore.cs` (namespace `Atlas.App`), connect the loop to its
+neighbours without an engine type:
+
+```csharp
+/// <summary>The space host as the frame loop drives it: steps 5, 6 and 8a of the frame.</summary>
+public interface ISpaceFrame
+{
+    void TickSpace(in FrameContext frame);
+    void UploadSpace(in FrameContext frame);
+    void WriteState(ref StateMessage state);
+}
+
+/// <summary>The walker resets the space host needs from the frame loop.</summary>
+public interface IWalkerReset
+{
+    void ResetWalkerToFloor();
+    /// <summary>A room was made active: the walker is reset straight after step 3 of the first frame whose
+    /// head pose is in the room frame, before that frame's kernel step.</summary>
+    void LatchRoomReset();
+    bool RoomResetPending { get; }
+}
+
+/// <summary>A frame hook that also owns fields of the State (Bump Guard: level and cue flag).</summary>
+public interface IStateWriter { void WriteState(ref StateMessage state); }
+
+/// <summary>Where the two eyes are this frame. Implemented over the stereo rig (RigEyePositions).</summary>
+public interface IEyePositions { void GetEyes(out float3 left, out float3 right); }
+```
 
 ### 7.2 The call sequence
 
 ```csharp
-// File: App/AtlasFrameLoop.cs   (shape only)
+// File: App/Frame/AtlasFrameLoop.cs
 [DefaultExecutionOrder(100)]                     // after TrackedPoseDriver (Update only) and every other Update
 public sealed class AtlasFrameLoop : MonoBehaviour, IFrameLoop
 {
-    void Update()
+    public FrameLoopCore Core { get; }
+    /// <summary>Creates the component, disabled, on a new object "FrameLoop" under parent.</summary>
+    public static AtlasFrameLoop Create(Transform parent, FrameLoopCore core);
+
+    void Update()     { _core.RunUpdate(Time.unscaledTimeAsDouble, Time.unscaledDeltaTime); }   // 1 to 6
+    void LateUpdate() { _core.RunState(); }                                                     // 8a
+    void OnEndContextRendering(ScriptableRenderContext context, List<Camera> cameras) { _core.RunAfterFrame(); }   // 8b
+}
+
+// File: App/Frame/FrameLoopCore.cs   (shape only)
+public sealed class FrameLoopCore : IFrameLoop, IWalkerReset
+{
+    public FrameLoopCore(IWalkerKernel kernel);
+    public ISpaceFrame Space { get; set; }                   // SpaceLab; null: no space is ever ticked
+    public ISpaceHost Host { get; set; }                     // for the common fields of the State
+    public IPosePipeline Pipeline { get; set; }
+    public IQualityState Quality { get; set; }               // null: Nominal
+    public IEyePositions Eyes { get; set; }                  // null: both eyes at the head
+    public Action<string> Warning { get; set; }
+    public int FrameCount { get; }
+    public bool HasGuard { get; }
+    public ref readonly StateMessage LastState { get; }
+    public void Seal();                                      // after boot: a hook added later is reported
+
+    public void RunUpdate(double time, float deltaTime)
     {
-        BeginFrame();                                        //    FrameIndex, Time, DeltaTime, Tier
-        for (i) _sense[i].Sense(ref _frame);                 // 1  pose, depth, input
-        FillEyes(ref _frame);                                //    from IStereoRig
+        if (the last frame was never rendered) { RunState(); RunAfterFrame(); }   // its tail is not lost
+        // BeginFrame:                                             FrameIndex, Time, DeltaTime, Tier
+        for (i) _sense[i].Sense(ref _frame);                 // 1  pose and depth, then input
+        Eyes.GetEyes(out _frame.LeftEyePosition, out _frame.RightEyePosition);   // from IStereoRig
         _guard.Guard(in _frame);                             // 2  Bump Guard
-        _filter.Filter(ref _frame);                          // 3  pose filter
-        FillFloorDelta(ref _frame);                          //    HeadPosition.xz minus the previous one
-        _frame.Kernel = _kernel.Step(_frame.FloorDelta, _frame.Tracking == TrackingState.Normal);   // 4
+        _filter.Filter(ref _frame);                          // 3  pose filter (writes FloorDelta too)
+        if (_roomResetLatched && Pipeline.Sensors.RoomActive) { ResetWalkerToFloor(); Pipeline.ResetGeometry(); }
+        _frame.Kernel = _kernel.Step(new double2(_frame.HeadPosition.x, _frame.HeadPosition.z),
+                                     _frame.Tracking == TrackingState.Normal);   // 4
         _frame.Walker = _kernel.Pose;
-        _spaceLab.TickSpace(in _frame);                      // 5  ISpaceModule.Tick
-        _spaceLab.UploadSpace(in _frame);                    // 6  the module's own IUploadStep, if any
-        for (i) _upload[i].Upload(in _frame);                // 6  AtlasLook, PortalRenderer, StereoRig, lane B later
+        Space.TickSpace(in _frame);                          // 5  ISpaceModule.Tick
+        Space.UploadSpace(in _frame);                        // 6  the module's own IUploadStep, if any
+        for (i) _upload[i].Upload(in _frame);                // 6  LookUploadStep, RigUploadStep, lane B later
     }
     // 7  URP renders Eye Left, Eye Right, then the Screen camera with the lens blit
 
-    void LateUpdate()                                        // 8a
+    public void RunState()                                   // 8a, once per frame
     {
         FillState(ref _state);                               //    common fields, section 2
-        _spaceLab.WriteState(ref _state);                    //    ISpaceModule.WriteState while a space is entered
+        Space.WriteState(ref _state);                        //    ISpaceModule.WriteState while a space is entered
         _sink.Send(in _state);
     }
 
-    void OnEndContextRendering(...)                          // 8b, once per frame (guarded by Time.frameCount)
+    public void RunAfterFrame()                              // 8b, once per frame (a second call does nothing)
     {
         for (i) _after[i].AfterFrame(in _frame);
     }
@@ -633,35 +765,44 @@ public sealed class AtlasFrameLoop : MonoBehaviour, IFrameLoop
 
 | Step (§6.3) | Call | Hook declared in | Implemented by | Lane |
 |---|---|---|---|---|
-| 1 Read | `ISenseStep.Sense(ref frame)`, each in order | `Atlas.World` | Pose pipeline in `Atlas.Scan`: moves the XR Origin so the room anchor is the world origin (README F4), then fills `RawHeadPosition`, `RawHeadRotation`, `Tracking` from `AtlasBootContext.Head`, and takes the newest depth image | C |
-| 1 Read | same | `Atlas.World` | `Atlas.App.InputSenseStep`: freezes the input snapshot | A (adapter), C (input) |
-| 1 Read | `FillEyes` | – | `AtlasFrameLoop` from `IStereoRig` | A |
+| 1 Read | `ISenseStep.Sense(ref frame)`, each in order | `Atlas.World` | Pose pipeline in `Atlas.Scan`: moves the XR Origin so the room anchor is the world origin (README F4), then fills `RawHeadPosition`, `RawHeadRotation`, `Tracking` from `AtlasBootContext.Head`, takes the newest depth image and builds the frame's `SensorFrame` | C |
+| 1 Read | same | `Atlas.World` | `Atlas.App.InputSenseStep`, added after the pose pipeline's step so the gaze sees this frame's head: freezes the input snapshot | A (adapter), C (input) |
+| 1 Read | `IEyePositions.GetEyes` | `Atlas.App` | `RigEyePositions` over `IStereoRig` | A |
 | 2 Bump Guard | `ISafetyStep.Guard(in frame)` → `IBumpGuard.Tick(in SensorFrame)` | `Atlas.World`; `Atlas.Safety` | `Atlas.App.BumpGuardStep` and lane C's Bump Guard | C (A adapter) |
 | 3 Pose filter | `IPoseFilterStep.Filter(ref frame)` | `Atlas.World` | Pose pipeline in `Atlas.Scan` | C |
-| 4 Kernel | `IWalkerKernel.Step(double2, bool)` | `Atlas.Kernel` | `FlatWalkerKernel` | B |
+| 4 Kernel | `IWalkerKernel.Step(double2 headFloorMetres, bool trackingNormal)` | `Atlas.Kernel` | `FlatWalkerKernel` | B |
 | 5 Space | `ISpaceModule.Tick(in frame)` | `Atlas.World` | The entered module; skipped when none | space owner |
-| 6 Upload | `IUploadStep.Upload(in frame)`: the module first, then the registered hooks | `Atlas.World` | `AtlasLook` (`_HeadPosWS`, `_HypL`, fog cross-fade, `_AtlasTime`, `_AtlasFade`), `PortalRenderer`, `StereoRig` (prediction offset); lane B's tile renderer later | A, B |
+| 6 Upload | `IUploadStep.Upload(in frame)`: the module first, then the registered hooks | `Atlas.World` | `LookUploadStep` (`AtlasLook.Upload`: `_HeadPosWS`, `_HypL`, fog cross-fade, `_AtlasTime`, and every other global again), then `RigUploadStep` (the prediction offset); a `PortalRenderer` is driven from `PortalSpace`'s own `Upload`; lane B's tile renderer later | A, B |
 | 7 Render | Unity and URP | – | Eye cameras into their textures, one lens blit to the screen (§9) | A |
 | 8a State | `ISpaceModule.WriteState(ref state)`, `IStateSink.Send(in state)` | `Atlas.World` | The module; lane D's link glue in `Atlas.Telemetry` | space owner, D |
-| 8b After the frame | `IAfterFrameStep.AfterFrame(in frame)`, each in order | `Atlas.World` | In this order: lane D's perf probe (samples counters); lane D's link glue (drains received parameters and commands; commands go to `IOperatorCommands`); `QualityLadder`; `SpaceLab` (advances a switch) | D, A |
+| 8b After the frame | `IAfterFrameStep.AfterFrame(in frame)`, each in order | `Atlas.World` | In this order: lane D's perf probe (samples counters); lane D's link pump (drains received parameters and commands; commands go to `IOperatorCommands`); lane D's HUD; hooks the asset client, the menu and onboarding added at rows 18 and 19; `QualityLadder`; `RehearsalFlow`; `RoomHandOver`; `SpaceActionStep`; `SpaceLab` (advances a switch, so a switch starts in the frame that asked for it) | D, C, A |
 
 Rules:
 
 1. Steps 1 to 6 are plain calls in this order from one `Update`. Nothing in them waits for the network, a file or
    a job that was not scheduled in the same frame.
-2. Step 2 runs every frame from the first, in every display mode and during every fade and load.
-   A device build with no guard registered is a boot error: the app shows "Bump Guard missing" and refuses
-   headset mode (decided here). In the Editor a missing guard is a warning.
+2. Step 2 runs every frame from the first, in every display mode and during every fade and load. A step-1 hook
+   that throws does not stop it: the fault is reported once through `FrameLoopCore.Warning`, the hook is called
+   again next frame, and the frame goes on with what it has.
+   A device build with no guard registered is a boot error: the app shows "Bump Guard missing"
+   (`HeadsetGate.Message`) and `GuardedStereoRig` refuses `SetMode(DisplayMode.Headset)` (decided here). In the
+   Editor a missing guard is a warning.
 3. Step 4 is called exactly once per frame, also while tracking is lost and also with no space entered.
    `IWalkerKernel.StepCount` rises by one per frame (`P1-B02`).
-4. A missing optional hook has a neutral default: no sense step → the raw pose is read from
-   `AtlasBootContext.Head`; no filter → the geometry pose is the raw pose; no sink → no State.
+4. A missing optional hook has a neutral default: no sense step → the raw pose stays as it was last set and
+   `Tracking` is `Normal` (`HeadTransformSenseStep` reads the pose from a head transform where there is no pose
+   pipeline); no filter → the geometry pose is the raw pose and the loop forms `FloorDelta`; no sink → no State.
 5. Step 8a runs in `LateUpdate` of the same component (§7.2 of the plan). Step 8b runs from
    `RenderPipelineManager.endContextRendering`, after both eyes and the lens blit have been submitted; the
-   Editor raises that event once per view, so the loop runs 8b only for the first one of a frame (decided here).
+   Editor raises that event once per view, so the core runs 8b only for the first one of a frame (decided here).
+   A frame that was never rendered (no camera, a paused Editor view) gets its 8a and 8b at the start of the next
+   `Update`, so a space switch and the link keep moving.
+   (differs from plan section 6.3: step 8 is two halves, `State` at 8a before rendering, counters and received
+   parameters at 8b after it.)
 6. Received parameters and commands are applied at 8b and take effect in the next frame. A parameter handler may
    swap eye-texture sets, rebuild geometry or start a switch there; it must not block.
-7. Hooks are added during boot only. Adding or removing one after `AtlasServices.Booted` is an error.
+7. Hooks are added during boot only. The composition root calls `FrameLoopCore.Seal()` after
+   `AtlasServices.MarkBooted()`; a hook added later is still added, and reported through `Warning`.
 8. Nobody else has an `Update` that does per-frame work on the frame path. Systems created by an installer may
    have `Update` for work that is not on the frame path (file writers, reconnect timers).
 
@@ -669,20 +810,29 @@ Rules:
 
 | Command | Local call |
 |---|---|
-| `SwitchSpace(space, variant)` | Sets the variant's parameter (§14), then `ISpaceHost.RequestSwitch(space)` |
+| `SwitchSpace(space, variant)` | Sets the variant's parameter (`CommandRouter.VariantParam(space)`: `glued.mode`, `rooms.layout`, `slicer.object`, §14) to the enum value whose name equals `variant` without regard to case, or to `variant` read as an index; then `ISpaceHost.RequestSwitch(space)` |
 | `Home()` | `ISpaceHost.ReturnHome()` |
-| `Recentre()` | `IFrameLoop.ResetWalkerToFloor()`, then lane C's recentre entry point if its page has one |
-| `SetQuality(tier)` | Sets `thermal.pinTier` (§9.5) |
-| `Cue()` | `BumpCue.Fire(BumpLevel.Strong, direction)` with the direction lane C's page gives for an operator cue |
-| `SetLock(on)` | Sets the registry's demo lock (lane D's page) |
+| `Recentre()` | `IFrameLoop.ResetWalkerToFloor()`, then `IPosePipeline.ResetGeometry()` |
+| `SetQuality(tier)` | Sets `thermal.pinTier` to the tier clamped to −1 … 4 (§9.5) |
+| `Cue()` | `BumpCue.Fire(BumpLevel.Strong, float2.zero, CueSource.Operator)` (`CommandRouter.FireOperatorCue`) |
+| `SetLock(on)` | Sets the parameter `demoLock` (lane D's page) |
 
-Each takes effect within 250 ms (test L10) and is written to the event log by the caller.
+Parameters are set with `ParamSource.Remote`. Each command takes effect within 250 ms (test L10) and is written
+to the event log by the caller.
+
+`CommandRouter(ISpaceHost host, IFrameLoop loop, ParamRegistry registry, IPosePipeline pipeline = null, Action cue = null)`.
+
+`Atlas.App.SpaceActions` (`App/Commands/SpaceActions.cs`) turns the four SpaceLab actions of the input map into
+the same local calls: `AtlasAction.ReturnHome`, `NextSpace`, `PrevSpace` and `SpaceMenu`. `SpaceActionStep` reads
+them at step 8b, one per frame. Nothing happens while the phone is in the hand, while a switch is under way or
+while `demoLock` is on.
 
 ---
 
 ## 8 · Composition root
 
-`Atlas.App.AtlasBootstrap` builds everything that is not in `Atlas_Boot.unity` (README F3).
+`Atlas.App.AtlasBootstrap` is the entry point and `Atlas.App.AtlasApp` builds everything that is not in
+`Atlas_Boot.unity` (README F3).
 
 ```csharp
 // File: App/AtlasBootstrap.cs
@@ -690,15 +840,58 @@ namespace Atlas.App
 {
     public static class AtlasBootstrap
     {
+        public const string BootSceneName = "Atlas_Boot";
+        public const string SandboxPrefix = "Sandbox_";
+        public const string SandboxMarker = "AtlasBoot";
+
+        /// <summary>The running app, or null.</summary>
+        public static AtlasApp App { get; }
+
         [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot();
+
+        /// <summary>The rule of which scene boots the app. Engine-free.</summary>
+        public static bool ShouldBoot(string sceneName, bool hasSandboxMarker);
+        /// <summary>Builds the app in the loaded scene. Also the entry point of sandboxes and play-mode tests.
+        /// A second call while an app runs returns the running one. Null when the boot failed.</summary>
+        public static AtlasApp Start(BootOptions options = null);
+        /// <summary>Stops the running app and releases what it made. Safe to call with none running.</summary>
+        public static void Stop();
+    }
+}
+
+// File: App/AtlasApp.cs
+namespace Atlas.App
+{
+    /// <summary>The three objects of the boot scene the composition root starts from.</summary>
+    public struct BootScene
+    {
+        public ARSession Session;
+        public XROrigin Origin;
+        public Camera Camera;
+        /// <summary>The one scene lookup of the app. What is absent (a sandbox, a test) is created in code.</summary>
+        public static BootScene FindOrCreate();
+    }
+
+    /// <summary>Everything the composition root built, in one place. Published in AtlasServices.</summary>
+    public sealed class AtlasApp
+    {
+        public const int PoolCapacity = 256;
+        public static AtlasApp Create(BootScene scene, BootOptions options);
+        public void Shutdown();
+        // One read-only property per system: Boot, Options, Registry, Pool, Lens, Rig, Display, Eyes, Blit, Loop,
+        // LoopCore, WalkerKernel, InputService, Pose, ScanSystems, ScanSettings, Guard, GuardInstalled,
+        // RoomContent, Ladder, Spaces, Commands, SpaceActions, TelemetrySystems, Assets, HandOver, SourceSwitch,
+        // Flow, Overlay, Onboarding, Menu, PerfTour.
     }
 }
 ```
 
-`Boot` runs only when the scene that was loaded is `Atlas_Boot`, or is named `Sandbox_…` and holds an object
+`Boot` runs only when the scene that was loaded is `Atlas_Boot`, or is named `Sandbox_…` and holds a root object
 named `AtlasBoot` (decided here). In any other scene it does nothing, so EditMode and PlayMode tests are not
-disturbed.
+disturbed. It does nothing in a build with `ATLAS_SPECTATOR`: the Spectator composes its own root (lane D).
+`BootOptions.Parse` reads the command line: `-atlasRoom <fixture or file>`, `-atlasReplay <pose log>`,
+`-atlasSource tracked|replay|walker`, `-atlasSpace S0…S6`, `-atlasHand`. `Stop` runs on `Application.quitting`.
 
 ### 8.1 Objects
 
@@ -713,7 +906,7 @@ XR Origin (Mobile AR)           from the scene; moved every frame by the pose pi
             ├─ Eye Left         Camera, local x = -ipd / 2
             ├─ Eye Right        Camera, local x = +ipd / 2
             └─ Hud              head-locked content of lanes C and D; layer AtlasHud
-Atlas                           created by AtlasBootstrap; DontDestroyOnLoad
+Atlas                           created by AtlasApp; DontDestroyOnLoad
 ├─ Systems                      one child per system, created by its installer
 ├─ Room                         room content (lane C); identity transform = the room frame
 ├─ Space                        parent of a module created by a factory
@@ -744,43 +937,70 @@ namespace Atlas.World
 
 ### 8.2 Creation order
 
-Each lane exposes one static installer per assembly (decided here):
-`public static void Install(Atlas.World.AtlasBootContext boot)`. It creates its systems under `boot.Systems`,
-publishes its services and adds its frame hooks. `Atlas.Input` cannot see `AtlasBootContext`, so its installer is
-`Install(UnityEngine.Transform parent)` and returns the input service, which the root publishes. Class names of
-installers outside lane A are those of their pages; the order is binding.
+`AtlasApp.Build` makes the rows below in order. Each lane exposes one static installer per assembly (decided
+here); the calls the root makes are given in the table. It creates its systems under `boot.Systems`, publishes
+its services and adds its frame hooks. `Atlas.Input` cannot see `AtlasBootContext`, so its installer takes the
+head-locked parent and returns the input service, which the root publishes. The order is binding.
 
 | # | What is created | By | Lane | Under | Publishes · hooks |
 |---|---|---|---|---|---|
-| 0 | `Application.targetFrameRate = 60`, `Screen.sleepTimeout = NeverSleep` | `Atlas.Rendering.AtlasBoot`, `BeforeSceneLoad` (exists) | A | – | – |
-| 0 | Space registrations | each space assembly, `BeforeSceneLoad` (§5.1) | A, B, C | – | `SpaceRegistry` |
-| 1 | `AtlasServices.Clear()`; the `Atlas` objects of §8.1; `AtlasBootContext` | `AtlasBootstrap` | A | – | – |
-| 2 | `ParamRegistry` | `AtlasBootstrap` | A (type: D) | – | `ParamRegistry` |
-| 3 | Look: shaders found, palette built, shader globals at their defaults, `RenderSettings.skybox` | `AtlasPalette`, `AtlasLook` | A | – | – |
-| 4 | `MaterialPool` (256 instances) | `AtlasBootstrap` | A | – | `MaterialPool` |
-| 5 | `StereoRig`: `Atlas Head`, `Atlas Eyes`, eye cameras, `Hud` | `StereoRig` | A | `Main Camera` | `IStereoRig` |
-| 6 | `EyeTextures` (four sets), `Screen` camera, `LensBlit` | `AtlasBootstrap` | A | `Atlas/Screen` | – |
-| 7 | `PortalRenderer` | `AtlasBootstrap` | A | – | `PortalRenderer`; `IUploadStep` at step 14 |
-| 8 | `AtlasFrameLoop` (disabled until step 20) | `AtlasBootstrap` | A | `Systems/FrameLoop` | `IFrameLoop` |
-| 9 | Kernel: `new FlatWalkerKernel()` | `AtlasBootstrap` | A (type: B) | – | `IWalkerKernel` |
-| 10 | Input | lane C's input installer | C | `Systems/Input` | input service; `InputSenseStep` |
-| 11 | AR session set-up, pose pipeline, scan session, photo capture, world map | `Atlas.Scan` installer | C | `Systems/Scan` | `ISenseStep`, `IPoseFilterStep`; its services |
-| 12 | Bump Guard and its cue (the cue under `boot.Hud`) | `Atlas.Safety` installer | C | `Systems/BumpGuard` | `IBumpGuard`; the root wraps it in `BumpGuardStep` → `SetGuard` |
-| 13 | Room content | room content installer in `Atlas.Rendering` (lane C files) | C | `Atlas/Room` | `IRoomContent` |
-| 14 | Upload hooks of lane A, in this order: `AtlasLook`, `PortalRenderer`, `StereoRig` | `AtlasBootstrap` | A | – | `AddUpload` × 3 |
-| 15 | `QualityLadder`; `RenderParams` and `QualityBinding` declare the parameters of §9.6 | `AtlasBootstrap` | A | `Systems/Quality` | `IQualityState` |
-| 16 | `SpaceLab`; `SpaceRegistry.DeclareAllParams(registry)` | `AtlasBootstrap` | A | `Systems/SpaceLab` | `ISpaceHost` |
-| 17 | `CommandRouter` | `AtlasBootstrap` | A | – | `IOperatorCommands` |
-| 18 | Link client, parameter binding scan, perf probe, HUD, event log, asset client | `Atlas.Telemetry` installer | D | `Systems/Link`, `Systems/Telemetry`; HUD under `boot.Hud` | `IStateSink`, `IPerfSource`; `AddAfterFrame` × 2 (probe, then link) |
-| 19 | On-device menu; onboarding | installers in `App/Menu` (D) and `App/Onboarding` (C) | D, C | `Systems/Menu`, `Systems/Onboarding` | – |
-| 20 | `AddAfterFrame(QualityLadder)`, `AddAfterFrame(SpaceLab)`; the frame loop is enabled; `AtlasServices.Booted` | `AtlasBootstrap` | A | – | – |
+| 0 | `FramePacing.TargetFrameRate = 60`, `Screen.sleepTimeout = NeverSleep`, the developer watermark off; frame rate, VSync and screen MSAA re-asserted before every frame's rendering | `Atlas.Rendering.AtlasBoot`, `BeforeSceneLoad` | A | – | – |
+| 0 | Space registrations; `AppHooks` factories of the menu, onboarding and the perf tour | each assembly, `BeforeSceneLoad` (§5.1) | A, B, C, D | – | `SpaceRegistry`, `AppHooks` |
+| 1 | `AtlasServices.Clear()`; the `Atlas` objects of §8.1; `AtlasBootContext` | `AtlasApp` | A | – | `AtlasApp` |
+| 2 | `ParamRegistry` | `AtlasApp` | A (type: D) | – | `ParamRegistry` |
+| 3 | Look: palette built and bound, shader globals at their defaults, `RenderSettings.skybox` | `AtlasLook.Initialise()` | A | – | – |
+| 4 | `MaterialPool` (256 instances) | `MaterialPool.CreateDefault(AtlasApp.PoolCapacity)` | A | – | `MaterialPool` |
+| 5 | `LensModel` (screen size from `Screen.dpi`); `StereoRig`: `Atlas Head`, `Atlas Eyes`, eye cameras, `Hud`; `GuardedStereoRig`. The tracked camera stops drawing layers 6, 7 and 23 | `StereoRig.Create(boot.TrackedCamera, lens)` | A | `Main Camera` | `IStereoRig` (the guarded rig) |
+| 6 | `EyeTextureSet` (four sets), `Screen` camera, `LensBlit` | `new EyeTextureSet(Screen.width, Screen.height)`, `Bind`, `LensBlit.Create(root, rig, eyes, lens)` | A | `Atlas/Screen` | – |
+| 7 | – (no shared `PortalRenderer` in this build; §12.2) | – | A | – | – |
+| 8 | Kernel: `new FlatWalkerKernel()` | `AtlasApp` | A (type: B) | – | `IWalkerKernel` |
+| 9 | `FrameLoopCore`; `AtlasFrameLoop` (disabled until row 20) | `AtlasFrameLoop.Create(boot.Systems, core)` | A | `Systems/FrameLoop` | `IFrameLoop` |
+| 10 | Input | `AtlasInput.Install(boot.Hud, material)` | C | `boot.Hud` | `IAtlasInput` |
+| 11 | AR session set-up, pose sources and pipeline; scan session, room store, photo capture, world maps; then `InputSenseStep` | `ArPoseSystems.Create(boot, session, logs)`, `ScanSystems.Create(pose)`, each with `Publish(loop)` | C | `Systems` | `ISenseStep`, `IPoseFilterStep`; `IPosePipeline`, `IScanSession` and their own types; `AddSense(InputSenseStep)` |
+| 12 | Bump Guard and its cue (the cue under `boot.Hud`) | `SafetyInstaller.Install(boot, material)` | C | `Systems` | `IBumpGuard`; the root wraps it in `BumpGuardStep` → `SetGuard`. If it throws: `Display.HeadsetLocked` on a device |
+| 13 | Room content | `RoomContentInstaller.Install(boot, pool)` (`Atlas.Rendering.Room`, lane C files) | C | `Atlas/Room` | `IRoomContent` |
+| 14 | Upload hooks of lane A, in this order: `LookUploadStep`, `RigUploadStep` | `AtlasApp` | A | – | `AddUpload` × 2 |
+| 15 | `QualityLadder` round a `QualityApplier` on the eye textures | `AtlasApp` | A | – | `IQualityState` |
+| 16 | `GridSpace` registered as Home when there is no Home space; `SpaceLab` with `SceneSpaceLoader` and `SpaceStage`; then the parameters of §9.6 (`AppParams`) and `SpaceRegistry.DeclareAllParams(registry)` | `AtlasApp` | A | – | `ISpaceHost` |
+| 17 | `CommandRouter` | `AtlasApp` | A | – | `IOperatorCommands` |
+| 18 | Link client, perf probe, HUD, event log, pairing; the asset client; then `RoomHandOver`, `RehearsalFlow`, `DevOverlay` and the `dev.*` parameters | `TelemetryInstaller.Install(boot)`, `AssetClientInstaller.Install(boot, telemetry)`; `AtlasApp` | D, A | `Systems`; HUD under `boot.Hud` | `SetStateSink`; `IPerfSource`, `IEventLog`, `IObjectPhotoSink`; `AddAfterFrame` × 3 (probe, pump, HUD); `RoomHandOver` |
+| 19 | On-device menu, onboarding, perf tour | `AppHooks.CreateMenu()`, `CreateOnboarding()`, `CreatePerfTour()`, then `Install(app)` on each | D, C, A | `Systems` | their own |
+| 20 | `AddAfterFrame` × 5: `QualityLadder`, `RehearsalFlow`, `RoomHandOver`, `SpaceActionStep`, `SpaceLab`; `ParamRegistry.PushAll()`; the frame loop is enabled; `AtlasServices.MarkBooted()`; `FrameLoopCore.Seal()`; `Onboarding.Begin()` | `AtlasApp` | A | – | – |
 
-After step 20 onboarding owns the flow: permissions, pairing, scan, outline confirmation, headset prompt, then
-`ISpaceHost.SetRoom(room)`, `IStereoRig.SetMode(DisplayMode.Headset)` and `ISpaceHost.RequestSwitch(SpaceId.Home)`.
-The display starts in `DisplayMode.Hand` (§9.2).
+Rows 10 and 12 get one pooled material for head-locked content (fog weight 0, fade weight 0); the reticle and
+the cue use it only when their own shader is missing (§10.1).
 
-In the Spectator build (`ATLAS_SPECTATOR`) steps 5, 6, 10 to 12, 17 and 19 are skipped; lane D's page says what
-replaces them. Everything a space uses (steps 2 to 4, 7 to 9, 13 to 16) is present.
+The folders composed after the root (`App/Menu`, `App/Onboarding`, `App/PerfTour`) announce themselves the way
+a space does: one `RuntimeInitializeOnLoadMethod(BeforeSceneLoad)` method sets a factory in `AppHooks`.
+
+```csharp
+// File: App/Hooks/AppHooks.cs
+public interface IOnboardingFlow { bool OwnsFlow { get; } void Install(AtlasApp app); void Begin(); void Shutdown(); }
+public interface IAppMenu       { void Install(AtlasApp app); void Shutdown(); }
+public interface IPerfTour      { void Install(AtlasApp app); bool Running { get; } void Shutdown(); }
+
+public static class AppHooks
+{
+    public static Func<IOnboardingFlow> Onboarding;
+    public static Func<IAppMenu> Menu;
+    public static Func<IPerfTour> PerfTour;
+    public static IOnboardingFlow CreateOnboarding();   // an empty slot gives NullOnboarding
+    public static IAppMenu CreateMenu();                // NullMenu
+    public static IPerfTour CreatePerfTour();           // NullPerfTour
+    public static void Clear();
+}
+```
+
+After row 20 onboarding owns the flow when `IOnboardingFlow.OwnsFlow` is true: permissions, pairing, scan,
+outline confirmation, headset prompt, then `RoomHandOver.Activate(room, anchor)`,
+`IStereoRig.SetMode(DisplayMode.Headset)` and `RoomHandOver.EnterNow()` (`HandOver.AutoEnter` is false then).
+Otherwise `Atlas.App.RehearsalFlow` owns it: it runs the scan session or takes a fixture room (`dev.room`, or the
+room a replayed walk names), hands the room over with `AutoEnter` set and, off the device, puts the display in
+the headset view by itself unless `-atlasHand` was given. The display starts in `DisplayMode.Hand` (§9.2).
+
+`AtlasBootstrap` builds nothing in the Spectator build (`ATLAS_SPECTATOR`). Lane D's `SpectatorApp` composes its
+own root and publishes `ParamRegistry`, `MaterialPool`, `IWalkerKernel`, `ISpaceHost` and `IFrameLoop`; a space
+must not assume any other service is there (use `AtlasServices.TryGet`).
 
 No `Sys_*` scene is loaded. §9.3 of the plan reserves `Sys_Scan`, `Sys_BumpGuard`, `Sys_Onboarding`, `Sys_Link`
 and `Sys_Hud` for their owners; README F3 replaces them with installers, so they are not created (§12.3).
@@ -797,6 +1017,7 @@ of that page are given as "U §n".
 One URP asset, `Rendering/Settings/Atlas_URP_iOS.asset`, with one renderer, `Atlas_URP_iOS_Renderer.asset`. The
 tiers of `P1-A03` are rows of the ladder table (§9.5), not separate URP assets (decided here): a tier changes the
 eye-texture set and three numbers, and nothing in the URP asset.
+(differs from plan task P1-A03: one URP asset instead of the tier assets Nominal / Fair / Serious.)
 
 | Setting | Value | Source |
 |---|---|---|
@@ -809,14 +1030,16 @@ eye-texture set and three numbers, and nothing in the URP asset.
 | GPU Resident Drawer, dynamic and static batching, baked occlusion culling | off | §8.2 |
 | Renderer `intermediateTextureMode` | `Auto`. With `Always` any active feature costs a full-screen copy per eye (U §4) | §8.2 check |
 | Renderer `defaultStencilState.overrideStencilState` | false | U §4 |
-| Renderer features | Those of §12.2 only. No AR background feature on this renderer in headset mode (§9.2) | – |
-| Screen MSAA | `Screen.SetMSAASamples(1)` at boot; `Camera.allowMSAA = false` on the Screen camera (U §6.3) | – |
+| Renderer features | Those of §12.2, and the template's AR background feature, which stays because the hand-mode AR camera draws the camera image through this renderer. It enqueues its pass only for a camera with an enabled `ARCameraBackground`, so the eye and Screen cameras carry nothing from it (§9.2) | – |
+| Screen MSAA | `AtlasBoot.EnforceScreenMsaa()` before every frame's rendering: `Screen.SetMSAASamples(1)` whenever the screen has more; `Camera.allowMSAA = false` on the Screen camera (U §6.3) | – |
 | Watermark | `Watermark.showDeveloperWatermark = false` at boot, or URP stores the MSAA colour (U §6.4) | – |
-| Frame rate | `Application.targetFrameRate = 60`; VSync count 1; ProMotion off; "Adjust iOS FPS based on thermal state" off | §8.2, C.4 |
+| Frame rate | `FramePacing.TargetFrameRate` (60; 30 on `Critical`), written to `Application.targetFrameRate` by `AtlasBoot.ApplyPacing()` before every frame's rendering, with VSync count 1 at 60 and 2 at 30; ProMotion off; "Adjust iOS FPS based on thermal state" off | §8.2, C.4 |
 | AR session | `ARSession.matchFrameRateRequested = false`, or the session overwrites the frame rate every update (U §12.4). Set by lane C's AR set-up | – |
 | Unity fog, ambient probes, reflection probes | off; renderers use `lightProbeUsage = Off`, `reflectionProbeUsage = Off` | D23 |
 
-`AtlasProjectSetup` (lane A, Editor) writes every row that lives in an asset or in Project Settings.
+`AtlasProjectSetup` (lane A, Editor) writes every row that lives in an asset or in Project Settings. Its render
+part (`AtlasProjectSetup.ApplyRenderSetup()`: URP asset, renderer and features, layer names) also runs by itself
+when the Editor loads a project whose assets are behind the code, and at the start of every player build.
 
 **Rule for every lane: nothing may break the one native pass per eye** (§8.2). No second renderer feature, no
 `ScriptableRenderPass` that reads colour or depth, no `ConfigureInput`, no `requiresIntermediateTexture`, no camera
@@ -846,7 +1069,7 @@ namespace Atlas.Rendering
     public interface IStereoRig
     {
         DisplayMode Mode { get; }
-        /// <summary>Takes effect at the start of the next frame.</summary>
+        /// <summary>Switches between hand and headset display.</summary>
         void SetMode(DisplayMode mode);
 
         /// <summary>Distance between the eye cameras. Metres. Clamped to 0.055 .. 0.075. Default 0.064.</summary>
@@ -871,24 +1094,44 @@ namespace Atlas.Rendering
 }
 ```
 
+`StereoRig` (`Rendering/Stereo/StereoRig.cs`) is the component on `Atlas Head` that implements it. Beyond the
+interface it has:
+
+```csharp
+public const float DefaultIpd = 0.064f, MinIpd = 0.055f, MaxIpd = 0.075f;
+public const float NearPlane = 0.05f, FarPlane = 60f;
+/// <summary>Builds "Atlas Head", "Atlas Eyes", the two eye cameras and "Hud" under the tracked camera. Starts in Hand.</summary>
+public static StereoRig Create(Transform trackedCamera, LensModel lens);
+public LensModel Lens { get; }
+/// <summary>Raised by SetMode after the cameras have been switched.</summary>
+public event Action<DisplayMode> ModeChanged;
+/// <summary>The frustum of an eye as tangents, from the lens model.</summary>
+public EyeFrustum GetEyeFrustum(Eye eye);
+```
+
+`SetMode` switches the cameras at once. What `AtlasServices` publishes as `IStereoRig` is
+`Atlas.App.GuardedStereoRig`, which passes everything through to the rig except that `SetMode(Headset)` is
+refused while `HeadsetLocked` is set (a phone with no Bump Guard, §7.2 rule 2); `Refused` is called with the line
+to show.
+
 | Item | Value | Source |
 |---|---|---|
 | Eye offset | Local x = ∓`Ipd` / 2 under `Atlas Eyes`; no toe-in, parallel axes | D7: ±32 mm |
-| Projection | Symmetric. Vertical field of view **96°**, aspect **1398 / 1290** = 1.0837, so 50.3° to each side and 48° up and down | §8.5 "about 50° to each side and 48° up and down" (decided here) |
+| Projection | From `LensModel.GetProjection(eye, near, far)`, assigned to `Camera.projectionMatrix`: how far the eye sees through its lens to each edge of its half of the screen, clamped to 50.28° to each side and 48° up and down (`LensModel.MaxFovHorizontalDegrees`, `MaxFovVerticalDegrees`). With the default lens numbers the screen reaches past both limits, so the frustum is symmetric: vertical field of view **96°**, aspect **1398 / 1290** = 1.0837. It turns off-axis only where the screen ends before a limit (a narrow lens separation, a vertical lens offset) | §8.5 "about 50° to each side and 48° up and down" (decided here) |
 | Near, far | 0.05 m, 60 m (decided here). Fog is opaque long before the far plane (ρ·L is at most 10.6 m on the high tier) | – |
 | Camera order | `Camera.depth`: Eye Left 0, Eye Right 1, Screen 10; whole numbers, because URP sorts by `(int)depth` (U §6.2) | – |
 | Clear | Skybox: the background shader of §10.8. No AR camera background | §8.1 |
 | Culling mask | Every layer except `XR Simulation` and `AtlasSpectator` (§12.1) | – |
-| Camera data | `renderPostProcessing`, `renderShadows`, `requiresDepthTexture`, `requiresColorTexture`, `allowXRRendering` all false; `antialiasing` none; `renderType` Base | U §5 |
+| Camera data | `renderPostProcessing`, `renderShadows`, `requiresDepthTexture`, `requiresColorTexture`, `allowXRRendering` all false; `antialiasing` none; `renderType` Base; `allowMSAA` true (the eye texture's own sample count applies); `allowHDR`, dynamic resolution and occlusion culling off | U §5 |
 | Stereo API of `Camera` | Not used: no `stereoTargetEye`, no stereo matrices (U §12.1) | – |
 
 Display modes (decided here):
 
 | | `Hand` | `Headset` |
 |---|---|---|
-| `Main Camera` (AR) | `Camera` and `ARCameraBackground` enabled; draws the camera image and scan visuals full screen | `Camera` and `ARCameraBackground` disabled. `ARCameraManager` and `TrackedPoseDriver` keep running |
+| `Main Camera` (AR) | `Camera` and `ARCameraBackground` enabled; draws the camera image and scan visuals full screen. Its culling mask leaves out layers 6, 7 and 23, so head-locked content does not cover the scan picture | `Camera` and `ARCameraBackground` disabled. `ARCameraManager` and `TrackedPoseDriver` keep running |
 | Eye cameras, Screen camera | disabled | enabled |
-| Who switches | The app starts in `Hand`. Onboarding calls `SetMode(Headset)` at the headset prompt and `SetMode(Hand)` for a rescan | |
+| Who switches | The app starts in `Hand`. Onboarding, or `RehearsalFlow` when no onboarding owns the flow, calls `SetMode(Headset)` at the headset prompt and `SetMode(Hand)` for a rescan | |
 | UI | Screen-space UI allowed | **No screen-space overlay canvas may be active.** In-headset UI is world-space under `Hud` |
 | Frame loop | Runs in full (Bump Guard included) | Runs in full |
 
@@ -899,20 +1142,35 @@ and is zero until measured (open item 2).
 ### 9.3 Eye textures
 
 ```csharp
-// File: Rendering/Stereo/EyeTextures.cs
+// File: Rendering/Stereo/EyeTextureSet.cs
 namespace Atlas.Rendering
 {
-    /// <summary>The eye render textures: four sets allocated once at boot (Master Plan sections 8.2, 8.6).</summary>
-    public sealed class EyeTextures
+    /// <summary>What the quality ladder needs from the eye textures. Lets the ladder run with no engine.</summary>
+    public interface IEyeTextures
     {
-        public const int HalfScreenWidth = 1398;     // half of 2796 px, iPhone 14 and 15 Pro Max in landscape
-        public const int HalfScreenHeight = 1290;
+        float RenderScale { get; }                   // of the active set: 0.8, 0.7 or 0.6
+        int Msaa { get; }                            // of the active set: 4, 2 or 1
+        void Select(float renderScale, int msaa);
+    }
 
-        public float RenderScale { get; }            // of the active set: 0.8, 0.7 or 0.6
-        public int Msaa { get; }                     // of the active set: 4, 2 or 1
+    /// <summary>The eye render textures: four sets allocated once at boot (Master Plan sections 8.2, 8.6).</summary>
+    public sealed class EyeTextureSet : IEyeTextures, System.IDisposable
+    {
+        /// <summary>Allocates the four sets for a screen of the given pixel size (the longer side is the width).
+        /// Pass Screen.width and Screen.height; a size that is not positive gives the 1398 x 1290 half-screen.</summary>
+        public EyeTextureSet(int screenWidth, int screenHeight);
+
+        public int HalfScreenWidth { get; }
+        public int HalfScreenHeight { get; }
+        public float RenderScale { get; }
+        public int Msaa { get; }
         public UnityEngine.RenderTexture Left { get; }
         public UnityEngine.RenderTexture Right { get; }
+        public UnityEngine.Rendering.RTHandle LeftHandle { get; }    // what the lens pass imports
+        public UnityEngine.Rendering.RTHandle RightHandle { get; }
 
+        /// <summary>Gives the eye cameras their targets: now, and again after every swap.</summary>
+        public void Bind(UnityEngine.Camera leftCamera, UnityEngine.Camera rightCamera);
         /// <summary>
         /// Makes the set for (renderScale, msaa) the target of the eye cameras and the source of the lens blit.
         /// A preallocated set is swapped in with no allocation. Any other pair re-creates one custom set.
@@ -921,9 +1179,14 @@ namespace Atlas.Rendering
         public void Select(float renderScale, int msaa);
         /// <summary>Raised after a swap, with the new textures in place.</summary>
         public event System.Action Changed;
+        public void Dispose();
     }
 }
 ```
+
+Sizes and sample counts are the engine-free `EyeTextureLayout` (`Rendering/Stereo/EyeTextureLayout.cs`):
+`DefaultHalfWidth = 1398`, `DefaultHalfHeight = 1290`, `SetCount = 4`, `SetScale(set)`, `SetMsaa(set)`,
+`HalfScreen`, `SnapScale`, `SnapMsaa`, `Scaled`, `Size`, `FindSet`.
 
 | Set | Render scale | Size, px | MSAA | Memoryless | Rung that uses it | Resolved colour, both eyes |
 |---|---|---|---|---|---|---|
@@ -932,10 +1195,12 @@ namespace Atlas.Rendering
 | 2 | 0.6 | 838 × 774 | 2× | `MSAA \| Depth` | Serious | 5.2 MB |
 | 3 | 0.6 | 838 × 774 | off (1) | `Depth` | Critical | 5.2 MB |
 
-- Size = 2 · round(1398 · scale / 2) by 2 · round(1290 · scale / 2) (decided here: even sizes; the 0.8 row is
-  the plan's 1118 × 1032).
-- The half-screen size is the constant 1398 × 1290, not `Screen.width / 2`: both phones have a 2796 × 1290
-  screen, and `Screen.width` is not trusted in the first frame (U §12.3). In the Editor the same sizes are used.
+- Size = 2 · round(w · scale / 2) by 2 · round(h · scale / 2) for a half-screen of w × h, halves rounding up
+  (decided here: even sizes; the 0.8 row is the plan's 1118 × 1032). The table is for w × h = 1398 × 1290.
+- The half-screen is taken from the screen size given to the constructor: half the longer side by the shorter
+  side, so a size read before the landscape orientation has settled still gives the right answer (U §12.3). Both
+  phones have a 2796 × 1290 screen, which gives 1398 × 1290; that is also the fallback for a size that is not
+  positive. In the Editor the sizes follow the Game view.
 - Colour format `SystemInfo.GetGraphicsFormat(DefaultFormat.LDR)`: 8 bits per channel, sRGB (the project is
   linear). Depth-stencil format `SystemInfo.GetGraphicsFormat(DefaultFormat.DepthStencil)`: the stencil is needed
   for portals (U §6.1, §11). No mipmaps, `bindMS` false, clamp, bilinear.
@@ -945,7 +1210,7 @@ namespace Atlas.Rendering
   texture (U §6.4).
 - A `render.msaa` or `render.scale` value that matches no set (for example 0.8 with 2×) creates one custom set
   and releases the previous custom set. That allocates; the ladder never does it.
-- Nobody but `EyeTextures` assigns `Camera.targetTexture`.
+- Nobody but `EyeTextureSet` assigns `Camera.targetTexture` of the eye cameras.
 
 ### 9.4 Lens blit
 
@@ -953,10 +1218,10 @@ One full-screen pass, drawn by the `Screen` camera, samples both eye textures, a
 pre-distortion and upscales to the screen. It is the only full-screen pass in the app.
 
 ```csharp
-// File: Rendering/Stereo/LensBlit.cs
+// File: Rendering/Stereo/LensModel.cs
 namespace Atlas.Rendering
 {
-    /// <summary>Optics of the headset. Lengths in metres.</summary>
+    /// <summary>Optics of the headset as five numbers. Lengths in metres.</summary>
     public struct LensParams
     {
         public float K1;                // radial distortion, first coefficient
@@ -968,16 +1233,64 @@ namespace Atlas.Rendering
         public static LensParams Default { get; }
     }
 
+    /// <summary>The view frustum of one eye as four tangents, all positive.</summary>
+    public struct EyeFrustum { public float TanLeft, TanRight, TanDown, TanUp; }
+
+    /// <summary>The lens model: the distortion polynomial and its inverse, and the per-eye field of view and
+    /// projection that follow from the lens numbers and the physical screen. Engine-free. Shared by the rig
+    /// and the lens blit; Version changes with every edit.</summary>
+    public sealed class LensModel
+    {
+        public const float DefaultK1 = 0.34f, DefaultK2 = 0.55f, DefaultLensSeparation = 0.064f,
+                           DefaultScreenToLens = 0.039f, DefaultVerticalOffset = 0f;
+        public const float DefaultMaxFovHorizontalDegrees = 50.28f, DefaultMaxFovVerticalDegrees = 48f;
+        public const float DefaultScreenWidth = 0.1544f, DefaultScreenHeight = 0.0712f;
+
+        public int Version { get; }
+        public float K1 { get; set; }
+        public float K2 { get; set; }
+        public float LensSeparation { get; set; }
+        public float ScreenToLens { get; set; }
+        public float VerticalOffset { get; set; }
+        public float MaxFovHorizontalDegrees { get; set; }
+        public float MaxFovVerticalDegrees { get; set; }
+        public float ScreenWidth { get; set; }
+        public float ScreenHeight { get; set; }
+        public LensParams Params { get; set; }
+        /// <summary>Screen size from pixels and density. False, and the default size, when the density is unknown.</summary>
+        public bool SetScreenFromPixels(int widthPixels, int heightPixels, float pixelsPerInch);
+        public EyeFrustum GetFrustum(Eye eye);
+        public Unity.Mathematics.float4x4 GetProjection(Eye eye, float near, float far);
+        /// <summary>What the lens pass computes for one screen position. The shader repeats this arithmetic.</summary>
+        public Unity.Mathematics.float2 ScreenToEyeUv(Unity.Mathematics.float2 screenUv, bool distortion, out Eye eye);
+    }
+}
+
+// File: Rendering/Stereo/LensBlit.cs
+namespace Atlas.Rendering
+{
     public sealed class LensBlit : UnityEngine.MonoBehaviour
     {
-        /// <summary>False: plain side by side, no distortion, each eye texture stretched over its half.</summary>
+        public const string ShaderResource = "AtlasLensBlit";
+        public const string ShaderName = "Atlas/LensBlit";
+        public const int ScreenCameraOrder = 10;
+
+        /// <summary>Creates the "Screen" object under parent with the Screen camera and the lens pass.</summary>
+        public static LensBlit Create(UnityEngine.Transform parent, StereoRig rig, EyeTextureSet eyes, LensModel lens);
+        /// <summary>False: plain side by side, no distortion, each eye texture stretched over its half.
+        /// Starts true on a phone and false in the Editor.</summary>
         public bool Distortion { get; set; }
         public LensParams Lens { get; set; }
-        /// <summary>Physical size of the screen in landscape. Metres. From Screen.dpi; 0.1544 x 0.0712 when dpi is unknown.</summary>
+        public LensModel Model { get; }
+        /// <summary>Physical size of the screen in landscape. Metres.</summary>
         public Unity.Mathematics.float2 ScreenSizeMetres { get; }
+        public UnityEngine.Camera ScreenCamera { get; }
     }
 }
 ```
+
+The pass itself is `LensBlitPass` (`Rendering/Stereo/LensBlitPass.cs`), a render-graph raster pass that
+`LensBlit` enqueues for the Screen camera only, from `RenderPipelineManager.beginCameraRendering`.
 
 | Parameter | Default | Range in the registry | Where the default comes from |
 |---|---|---|---|
@@ -986,8 +1299,9 @@ namespace Atlas.Rendering
 | `LensSeparation` | 0.064 m | 0.055 to 0.075 | same; equals the default IPD (D7) |
 | `ScreenToLens` | 0.039 m | 0.025 to 0.060 | same |
 | `VerticalOffset` | 0 m | −0.02 to 0.02 | Lens centres at mid-height of the screen (decided here) |
-| `Distortion` | on | 0 or 1 | §8.2; off for the Editor and for hand checks |
-| Screen size | 0.1544 × 0.0712 m | – | 2796 × 1290 px at 460 px per inch |
+| `Distortion` | on a phone, off in the Editor | 0 or 1 | §8.2; off for the Editor and for hand checks |
+| Field-of-view limits | 50.28° to each side, 48° up and down | – (properties of `LensModel`, not in the registry) | §9.2 |
+| Screen size | From `Screen.width`, `Screen.height` and `Screen.dpi`; 0.1544 × 0.0712 m when the density is unknown or the long side is not between 0.10 and 0.20 m | – | 2796 × 1290 px at 460 px per inch |
 
 These are placeholders until the headset is measured (open item 1). They are registry parameters (§9.6), so they
 are tuned live in the headset with a straight-line grid and then baked.
@@ -998,14 +1312,17 @@ The mapping, for a screen pixel at (x, y) metres from the screen centre (x right
 c   = ( −LensSeparation / 2 for the left eye, +LensSeparation / 2 for the right ,  VerticalOffset )
 r   = ( (x, y) − c ) / ScreenToLens                    # tangent of the view angle before the lens
 r'  = r · ( 1 + K1·|r|² + K2·|r|⁴ )                    # tangent of the angle the eye sees
-uv  = 0.5 + r' / ( 2 · (tanH, tanV) )                  # tanV = tan(96° / 2) = 1.1106 ,  tanH = tanV · 1398 / 1290 = 1.2036
+uv  = ( r' + (tanLeft, tanDown) ) / ( tanLeft + tanRight , tanDown + tanUp )     # the frustum of eye e (section 9.2)
+      # with the defaults the frustum is symmetric and this is  0.5 + r' / ( 2 · (tanH, tanV) ),
+      # tanV = tan(96° / 2) = 1.1106 ,  tanH = tanV · 1398 / 1290 = 1.2036
 colour = eye texture e at uv,  black outside [0, 1]²
 with Distortion off:  uv = ( 2·u − (0 or 1) , v )  for screen uv (u, v)
 ```
 
-The eye camera's axis passes through the lens centre, so the same symmetric projection serves both eyes. The
-pass writes the back buffer directly (U §7), does the sRGB conversion itself when
-`Display.main.requiresSrgbBlitToBackbuffer` is true (U §11), and costs at most 1.0 ms of GPU time (`P1-A05`).
+The eye camera's axis passes through the lens centre, and the blit reads the same `EyeFrustum` the eye camera
+renders with, so the two always agree. The pass writes the back buffer directly (U §7), does the sRGB
+conversion itself when `Display.main.requiresSrgbBlitToBackbuffer` is true (U §11), and costs at most 1.0 ms of
+GPU time (`P1-A05`). `LensModel.ScreenToEyeUv` is the same arithmetic on the CPU, for tests.
 
 ### 9.5 Quality tiers and the thermal ladder
 
@@ -1038,11 +1355,16 @@ namespace Atlas.World
         public readonly float CullRho;       // fog radius rho, kernel units
         public readonly int GluedCopies;     // copies per side of the Glued lattice
         public readonly int FrameRate;       // 60 or 30
+        public QualityRow(QualityTier tier, float renderScale, int msaa, float cullRho, int gluedCopies, int frameRate);
     }
 
     public static class QualityTable
     {
+        public const int Count = 5;
+        /// <summary>The row of a tier. An undefined value gives the Nominal row.</summary>
         public static QualityRow Row(QualityTier tier);
+        /// <summary>Bits 4 to 5 of State.flags: 0 to 3; High is sent as 0.</summary>
+        public static byte ToWire(QualityTier tier);
     }
 
     /// <summary>The ladder as every lane reads it.</summary>
@@ -1086,12 +1408,22 @@ The ladder (§8.6):
 T³ is 3 × 3 × 3 on every rung. `State.flags` bits 4 to 5 carry the value 0 to 3; `High` is sent as 0 (it shares
 the Nominal texture set). `Telemetry.tier` carries the value 0 to 4 (decided here).
 
-Inputs and stepping rule. The rule is the engine-free `QualityLadderCore` (`Atlas.World`); `QualityLadder`
-(`Atlas.Rendering`) feeds it once per second at step 8b.
+Inputs and stepping rule. Three classes carry the ladder:
+
+- `Atlas.Rendering.LadderController` is the engine-free stepping rule the app runs.
+- `Atlas.Rendering.QualityApplier` owns one, polls the thermal state every 2 s, evaluates the rule once per
+  second (at once when the forced tier changes) and puts a tier into force: it swaps the eye-texture set, sets
+  `FramePacing.TargetFrameRate` and holds the rung's `CullRho` and `GluedCopies` as plain properties.
+- `Atlas.App.QualityLadder : IQualityState, IAfterFrameStep` wraps the applier, feeds it the perf probe's
+  percentiles at step 8b and publishes the tier in the `Atlas.World` types.
+
+`QualityTier`, `QualityRow`, `QualityTable` and `QualityInputs` exist once, in `Atlas.World`; `Atlas.Rendering`
+uses them. `QualityTable.Row` throws for an undefined tier. `QualityInputs` names the pin `PinTier`; the applier's
+own property is `QualityApplier.ForcedTier`.
 
 ```csharp
-// File: World/Quality/QualityLadderCore.cs
-namespace Atlas.World
+// File: Rendering/Quality/LadderController.cs
+namespace Atlas.Rendering
 {
     public struct QualityInputs
     {
@@ -1100,13 +1432,12 @@ namespace Atlas.World
         public bool PerfValid;         // IPerfSource present and HasData
         public float GpuP95Ms;         // IPerfSource.GpuP95Ms10s
         public float FrameP95Ms;       // IPerfSource.FrameP95Ms10s
-        public int PinTier;            // thermal.pinTier: -1 automatic, 0..4
+        public int ForcedTier;         // thermal.pinTier: -1 automatic, 0..4
     }
 
-    public sealed class QualityLadderCore
+    public sealed class LadderController
     {
         public const double DwellSeconds = 20.0;      // at most one automatic step per 20 s (section 8.6)
-        public const double ThermalPollSeconds = 2.0; // P1-A07
         public const float GpuToFairMs = 9f;          // section 8.6
         public const float GpuToSeriousMs = 12f;      // section 8.6
         public const float GpuBackToNominalMs = 6.5f; // hysteresis (proposed)
@@ -1114,65 +1445,124 @@ namespace Atlas.World
         public const float FrameMissMs = 17.2f;       // one vsync interval + 0.5 ms (section 11.2)
 
         public QualityTier Tier { get; }
-        /// <summary>Evaluates the rule. True when Tier changed.</summary>
+        public bool IsForced { get; }
+        /// <summary>Evaluates the rule once. True when Tier changed.</summary>
         public bool Step(in QualityInputs inputs);
         public void Reset(QualityTier tier = QualityTier.Nominal);
+    }
+}
+
+// File: Rendering/Quality/QualityApplier.cs
+namespace Atlas.Rendering
+{
+    public sealed class QualityApplier
+    {
+        public const double ThermalPollSeconds = 2.0; // P1-A07
+        public const double EvaluateSeconds = 1.0;
+
+        /// <summary>eyes may be null where there is no stereo rig. Starts on Nominal.</summary>
+        public QualityApplier(IEyeTextures eyes);
+        public QualityTier Tier { get; }
+        public QualityRow Row { get; }
+        public LadderController Ladder { get; }
+        public int ThermalState { get; }
+        /// <summary>-1 reads the device. 0 .. 3 replaces the device's thermal state: for rehearsal in the Editor.</summary>
+        public int ThermalOverride { get; set; }
+        /// <summary>-1: the ladder is automatic. 0 .. 4: this tier is forced, in force within one second.</summary>
+        public int ForcedTier { get; set; }
+        public float RenderScale { get; }
+        public int Msaa { get; }
+        public float CullRho { get; set; }
+        public int GluedCopies { get; set; }
+        public int FrameRate { get; }
+        public event System.Action<QualityTier> TierChanged;
+        public void SetPerf(bool valid, float gpuP95Ms, float frameP95Ms);
+        /// <summary>Once per frame, after the frame has been rendered, with the app clock in seconds.</summary>
+        public void Tick(double timeSeconds);
+        public void Reset();
+        public void Apply(QualityTier tier);
+    }
+}
+
+// File: App/Params/QualityLadder.cs
+namespace Atlas.App
+{
+    public sealed class QualityLadder : Atlas.World.IQualityState, Atlas.World.IAfterFrameStep
+    {
+        public QualityLadder(Atlas.Rendering.QualityApplier applier);
+        public Atlas.Rendering.QualityApplier Applier { get; }
+        /// <summary>Frame-time percentiles; null until the perf probe is published (thermal state alone then).</summary>
+        public Atlas.World.IPerfSource Perf { get; set; }
     }
 }
 ```
 
 ```text
-if PinTier ≥ 0:   Tier = PinTier at once (no dwell; within 1 s, P1-A07)                       # Console, menu
+if ForcedTier ≥ 0:   Tier = ForcedTier at once (no dwell; within 1 s, P1-A07)                 # Console, menu
 else, and only when Time − time of the last automatic step ≥ 20 s, move ONE rung:
   down (worse):  Nominal  → Fair      if thermal ≥ 1  or  GPU p95 > 9 ms
                  Fair     → Serious   if thermal ≥ 2  or  GPU p95 > 12 ms
                  Serious  → Critical  if thermal = 3  or  frame p95 > 17.2 ms               # "still missing 60 fps"
-  up (better):   Fair     → Nominal   if thermal = 0  and  GPU p95 < 6.5 ms
-                 Serious  → Fair      if thermal ≤ 1  and  GPU p95 < 8.0 ms
+  up (better):   Fair     → Nominal   if thermal = 0  and  PerfValid  and  GPU p95 < 6.5 ms
+                 Serious  → Fair      if thermal ≤ 1  and  PerfValid  and  GPU p95 < 8.0 ms
                  Critical → (never automatically; only by a pin or Reset at a new session)
-  a down condition is tested first; with PerfValid false only the thermal terms count
-  leaving a pin (PinTier back to −1) starts from the pinned rung, or from Nominal after High
+  a down condition is tested first; with PerfValid false only the thermal terms step down, and nothing steps up
+  leaving a pin (PinTier back to −1) starts from the pinned rung, or from Nominal after High,
+  and restarts the 20 s dwell
 ```
 
 - Hysteresis: the thermal state changes slowly by itself; the GPU term steps up only well below the threshold it
   stepped down at (9 ms at scale 0.8 is about 6.9 ms at scale 0.7). The two "back" values are proposed and are
   confirmed at G4.
 - A step allocates nothing: it swaps to a preallocated texture set and writes four numbers.
-- On `Critical` the ladder sets `Application.targetFrameRate = 30`, the HUD shows "Session over" and the event
-  `quality.critical` is logged. `State` then goes out at 30 Hz, one per frame (§7.2 of the plan).
-- A tier takes effect like this (README F6: `Atlas.Rendering` does not see the registry): `QualityLadder` raises
-  `TierChanged`; `Atlas.App.QualityBinding` writes the row's values into `render.scale`, `render.msaa`,
-  `curved.cullRho` and `glued.copies`; the parameters' own handlers apply them (`EyeTextures.Select`,
-  `IWalkerKernel.CullRho`, the Glued module). The registry therefore always shows what is in force, and
+- On `Critical` the applier sets `FramePacing.TargetFrameRate = 30` (VSync count 2) and lane D's HUD shows
+  "Session over" (`HudText.SessionOver`). `State` then goes out at 30 Hz, one per frame (§7.2 of the plan). The
+  ladder itself logs no event.
+- A tier takes effect like this (README F6: `Atlas.Rendering` does not see the registry): `QualityApplier` swaps
+  the eye-texture set itself (`IEyeTextures.Select`) and raises `TierChanged`; the handler that
+  `AppParams.DeclareRender` installed then writes what is in force back into `render.scale`, `render.msaa`,
+  `curved.cullRho` and `glued.copies`. The handler of `curved.cullRho` sets `IWalkerKernel.CullRho`; the Glued
+  module reads `glued.copies` from its handle. The registry therefore always shows what is in force, and
   `State.p[2]` follows. Between two tier changes a manual change of one of the four stands (§12.2 of the plan:
   "the Console can pin any rung").
 
 ### 9.6 Parameters declared by the composition root
 
-`Atlas.App.RenderParams` and `QualityBinding` declare these at boot and bind them to the plain properties above.
-Numeric ids are on lane D's page; the names, ranges and defaults are binding here.
+The static class `Atlas.App.AppParams` (`App/Params/AppParams.cs`) declares these at boot and binds them to the
+plain properties above: `DeclareSpace`, `DeclareRender`, `DeclareUnownedKillSwitches`, `DeclarePose`,
+`DeclareScan`, `DeclareInput`, `DeclareDev`. Each name is also a `public const string` there
+(`AppParams.RenderScale` = `"render.scale"` and so on). Numeric ids are on lane D's page (the wire id is the
+order of declaration); the names, ranges and defaults are binding here.
 
-| Name | Min | Max | Default | Unit | `onRelease` | Drives |
-|---|---|---|---|---|---|---|
-| `render.ipd` | 0.055 | 0.075 | 0.064 | m | no | `IStereoRig.Ipd` |
-| `render.scale` | 0.6 | 0.8 | 0.8 | – (0.6, 0.7, 0.8) | yes | `EyeTextures.Select` |
-| `render.msaa` | 1 | 4 | 4 | samples (1, 2, 4) | yes | `EyeTextures.Select` |
-| `render.lineWidth` | 0.5 | 3 | 1.5 | px | no | `AtlasLook.SetLineWidth` |
-| `render.lens` | 0 | 1 | 1 | off, on | no | `LensBlit.Distortion` |
-| `render.lensK1` | 0 | 1 | 0.34 | – | no | `LensParams.K1` |
-| `render.lensK2` | 0 | 1 | 0.55 | – | no | `LensParams.K2` |
-| `render.lensSeparation` | 0.055 | 0.075 | 0.064 | m | no | `LensParams.LensSeparation` |
-| `render.screenToLens` | 0.025 | 0.060 | 0.039 | m | no | `LensParams.ScreenToLens` |
-| `render.lensOffsetY` | −0.02 | 0.02 | 0 | m | no | `LensParams.VerticalOffset` |
-| `render.headOffsetX`, `…Y`, `…Z` | −0.10 | 0.10 | 0 | m | no | `IStereoRig.HeadOffset` |
-| `thermal.pinTier` | −1 | 4 | −1 | tier | yes | `QualityInputs.PinTier` |
-| `space.id` | 0 | 6 | 0 | space | yes | `ISpaceHost.RequestSwitch`; written back after every switch |
-| `curved.cullRho` | 2 | 3.5 | 3 | kernel units | no | `IWalkerKernel.CullRho`; written by the ladder |
-| `glued.copies` | 3 | 7 | 5 | per side (3, 5, 7) | yes | Glued lattice; written by the ladder |
+| Name | Group | Min | Max | Default | Unit | `onRelease` | Drives |
+|---|---|---|---|---|---|---|---|
+| `space.id` | `app` | 0 | 6 | 0 | space (enum) | yes | `ISpaceHost.RequestSwitch`; written back on `SpaceEntered`, and snapped back when a switch is refused. Ignored until the end of boot |
+| `thermal.pinTier` | `render` | −1 | 4 | −1 | tier | yes | `QualityApplier.ForcedTier` |
+| `render.scale` | `render` | 0.6 | 0.8 | 0.8 | – (0.6, 0.7, 0.8) | yes | `IEyeTextures.Select` |
+| `render.msaa` | `render` | 1 | 4 | 4 | samples (1, 2, 4) | yes | `IEyeTextures.Select` |
+| `render.ipd` | `render` | 0.055 | 0.075 | 0.064 | m | no | `IStereoRig.Ipd` |
+| `render.lineWidth` | `render` | 0.5 | 3 | 1.5 | px | no | `AtlasLook.SetLineWidth` |
+| `render.lens` | `render` | 0 | 1 | on a phone, off in the Editor | off, on (bool) | no | `LensBlit.Distortion` |
+| `render.lensK1` | `render` | 0 | 1 | 0.34 | – | no | `LensModel.K1` |
+| `render.lensK2` | `render` | 0 | 1 | 0.55 | – | no | `LensModel.K2` |
+| `render.lensSeparation` | `render` | 0.055 | 0.075 | 0.064 | m | no | `LensModel.LensSeparation` |
+| `render.screenToLens` | `render` | 0.025 | 0.060 | 0.039 | m | no | `LensModel.ScreenToLens` |
+| `render.lensOffsetY` | `render` | −0.02 | 0.02 | 0 | m | no | `LensModel.VerticalOffset` |
+| `render.headOffsetX`, `…Y`, `…Z` | `render` | −0.10 | 0.10 | 0 | m | no | `IStereoRig.HeadOffset` |
+| `curved.cullRho` | `curved` | 2 | 3.5 | 3 | kernel units | no | `IWalkerKernel.CullRho`; written by the ladder |
+| `glued.copies` | `glued` | 3 | 7 | 5 | per side (3, 5, 7) | yes | Glued lattice; written by the ladder |
+| `curved.mode`, `portal.depth`, `slicer.source`, `forge.backend` | `curved`, `portal`, `slicer`, `forge` | | | 0, 1, 0, 0 | | yes, no, yes, no | Nothing here: the kill switches of §12.4, declared only when their owner has not declared them, so the Console and the menu list them from the first frame |
+| `pose.gyroPredict`, `pose.gyroLeadMs` | `pose` | 0 | 60 (ms) | off, 40 | bool, ms | no | `IPosePipeline.GyroPredictMs` (the lead while the switch is on, else 0) |
+| `pose.source` | `pose` | 0 | 2 | 0 | `tracked`, `replay`, `walker` | yes | `PoseSourceSwitch.SetSource` |
+| `replay.speed`, `replay.loop`, `pose.record` | `pose` | 0 | 4 | 1, on, off | | no | `PoseSourceSwitch`, the pose log recorder |
+| `scan.route`, `scan.teamPrescan` | `scan` | 1 | 4 | 3, off | | no | `ScanSettings.Route`, `ScanSettings.TeamPrescan` |
+| `input.dwell` | `input` | 0.6 | 0.8 | 0.7 | s | no | `IAtlasInput.DwellSeconds` |
+| `dev.room` | `dev` | 0 | fixtures | `none`, or a fixture where there is no AR provider | enum | yes | The fixture RoomModel the rehearsal flow uses |
+| `dev.overlay` | `dev` | 0 | 1 | on in the Editor and in a debug build | bool | no | `DevOverlay.Visible` |
 
 `render.msaa` gains the value 1 and `glued.copies` the value 7 against §12.4, for the `Critical` and `High` rungs
-(decided here). `pose.gyroPredict` is lane C's parameter; the composition root copies the pipeline's prediction
-rotation into `IStereoRig.PredictionOffset` at step 6.
+(decided here). `RigUploadStep` copies the pipeline's `PredictionRotation` into `IStereoRig.PredictionOffset` at
+step 6. `ParamRegistry.PushAll()` at the end of boot pushes every value to its handler once.
 
 ---
 
@@ -1180,26 +1570,33 @@ rotation into `IStereoRig.PredictionOffset` at step 6.
 
 ### 10.1 Files and owners
 
-All under `Rendering/Shaders/`.
+Every shader sits in a `Resources` folder, so a player build includes it with nothing referencing it.
 
 | File | Shader name | Owner | Does |
 |---|---|---|---|
-| `AtlasSurface.shader` | `Atlas/Surface` | A | The one surface shader. One pass, `LightMode = UniversalForward`. Holds the vertex and fragment programs of §10.5 |
-| `AtlasCore.hlsl` | – | A | The `UnityPerMaterial` block, the globals, palette lookup, vertex shade, lines, fog, fade, dither |
-| `AtlasWarp.hlsl` | – | B | `AtlasWarp`: object position in, world position out. Identity in this build (lane B §5) |
-| `AtlasPortalClip.hlsl` | – | A | `AtlasPortalClip`: clip against a portal plane |
-| `AtlasGates.hlsl` | – | B | `AtlasGatesClip`: clip against up to four sight-line gates. No clip in this build (lane B §6) |
-| `AtlasBackground.shader` | `Hidden/Atlas/Background` | A | The gradient background, used as the skybox material |
-| `AtlasPortalMask.shader` | `Hidden/Atlas/PortalMask` | A | Doorway mask: stencil mark and depth reset |
-| `AtlasLensBlit.shader` | `Hidden/Atlas/LensBlit` | A | The lens blit of §9.4 |
-| `../Look/AtlasShaderIDs.cs` | – | A, with B | Every property id (§10.6) |
+| `Rendering/Shaders/Resources/AtlasSurface.shader` | `Atlas/Surface` | A | The one surface shader. One pass (`AtlasForward`), `LightMode = UniversalForward`. Holds the vertex and fragment programs of §10.5 |
+| `Rendering/Shaders/Resources/AtlasCore.hlsl` | – | A | The `UnityPerMaterial` block, the globals, palette lookup, vertex shade, lines, fog, fade, dither |
+| `Rendering/Shaders/Resources/AtlasWarp.hlsl` | – | B | `AtlasWarp`: object position in, world position out. Identity in this build (lane B §5) |
+| `Rendering/Shaders/Resources/AtlasPortalClip.hlsl` | – | A | `AtlasPortalClip`: clip against a portal plane |
+| `Rendering/Shaders/Resources/AtlasGates.hlsl` | – | B | `AtlasGatesClip`: clip against up to four sight-line gates. No clip in this build (lane B §6) |
+| `Rendering/Shaders/Resources/AtlasBackground.shader` | `Hidden/Atlas/Background` | A | The gradient background, used as the skybox material |
+| `Rendering/Portals/Resources/AtlasPortalMask.shader` | `Hidden/Atlas/PortalMask` | A | Doorway mask: stencil mark and depth reset |
+| `Rendering/Stereo/Resources/AtlasLensBlit.shader` | `Atlas/LensBlit` | A | The lens blit of §9.4 |
+| `Rendering/Look/AtlasShaderIDs.cs` | – | A, with B | The property ids of the look, the warp and the portals (§10.6) |
 
 - An include is edited only by its owner. `AtlasShaderIDs.cs` is edited by lane A in this build; lane B's ids
-  are already in it. An id is added or changed only after all four lanes are told (§6.4).
-- The four shaders reach the player through `Rendering/Resources/AtlasShaderSet.asset`, a `ScriptableObject`
-  that references them, written by `AtlasProjectSetup` and loaded with `Resources.Load` at boot (decided here;
-  `Shader.Find` is not relied on, U §9). **No other lane loads a shader or creates a `Material`.** Materials come
-  from `MaterialPool`.
+  are already in it. An id is added or changed only after all four lanes are told (§6.4);
+  `docs/scene-ownership.md` says the same.
+- The shaders reach the player through their `Resources` folders and are loaded by file name at boot:
+  `Resources.Load<Shader>("AtlasSurface")` and `("AtlasBackground")` (`AtlasLook.LoadSurfaceShader`,
+  `LoadBackgroundShader`), `("AtlasPortalMask")` (`PortalRenderer.MaskShaderResource`) and `("AtlasLensBlit")`
+  (`LensBlit.ShaderResource`). There is no shader-set asset; `Shader.Find` is only the lens blit's second try
+  (U §9). **No other lane loads `Atlas/Surface` or creates a material of it.** Materials come from
+  `MaterialPool`.
+- Three shaders outside `Atlas.Rendering` exist in the code, each loaded from `Resources` by its owner:
+  `Input/Resources/AtlasReticle.shader` (the gaze reticle), `Safety/Resources/AtlasCue.shader` (the warning
+  cue, which must not depend on the look) and `Telemetry/Map/Resources/AtlasFlatTwin.shader` (the flat-twin
+  map). They are not part of this contract; README F7 still names one shader.
 - No keyword, no `multi_compile`, no `shader_feature` in any of them: one variant per pass (`Shader_Contract`:
   at most 8). A new keyword is a request to lane A (README F7).
 - `Atlas/Surface` has no shadow, depth-only, meta or motion-vector pass. With the settings of §9.1 URP draws
@@ -1237,6 +1634,12 @@ namespace Atlas.Kernel
         public float2 Uv0;        // offset 28   TEXCOORD0  Float32 x 2
         public float2 Uv1;        // offset 36   TEXCOORD1  Float32 x 2
 
+        /// <summary>Size of one vertex in bytes.</summary>
+        public const int Stride = 44;
+        /// <summary>The baked shade, COLOR.r.</summary>
+        public byte Shade { get; }
+        /// <summary>The line weight, COLOR.g.</summary>
+        public byte LineWeight { get; }
         /// <summary>R = shade, G = line weight, B = 255, A = 255.</summary>
         public static uint PackColor(byte shade, byte lineWeight = 255);
     }
@@ -1286,12 +1689,16 @@ namespace Atlas.Kernel
 **The 0.25 m rule.** No edge longer than 0.25 m on anything that can stand in a curved space (§8.4): the room
 shell, placeholder boxes, generated and built-in furniture, authored props, and the flat variant of a tile.
 Exempt, because they are never warped: Glued cell frames, the virtual rooms of S5, slices of S6, anything on the
-`AtlasHud` layer. `MeshData.LongestEdge()` is the test.
+`AtlasHud` layer. The code has two measures. The grid generators (`AddQuadGrid`, `AddBox`, `AddFloorGrid`) cut
+cell **sides** to at most `maxEdge`, so a cell diagonal reaches 0.354 m; `LongestSide()` measures that.
+`AtlasMeshBuilder.Subdivide()` is the strict pass, after which `LongestEdge()` (diagonals included) is at most
+0.25 m, at about twice the triangles; the room shell's floor uses the strict rule.
 
-Helpers every generator may use:
+Helpers every generator may use. The two classes have the same core members; `AtlasMeshBuilder` is the one
+`AtlasMesh` takes.
 
 ```csharp
-// File: World/Meshing/MeshData.cs   (engine-free)
+// File: World/Meshing/MeshData.cs   (engine-free; for assemblies that may not reference Atlas.Rendering)
 using Atlas.Kernel;
 using Unity.Mathematics;
 
@@ -1300,6 +1707,8 @@ namespace Atlas.World
     /// <summary>A growable vertex and index list in the AtlasVertex layout.</summary>
     public sealed class MeshData
     {
+        public const float DefaultMaxEdge = 0.25f;
+
         public AtlasVertex[] Vertices;      // valid up to VertexCount
         public int VertexCount;
         public int[] Indices;               // valid up to IndexCount
@@ -1309,6 +1718,7 @@ namespace Atlas.World
         public MeshData(int vertexCapacity = 1024, int indexCapacity = 4096);
         public int TriangleCount { get; }
         public void Clear();
+        public void Reserve(int moreVertices, int moreIndices);
         public int AddVertex(in AtlasVertex vertex);
         public void AddTriangle(int a, int b, int c);
 
@@ -1320,17 +1730,62 @@ namespace Atlas.World
         /// </summary>
         public void AddQuadGrid(float3 origin, float3 u, float3 v, float2 uv0,
                                 float2 line0, float2 lineU, float2 lineV,
-                                float ambientOcclusion = 1f, byte lineWeight = 255, float maxEdge = 0.25f);
+                                float ambientOcclusion = 1f, byte lineWeight = 255, float maxEdge = DefaultMaxEdge);
 
-        /// <summary>A box standing on its base centre, turned by yaw about +Y (Unity's sense), five or six faces.</summary>
+        /// <summary>A box standing on its base centre, turned by yaw about +Y (Unity's sense), five or six faces.
+        /// size is (w along local X, h up, d along local Z). Line coordinates are zero.</summary>
         public void AddBox(float3 baseCentre, float3 size, float yaw, float2 uv0,
-                           bool withBottom = false, byte lineWeight = 0, float maxEdge = 0.25f);
+                           bool withBottom = false, byte lineWeight = 0, float maxEdge = DefaultMaxEdge);
 
         /// <summary>Length of the longest triangle edge. Metres.</summary>
         public float LongestEdge();
     }
 }
 ```
+
+```csharp
+// File: Rendering/Look/AtlasMeshBuilder.cs   (engine-free code in Atlas.Rendering)
+namespace Atlas.Rendering
+{
+    /// <summary>The same list with every generator of the look. Members beyond MeshData's:</summary>
+    public sealed class AtlasMeshBuilder
+    {
+        public const float MaxEdge = 0.25f;       // the default maxEdge
+        public const float GridMetres = 0.5f;     // spacing of the floor grid lines
+
+        public bool IsEmpty { get; }
+        public float3 BoundsCentre { get; }
+        public float3 BoundsSize { get; }
+        public void Reserve(int vertices, int indices);
+        public void Append(AtlasMeshBuilder other);
+        /// <summary>One quad of two triangles, with no line coordinates: for things that are never warped.</summary>
+        public void AddQuad(float3 origin, float3 u, float3 v, float2 uv0,
+                            float ambientOcclusion = 1f, byte lineWeight = 0);
+        /// <summary>A horizontal rectangle at height y facing up, gridded, with line coordinates in world metres
+        /// divided by lineSpacing, so neighbouring floors line up.</summary>
+        public void AddFloorGrid(float2 min, float2 max, float y, float2 uv0,
+                                 float lineSpacing = GridMetres, float ambientOcclusion = 1f,
+                                 byte lineWeight = 255, float maxEdge = MaxEdge);
+        /// <summary>As MeshData.AddBox, with line coordinates in metres / GridMetres and a darkened base row.</summary>
+        public void AddBox(float3 baseCentre, float3 size, float yaw, float2 uv0,
+                           bool withBottom = false, byte lineWeight = 0, float maxEdge = MaxEdge,
+                           float baseOcclusion = 1f);
+        // Also AddVertex(position, normal, uv0, lineCoord, ...), AddPost, AddExtrudedOutline, AddOutlineCap.
+        /// <summary>The strict pass: splits triangles until no edge is longer than maxEdge. Crack-free.
+        /// Returns the number of triangles added.</summary>
+        public int Subdivide(float maxEdge = MaxEdge, int firstIndex = 0);
+        /// <summary>Length of the longest triangle edge, diagonals included. Metres.</summary>
+        public float LongestEdge();
+        /// <summary>Length of the longest grid side: over all triangles, the longer of the two shorter edges.</summary>
+        public float LongestSide();
+        public bool WithinBudget(int triangles);
+    }
+}
+```
+
+`AtlasMeshBudget` (`Rendering/Look/AtlasMeshBudget.cs`) holds the triangle budgets of §15 as constants
+(`FrameTriangles`, `HomeShell`, `GluedCell`, `PortalRoom`, `SelfAvatar`, `BuiltInFurniture`, `FurnitureTotal`)
+and the counting helpers `Segments`, `QuadGridTriangles` and `BoxTriangles`.
 
 ```csharp
 // File: Rendering/Look/AtlasMesh.cs
@@ -1340,13 +1795,15 @@ namespace Atlas.Rendering
     {
         /// <summary>Position, Normal, Color (UNorm8 x 4), TexCoord0, TexCoord1; all in stream 0.</summary>
         public static readonly UnityEngine.Rendering.VertexAttributeDescriptor[] Layout;
+        /// <summary>The most vertices a mesh with 16-bit indices can hold.</summary>
+        public const int MaxVertices16 = 65535;
         /// <summary>A new Mesh with the data, bounds from the data, UInt16 or UInt32 indices as needed.</summary>
-        public static UnityEngine.Mesh Create(Atlas.World.MeshData data, string name);
+        public static UnityEngine.Mesh Create(AtlasMeshBuilder data, string name);
         /// <summary>Replaces the contents of an existing mesh. Allocates nothing when the counts fit.</summary>
-        public static void Apply(Atlas.World.MeshData data, UnityEngine.Mesh mesh);
+        public static void Apply(AtlasMeshBuilder data, UnityEngine.Mesh mesh);
         /// <summary>For meshes rewritten every frame: fixed capacity, UInt32 indices, MarkDynamic.</summary>
         public static UnityEngine.Mesh CreateDynamic(string name, int vertexCapacity, int indexCapacity);
-        /// <summary>Uploads the first counts of the arrays and sets the bounds. No allocation.</summary>
+        /// <summary>Uploads the first counts of the arrays into a mesh from CreateDynamic and sets the bounds. No allocation.</summary>
         public static void Upload(UnityEngine.Mesh mesh,
                                   Unity.Collections.NativeArray<Atlas.Kernel.AtlasVertex> vertices, int vertexCount,
                                   Unity.Collections.NativeArray<int> indices, int indexCount,
@@ -1390,6 +1847,11 @@ CBUFFER_END
 | `_SurfaceParams` | (1, 1, 0, 1) | yes |
 | `_WarpMode` | 0 | yes |
 | `_Cull` | 2 (Back); 0 = Off, 1 = Front | yes. Render state only (`Cull [_Cull]`), not in the block |
+| `_StencilRef` | 0 | yes. Render state only (`Stencil { Ref [_StencilRef] … }`), not in the block |
+| `_StencilComp` | 8 (Always); 3 = Equal | yes. Render state only. The pass never writes the stencil (pass, fail and depth-fail are Keep) |
+
+`Atlas/Surface` carries the stencil test itself, so a room behind a doorway can be drawn either by a Render
+Objects feature with a stencil override (§12.2), which replaces this block, or by `MaterialPool.SetStencil`.
 
 There is no per-material texture: the palette is a global. Per-tile, per-room and per-object data live in this
 block, one pooled material instance each. Camera-wide data are globals. **No `MaterialPropertyBlock`** (D14).
@@ -1400,16 +1862,19 @@ Declared in `AtlasCore.hlsl` outside the block. Set only by the owner named; eve
 
 | Name | HLSL type | Meaning | Default | Set by | When |
 |---|---|---|---|---|---|
-| `_AtlasPalette` | `Texture2D` + `sampler_AtlasPalette` | The palette (§10.7) | – | `AtlasPalette` | boot |
+| `_AtlasPalette` | `Texture2D` + `sampler_AtlasPalette` | The palette (§10.7) | – | `AtlasPaletteTexture.Bind` | boot |
 | `_HeadPosWS` | `float4` | xyz = raw head position, world, metres: the eye midpoint, one value for both eyes. w unused | (0, 1.6, 0, 0) | `AtlasLook.Upload` | step 6 |
 | `_HypL` | `float` | `IWalkerKernel.MetresPerUnit`: L, or R on the sphere. Metres per kernel unit, above 0 | 1 | `AtlasLook.Upload` | step 6 |
 | `_AtlasFogColor` | `float4` | rgb linear. Also the colour of the background at and below the horizon | palette `FogBase` | `AtlasLook` | on change; cross-fade at step 6 |
 | `_AtlasFogParams` | `float4` | x = fog start, metres from the head on the floor; y = 1 / (end − start); z, w unused | (8, 1/6, 0, 0) | `AtlasLook.SetFog` | on change |
 | `_AtlasSkyTop` | `float4` | rgb linear: the background at the zenith | palette `SkyTop` | `AtlasLook` | on change |
-| `_AtlasShade` | `float4` | x = darkest shade a vertex can have (0.25); y = global emissive gain (1); z, w unused | (0.25, 1, 0, 0) | `AtlasLook` | boot |
+| `_AtlasShade` | `float4` | x = darkest shade a vertex can have (0.25, `AtlasLookState.DarkestShade`); y = global emissive gain (1); z, w unused | (0.25, 1, 0, 0) | `AtlasLook` (`SetEmissiveGain`) | boot |
 | `_AtlasLineWidth` | `float` | Line width unit, pixels of the eye texture | 1.5 | `AtlasLook.SetLineWidth` | on change |
 | `_AtlasFade` | `float` | 1 = world visible, 0 = world black. Scales surfaces whose fade weight is 1, and the background | 1 | `AtlasLook.SetFade` (SpaceLab only) | step 6 |
 | `_AtlasTime` | `float` | `FrameContext.Time` modulo 3,600, seconds. For pulsing accents | 0 | `AtlasLook.Upload` | step 6 |
+
+`AtlasLook.Upload` writes every global of this table again at step 6, so the look survives anything that resets
+shader state.
 
 URP's own globals (`_WorldSpaceCameraPos`, the view and projection matrices) are per eye and may be read. The
 fog, the warp and the head-centred effects use `_HeadPosWS`, never the eye position, so both eyes agree.
@@ -1424,6 +1889,9 @@ half3 AtlasPaletteColor(float2 uv0);
 
 // True when uv0 lies in the emissive block of the palette (uv0.y >= 0.75).
 bool AtlasIsEmissive(float2 uv0);
+
+// Coverage of the lines at the integers of coord, per axis, for a line widthPixels wide. coordPerPixel is fwidth(coord).
+float2 AtlasLineAxes(float2 coord, float2 coordPerPixel, float widthPixels);
 
 // Coverage 0..1 of the grid and edge lines at these line coordinates. Anti-aliased with fwidth.
 // lineWeight is COLOR.g. Returns 0 when both strengths in _LineParams are 0.
@@ -1517,8 +1985,10 @@ aliasing, so it is stable in both eyes.
 ### 10.6 `AtlasShaderIDs`
 
 File `Rendering/Look/AtlasShaderIDs.cs`, namespace `Atlas.Rendering`. Each member is
-`public static readonly int X = Shader.PropertyToID("…")`. This is the complete list; nobody calls
-`Shader.PropertyToID` elsewhere.
+`public static readonly int X = Shader.PropertyToID("…")`. This is the complete list of the class. Two places
+keep ids of their own: the lens blit (`LensBlit` and `LensBlitPass` hold private ids for `_LensScreen`, `_LensK`,
+`_LensFrustumL`, `_LensFrustumR`, `_EyeL`, `_EyeR`), and `PortalRenderer`, which sets the mask shader's
+`_StencilPass`, `_MaskZTest`, `_MaskZWrite` and `_MaskParams` by name when a mask material is made.
 
 | Member | Property | Kind | Set with | Owner |
 |---|---|---|---|---|
@@ -1542,18 +2012,27 @@ File `Rendering/Look/AtlasShaderIDs.cs`, namespace `Atlas.Rendering`. Each membe
 | `LineWidth` | `_AtlasLineWidth` | global | `Shader.SetGlobalFloat` | A |
 | `Fade` | `_AtlasFade` | global | `Shader.SetGlobalFloat` | A |
 | `Time` | `_AtlasTime` | global | `Shader.SetGlobalFloat` | A |
-| `StencilRef` | `_StencilRef` | render state of `Hidden/Atlas/PortalMask` | `Material.SetFloat` | A |
-| `EyeLeft`, `EyeRight` | `_AtlasEyeLeft`, `_AtlasEyeRight` | lens blit textures | `Material.SetTexture` | A |
-| `LensK` | `_AtlasLensK` | lens blit: (K1, K2, distortion on = 1, 0) | `Material.SetVector` | A |
-| `LensGeometry` | `_AtlasLensGeometry` | lens blit: (screen width, screen height, lens separation, vertical offset), each ÷ `ScreenToLens` | `Material.SetVector` | A |
-| `LensFov` | `_AtlasLensFov` | lens blit: (tanH, tanV, 0, 0) | `Material.SetVector` | A |
+| `StencilRef` | `_StencilRef` | render state of `Atlas/Surface` and of `Hidden/Atlas/PortalMask` | `Material.SetFloat` | A |
+| `StencilComp` | `_StencilComp` | render state of the same two shaders | `Material.SetFloat` | A |
+| `EyeLeft`, `EyeRight`, `LensK`, `LensGeometry`, `LensFov` | `_AtlasEyeLeft`, `_AtlasEyeRight`, `_AtlasLensK`, `_AtlasLensGeometry`, `_AtlasLensFov` | Declared, but no shader has these properties and nothing sets them | – | A |
+
+What the lens blit shader (`Atlas/LensBlit`) really reads, set by `LensBlit` and `LensBlitPass`:
+
+| Property | Content |
+|---|---|
+| `_EyeL`, `_EyeR` | The two eye textures of the active set |
+| `_LensScreen` | (screen width, screen height, half the lens separation, vertical offset), each ÷ `ScreenToLens` |
+| `_LensK` | (K1, K2, distortion on = 1, write sRGB by hand = 1) |
+| `_LensFrustumL`, `_LensFrustumR` | (tanLeft, tanDown, 1 / (tanLeft + tanRight), 1 / (tanDown + tanUp)) of each eye |
 
 Vectors are passed as `Vector4`; a `float4` converts implicitly. A colour is passed linear.
 
 ### 10.7 The palette
 
-One texture, 128 × 128, `R8G8B8A8_SRGB`, no mipmaps, no compression, bilinear, clamp. Built in code at boot by
-`AtlasPalette` from the table below (README F3: no hand-painted file) and bound as `_AtlasPalette`.
+One texture, 128 × 128, RGBA8 sRGB, no mipmaps, no compression, point filtered, clamp. `AtlasPalette`
+(engine-free) holds the table below and writes the pixels; `AtlasPaletteTexture.Bind()` builds the texture at
+boot (README F3: no hand-painted file) and binds it as `_AtlasPalette`. The strips are generated per texel, so
+they step once per texel.
 
 ```csharp
 // File: Rendering/Look/AtlasPalette.cs
@@ -1562,6 +2041,15 @@ namespace Atlas.Rendering
     public static class AtlasPalette
     {
         public const int Size = 128, CellsPerSide = 16, CellPixels = 8;
+        public const int CellCount = CellsPerSide * CellsPerSide;
+        public const int EmissiveRow = 12;
+        public const float EmissiveV = 0.75f;
+        public const int CategoryBase = 32, CategoryCount = 32;
+        public const int ObjectBase = 64, ObjectCount = 64;
+        public const int RegionBase = 128, RegionCount = 4, RegionSteps = 4;
+        public const int Cell4DBase = 208, Cell4DCount = 32;
+        /// <summary>Gradient strips: rows, for StripUv.</summary>
+        public const int StripWarm = 9, StripCool = 10, StripDepth = 11, StripW = 15;
 
         /// <summary>Palette coordinate of the centre of cell index (0..255).</summary>
         public static Unity.Mathematics.float2 Uv(int index);
@@ -1569,6 +2057,14 @@ namespace Atlas.Rendering
         public static Unity.Mathematics.float2 StripUv(int row, float t);
         /// <summary>The colour of a cell in linear rgb, for values that go into _BaseTint, fog or line colour.</summary>
         public static Unity.Mathematics.float3 Linear(int index);
+        /// <summary>The colour of a cell in sRGB, 0..1, at the cell's centre.</summary>
+        public static Unity.Mathematics.float3 Srgb(int index);
+        /// <summary>Object colour cell (lane D's AssetReady.palette): ObjectBase + 16 * valueStep + column.</summary>
+        public static int Object(int column, int valueStep);
+        /// <summary>True when the cell lies in the emissive rows 12 to 15.</summary>
+        public static bool IsEmissive(int index);
+        /// <summary>Writes the whole palette as RGBA8, sRGB encoded, row 0 (the bottom row) first: Size * Size * 4 bytes.</summary>
+        public static void WritePixels(byte[] rgba);
         /// <summary>Tint cell of an object category (0..31): CategoryBase + category.</summary>
         public static int Category(int category);
         /// <summary>Cell of region r (0..3) at lightness step t (0..3): RegionBase + 4 * r + t.</summary>
@@ -1640,7 +2136,7 @@ Named cells (sRGB values; lane A may retune a value without notice, the index an
 | 204 | `Reticle` | #FFFFFF | Gaze reticle |
 | 205 | `SliceEdge` | #FFFFFF | Outline of a 4D slice |
 | 206 | `GridLine` | #6FA8C8 | Default `_LineColor` |
-| 207 | – | – | Spare |
+| 207 | `Spare` | #000000 | Spare |
 
 A GLB stores v downwards and glTFast flips it on import (`com.unity.cloud.gltfast`, `Runtime/Scripts/Jobs.cs`:
 `tmp.y = 1 - tmp.y`), so the Forge writes `TEXCOORD_0 = (u, 1 − v)` for a cell whose Unity coordinate is (u, v).
@@ -1673,6 +2169,18 @@ namespace Atlas.Rendering
     {
         public const float DefaultFogStart = 8f, DefaultFogEnd = 14f;   // metres
         public const float FogCrossFadeSeconds = 1f;
+        /// <summary>Resources names of the two shaders of the look.</summary>
+        public const string SurfaceShaderResource = "AtlasSurface", BackgroundShaderResource = "AtlasBackground";
+
+        /// <summary>The values last written to the shader.</summary>
+        public static AtlasLookState State { get; }
+        /// <summary>Boot: builds and binds the palette, sets every global to its default and installs the background.</summary>
+        public static void Initialise();
+        /// <summary>Atlas/Surface, loaded from Resources. Null if missing.</summary>
+        public static UnityEngine.Shader LoadSurfaceShader();
+        public static UnityEngine.Shader LoadBackgroundShader();
+        /// <summary>Makes the gradient the scene's skybox. Returns the material, or null when the shader is missing.</summary>
+        public static UnityEngine.Material InstallBackground();
 
         /// <summary>Fog ramp in metres from the head, on the floor. end must exceed start.</summary>
         public static void SetFog(float startMetres, float endMetres);
@@ -1684,14 +2192,20 @@ namespace Atlas.Rendering
         public static void SetLineWidth(float pixels);
         /// <summary>World fade 0..1. SpaceLab only.</summary>
         public static void SetFade(float fade);
+        /// <summary>Global gain of the emissive accents; 1 by default.</summary>
+        public static void SetEmissiveGain(float gain);
         /// <summary>Defaults for a new space: default fog, FogBase and SkyTop colours, immediate. SpaceLab only.</summary>
         public static void ResetForSpace();
-        /// <summary>Step 6: _HeadPosWS, _HypL (from IWalkerKernel.MetresPerUnit), _AtlasTime, the fog cross-fade.
-        /// Called by the composition root's first upload hook.</summary>
-        public static void Upload(in Atlas.World.FrameContext frame, double metresPerUnit);
+        /// <summary>Step 6: the head position, the metres per kernel unit, the time and the fog cross-fade.
+        /// Writes every global. Called by the composition root's first upload hook (LookUploadStep) with
+        /// frame.RawHeadPosition, IWalkerKernel.MetresPerUnit, frame.Time and frame.DeltaTime.</summary>
+        public static void Upload(float3 headPositionWS, double metresPerUnit, double timeSeconds, float dt);
     }
 }
 ```
+
+The values and the fog cross-fade are the engine-free struct `AtlasLookState`
+(`Rendering/Look/AtlasLookState.cs`), which tests step with no engine.
 
 A space calls `SetFog`, `SetFogColor` and `SetSkyTop` in `Enter` or later; it never calls `Shader.SetGlobal…`
 itself. Lane B's spaces set the fog from ρ and L the same way.
@@ -1712,16 +2226,43 @@ namespace Atlas.Rendering
         /// <param name="surface">The Atlas/Surface shader.</param>
         /// <param name="capacity">Instances created up front. The composition root passes 256.</param>
         public MaterialPool(Shader surface, int capacity);
+        /// <summary>A pool on the shader loaded from Resources. Throws when the shader is not in the build.</summary>
+        public static MaterialPool CreateDefault(int capacity = 256);
 
         /// <summary>A material with every property at the default of section 10.3. Never null.</summary>
         public Material Rent();
         /// <summary>Gives a material back. It is reset and reused; never destroy a rented material.</summary>
         public void Return(Material material);
-        /// <summary>Sets every property of section 10.3 to its default.</summary>
+        /// <summary>True when the pool made the material and it is rented now.</summary>
+        public bool Owns(Material material);
+        /// <summary>Destroys every instance. For shutdown and tests; the pool is unusable afterwards.</summary>
+        public void Dispose();
+        /// <summary>Sets every per-material property and render-state value to its default.</summary>
         public static void ResetToDefaults(Material material);
 
         public int Capacity { get; }
         public int Rented { get; }
+        public Shader Shader { get; }
+
+        // Typed setters for a rented instance. None allocates.
+        public static void SetAnchor(Material material, in float4x4 anchor);
+        public static void SetWarpMode(Material material, int mode);
+        public static void SetTint(Material material, float3 linearRgb, float opacity = 1f);
+        public static void SetTintIndex(Material material, int paletteIndex, float opacity = 1f);
+        public static void SetLineColor(Material material, float3 linearRgb);
+        public static void SetLines(Material material, float minorStrength, float majorStrength, float2 majorPeriod,
+                                    float minorWidth = 1f, float majorWidth = 2f);
+        public static void SetSurface(Material material, float emissiveGain = 1f, float fogWeight = 1f,
+                                      float nearFadeMetres = 0f, float fadeWeight = 1f);
+        public static void SetPortalPlane(Material material, float4 plane);
+        public static void SetPortalPlane(Material material, float3 normal, float3 pointOnPlane);
+        public static void ClearPortalPlane(Material material);
+        public static void SetGate(Material material, int gate, float2 post, float sign);
+        public static void ClearGates(Material material);
+        public static void SetStencil(Material material, int reference,
+                                      UnityEngine.Rendering.CompareFunction comparison = UnityEngine.Rendering.CompareFunction.Equal);
+        public static void ClearStencil(Material material);
+        public static void SetCull(Material material, UnityEngine.Rendering.CullMode cull);
     }
 }
 ```
@@ -1729,10 +2270,10 @@ namespace Atlas.Rendering
 | Rule | Detail |
 |---|---|
 | Assign | `renderer.sharedMaterial = pool.Rent()`. Never `renderer.material` (it clones). Never a `MaterialPropertyBlock` |
-| Set values | `material.SetVector(AtlasShaderIDs.BaseTint, …)` and the like, on the rented instance |
+| Set values | The typed setters above (`MaterialPool.SetTint(material, …)`), or `material.SetVector(AtlasShaderIDs.BaseTint, …)` and the like, on the rented instance |
 | One per what | One instance per tile, per room shell, per object, per Glued cell copy that needs its own tint. Renderers that share every value share one instance |
 | Return | In `ISpaceModule.Exit`, or when the object is destroyed. A material returned twice, or one the pool did not make, is an `ArgumentException` |
-| Allocation | `Rent` and `Return` allocate nothing while `Rented` ≤ `Capacity`. Beyond it the pool doubles and logs `materials.grow` once; that is a budget defect, not a crash |
+| Allocation | `Rent` and `Return` allocate nothing while `Rented` ≤ `Capacity`. Beyond it the pool doubles and logs the warning `materials.grow` once; that is a budget defect, not a crash |
 | Budget | At most 256 rented at once (decided here; S2 at ρ = 3 needs 71 tiles + 21 room materials) |
 | Never saved | Pool instances are never assets (§9.3) |
 
@@ -1742,26 +2283,39 @@ namespace Atlas.Rendering
 
 ### 12.1 Layers
 
-`AtlasProjectSetup` writes the names into `ProjectSettings/TagManager.asset`. Code uses the constants.
+`AtlasProjectSetup` writes the names into `ProjectSettings/TagManager.asset`. Code uses the numbers. There is
+no `AtlasLayers` class: the layer numbers of the portal table are constants of `PortalStencilTable`; the
+Spectator layer (23) and the XR Simulation layer (30) are written as numbers where they are used (`StereoRig`,
+`AtlasApp`, `AtlasProjectSetup`).
 
 ```csharp
-// File: Rendering/Look/AtlasLayers.cs
+// File: Rendering/Portals/PortalStencilTable.cs   (engine-free)
 namespace Atlas.Rendering
 {
-    public static class AtlasLayers
+    public static class PortalStencilTable
     {
-        public const int World = 0;            // "Default"
-        public const int PortalMask = 6;       // "AtlasPortalMask"
-        public const int Hud = 7;              // "AtlasHud"
-        public const int Room01 = 8;           // "AtlasRoom01" .. "AtlasRoom15" = 8 .. 22
-        public const int RoomCount = 15;
-        public const int Spectator = 23;       // "AtlasSpectator"
-        public const int XrSimulation = 30;    // "XR Simulation" (exists)
+        public const int MaxSlots = 15;
+        public const int WorldLayer = 0;       // "Default"
+        public const int MaskLayer = 6;        // "AtlasPortalMask"
+        public const int HudLayer = 7;         // "AtlasHud"
+        public const int FirstRoomLayer = 8;   // "AtlasRoom01" .. "AtlasRoom15" = 8 .. 22
+        public const string MaskLayerName = "AtlasPortalMask";
+        public const string HudLayerName = "AtlasHud";
+        public const string MaskFeature = "Atlas Portal Masks";
+        public const string HudFeature = "Atlas HUD";
+        public const string HudTextFeature = "Atlas HUD Text";
+        public const int MaskEvent = 300, HudEvent = 500, HudTextEvent = 501;
+        public const int MarkQueue = 2000, ResetQueue = 2001;
 
-        /// <summary>Layer of the room seen through the portal that holds stencil reference 1..15.</summary>
-        public static int Room(int stencilRef);   // 7 + stencilRef
-        /// <summary>Sets the layer on a transform and every child. No allocation.</summary>
-        public static void SetLayerRecursively(UnityEngine.Transform root, int layer);
+        public static bool IsReference(int reference);        // 1 .. 15
+        /// <summary>Layer of the room seen through the doorway that holds this reference: 8 .. 22.</summary>
+        public static int Layer(int reference);
+        public static string LayerName(int reference);        // "AtlasRoom01" .. "AtlasRoom15"
+        public static string FeatureName(int reference);      // "Atlas Room 01" .. "Atlas Room 15"
+        public static int PassEvent(int reference);           // 301 .. 315
+        public static int ReferenceOfLayer(int layer);        // 0 for a layer that is no room layer
+        /// <summary>The layers a renderer feature draws: out of the renderer's own opaque and transparent masks.</summary>
+        public static int FeatureLayerMask { get; }
     }
 }
 ```
@@ -1770,14 +2324,14 @@ namespace Atlas.Rendering
 |---|---|---|---|
 | 0 | `Default` | The renderer's opaque pass. **The world**: everything a space or the room content draws in the room the walker is in | Every lane; it is the default of a new object |
 | 6 | `AtlasPortalMask` | Feature "Atlas Portal Masks" | `PortalRenderer` only |
-| 7 | `AtlasHud` | Features "Atlas HUD": after everything, depth test off, depth write off | Lane C (cue, reticle), lane D (HUD, link dot, menu) |
+| 7 | `AtlasHud` | Features "Atlas HUD" and "Atlas HUD Text": after everything, depth test Always, depth write off | Lane C (cue, reticle), lane D (HUD, link dot, menu) |
 | 8 – 22 | `AtlasRoom01` … `AtlasRoom15` | Feature "Atlas Room NN" with stencil Equal NN | `PortalRenderer` only: it moves a room's root between `Default` and a room layer |
 | 23 | `AtlasSpectator` | Nothing on the phone. The Spectator's cameras and a map camera (lane D) | Lane D |
 | 30 | `XR Simulation` | Nothing in the eye cameras | AR Foundation |
 | 1 – 5, 24 – 29, 31 | Unity's own or free | Not drawn in headset mode | Nobody without asking lane A |
 
-- The renderer's `opaqueLayerMask` and `transparentLayerMask` are `Default` only. A layer owned by a feature
-  must be out of them or it is drawn twice (U §8).
+- The renderer's `opaqueLayerMask` and `transparentLayerMask` are the template's masks with the feature layers
+  (6, 7, 8 to 22) taken out. A layer owned by a feature must be out of them or it is drawn twice (U §8).
 - Content under `IStereoRig.Hud` on `AtlasHud` is drawn in both eyes at its real stereo depth, on top of the
   world. Keep it 1.0 to 2.0 m from the eyes. It uses `Atlas/Surface` with fog weight 0 and fade weight 0, or
   TextMeshPro. Budget: at most 20 draw calls per frame for everything on the layer (decided here).
@@ -1794,10 +2348,12 @@ kind (U §8). The features live in `Atlas_URP_iOS_Renderer.asset`, added by `Atl
 | 2 | Atlas Portal Masks | `AfterRenderingOpaques` (300) | `AtlasPortalMask` | The mask shader's own: writes reference N where the doorway is visible | Marks at the doorway's depth; then resets depth to far where the stencil is N |
 | 3 | Atlas Room 01 … 15 | 301 … 315 | `AtlasRoom01` … `15` | override: reference N, compare Equal, pass Keep | normal |
 | 4 | (URP skybox) | 350 | – | none | Fills what is still at far depth, through portals too |
-| 5 | Atlas HUD, two features: opaque queue (`Atlas/Surface`), then transparent queue (TextMeshPro) | `AfterRenderingTransparents` (500, 501) | `AtlasHud` | none | test Always, write off |
+| 5 | "Atlas HUD" (opaque queue, `Atlas/Surface`), then "Atlas HUD Text" (transparent queue, text) | `AfterRenderingTransparents` (500, 501) | `AtlasHud` | none | test Always, write off |
 
-A room feature is switched with `SetActive` and is active only while its slot is in use, so a space without
-portals pays for none of them (U §8).
+The mask feature and the room features are saved inactive. `PortalRenderer` switches them with `SetActive`: the
+mask feature while a doorway is in view, a room feature only while its reference is in use, so a space without
+portals pays for none of them (U §8). The two HUD features are always active. `PortalRenderer.FeaturesFound` is
+false when the renderer asset does not carry them (the project set-up has not run).
 
 One row per room layer and stencil reference (§6.4):
 
@@ -1843,10 +2399,27 @@ namespace Atlas.Rendering
     /// <summary>Stencil portals between rooms authored in the room frame (Master Plan D16, task P1-A10).</summary>
     public sealed class PortalRenderer : Atlas.World.IUploadStep
     {
-        public const int MaxSlots = 15;
+        public const int MaxSlots = PortalStencilTable.MaxSlots;      // 15
+        public const string MaskShaderResource = "AtlasPortalMask";
+
+        /// <param name="maskParent">Parent of the mask objects, or null for a root object of their own.</param>
+        public PortalRenderer(Transform maskParent = null);
+        /// <summary>The eye cameras, for their frusta. Null in the Spectator: a doorway then counts as seen
+        /// whenever the head is in front of it.</summary>
+        public IStereoRig Rig { get; set; }
+        /// <summary>The engine-free frame logic this renderer applies: the same object a headless test steps.</summary>
+        public PortalFrameCore Core { get; }
+        public int RoomCount { get; }
+        public int DoorCount { get; }
+        public PortalRoom GetRoom(int room);
+        public PortalDoor GetDoor(int door);
+        /// <summary>True when the renderer features of the project set-up were found.</summary>
+        public bool FeaturesFound { get; }
 
         /// <summary>Registers a room: every renderer under root, with materials from the pool. Returns its id (0, 1, ...).</summary>
         public int AddRoom(Transform root, Bounds boundsWorld);
+        /// <summary>Adds a second root to a room: geometry of that room that lives under another parent.</summary>
+        public void AddRoomPart(int room, Transform root);
         /// <summary>Re-reads the renderers under a room's root after its content changed.</summary>
         public void RefreshRoom(int room);
         /// <summary>
@@ -1857,8 +2430,11 @@ namespace Atlas.Rendering
         public void SetDoorOpen(int door, bool open);
         /// <summary>Removes every room and door and puts every root back on Default with the clip off.</summary>
         public void Clear();
+        /// <summary>Clear, and the mask materials are destroyed. The renderer can be used again afterwards.</summary>
+        public void Dispose();
 
-        /// <summary>The room the walker is in. Changed by the renderer when the head crosses a doorway.</summary>
+        /// <summary>The room the walker is in. Changed by the renderer when the head crosses a doorway.
+        /// Placed from outside, the next frame tests no crossing: the head did not walk there.</summary>
         public int CurrentRoom { get; set; }
         /// <summary>0: doorways show the fog colour. 1: doorways show the next room (portal.depth).</summary>
         public int Depth { get; set; }
@@ -1873,32 +2449,45 @@ namespace Atlas.Rendering
 }
 ```
 
+The composition root creates no `PortalRenderer` and publishes none. `PortalSpace` takes one from
+`AtlasServices` if somebody published it, and otherwise creates its own (`new PortalRenderer(transform)`), gives
+it the `IStereoRig`, drives it from its own `IUploadStep.Upload` and disposes it in `Exit`.
+
+The rules live in engine-free classes beside it, which the headless tests step: `PortalFrameCore` (the frame
+logic), `PortalSwapRule` (`HoldFrames = 3`), `PortalMath` (`BoxDistance = 0.10f`, `DoorPlane`, `Crossed`,
+`BoundsInFrustum`, `InOverlap`, `DoorViewArea`) and `PortalSlotAllocator`.
+
 Behaviour fixed by `P1-A10`: the current room changes when the head (not an eye) crosses a doorway plane; a room
-is switched off only when its bounds fail `GeometryUtility.TestPlanesAABB` for both eye frusta and the head is
+is switched off only when its bounds are outside both eye frusta (`PortalMath.BoundsInFrustum`) and the head is
 outside the overlap volume, held for 3 consecutive frames; while one eye is within 0.10 m of a doorway plane the
-mask covers the whole view of that eye (the portal box). At most 1.0 ms of GPU time per visible portal.
+mask covers the whole view of that eye (the portal box). With the renderer features missing the walker's room is
+shown alone, and walking through a doorway still works. At most 1.0 ms of GPU time per visible portal.
 
 ### 12.3 Scenes
 
 | Scene | Path | Owner | iOS build list | Windows (Spectator) | Holds |
 |---|---|---|---|---|---|
 | `Atlas_Boot` | `Scenes/Atlas_Boot.unity` | A | index 0 | – | AR Session, XR Origin. Nobody edits it (README F3) |
-| `Space_Home` | `Scenes/Space_Home.unity` | C | when generated | when generated | One root `Space_Home` with `HomeSpace` |
-| `Space_Glued`, `Space_Portal`, `Space_Slicer` | `Scenes/Space_<Name>.unity` | A | when generated | when generated | One root with the module |
+| `Space_Home` | `Scenes/Space_Home.unity` | C | index 1 | after `PC_Spectator` | One root `Space_Home` with `HomeSpace` |
+| `Space_Glued`, `Space_Portal`, `Space_Slicer` | `Scenes/Space_<Name>.unity` | A | indices 2, 3, 4 | after `PC_Spectator` | One root with the module |
 | `Space_CurvedWalk`, `Space_AlignedCells`, `Space_SmallPlanet` | `Scenes/Space_<Name>.unity` | B | not in this build | not in this build | – |
-| `PC_Spectator` | `Scenes/PC_Spectator.unity` | D | never | index 0 | Lane D's page |
-| `Sandbox_<name>` | `Scenes/Sandbox/` | each engineer | never | never | Anything; boots only with an `AtlasBoot` object (§8) |
-| `Sys_Scan`, `Sys_BumpGuard`, `Sys_Onboarding`, `Sys_Link`, `Sys_Hud` | – | C, D | not created | not created | Replaced by installers (README F3). The names stay reserved |
+| `PC_Spectator` | `Scenes/PC_Spectator.unity` | D | never | index 0 | One root `AtlasSpectatorBoot` with no script. Lane D's page |
+| `Sandbox_<name>` | `Scenes/Sandbox/` (none exists yet) | each engineer | never | never | Anything; boots only with a root object named `AtlasBoot` (§8) |
+| `Sys_Scan`, `Sys_BumpGuard`, `Sys_Onboarding`, `Sys_Link`, `Sys_Hud` | – | C, D | not created | not created | Replaced by installers (README F3). The names stay reserved; `docs/scene-ownership.md` says the same |
 
-`tools/gen_scenes.py` (lane A) writes the `Space_*` scenes and their `.meta` files and adds them to
-`EditorBuildSettings`. Until it has run, every space comes from its factory (§5.2); behaviour is the same.
-`Atlas_Boot` stays the active scene at all times, so `RenderSettings` (the background) are the boot scene's.
+`tools/gen_scenes.py` (lane A) writes the four `Space_*` scenes and `PC_Spectator` with their `.meta` files from
+its manifest and lists the `Space_*` scenes in `EditorBuildSettings` after `Atlas_Boot`
+(`gen_scenes.py --check` exits 1 if anything would change; run `tools/gen_meta.py` first). Without a scene a
+space comes from its factory (§5.2); behaviour is the same. `Atlas_Boot` stays the active scene at all times, so
+`RenderSettings` (the background) are the boot scene's. The Windows list is built by `AtlasBuild.Spectator`:
+`PC_Spectator`, then every enabled `Space_*` scene (§16.1).
+(differs from plan section 9.3: no `Sys_*` scene is created; systems are installed in code.)
 
 ---
 
 ## 13 · `Mesh4D` and the slicer
 
-Lane A's code in `Atlas.Kernel` (README F1), namespace `Atlas.Kernel.FourD`, folder `Kernel/FourD/`. Engine-free:
+Lane A's code in `Atlas.Kernel` (README F1), namespace `Atlas.Kernel.FourD`, folder `Kernel/Mesh4D/`. Engine-free:
 `System`, `Unity.Mathematics`, and for the job `Unity.Burst`, `Unity.Collections`, `Unity.Jobs`. One code path
 for polytopes and for the worldtube (D17, §5.5).
 
@@ -1908,7 +2497,8 @@ for polytopes and for the worldtube (D17, §5.5).
   direction (in ℝ³ × S¹: time or phase, scaled to length).
 - Model units: polytopes have circumradius 1. The module scales the result to metres with its transform.
 - A `Mesh4D` holds the **boundary** of a 4D body as tetrahedra, so a cut gives the surface of the 3D
-  cross-section.
+  cross-section. Every tetrahedron is oriented so that `TetNormal(tet)` points out of the body; the generators
+  leave them so, and that is what lets a slice be wound outward.
 - The cut is the hyperplane `dot(normal, p) = offset` in the **slice frame**, where
   `p = mul(modelToSlice, vertex) + translation`. The 3D position of a cut point is `p.xyz`.
   With `normal = (0, 0, 0, 1)` that is an isometric picture of the cross-section: rotate the object, keep the cut
@@ -1918,7 +2508,7 @@ for polytopes and for the worldtube (D17, §5.5).
 ### 13.2 Types and generators
 
 ```csharp
-// File: Kernel/FourD/Mesh4D.cs
+// File: Kernel/Mesh4D/Mesh4D.cs
 using Unity.Mathematics;
 
 namespace Atlas.Kernel.FourD
@@ -1932,18 +2522,31 @@ namespace Atlas.Kernel.FourD
         public readonly int[] Edges;           // 2 vertex indices per edge of the body, for the shadow; may be empty
         public readonly int CellCount;
         public readonly float WPeriod;         // > 0 when w wraps (R^3 x S^1); 0 otherwise
+        public readonly float[] VertexData;    // one scalar per vertex, interpolated onto a slice; may be null
 
         public int VertexCount { get; }
         public int TetCount { get; }
+        public int EdgeCount { get; }
+        /// <summary>Upper bounds on one slice: 2 triangles and 6 vertices per tetrahedron.</summary>
+        public int MaxSliceTriangles { get; }
+        public int MaxSliceVertices { get; }
 
         /// <summary>ArgumentException when an index is out of range, a length does not fit, or a cell id is not below cellCount.</summary>
-        public Mesh4D(float4[] vertices, int[] tetrahedra, int[] tetCell, int[] edges, int cellCount, float wPeriod = 0f);
+        public Mesh4D(float4[] vertices, int[] tetrahedra, int[] tetCell, int[] edges, int cellCount,
+                      float wPeriod = 0f, float[] vertexData = null);
+
+        /// <summary>The vector orthogonal to three edge vectors of a tetrahedron. Its length is six times the volume.</summary>
+        public static float4 TetNormal(float4 a, float4 b, float4 c);
+        public float4 TetNormal(int tet);
+        public float4 TetCentroid(int tet);
+        /// <summary>Triangles of the faces that separate two cells or lie on an open end. For the solid shadow. Allocates.</summary>
+        public int[] BuildCellBoundaryTriangles();
     }
 }
 ```
 
 ```csharp
-// File: Kernel/FourD/Polytopes4D.cs
+// File: Kernel/Mesh4D/Polytopes4D.cs
 using Unity.Mathematics;
 
 namespace Atlas.Kernel.FourD
@@ -1961,7 +2564,7 @@ namespace Atlas.Kernel.FourD
         /// A closed triangle surface carried through a periodic motion (Appendix A.8): ring k is the surface moved by
         /// phaseOffsets[k] at w = k * wPeriod / phaseOffsets.Length; one more ring repeats ring 0 at w = wPeriod.
         /// Each triangle between two rings is a prism split into three tetrahedra with its indices sorted.
-        /// Cell id = the phase interval.
+        /// Cell id = the phase interval. Vertex data = the phase, w / wPeriod.
         /// </summary>
         public static Mesh4D Tube(float3[] surfaceVertices, int[] surfaceTriangles, float3[] phaseOffsets, float wPeriod);
         /// <summary>Tube of a sphere of 600 triangles (20 segments, 16 bands).</summary>
@@ -1980,11 +2583,11 @@ namespace Atlas.Kernel.FourD
 | `Cell5()` | 5 | 5 | 5 | 10 | Regular, circumradius 1 |
 | `Cell16()` | 8: ± each axis | 16 | 16 | 24 | Circumradius 1 |
 | `Cell24()` | 24: permutations of (±1, ±1, 0, 0) / √2 | 96: 24 octahedra × 4 | 24 | 96 | Circumradius 1 |
-| `Ball(n)` | on the unit 3-sphere | 48 · n³ | 8 | 0 | For `Slicer_Ball` (n = 12); not shown in S6 |
+| `Ball(n)` | on the unit 3-sphere | 48 · n³ | 8 | 0 | For `Slicer_Ball` (n = 24: a slice at offset c is short by about 0.9 / (n² · (1 − c²)) of its radius); S6 shows it with n = 6 (`slicer.object` = `ball`, 10,368 tetrahedra) |
 | `MovingSphere` with 10 phases | 11 rings | 600 × 10 × 3 = 18,000 | 10 | 0 | The size of the tumour worldtube (§5.5) |
 
 ```csharp
-// File: Kernel/FourD/Rotation4D.cs
+// File: Kernel/Mesh4D/Rotation4D.cs
 using Unity.Mathematics;
 
 namespace Atlas.Kernel.FourD
@@ -2002,14 +2605,19 @@ namespace Atlas.Kernel.FourD
         public static double4x4 Orthonormalised(in double4x4 m);
     }
 
-    public static class Projector4D
+    public static unsafe class Projector4D
     {
         /// <summary>Distance of the 4D eye along +w, model units (decided here: twice the circumradius).</summary>
         public const float DefaultFocal = 2f;
-        /// <summary>Perspective shadow: p.xyz * focal / (focal - p.w).</summary>
+        /// <summary>Perspective shadow: p.xyz * focal / (focal - p.w). The depth is held above 5% of focal.</summary>
         public static float3 Perspective(float4 p, float focal = DefaultFocal);
         /// <summary>Orthographic shadow: p.xyz.</summary>
         public static float3 Orthographic(float4 p);
+        /// <summary>Shadow of a whole mesh: one position per vertex and, when outW is not null, its w before projection.</summary>
+        public static void ProjectVertices(float4* vertices, int vertexCount,
+                                           in float4x4 modelToSlice, in float4 translation,
+                                           bool perspective, float focal,
+                                           float3* outPositions, float* outW);
     }
 }
 ```
@@ -2017,7 +2625,7 @@ namespace Atlas.Kernel.FourD
 ### 13.3 The slicer kernel and its job
 
 ```csharp
-// File: Kernel/FourD/Slicer4D.cs
+// File: Kernel/Mesh4D/Slicer4D.cs
 using Unity.Mathematics;
 
 namespace Atlas.Kernel.FourD
@@ -2025,40 +2633,52 @@ namespace Atlas.Kernel.FourD
     /// <summary>Cuts tetrahedra in R^4 with a hyperplane (Appendix A.8). Static, pointer-based, allocation-free.</summary>
     public static unsafe class Slicer4D
     {
-        public const int MaxVerticesPerTet = 4;
-        public const int MaxIndicesPerTet = 6;
+        public const int MaxTrianglesPerTet = 2;
+        public const int MaxVerticesPerTet = 6;
 
-        /// <param name="vertices">vertexCount model-space vertices.</param>
+        /// <param name="vertices">Model-space vertices.</param>
         /// <param name="tetrahedra">4 * tetCount vertex indices.</param>
+        /// <param name="tetCount">Number of tetrahedra.</param>
         /// <param name="tetCell">tetCount cell ids, or null (every cell id is then 0).</param>
-        /// <param name="cellUv">cellUvCount palette coordinates; a cut of cell c gets cellUv[c % cellUvCount]. At least one.</param>
+        /// <param name="vertexData">One scalar per vertex to interpolate, or null.</param>
         /// <param name="modelToSlice">Rotation of the object in R^4.</param>
         /// <param name="translation">Added after the rotation.</param>
         /// <param name="normal">Unit normal of the cut in the slice frame.</param>
         /// <param name="offset">The cut is dot(normal, p) = offset.</param>
-        /// <param name="scratch">vertexCount entries; receives the transformed vertices.</param>
-        /// <param name="outVertices">Receives up to vertexCapacity vertices: 3 or 4 per cut tetrahedron, not shared.</param>
-        /// <param name="outIndices">Receives up to indexCapacity indices: 3 or 6 per cut tetrahedron.</param>
+        /// <param name="outPositions">Receives up to vertexCapacity positions, 3 per triangle.</param>
+        /// <param name="outNormals">Receives the unit flat normal of its triangle for every vertex.</param>
+        /// <param name="outCells">Receives the cell id of the tetrahedron each vertex came from.</param>
+        /// <param name="outVertexData">Receives the interpolated scalar, or null. Unused when vertexData is null.</param>
+        /// <param name="vertexCapacity">Length of every output buffer. Slicing stops before the first tetrahedron that would not fit.</param>
+        /// <param name="outVertexCount">Vertices written (3 * outTriangleCount).</param>
+        /// <param name="outTriangleCount">Triangles written.</param>
+        /// <param name="outTetsCut">Tetrahedra whose cut was written.</param>
         public static void Slice(
-            float4* vertices, int vertexCount,
+            float4* vertices,
             int* tetrahedra, int tetCount,
             int* tetCell,
-            float2* cellUv, int cellUvCount,
+            float* vertexData,
             in float4x4 modelToSlice, in float4 translation,
             in float4 normal, float offset,
-            float4* scratch,
-            AtlasVertex* outVertices, int vertexCapacity,
-            int* outIndices, int indexCapacity,
-            out int outVertexCount, out int outIndexCount, out int outTetsCut);
+            float3* outPositions, float3* outNormals, int* outCells, float* outVertexData,
+            int vertexCapacity,
+            out int outVertexCount, out int outTriangleCount, out int outTetsCut);
 
-        /// <summary>Sum of the triangle areas of a slice. For tests.</summary>
-        public static float Area(AtlasVertex* vertices, int* indices, int indexCount);
+        /// <summary>Sum of the triangle areas of a slice (three positions per triangle).</summary>
+        public static float Area(float3* positions, int triangleCount);
+        /// <summary>Extent of a slice along axis: the largest minus the smallest coordinate of its vertices.</summary>
+        public static float Extent(float3* positions, int vertexCount, float3 axis);
     }
 }
 ```
 
+The kernel writes plain buffers, a triangle soup of three unshared vertices per triangle, so the index buffer of
+the receiving mesh is the fixed sequence 0, 1, 2, … It does not write `AtlasVertex`: the module turns the
+buffers into `AtlasVertex` (palette coordinate of the cell, baked shade) in its own job (`SlicerMeshKernel` in
+`Spaces/Slicer/Core/`).
+
 ```csharp
-// File: Kernel/FourD/SliceJob.cs
+// File: Kernel/Mesh4D/SliceJob.cs
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
@@ -2072,16 +2692,17 @@ namespace Atlas.Kernel.FourD
     {
         [ReadOnly] public NativeArray<float4> Vertices;
         [ReadOnly] public NativeArray<int> Tetrahedra;
-        [ReadOnly] public NativeArray<int> TetCell;       // length 0 = no cell ids
-        [ReadOnly] public NativeArray<float2> CellUv;
+        [ReadOnly] public NativeArray<int> TetCell;         // length 0 = no cell ids
+        [ReadOnly] public NativeArray<float> VertexData;    // length 0 = none
         public float4x4 ModelToSlice;
         public float4 Translation;
         public float4 Normal;
         public float Offset;
-        public NativeArray<float4> Scratch;               // length = Vertices.Length
-        public NativeArray<AtlasVertex> OutVertices;      // length = 4 * tetrahedra
-        public NativeArray<int> OutIndices;               // length = 6 * tetrahedra
-        public NativeArray<int> OutCounts;                // length 3: vertices, indices, tetrahedra cut
+        public NativeArray<float3> OutPositions;            // length = 6 * tetrahedra
+        public NativeArray<float3> OutNormals;              // length = 6 * tetrahedra
+        public NativeArray<int> OutCells;                   // length = 6 * tetrahedra
+        public NativeArray<float> OutVertexData;            // length = 6 * tetrahedra, or 0
+        public NativeArray<int> OutCounts;                  // length 3: vertices, triangles, tetrahedra cut
         public void Execute();
     }
 }
@@ -2094,28 +2715,31 @@ Behaviour of `Slice`, binding:
 | Side test | d_k = dot(normal, p_k) − offset. A vertex with d ≥ 0 is on the positive side. One test for every tetrahedron |
 | 4 – 0, 0 – 4 | Nothing |
 | 1 – 3, 3 – 1 | One triangle: the three edges that cross |
-| 2 – 2 | One quadrilateral as two triangles. With positive a₀, a₁ and negative b₀, b₁ the corner cycle is a₀b₀, a₀b₁, a₁b₁, a₁b₀: it never crosses itself |
-| Edge point | p_i + d_i / (d_i − d_j) · (p_j − p_i) (Appendix A.8) |
-| `Position` | `p.xyz` of the edge point |
-| `Normal` | The flat normal of the triangle (of the quadrilateral's plane for both its triangles). Its sign is not defined |
-| `Color` | `PackColor(AtlasShading.ToByte(AtlasShading.FaceShadeTwoSided(normal)), 0)`: baked shade, no lines |
-| `Uv0` | `cellUv[cell % cellUvCount]`: the colour of the cell the face came from |
-| `Uv1` | (0, 0) |
-| Winding | Not defined. The slice material has `_Cull` = 0 (off) |
-| Capacity | Stops before the first tetrahedron that would not fit. Never writes past a capacity. `outTetsCut` counts what was written |
-| Cost | No allocation. No exception for any finite input |
+| 2 – 2 | One quadrilateral as two triangles. With negative b₀, b₁ and positive a₀, a₁ the corner cycle is b₀a₀, b₁a₀, b₁a₁, b₀a₁: it never crosses itself |
+| Edge point | Interpolated from the negative end to the positive end of the edge (Appendix A.8), so two tetrahedra that share an edge compute bit-identical points: no cracks. The cut is tested in model space; only the cut points are transformed |
+| `outPositions` | `p.xyz` of the edge point, three per triangle |
+| `outNormals` | The unit flat normal of the triangle, the same for its three vertices |
+| `outCells` | The cell id of the tetrahedron the vertex came from |
+| `outVertexData` | The mesh's `VertexData` interpolated to the edge point (the phase of a worldtube), when both buffers are given |
+| Winding | Defined: every triangle (a, b, c) is wound so that cross(b − a, c − a) points out of the body, along its stored normal (Unity's front face), provided the tetrahedra are oriented outward and `modelToSlice` is a rotation. The slice material of S6 still has `_Cull` = 0 (off) |
+| Capacity | Stops before the first tetrahedron that would not fit. Never writes past `vertexCapacity`. `outTetsCut` counts what was written. 6 · `tetCount` vertices always suffice |
+| Cost | No allocation, no scratch buffer. No exception for any finite input |
 
-The module (`SlicerSpace`) allocates the native arrays in `Configure` (`Allocator.Persistent`), schedules one
-`SliceJob` in `Tick`, completes it in its `IUploadStep.Upload` and calls `AtlasMesh.Upload`. It reschedules only
-when the rotation, the offset or the object changed: nothing is cut while the cut does not move (§5.5). The
-schedule-to-upload span is inside `ProfilerMarker("Atlas.Slicer4D")` (§11.2).
+The module (`SlicerSpace`) allocates the native arrays (`SlicerBuffers`, `Allocator.Persistent`) when the object
+is chosen and disposes them in `Exit`. In `Tick` it schedules its own Burst job, which calls `Slicer4D.Slice`
+and packs the result into `AtlasVertex` (`SlicerMeshKernel`); it completes the job in its `IUploadStep.Upload`
+and calls `AtlasMesh.Upload`. It reschedules only when the rotation, the offset or the object changed: nothing
+is cut while the cut does not move (§5.5). The shadow is a second job, rebuilt only when the body turns and only
+while it is shown. The job runs inside `ProfilerMarker("Atlas.Slicer4D")` and the upload inside
+`ProfilerMarker("Atlas.Slicer4D.Upload")` (§11.2). `SliceJob` is the kernel's own thin wrapper, for callers
+that want the plain buffers.
 
-Tests (lane A, `Tests/Kernel/`, assembly `Atlas.Kernel.Tests`, plain NUnit, pinned managed arrays):
+Tests (lane A, `Tests/Kernel/Mesh4D/`, assembly `Atlas.Kernel.Tests`, plain NUnit, pinned managed arrays):
 
 | Test | Set-up | Pass |
 |---|---|---|
 | `Slicer_Tesseract` | `Tesseract()`, `modelToSlice = CornerFirst()`, `normal = +w`, `offset = (c − 2) / 2` for the cut x + y + z + w = c of the unit tesseract | `Area` = 0.8660 at c = 0.5 and 6.9282 at c = 2.0, to four decimals |
-| `Slicer_Ball` | `Ball(12)`, identity, `normal = +w`, `offset = c` | Every output vertex has ‖`Position`‖ within 1 % of √(1 − c²) at c = 0, 0.5, 0.9 |
+| `Slicer_Ball` | `Ball(24)`, three rotations (identity among them), `normal = +w`, `offset = c` | The radius from the slice's area, and half its extent along x, y and z, are within 1 % of √(1 − c²) at c = 0, 0.5, 0.9 |
 | `Slicer_MovingSphere` | `MovingSphere` at constant speed u, w = time × c; `normal = (0, 0, −sin θ, cos θ)` with tan θ = c / v | Extent of the slice along z = D · v / (v − u) within 2 %; at θ = 0, `Area` within 2 % of π D² |
 | `Polytopes_Counts` | every generator | The counts of the table in §13.2; every tetrahedron of `Tesseract()` has volume 1/6 (six fill one unit cube) |
 | `Rotation4D_Basics` | – | R · Rᵀ = I to 1e-9; four quarter turns in XW give the identity; `CornerFirst()` maps (1, 1, 1, 1) / 2 to (0, 0, 0, 1) to 1e-12 |
@@ -2136,7 +2760,7 @@ the C# members are lane C's.
 |---|---|
 | `Registered` | true. The lattice is fixed to the floor (D15) |
 | Needs from the RoomModel | `cells.glued` (`nx`, `nz`, `sizeX`, `sizeZ`), `freeRect` (`wf`, `df`), `standing` |
-| Needs from `IRoomContent` | Walls as kerbs; every object visible, drawn once at its true position (placeholder, generated or built-in mesh). The room is **not** copied (§4.9) |
+| Needs from `IRoomContent` | `SetWallMode(WallMode.Kerbs)`, `FloorVisible = false` (the cells bring the floor), `ObjectsVisible = true`: every object drawn once at its true position (placeholder, generated or built-in mesh). The room is **not** copied (§4.9) |
 | Lattice | Cell (i, j) covers x from −wf/2 + i·sizeX, z from −df/2 + j·sizeZ; the lattice continues past the free rectangle in every direction |
 | Walker's cell | (ci, cj) = (floor((x + wf/2) / sizeX), floor((z + df/2) / sizeZ)) of `HeadPosition` |
 | Copies drawn | T², Klein: n × n cells round (ci, cj), n = `glued.copies`. T³: 3 × 3 × 3, vertical period 2.6 m |
@@ -2146,13 +2770,18 @@ the C# members are lane C's.
 | Fog | §10.8: opaque at (n − 1) / 2 cells |
 | Standing mode | Runs in place: no prompt to walk across a cell edge |
 | `tileId` in `State` | (ci, cj, 0, 0, 0, 0) |
-| `p[3]` to `p[7]` | mode, copies per side, sizeX, sizeZ, 0 |
-| Budget | Cells and avatars alone: at most 110 draw calls and 110k triangles at 5 × 5; 120 and 120k for T³. With the room: the S1 rows of §15 |
+| `p[3]` to `p[7]` | mode, copies per side as drawn (3 for T³), sizeX, sizeZ, 0 |
+| Spectator | `GluedSpace` implements `ISpaceStateReader`: mode and copies come from `p[3]` and `p[4]` |
+| Budget | Cells and avatars alone: at most 110 draw calls and 110k triangles at 5 × 5; 120 and 120k for T³ (`GluedBudget`). With the room: the S1 rows of §15 |
 | Test | `Glued_Handedness` (§11.1) |
+
+The rules are engine-free in `Spaces/Glued/GluedLattice.cs` and `GluedCore.cs`: `GluedLattice`
+(`VerticalPeriod = 2.6`), `GluedRules` (`MinCopies = 3`, `DefaultCopies = 5`, `MaxCopies = 7`, `LayoutNames`,
+`Fog`), `GluedBudget`.
 
 | Parameter | Values | Default | `onRelease` | `SceneCmd.variant` |
 |---|---|---|---|---|
-| `glued.mode` | 0 torus T², 1 Klein bottle, 2 3-torus T³ | 0 | yes | `t2`, `klein`, `t3` |
+| `glued.mode` | enum: 0 `t2` (torus T²), 1 `klein` (Klein bottle), 2 `t3` (3-torus T³) | 0 | yes | `t2`, `klein`, `t3` |
 | `glued.copies` | 3, 5, 7 per side (§9.6; written by the ladder) | 5 | yes | – |
 | `glued.avatar` | 0 off, 1 on | 1 | no | – |
 
@@ -2161,22 +2790,28 @@ the C# members are lane C's.
 | Item | Contract |
 |---|---|
 | `Registered` | true, room by room. The real room's walls and furniture are where they really are; a virtual room's walls are virtual (§4.9) |
-| Needs from the RoomModel | `freeRect` (`wf`, `df`): every cell of every room lies inside it. `standing`. The lowest wall height, for the door height |
-| Needs from `IRoomContent` | Its root `Transform`, with every renderer on a pool material: the real room is room 0 of `PortalRenderer`. A change event when a mesh replaces a placeholder, to call `RefreshRoom(0)`. Walls in full |
-| Layout 0, booth to hall | A booth of 1.0 × 1.0 m (at most 800 triangles) in a corner of the free rectangle, door 0.9 × 2.1 m towards the centre. Through the door: a hall that fills the free rectangle (at most 2,000 triangles) |
-| Layout 1, four-turn loop | L-shaped corridors of width clamp(wf / 3, 0.7 m, 1.0 m) along the sides of the free rectangle, reusing the same floor; four right turns end in a different room. At most 2,000 triangles per room |
-| Fallback | A free rectangle too small for the loop (wf under 2.1 m) gives layout 0. Standing mode gives layout 0, viewed in place |
-| Portals | `PortalRenderer` (§12.2). Every portal transform is the identity (D16). No recursion |
+| Needs from the RoomModel | `freeRect` (`wf`, `df`): every cell of every room lies inside it, and on the eroded free floor of the scan. `standing`. The lowest wall height, for the door height. The room's id, for the seed that picks the booth's corner and the loop's entrance |
+| Needs from `IRoomContent` | Its root `Transform`, with every renderer on a pool material: the real room is room 0 of `PortalRenderer`. A change event when a mesh replaces a placeholder, to call `RefreshRoom(0)`. `SetWallMode(WallMode.Full, 0f)`, floor and objects visible |
+| Layout 0, booth to hall | A booth of 1.0 × 1.0 m where the floor allows, never under 0.7 m wide (at most 800 triangles), in a corner of the free rectangle, door 0.9 m wide and as high as the lowest wall, clamped to 1.8 to 2.1 m, towards the centre. Through the door: a hall that fills the free rectangle (at most 2,000 triangles) |
+| Layout 1, four-turn loop | L-shaped corridors of width clamp(short side / 3, 0.7 m, 1.0 m) along the sides of the free rectangle, walls 2.4 m high, reusing the same floor; four right turns end in a different room. The rooms cover eight corners between them: two laps. At most 2,000 triangles per room |
+| Fallback | The loop is built only when the short side of the free rectangle is at least 2.4 m (`PortalLayoutGenerator.MinLoopSide`, the Master Plan's figure) and not in standing mode; otherwise layout 0, viewed in place when standing. A floor that cannot hold the booth either (short side under 1.1 m) gives the real room alone, with no doorway (`PortalLayoutKind.RealRoomOnly`). `PortalLayout.IsFallback` says so |
+| Portals | `PortalRenderer` (§12.2), the module's own unless one is published. Every portal transform is the identity (D16). No recursion |
 | `tileId` in `State` | (current room id, 0, 0, 0, 0, 0); `sheet` = current room id |
-| `p[3]` to `p[7]` | layout, room count, portal depth, 0, 0 |
+| `p[3]` to `p[7]` | layout kind as built, room count, portal depth, 0, 0 |
+| Spectator | `PortalSpace` implements `ISpaceStateReader`: the current room comes from `sheet` |
 | Budget | At most 60 draw calls and 150k triangles; at most 1.0 ms of GPU time per visible portal; at most 15 stencil references per frame |
 | Test | `Portal_Graph` (§11.1) on an engine-free room graph |
 
 | Parameter | Values | Default | `onRelease` | `SceneCmd.variant` |
 |---|---|---|---|---|
-| `rooms.layout` | 0 booth to hall, 1 four-turn loop | 0 | yes | `booth`, `loop` |
+| `rooms.layout` | enum: 0 `booth` (booth to hall), 1 `loop` (four-turn loop) | 0 | yes | `booth`, `loop` |
 | `rooms.count` | 2 to 6 rooms in the loop | 6 | yes | – |
 | `portal.depth` | 0 doorways show fog, 1 doorways show the next room | 1 | no | – |
+
+All three are in the parameter group `portal` (`SpaceIds.ParamGroup(SpaceId.Portal)`), whatever their name
+prefix. A released `rooms.layout` or `rooms.count` regenerates the rooms at the next `Tick`, puts the walker
+back in the real room and bumps the world version. The layout rules are engine-free in
+`Spaces/Portal/PortalLayout.cs`, `PortalLayoutGenerator.cs` and `PortalSpaceCore.cs`.
 
 ### 14.3 S6 Slicer (`SlicerSpace`)
 
@@ -2186,36 +2821,39 @@ the C# members are lane C's.
 | Needs from the RoomModel | `freeRect` (`wf`, `df`), `standing` |
 | Needs from `IRoomContent` | The default: walls in full, objects visible |
 | Object | Centre at (+wf / 4, 1.25 m, 0). Radius clamp(0.2 · wf, 0.25 m, 0.5 m) for a model circumradius of 1 (decided here) |
-| The w lane | A line on the floor at x = −wf / 4, along Z, of length min(df − 0.4 m, 3.0 m), centred on z = 0. Walking it moves the cut: w₀ = lerp(−1.1, +1.1, t) with t the walker's fraction along the lane. Its twin is the stick. The input touched last owns w₀ for 2 s |
-| Standing mode | No lane. The cut is moved with the stick (`P1-A15`) |
-| Views | Slice (the cross-section, a colour per cell) and shadow (the projected edges, coloured along the w-depth strip) |
-| Rotation | In the planes XW, YW, ZW, by the sticks; the cut stays at `normal = +w` |
+| The w lane | A line on the floor at x = −wf / 4, along Z, of length min(df − 0.4 m, 3.0 m), centred on z = 0. Walking it moves the cut: w₀ = lerp(−1.1, +1.1, t) with t the walker's fraction along the lane. Its twin is the stick. The input touched last owns w₀ for 2 s (`SlicerController.OwnerHoldSeconds`) |
+| Standing mode | No lane, and none either when the lane would be shorter than 0.8 m (`SlicerLayout.MinLane`). The cut is moved with the stick (`P1-A15`) |
+| Views | Slice (the cross-section, a colour per cell) and shadow (the cross-section with the dithered, ghosted shadow of the whole body round it, coloured along the w-depth strip) |
+| Rotation | In the planes XW, YW, ZW, by the sticks; the cut stays at `normal = +w`, tilted by `slicer.tilt` for the tube |
+| Input | `AtlasAction.Primary`: next object. `AtlasAction.Secondary`: slice or shadow. `AtlasAxis.LeftY`: w. `LeftX`: XW. `RightY`: YW. `Twist`: ZW. Each has a gaze twin: hold handles for the axes, chips for the two actions |
 | `tileId` in `State` | six zeros |
-| `p[3]` to `p[7]` | w₀; the XW, YW, ZW angles in radians; object + 16 · view |
+| `p[3]` to `p[7]` | w₀; the XW, YW, ZW angles in radians; object + 16 · view (`SlicerState.Pack`) |
+| Spectator | `SlicerSpace` implements `ISpaceStateReader`: the cut, the turns, the object and the view come from `p[3]` to `p[7]` |
 | Budget | At most 70 draw calls and 160k triangles with Home; slicer cost of §13.3 |
 
 | Parameter | Values | Default | `onRelease` | `SceneCmd.variant` |
 |---|---|---|---|---|
-| `slicer.source` | 0 live, 1 stepped (precomputed slices, no blending), 2 tesseract only | 0 | yes | – |
-| `slicer.object` | 0 tesseract, 1 5-cell, 2 16-cell, 3 24-cell, 4 moving-sphere tube | 0 | yes | `tesseract`, `cell5`, `cell16`, `cell24`, `tube` |
-| `slicer.view` | 0 slice, 1 shadow | 0 | no | – |
+| `slicer.source` | enum: 0 `live`, 1 `stepped` (the cut moves in 32 fixed steps, so the slice is rebuilt only when it reaches the next step), 2 `tesseract` (the tesseract whatever `slicer.object` says) | 0 | yes | – |
+| `slicer.object` | enum: 0 `tesseract`, 1 `cell5`, 2 `cell16`, 3 `cell24`, 4 `tube` (moving-sphere worldtube), 5 `ball` (`Ball(6)`) | 0 | yes | `tesseract`, `cell5`, `cell16`, `cell24`, `tube`, `ball` |
+| `slicer.view` | enum: 0 `slice`, 1 `shadow` | 0 | no | – |
 | `slicer.w` | −1.1 to 1.1, model units | 0 | no | – |
 | `slicer.xw`, `slicer.yw`, `slicer.zw` | −180 to 180, degrees | 0 | no | – |
 | `slicer.tilt` | 0 to 80, degrees; the tube only (the scanner tilt of §5.4) | 0 | no | – |
 
 ### 14.4 What lane A's spaces and SpaceLab need from the input contract
 
-Each with a gamepad binding and a gaze-dwell twin (rule 5). Names are lane C's.
+Each with a gamepad binding and a gaze-dwell twin (rule 5). Names are lane C's (`Atlas.Input.AtlasAction`,
+`AtlasAxis`).
 
 | Action | Kind | Used by |
 |---|---|---|
-| Return to Home | button | SpaceLab |
-| Next space, previous space | two buttons | SpaceLab |
-| Open the menu | chord | lane D's menu |
-| Primary, secondary | two buttons | S1 (mode), S5 (–), S6 (view, next object) |
-| Axis w | one axis, −1 to 1 | S6 |
-| Rotate A | two axes | S6: XW, YW |
-| Rotate B | one axis | S6: ZW |
+| `AtlasAction.ReturnHome` | button | `SpaceActions` → `ISpaceHost.ReturnHome()` |
+| `AtlasAction.NextSpace`, `PrevSpace` | two buttons | `SpaceActions` → `RequestSwitch` to the next or previous available space |
+| `AtlasAction.SpaceMenu` | button | `SpaceActions` → lane D's menu, on its Spaces page |
+| `AtlasAction.Primary`, `Secondary` | two buttons | S6 (next object, view). S1 and S5 read no input |
+| `AtlasAxis.LeftY` | one axis, −1 to 1 | S6: w |
+| `AtlasAxis.LeftX`, `RightY` | two axes | S6: XW, YW |
+| `AtlasAxis.Twist` | one axis | S6: ZW |
 
 ---
 
@@ -2298,19 +2936,25 @@ tools/build_ios.sh <branch>        fetch, switch to <branch>, fast-forward, pull
 
 | Step | Command | Output |
 |---|---|---|
-| 1 | With `<branch>`: refuses a working tree with changes; `git fetch`, `checkout`, `pull --ff-only`, `lfs pull` | – |
-| 2 | Unity in batch mode: `-buildTarget iOS -executeMethod Atlas.EditorTools.AtlasBuild.IOS -buildOutput ATLAS/Build/iOS` (append mode when the folder already holds a project) | `ATLAS/Build/iOS/Unity-iPhone.xcodeproj`; log `ATLAS/Build/unity-build.log` |
-| 3 | `xcodebuild -scheme Unity-iPhone -configuration Release -destination generic/platform=iOS -allowProvisioningUpdates` | `ATLAS/Build/DerivedData/Build/Products/Release-iphoneos/*.app`; log `ATLAS/Build/xcodebuild.log` |
-| 4 | `xcrun devicectl device install app` on every paired physical iPhone | – |
+| 0 | Refuses anything but macOS with `xcodebuild`; refuses a project that is open in the Editor (`Temp/UnityLockfile`) | – |
+| 1 | With `<branch>`: refuses a working tree with changes; `git fetch origin`, `checkout`, `pull --ff-only origin <branch>` (a failed fast-forward does not stop the build), `lfs pull` | – |
+| 2 | Unity in batch mode: `-batchmode -quit -buildTarget iOS -executeMethod Atlas.EditorTools.AtlasBuild.IOS -buildOutput ATLAS/Build/iOS` (append mode when the folder already holds a project). The render set-up of §9.1 is applied first, as a build preprocess step | `ATLAS/Build/iOS/Unity-iPhone.xcodeproj`; log `ATLAS/Build/unity-build.log` |
+| 3 | `xcodebuild -scheme Unity-iPhone -configuration Release -destination generic/platform=iOS -derivedDataPath ATLAS/Build/DerivedData -allowProvisioningUpdates CODE_SIGN_STYLE=Automatic` (`Debug` with `ATLAS_DEV=1`; `DEVELOPMENT_TEAM` from `ATLAS_TEAM_ID`) | `ATLAS/Build/DerivedData/Build/Products/Release-iphoneos/*.app`; log `ATLAS/Build/xcodebuild.log` |
+| 4 | `xcrun devicectl device install app` on every paired physical iPhone; with `ATLAS_LAUNCH=1`, `devicectl device process launch` with the bundle id of `ProjectSettings.asset` | – |
 
 It exits with 0 on success and 1 on any failure, after printing the failing lines of the log. The project must
 be closed in the Unity Editor. Fallback: open the exported project in Xcode and press Run. The scenes built are
 the enabled scenes of `EditorBuildSettings` (§12.3).
 
+The Station's Spectator is built by `Atlas.EditorTools.AtlasBuild.Spectator`
+(`-executeMethod Atlas.EditorTools.AtlasBuild.Spectator -buildOutput Build/Spectator/AtlasSpectator.exe`):
+`StandaloneWindows64`, the define `ATLAS_SPECTATOR`, the scene `PC_Spectator` first and then every enabled
+`Space_*` scene. No script wraps it.
+
 ### 16.2 Info.plist keys and build settings
 
-`Editor/AtlasPostBuild.cs` (`[PostProcessBuild]`, lane A) writes every key. Nobody edits the generated Xcode
-project by hand (Appendix C.5). A lane that needs another key asks lane A.
+`Editor/AtlasPostBuild.cs` (`[PostProcessBuild]`, lane A, compiled only under `UNITY_IOS`) writes every key.
+Nobody edits the generated Xcode project by hand (Appendix C.5). A lane that needs another key asks lane A.
 
 | Key | Value | Why |
 |---|---|---|
@@ -2319,17 +2963,20 @@ project by hand (Appendix C.5). A lane that needs another key asks lane A.
 | `NSAppTransportSecurity` → `NSAllowsLocalNetworking` | `YES` | HTTP to a LAN address |
 | `UIFileSharingEnabled` | `YES` | The perf CSV and the event log are readable from the Mac |
 | `UIRequiresFullScreen` | `YES` | – |
-| `CFBundleURLTypes` | one entry, scheme `atlas` | The pairing link `atlas://<ip>:9050` |
+| `CFBundleURLTypes` | one entry: `CFBundleURLName` = the bundle id, scheme `atlas` | The pairing link `atlas://<ip>:9050` |
 | `MetalHudEnabled` | `YES`, development builds only | Metal Performance HUD |
 | Build setting `ENABLE_BITCODE` | `NO` on the project and both targets | – |
 
 Not written, on purpose: `NSBonjourServices`, a microphone key, a multicast entitlement, and
 `CADisableMinimumFrameDurationOnPhone` (the display stays at 60 Hz, §8.2).
 
-Player settings applied by `Editor/AtlasProjectSetup.cs` (menu "Atlas/Apply Project Settings"): IL2CPP, ARM64,
-Metal only, iOS 17.0, landscape left only, Frame Timing Stats on, managed stripping Low, VSync count 1, "Adjust
-iOS FPS based on thermal state" off, bundle id `com.winstonthov.atlas`, automatic signing, and the URP, renderer,
-layer and shader-set values of §9.1, §10.1 and §12.
+Player settings applied by `Editor/AtlasProjectSetup.cs` (menu "Atlas/Apply Project Settings", or
+`-executeMethod Atlas.EditorTools.AtlasProjectSetup.Apply`): product name `ATLAS`, IL2CPP, ARM64, Metal only,
+iOS 17.0, full screen required, landscape left only, Frame Timing Stats on, managed stripping Low, VSync count 1,
+"Adjust iOS FPS based on thermal state" off, static and dynamic batching off, plain http always allowed
+(`insecureHttpOption`, for the Forge and the Hub on the local network), bundle id `com.winstonthov.atlas`,
+automatic signing, the camera usage text, and the URP, renderer, feature and layer values of §9.1 and §12. It
+also makes sure `Atlas_Boot.unity` exists with the AR Session and the XR Origin.
 
 ---
 
@@ -2345,18 +2992,21 @@ layer and shader-set values of §9.1, §10.1 and §12.
 | ARKit keeps delivering poses and depth with the AR `Camera` component disabled in headset mode. In the source, `ARCameraManager` only reads the camera's clip planes (`ARCameraManager.cs`, `Update`). Fallback if not: keep the camera enabled, culling nothing, into a 16 × 16 texture | phone A |
 | Which formats Metal returns for the eye textures, and `Display.main.requiresSrgbBlitToBackbuffer` | phone A, logged once at boot |
 | A straight-line grid looks straight through the lenses; lens numbers and head offset tuned | phone A in the headset, three testers |
-| The shader set loads from `Resources` in a player build | phone A |
+| The four shaders load from their `Resources` folders in a player build | phone A |
+| The Render Objects features of §12.2 are in the renderer asset after the set-up has run, and `PortalRenderer.FeaturesFound` is true | Editor, then phone A |
 | Each ladder rung forced from the Console takes effect within 1 s | G4 |
 
 ### 17.2 Where the repository differs from this page today
 
-Lane A's own work list; nothing here is another lane's to fix.
+Lane A's own work list; nothing here is another lane's to fix. The code of `AtlasProjectSetup` writes what this
+page says; the assets in the repository were last saved before it and are brought up to date the first time the
+project is opened in the Editor, and at the start of every player build (§9.1).
 
-| File | Today | This page |
+| File | In the repository today | After the set-up has run |
 |---|---|---|
-| `Editor/AtlasProjectSetup.cs` | Writes URP render scale 0.8; leaves `intermediateTextureMode` at `Always`, the main light on, and the AR background feature in the renderer | Render scale 1.0, `Auto`, main light disabled, the features of §12.2, layers of §12.1, the shader set, `Screen` MSAA 1 |
-| `ProjectSettings/TagManager.asset` | No Atlas layer | §12.1 |
-| `docs/scene-ownership.md` | `AtlasShaderIDs.cs` is "B only"; `Sys_*` scenes are loaded by the boot scene | §10.1 and §12.3 (open items 6 and 7) |
+| `Rendering/Settings/Atlas_URP_iOS.asset` | Render scale 0.8, main light on | Render scale 1.0, main and additional lights disabled, no shadows |
+| `Rendering/Settings/Atlas_URP_iOS_Renderer.asset` | `intermediateTextureMode` `Always`; none of the features of §12.2 | `Auto`; the mask, the fifteen room and the two HUD features; feature layers out of the renderer's own masks |
+| `ProjectSettings/TagManager.asset` | No Atlas layer name | §12.1 |
 | `Scenes/Atlas_Boot.unity` | Also holds `ARPlaneManager`, `ARRaycastManager` and `ARCameraBackground` from the template | Unchanged by lane A. Lane C's AR set-up switches them at run time |
 
 ---
@@ -2371,34 +3021,23 @@ Lane A's own work list; nothing here is another lane's to fix.
    midpoint between the walker's eyes. `IStereoRig.HeadOffset` corrects it and is (0, 0, 0) until measured for
    the chosen headset and each phone. With zero offset the 5 cm wall test of `P1-C07` is at risk. Measure with
    item 1.
-3. **Field of view.** The eye cameras use 96° vertical at aspect 1398 : 1290, taken from §8.5's "about 50° to
-   each side and 48° up and down". Confirm against the headset's real field of view; a smaller one wastes
-   pixels, a larger one shows a black border.
+3. **Field of view.** The eye frusta are clamped to 50.28° to each side and 48° up and down (96° vertical at
+   aspect 1398 : 1290 with the default lens numbers), taken from §8.5's "about 50° to each side and 48° up and
+   down". Confirm against the headset's real field of view; a smaller one wastes pixels, a larger one shows a
+   black border. The two limits are properties of `LensModel` and not registry parameters yet.
 4. **Values added to §12.4.** `QualityTier.High = 4` (ρ = 3.5, 7 × 7), `glued.copies` = 7 and `render.msaa` = 1
    extend the kill-switch ranges so that the high and the critical rung are ordinary parameter values.
    `State.flags` has two bits for the tier, so `High` is sent as 0.
 5. **Ladder details the plan leaves open.** Step-up thresholds 6.5 ms and 8.0 ms (proposed); "missing 60 fps"
-   read as frame p95 over 17.2 ms across the last 10 s; no automatic step up from `Critical`. And what the walker
-   sees on `Critical`: this page shows "Session over" on the HUD and keeps rendering at 30 fps.
-6. **Who edits `AtlasShaderIDs.cs`.** §6.4 says lanes A and B, `docs/scene-ownership.md` says B only. This page
-   has lane A create and edit it until lane B starts (lane B's page proposes the same). The ownership file needs
-   that line changed.
-7. **`Sys_*` scenes.** §9.3 lists five system scenes; README F3 builds systems in code. This page creates none.
-   Confirm, and correct `docs/scene-ownership.md`.
-8. **One URP asset.** `P1-A03` asks for "tier assets Nominal / Fair / Serious". The eye-texture sets carry scale
-   and MSAA, so this page keeps one URP asset and makes the tiers rows of a table. Confirm.
-9. **Step 8 in two halves.** `State` is sent from `LateUpdate` (§7.2 of the plan); counters are sampled and
-   received parameters applied after rendering (README F5). Confirm the split.
-10. **No space entered.** `State.spaceId = 255` and `sceneId = 0xFFFF` during onboarding and scan. Appendix B.1
-    only lists 0 to 6. Lane D's codec and the Spectator must accept it.
-11. **Shading.** The shader does not light by the normal (D23); every generator bakes one fixed light into the
-    vertex shade with `AtlasShading`. If the first headset view reads too flat, a normal term is an addition to
-    the warp contract (lane B's open item 10) and is announced to all four lanes.
-12. **Geometry pose after a jump.** This page assumes it follows the raw pose again, so registered spaces stay
-    registered; only the displacement of the jump frame is dropped. Lane C's page defines it; if it differs,
-    registered spaces read the raw pose.
-13. **Parameters are never deleted.** A space's parameters exist from boot and keep their values across
-    switches; leaving a space only marks its group inactive. This needs a group flag in lane D's registry; the
-    fallback is that every group stays listed.
-14. **A device build with no Bump Guard does not enter headset mode.** A missing guard is treated as a boot
-    error on the phone and as a warning in the Editor.
+   read as frame p95 over 17.2 ms across the last 10 s; no automatic step up from `Critical`; no automatic step
+   up at all while the perf probe has no data; leaving a pin restarts the 20 s dwell. And what the walker sees
+   on `Critical`: the HUD shows "Session over" and rendering goes on at 30 fps.
+6. **Shading.** The shader does not light by the normal (D23); every generator bakes one fixed light into the
+   vertex shade with `AtlasShading`. If the first headset view reads too flat, a normal term is an addition to
+   the warp contract (lane B's open item 10) and is announced to all four lanes.
+7. **One look, four shaders.** README F7 names one shader. The gaze reticle, the Bump Guard cue and the
+   flat-twin map each draw with a shader of their own (§10.1). Accept them as exceptions in F7, or move them
+   onto `Atlas/Surface`.
+8. **The 0.25 m rule has two measures.** Gridded shapes keep cell sides to 0.25 m (diagonals to 0.354 m); the
+   strict pass keeps every edge to 0.25 m at about twice the triangles (§10.2). Decide which one the warp of
+   lane B needs, because the triangle budgets of §15 were written for the first.

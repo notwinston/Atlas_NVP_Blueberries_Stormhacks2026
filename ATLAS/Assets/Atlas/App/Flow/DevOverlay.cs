@@ -51,23 +51,34 @@ namespace Atlas.App
             enabled = HeadsetGate.OverlayDrawn(_wanted, device, headset, _app == null || _app.GuardInstalled);
         }
 
+        /// <summary>
+        /// True when the overlay is drawn and the point, in screen pixels from the bottom left, is inside its
+        /// box: a press there belongs to the overlay's buttons and is not the headset lever.
+        /// </summary>
+        public bool Covers(float screenX, float screenY)
+        {
+            return enabled && DevOverlayLayout.Contains(screenX, screenY, Screen.height, _warningOnly);
+        }
+
         void OnGUI()
         {
             if (_app == null) return;
             // One layout for every screen: 540 units tall.
-            float scale = Screen.height / 540f;
+            float scale = Screen.height / DevOverlayLayout.ReferenceHeight;
             GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
             if (_warningOnly)
             {
                 // A phone with no Bump Guard says so whatever dev.overlay is, release builds included
                 // (lane A contract, section 7.2).
-                GUILayout.BeginArea(new Rect(8f, 8f, 250f, 64f), GUI.skin.box);
+                GUILayout.BeginArea(new Rect(DevOverlayLayout.Left, DevOverlayLayout.Top, DevOverlayLayout.Width,
+                    DevOverlayLayout.WarningHeight), GUI.skin.box);
                 GUILayout.Label(HeadsetGate.Message);
                 GUILayout.Label("The headset view is refused.");
                 GUILayout.EndArea();
                 return;
             }
-            GUILayout.BeginArea(new Rect(8f, 8f, 250f, 524f), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(DevOverlayLayout.Left, DevOverlayLayout.Top, DevOverlayLayout.Width,
+                DevOverlayLayout.Height), GUI.skin.box);
 
             ISpaceHost host = _app.Spaces;
             RehearsalFlow flow = _app.Flow;

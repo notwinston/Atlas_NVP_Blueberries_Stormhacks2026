@@ -36,7 +36,10 @@ if [ $# -ge 1 ]; then
   [ -z "$(git -C "$repo" status --porcelain)" ] || die "the working tree has changes; commit or stash them before building a branch"
   git -C "$repo" fetch origin
   git -C "$repo" checkout "$branch"
-  git -C "$repo" pull --ff-only origin "$branch" || true
+  # A branch that exists only on this machine has nothing to pull; one that is on the remote must fast-forward.
+  if git -C "$repo" rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null; then
+    git -C "$repo" pull --ff-only origin "$branch" || die "$branch does not fast-forward to origin/$branch; sort that out first"
+  fi
   git -C "$repo" lfs pull
 fi
 commit="$(git -C "$repo" rev-parse --short HEAD)"
@@ -117,4 +120,4 @@ done <<< "$ids"
 
 [ "$failed" = "0" ] || die "at least one install failed. First launch after a new signing identity:
 Settings > General > VPN & Device Management > the owner account > Trust."
-step "Done: $commit$dirty is on the phone(s). Add a line to docs/build-queue.md."
+step "Done: $commit$dirty is on the phone(s). Add a line to the queue in docs/build-seat.md."

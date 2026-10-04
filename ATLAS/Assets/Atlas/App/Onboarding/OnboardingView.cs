@@ -69,6 +69,12 @@ namespace Atlas.App.Onboarding
             Build(parent);
         }
 
+        /// <summary>
+        /// The development overlay, drawn over this screen in the Editor and in development builds. A
+        /// pointer-down inside its box is left to its buttons. May be null.
+        /// </summary>
+        public DevOverlay Overlay { get; set; }
+
         /// <summary>Once per frame, after the flow's own tick.</summary>
         public void Refresh(float deltaTime)
         {
@@ -350,6 +356,9 @@ namespace Atlas.App.Onboarding
         void OnPointerDown(PointerDownEvent e)
         {
             Vector2 screen = ToScreen(e.position);
+            // The overlay's buttons are immediate-mode and do not stop the event: without this a press on
+            // one of them would also be the lever tap of the headset prompt, or a corner of the outline.
+            if (Overlay != null && Overlay.Covers(screen.x, screen.y)) return;
             if (_flow.Step == OnboardingStep.Confirm && _flow.Adjusting)
             {
                 _dragIndex = PickCorner(screen);

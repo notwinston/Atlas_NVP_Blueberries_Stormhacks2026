@@ -116,6 +116,8 @@ namespace Atlas.App
         public QualityLadder Ladder { get; private set; }
         public SpaceLab Spaces { get; private set; }
         public CommandRouter Commands { get; private set; }
+        /// <summary>Return home, next and previous space and the space menu, from the gamepad or the gaze.</summary>
+        public SpaceActions SpaceActions { get; private set; }
         public AtlasTelemetry TelemetrySystems { get; private set; }
         public AssetClient Assets { get; private set; }
         public RoomHandOver HandOver { get; private set; }
@@ -306,11 +308,17 @@ namespace Atlas.App
             Flow.OwnsFlow = !Onboarding.OwnsFlow;
             HandOver.AutoEnter = !Onboarding.OwnsFlow;
 
-            // 20  The tail of the frame after lane D's hooks: the ladder, the flow, the hand-over, then
-            //     SpaceLab, which so starts a switch in the frame that asked for it.
+            // 20  The tail of the frame after lane D's hooks: the ladder, the flow, the hand-over, the
+            //     SpaceLab actions of the action map, then SpaceLab, which so starts a switch in the frame
+            //     that asked for it.
             Loop.AddAfterFrame(Ladder);
             Loop.AddAfterFrame(Flow);
             Loop.AddAfterFrame(HandOver);
+            StereoRig rig = Rig;
+            SpaceActions = new SpaceActions(Spaces, Registry) { InHand = () => rig.Mode != DisplayMode.Headset };
+            var menu = Menu as Atlas.App.Menu.OnDeviceMenu;
+            if (menu != null) SpaceActions.OpenSpaceMenu = menu.OpenOnSpaces;
+            Loop.AddAfterFrame(new SpaceActionStep(InputService, SpaceActions));
             Loop.AddAfterFrame(Spaces);
 
             // Every property starts from the registry's value; then the app is live.

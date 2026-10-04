@@ -1,4 +1,5 @@
 using System;
+using Atlas.World;
 
 namespace Atlas.Rendering
 {
@@ -111,7 +112,7 @@ namespace Atlas.Rendering
                 PerfValid = _perfValid,
                 GpuP95Ms = _gpuP95Ms,
                 FrameP95Ms = _frameP95Ms,
-                ForcedTier = _forcedTier,
+                PinTier = _forcedTier,
             };
             if (_ladder.Step(in inputs))
                 Apply(_ladder.Tier);

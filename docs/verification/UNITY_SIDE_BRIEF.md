@@ -5,6 +5,10 @@ Paths in this brief are relative to the repository root: the folder that holds `
 `docs/` and `recordings/`. The code is the truth. Where this brief and the code disagree, trust the code and
 write the difference into your report.
 
+Last checked against the code on `phase1-acd` at commit `025b6fb` plus the last fixes still uncommitted
+there (`App/Commands/SpaceActions.cs`, `App/Flow/DevOverlayLayout.cs`). If `git log` shows later commits
+that touch `ATLAS/Assets/Atlas/App`, trust the code.
+
 Contents: 0 who you are · 1 rules · 2 tools · 3 the steps (a to h) · 4 risk register · 5 known gaps ·
 6 paste this to start.
 
@@ -21,13 +25,16 @@ session that wrote the code has none of those. It reads `docs/verification/` and
    were written and checked without the Unity Editor, without Xcode and without a phone.
 2. Lane B (hyperbolic and spherical spaces) is deliberately not built. Only its contract types exist, with a
    flat stub (`Atlas.Kernel.FlatWalkerKernel`).
-3. Verified: every C# assembly compiles against the real Unity 6000.3.25f1 and package assemblies in three
+3. Verified: all 35 C# assemblies compile against the real Unity 6000.3.25f1 and package assemblies in three
    configurations (iOS player, Windows Station, Editor) through `tools/headless/verify.py`.
-4. Verified: about 1,300 engine-free NUnit tests pass headless.
-5. Verified: the Hub (.NET 8) and the Forge (Python, procedural generator) run for real with their own test
-   suites; `tools/e2e/run_station_rehearsal.sh` rehearses both with no Unity.
-6. Never verified: Unity importing the project; the generated scenes and `.meta` files loading.
-7. Never verified: the Atlas shaders compiling; any rendered frame.
+4. Verified: 1,383 engine-free NUnit tests pass headless, plus the 13 added with the last fixes
+   (`SpaceActionsTests`, `DevOverlayLayoutTests`; `Atlas.App.Tests` alone is 186 of 186).
+5. Verified: the Hub (.NET 8, 42 tests), the Forge (Python, procedural generator, 53 tests) and the Console
+   (58 tests) pass their own suites; `tools/e2e/run_station_rehearsal.sh` runs a real Hub and a real Forge
+   with no Unity and passes.
+6. Never verified: Unity importing the project; the generated scenes (the boot scene, four space scenes,
+   `PC_Spectator`) and `.meta` files loading.
+7. Never verified: the seven Atlas shaders compiling; any rendered frame; the Windows Spectator build.
 8. Never verified: the tests marked `[Category("Unity")]`; the Editor set-up script `AtlasProjectSetup`.
 9. Never verified: the native iOS plugins, an iOS build, anything on a device.
 10. Never verified: the TripoSG generator (it needs the Station's RTX 5070).
@@ -241,7 +248,8 @@ matters.
 | A package fails to resolve | `ATLAS/Packages/manifest.json`: `com.coplaydev.unity-mcp` is a git URL on `#main`; `com.revenantx.litenetlib` 2.1.4 comes from the OpenUPM scoped registry. Both need the network on a first resolve |
 | `error CS` in an Atlas assembly | The harness compiled the same sources against the same DLLs, so suspect what differs: the `.asmdef` (references by name, `allowUnsafeCode`, `defineConstraints`), a `.meta` GUID, a define. Compare with `tools/headless/verify.py` lines 51 to 66 (the defines it used) |
 | "GUID conflict" or "has no meta file" | `tools/gen_meta.py` wrote the `.meta` files. Report every `.meta` Unity creates or rewrites |
-| A scene shows a missing script | `tools/gen_scenes.py` wrote the four space scenes with the script GUIDs from the `.meta` files. SpaceLab falls back to the registered factory when a scene holds no module, so the app still runs; report it |
+| A scene shows a missing script | `tools/gen_scenes.py` wrote the four space scenes with the script GUIDs from the `.meta` files (and `PC_Spectator`, which holds one empty object `AtlasSpectatorBoot` and no script). SpaceLab falls back to the registered factory when a scene holds no module, so the app still runs; report it |
+| `AtlasRuntimeTheme.tss` shows an import error, or its `.meta` is rewritten | `ATLAS/Assets/Atlas/App/Onboarding/Resources/AtlasUi/AtlasRuntimeTheme.tss` is one line, `@import url("unity-theme://default");`, and its `.meta` came from `tools/gen_meta.py` with a GUID only. Unity adding importer settings to that `.meta` is expected: keep the GUID and list the file |
 | `Burst error` | `Safety/Core/BumpDepthJob.cs`, `Spaces/Slicer/SlicerJobs.cs`, `Kernel/Mesh4D/SliceJob.cs` |
 | Errors in the test assemblies only | `ATLAS/Assets/Atlas/Tests/*/Atlas.*.Tests.asmdef` use `overrideReferences` with `nunit.framework.dll` |
 | Stray `*.csproj` in `ATLAS/` | Left by an earlier Editor; git ignores them. Not a fault |
@@ -381,7 +389,7 @@ play mode itself). The PlayMode tab should list nothing from Atlas.
 `Atlas` object, no error line and no leaked-material warning when it ends.
 
 **The tests that have never run** (compiled out of the headless run by `#if !ATLAS_HEADLESS`, marked
-`[Category("Unity")]`): 19 tests in five classes.
+`[Category("Unity")]`): 19 tests in five classes (recounted after the last fixes: unchanged).
 
 | Class (file under `ATLAS/Assets/Atlas/Tests/`) | Tests |
 |---|---|
@@ -397,19 +405,24 @@ stop with `sample_3x3` and no boot scene.
 **Expected size per assembly.** Counted from the attributes in the source, not from a run: a `[TestCase]`
 row is one test in the Runner, so the Runner's totals are a little higher than the first column.
 
-| Assembly | `[Test]` and `[UnityTest]` methods | `[TestCase]` rows | Unity-only tests |
+| Assembly | `[Test]` and `[UnityTest]` methods | `[TestCase]` and `[TestCaseSource]` attributes | Unity-only tests |
 |---|---|---|---|
-| `Atlas.App.Tests` | 159 | 18 | 3 |
+| `Atlas.App.Tests` | 171 | 16 | 3 |
+| `Atlas.E2E.Tests` (`Tests/App/E2E`) | 8 | 2 (sources: five fixtures, four spaces) | 0 |
 | `Atlas.Architecture.Tests` | 5 | 0 | 0 |
 | `Atlas.Input.Tests` | 52 | 0 | 4 |
 | `Atlas.Kernel.Tests` | 42 | 15 | 0 |
-| `Atlas.Link.Tests` | 107 | 0 | 0 |
-| `Atlas.Rendering.Tests` | 161 | 12 | 7 |
+| `Atlas.Link.Tests` | 110 | 0 | 0 |
+| `Atlas.Rendering.Tests` | 173 | 12 | 7 |
 | `Atlas.Safety.Tests` | 62 | 8 | 0 |
-| `Atlas.Scan.Tests` | 216 | 37 | 0 |
-| `Atlas.Spaces.Tests` | 97 | 0 | 5 |
-| `Atlas.Telemetry.Tests` | 124 | 52 | 0 |
+| `Atlas.Scan.Tests` | 219 | 37 | 0 |
+| `Atlas.Spaces.Tests` | 100 | 0 | 5 |
+| `Atlas.Telemetry.Tests` | 132 | 52 | 0 |
 | `Atlas.World.Tests` | 43 | 32 | 0 |
+
+Twelve test assemblies. The first column sums to 1,117, of which 19 are Unity-only; the headless total of
+1,396 is higher because every `[TestCase]` row and every value of a source is a test of its own. In Unity
+expect that total plus the 19, minus the one headless-only test below.
 
 One test runs only headless and is absent in Unity by design: `StepAndDepth_AllocateNothing` in
 `Safety/BumpGuardReplayTests.cs` (`#if ATLAS_HEADLESS`).
@@ -424,6 +437,7 @@ each red test its full name and the first line of its message.
 | Tests that read repository files fail in Unity but pass headless | They find files through `ATLAS_PROJECT_DIR`, falling back to the current directory, which is the project folder inside Unity. A test that needs the repository root (`recordings/`) may resolve it differently |
 | `TheSteadyFrame_AllocatesNothing` red | `Is.Not.AllocatingGCMemory` with the Editor's job safety checks on. Re-run with Jobs > Burst > Safety Checks off before you call it a fault |
 | `BootstrapUnityTests` asserts on the display mode | The test starts the app with a room on the command-line path (`BootOptions.Room`), so the rehearsal flow owns the flow and enters the headset view by itself |
+| `BootstrapUnityTests` fails with "Home is available: its own module, or the built-in grid space when Home is not in the build" | `SpaceLab.IsAvailable(SpaceId.Home)` is false: neither `Space_Home` nor a registered factory was found. See the registrations (risk I6) |
 | Mono formats a number differently from .NET 8 | `RoomModelJson.Write` uses the custom format `"0.0#####"`; pose-log text likewise. A golden-text test then fails only in Unity |
 | A test passes alone and fails in Run All | Static state left by another test: `AtlasServices`, `BumpCue`, `SpaceRegistry`, `AppHooks` |
 
@@ -469,7 +483,8 @@ the source.
 
 **The first picture, both branches (the hand view).**
 
-- Right 46 % of the screen: a dark card, the onboarding screen (UI Toolkit, built-in font). Title
+- Right 46 % of the screen: a dark card, the onboarding screen (UI Toolkit; Unity's default runtime theme
+  loaded from Resources as `AtlasUi/AtlasRuntimeTheme`, every size and colour set in code, built-in font). Title
   `Welcome to ATLAS`, a body that starts "You scan this room with the phone in your hand, then walk it in the
   headset.", a wide white button `Start` and a dark button `Sample room (no scan)`.
 - Top left: a small grey box, the development overlay (`dev.overlay`, on in the Editor). It reads
@@ -498,11 +513,17 @@ The onboarding screens, in order, with their exact titles and buttons:
 | sweep | `Scan the room` or `Outline the room` | `Done`, `Outline by hand` or `Add corner here` and `Undo corner`, `Back` | Branch S only |
 | confirm | `Is this your free floor?` | `Looks right`, `Adjust` / `Done adjusting`, `Scan again` | White outline, green free rectangle, yellow lap square drawn on the floor |
 | build | `Building your room` | none | At most 3 s |
-| headset | `Put the phone in the headset` | `Switch now`, `Scan again` | Counts down from 10 s. A click anywhere but on another button (the lever), the `Switch now` button or gamepad A switches at once. The body gives `Free floor: W x D m` and either `You will walk a square of S m.` or the standing-mode sentence |
+| headset | `Put the phone in the headset` | `Switch now`, `Scan again` | Counts down from 10 s. The `Switch now` button, gamepad A, or a click anywhere that is neither on another button nor inside the overlay's box (the lever) switches at once. The body gives `Free floor: W x D m` and either `You will walk a square of S m.` or the standing-mode sentence |
 | home | (nothing) | | The card is gone |
 
-Quirk to know: during the headset step a click on an overlay button also counts as the lever tap and
-switches to the headset view.
+The overlay's box and the card. While the overlay is drawn, a press inside its box belongs to the overlay
+only: it is not the lever tap of the headset step, and on the confirm screen it neither places nor drags a
+corner (`OnboardingView.OnPointerDown` asks `DevOverlay.Covers`). The box is the rectangle 8, 8, 250 x 524 on
+a layout 540 units high, scaled to the screen height (`App/Flow/DevOverlayLayout.cs`): at 2796 x 1290 it is
+about the left 616 pixels, nearly the full height, blank parts of the box included. Check two things: a click
+on an overlay button during the countdown does not switch to the headset view, and a click just right of the
+box still does. Repeat at a Game view size that is not 16:9 and report it if the grey box and the dead zone do
+not line up.
 
 **The headset view in Home: the expected picture.**
 
@@ -531,7 +552,10 @@ switches to the headset view.
 | W A S D | Walk at 0.7 m/s | Only while the head is the keyboard walker (branch N, or `pose.source` = `walker`) |
 | Left Shift / Left Ctrl held | 1.0 m/s / 0.3 m/s | |
 | Right mouse button held + mouse | Turn the head, 0.15 degrees per pixel, pitch limited to 85 degrees | |
-| Left mouse click | The headset lever: fires the gaze target under the reticle, otherwise `Confirm` | A click on an overlay button is also a lever tap |
+| Left mouse click | The headset lever: fires the gaze target under the reticle, otherwise `Confirm` | Quirk, headset view only: a click on an overlay button is also a lever tap here (this path is in `Atlas.Input`, not in the card), so it fires a gaze target under the reticle, or `Confirm`. Look away from the menu chip before you click the overlay |
+| H | Return to Home | Gamepad: B held 1.0 s (a tap of B under 0.5 s is Back). Already in Home: the walker is put back on the floor, no fade |
+| Page Up / Page Down | Next / previous built space in the order S0, S1, S5, S6, wrapping at both ends | Gamepad: d-pad up / down. Only with the menu closed; with the menu open the d-pad moves the focus |
+| Tab | Opens the menu on its `Spaces` page; with the menu open, jumps to that page | Gamepad: start with select up |
 | F1 | Opens and closes the on-device menu | Gamepad: start while select is held |
 | Up / Down arrows | Menu: move the focus | Gamepad: d-pad or left stick |
 | Left / Right arrows | Menu: step the focused value; on the first row, change the page | |
@@ -540,9 +564,14 @@ switches to the headset view.
 | M / X | Slicer: next body / slice or shadow view | Gamepad Y / X |
 | I K / J L / = - | Slicer: move the cut (`slicer.w`) / turn XW / turn ZW | Left stick / triggers. YW has no key: right stick, or its gaze handle |
 
-Bound but read by nothing in this build (not a fault of your keyboard): H (return home), Page Up and
-Page Down (next and previous space), Tab (space menu), comma and period outside the Slicer's sweep.
-Switch spaces with the overlay, the menu or the Station.
+H, Page Up, Page Down and Tab do nothing, by design, in four cases: in the hand view; while a space switch
+is under way (fading out, loading, fading in); while `demoLock` is on; and, for the first three, while the
+menu is open. The overlay's buttons, the menu's own `Spaces` rows and the Station's commands are not held
+back by the lock.
+
+Bound but read by nothing in this build (not a fault of your keyboard): comma and period (previous and next
+variant; gamepad shoulders), and the left and right arrows outside the menu (the floor dial; gamepad d-pad
+left and right).
 
 **Parameters, from the command line.** Pass them after `-projectPath` when you start the Editor, or in the
 Xcode scheme for the phone.
@@ -592,7 +621,8 @@ on Enter.
 **The checks I want from you** are the walk-through that follows. In short: the Console lines above; no
 magenta; two eye images; Home in each of the five fixture rooms; the cue at a wall; HUD, menu and mini-map;
 each built space and each of its layouts; return to Home; standing mode; the three recorded walks; Stats
-against the budgets; a clean stop.
+against the budgets; a clean stop; the performance tour; the four space actions from the keyboard and their
+refusals; the menu's rescan.
 
 #### The walk-through
 
@@ -615,13 +645,16 @@ with the overlay buttons: the space reloads with the new room through a fade. On
 | 11 | `glued.mode` = `klein`, then `t3`; `glued.copies` = 3 and 7 | `klein`: every second row is mirrored, and is not inside out; avatar shoulder colours swap in mirrored copies. `t3`: 3 x 3 x 3, a layer above with an avatar in it when you look up. Copies change the lattice within a frame | `glued_klein`, `glued_t3`, `glued_copies7` |
 | 12 | Overlay `S5` (Impossible Rooms) | `rooms.layout` = `booth`: a booth in a corner of the room whose door shows a hall larger than the booth. Walk through the door: no seam, no pop, no hole when one eye is through. `rooms.layout` = `loop`: a corridor of four right turns that arrives in a different room; rooms carry tally marks 1 to `rooms.count` | `portal_booth`, `portal_loop` |
 | 13 | Overlay `S6` (Slicer) | The room as in Home plus a 3D cross-section of a 4D body floating at about 1.25 m, to one side, and a lane on the floor on the other side: walking the lane moves the cut. I and K move it too. M steps through `tesseract`, `cell5`, `cell16`, `cell24`, `tube`, `ball`. X shows the dithered shadow round the slice. Small handle and chip boxes are gaze targets | `slicer_tesseract`, `slicer_tube`, `slicer_shadow` |
-| 14 | Overlay `Home`; and the menu row `Return to Home` from another space | Back in Home through a fade. Pressed while already in Home: no fade, nothing visible changes | `home_return` |
-| 15 | Overlay `tiny_standing`, then each space | Home: no lap outline, the centre mark stays. Glued: runs in place, no chevrons. Slicer: no lane; the body about 0.35 m from the centre. Impossible Rooms: a small booth, or the real room alone. The full flow's headset step says `This floor is small, so you will use standing mode: stay on the spot and turn; do not walk.` | `standing_<space>` |
+| 14 | Overlay `Home`; the menu row `Return to Home` from another space; and H from another space | Back in Home through a fade, each way. Pressed while already in Home: no fade, nothing visible changes | `home_return` |
+| 15 | Overlay `tiny_standing`, then each space | Home: no lap outline, the centre mark stays. Glued: runs in place, no chevrons. Slicer: no lane; the body about 0.35 m from the centre. Impossible Rooms: a shallow booth whose door is in front of you and not under you (0.5 m is kept between the middle of the floor and the door where the floor allows), or the real room alone. The full flow's headset step says `This floor is small, so you will use standing mode: stay on the spot and turn; do not walk.` | `standing_<space>` |
 | 16 | `sample_3x3`, then overlay `replay` | The head follows a recorded walk from `recordings/` on a loop. The newest `walk_*.poselog` by file time is played; on a tie the later name wins. To choose one, start with `-atlasReplay <path>`, or through MCP set `Atlas.App.AtlasBootstrap.App.SourceSwitch.ReplayPath` and then `pose.source` to 1 (to 0 first if it is 1 already). With onboarding in charge the replay does not pick the room: have `sample_3x3` active first. `walk_lap_sample_3x3`: one lap of the lap square, 0.5 m from the walls; no STRONG on the straight sides. `walk_wall_approach`: straight at the wall at 1.0 m/s, stops 0.3 m short; the cue must be up before it stops. `walk_jump_and_loss`: a 0.5 m pose jump at 1.5 s that the cue sees and the geometry ignores, then one second of limited tracking that raises the white "stand still" ring. Overlay `walker` returns the keys | `replay_lap`, `replay_wall`, `replay_jump` |
 | 17 | Game view > Stats in each space, with `dev.overlay` off | Batches at most 300 and Tris at most 500k, for both eyes together, everywhere. Set-pass calls at most 60. Per space, on `budget_room`: Home at most 60 draw calls and 130k triangles (the room alone is 28 draws); Glued 5 x 5 at most 150 and 250k; Glued 3 x 3 x 3 at most 160 and 250k; Impossible Rooms at most 60 and 150k; Slicer at most 70 and 160k. The Home and Glued figures are constants in the code (`RoomBudget`, `GluedBudget`); the other two are the plan's (section 8.5) | `stats_<space>` |
 | 18 | Leave it running for a minute in each space, Console open | No red line. No message that repeats every frame. The Profiler shows 0 B of managed allocation per frame in `AtlasFrameLoop.Update` and `LateUpdate` once a space runs (the overlay and the Editor itself allocate; judge with `dev.overlay` off) | `console_clean` |
 | 19 | Stop play mode | No red line. No `Atlas` object, eye texture or pooled material left in the scene. Enter play mode again: it boots the same way (also with Enter Play Mode Options set to no domain reload, if the owner uses that) | `stop` |
 | 20 | Start with `-atlasRoom budget_room -atlasPerf tour -atlasPerfVisit 5` | A scripted run through S0, S1 5 x 5, S1 3 x 3 x 3, S5 and S6. Logs `Atlas: performance run tour started, ...` and `Atlas: performance run finished: ...`. In the Editor every row ends `incomplete`, which is correct there. Files `tour_<session>.csv`, `perf_<session>.csv`, `events_<session>.jsonl` under `~/Library/Application Support/DefaultCompany/ATLAS/logs` (the Editor's `persistentDataPath`; every play session writes its event log there) | `perftour` |
+| 21 | In Home, headset view, menu closed: Page Up four times, Page Down four times, Tab, then Tab again from the `Quality` page, H in Glued | Page Up: Glued, Impossible Rooms, Slicer, Home, each through a fade; a press during a fade is ignored, so wait for each. Page Down: the same backwards. Tab opens the menu on `Spaces`, and from another page jumps back to it. H returns Home. Then set `demoLock` on (menu > `Parameters`, or the Console's lock): all four keys do nothing, the overlay and the menu's rows still switch. Set it off again. In the hand view (overlay `Back in the hand` needs the no-onboarding start; otherwise before the headset step) none of the four does anything | `actions_next`, `actions_menu`, `actions_locked` |
+| 22 | With onboarding in charge (the fast or the full way), in Home: F1 > page `Session` > `Rescan the room` | The menu closes, the view leaves the headset for the hand, and the card shows `Your room` with `Scan this room`, `Outline by hand` and `Sample room (no scan)`. The room of the earlier scan is not drawn over the camera picture. Started with `-atlasRoom` or `-atlasReplay` instead, the same row starts the rehearsal flow's scan (the overlay then shows `End sweep`) | `rescan` |
+| 23 | With onboarding in charge and `sample_3x3` active, set `perf.run` to `tour` in the menu and let it end | The run stands in `budget_room`; when it ends the room in force is `sample_3x3` again (the overlay's `Room:` line), Home is rebuilt in it, and the walls Bump Guard watches are that room's. `perf.run` = `ladder` stays in the active room throughout | `perf_roomback` |
 
 **The full flow, once, in branch S** (the rehearsal of the owner's phone flow): `Start` > `Continue without
 Station` > sweep the simulated room > `Done` > `Looks right` > `Switch now` > Home. Expect the outline on the
@@ -634,7 +667,11 @@ intrinsics are zero there), so every scanned object takes a built-in mesh: corre
 | Symptom | Look at |
 |---|---|
 | `Atlas: boot failed. The app is not running.` | The exception logged just before it; `App/AtlasApp.cs` `Build` runs the 20 steps in order |
-| The card is missing or unstyled | `App/Onboarding/OnboardingView.cs`: a `PanelSettings` made in code has no theme; the font is `LegacyRuntime.ttf` |
+| The card is missing or unstyled | `App/Onboarding/OnboardingView.cs`: the `PanelSettings` is made in code and takes its theme from `Resources.Load<ThemeStyleSheet>("AtlasUi/AtlasRuntimeTheme")`. A warning `Atlas: AtlasUi/AtlasRuntimeTheme not in Resources; the onboarding screen has no theme.` means the `.tss` did not import as a theme: sizes and colours are still set in code, the text field and buttons lose their base styling. `Atlas: the onboarding panel could not be created.` means no card at all. The font is the built-in `LegacyRuntime.ttf` |
+| H, Page Up, Page Down or Tab does nothing in a running space | `App/Commands/SpaceActions.cs`, `Refused`: the hand view, a switch under way, or `demoLock` on. Otherwise `SpaceActionStep` (added to the frame's tail in step 20 of `AtlasApp.Build`, just before SpaceLab) and the key bindings in `Input/Core/InputTwins.cs` |
+| Page Up lands on a space that is not built, or never wraps | `SpaceActions.TryNeighbour`: it skips every space `IsAvailable` rejects |
+| A click on an overlay button still skips the headset countdown, or clicks right of the box are dead | `App/Flow/DevOverlayLayout.cs` against what IMGUI really draws; `OnboardingView.ToScreen` (the panel's coordinates to screen pixels from the bottom left) |
+| `Rescan the room` leaves the hand view with no card | `OnboardingInstaller.OnRescan` is subscribed to `OnDeviceMenu.RescanRequested` only when a menu is installed; `OnboardingFlow.Rescan` answers only in the step `Home` |
 | Buttons do not react | The Input System UI module for UI Toolkit; the overlay (IMGUI) reacting while the card does not narrows it |
 | The scan never starts in branch S, or the head is far outside the fixture room | XR Simulation; use the fast way with `walker` and report what the simulation did |
 | Black stereo view | Step 3c, the lens blit. Then `Rendering/Stereo/EyeTextureSet.cs` |
@@ -691,12 +728,14 @@ Play connects at boot. To test a first launch again, delete those two keys.
 | Mirror data | `Map` tab; `curl -s http://127.0.0.1:8080/api/state` | The floor plan of the room with the head moving as you walk; the space code and cell as text |
 | Live tuning | `Tuner`: move `render.lineWidth`; change `glued.copies` while in Glued | The Editor follows within a frame or two; the value is clamped to its range; the groups of spaces not entered are folded |
 | Telemetry | `Dashboard`; `curl -s http://127.0.0.1:8080/api/telemetry` | One row per second; charts advance; `station/hub/logs/<session>/perf.csv` grows; the folder is named after the phone's session id |
-| Switch space | `Operator`: the space buttons, or `curl -s -X POST http://127.0.0.1:8080/api/scene -d '{"space":"S1","variant":"klein","args":{}}'` | The Editor fades to Glued in the Klein layout. `S2`, `S3`, `S4` are dashed, marked "not in this build", and a banner shows `space.refused` |
+| Switch space | `Operator`: the space buttons, or `curl -s -X POST http://127.0.0.1:8080/api/scene -d '{"space":"S1","variant":"klein","args":{}}'` | The Editor fades to Glued in the Klein layout. A variant sets `glued.mode` for S1, `rooms.layout` for S5 (`booth`, `loop`) and `slicer.object` for S6 (for example `cell24`), by name or by index. `S2`, `S3`, `S4` are dashed, marked "not in this build", and a banner shows `space.refused` |
 | Return to Home | `Return to Home`, or `-d '{"cmd":"home","args":{}}'` to `/api/op` | Home |
 | Recentre | `Recentre`, or `{"cmd":"recentre","args":{}}` | The walker is put back on the floor under the head; nothing else changes |
 | Quality | `{"cmd":"quality","args":{"tier":2}}`; back with `"tier":-1` | `thermal.pinTier` 2: eye textures at scale 0.6 with 2x MSAA, `glued.copies` 3; the HUD shows `tier 2`. Tier 3 also drops to 30 fps. Each within 1 s |
 | STOP | The `STOP` button or the space bar in the browser, or `{"cmd":"cue","args":{}}` | The STRONG cue, with tone, for 3 s, whatever Bump Guard says; the world keeps rendering |
-| Lock | `{"cmd":"lock","args":{"on":true}}`, then try a slider | `demoLock` on; parameter writes answer 423; the link dot is hidden while connected. Unlock with `"on":false` |
+| Lock | `{"cmd":"lock","args":{"on":true}}`, then try a slider | `demoLock` on; parameter writes answer 423; the link dot is hidden while connected; H, Page Up, Page Down and Tab do nothing in the Editor (step 3e row 21). Unlock with `"on":false` |
+| Lock set on the phone | In the Editor's menu (F1 > `Parameters`) switch `demoLock` on, then off | The Hub follows the phone's `State`: its terminal prints `demo lock on (set on the phone)`, the Console shows the lock and answers 423, and back again when switched off |
+| Leaving | Stop play mode with the Hub running | The Hub prints `phone left: <reason> (peer <n>)` at once, not after a time-out: the link's `Bye` travels inside the disconnect |
 | Hub off | Stop the Hub (Ctrl+C) while walking | Only the link dot and the HUD's link field change; frame time and the cue are unchanged. Start it again: the link returns and parameters are restored |
 
 **5. Assets into Home.** What the Editor can show:
@@ -708,17 +747,46 @@ Play connects at boot. To test a first launch again, delete those two keys.
   `tools/e2e/run_station_rehearsal.sh`.
 - The whole trip (crop, Forge job, GLB, mesh placed in Home) needs a scan on a phone: step 3h.
 
-**6. The Spectator.** There is no `PC_Spectator` scene and no Windows build method in this build (section
-5). A second Editor cannot open the same project folder. So:
+**6. The Spectator.** It has a scene of its own, `ATLAS/Assets/Atlas/Scenes/PC_Spectator.unity` (one empty
+object, `AtlasSpectatorBoot`; never in the iOS build list), and a Windows build method. The walker's app
+does not boot in that scene. A second Editor cannot open the same project folder, so in the Editor the
+phone is played by ReplayPhone:
 
 - Start `dotnet run --project tools/ReplayPhone -- --hub 127.0.0.1:9050` (a synthetic walk as the phone).
-- In the Editor open a new empty scene, press Play, then run the menu **Atlas > Start Spectator (play
-  mode)**. It connects to `127.0.0.1:9050` unless the Editor was started with `-atlasHub <ip[:port]>`.
-- Correct: `Atlas: Spectator booted. <N> parameters, ...` in the Console; two viewports side by side, the
-  mirror view (72 % of the width) and the panels (28 %); the room outline once the Hub has one; the head
-  following the walk.
+- In the Editor open `PC_Spectator` and press Play: the Spectator starts by itself. The older way still
+  works: a new empty scene, Play, then the menu **Atlas > Start Spectator (play mode)** (in `Atlas_Boot` it
+  refuses with `Atlas: the walker's app is running in this scene; the Spectator needs a scene of its own.`).
+- It dials `127.0.0.1:9050`, or the Hub named with `-atlasHub <ip[:port]>` on the Editor's or the player's
+  command line, and nothing else: an address the walker's app stored in `PlayerPrefs` is not used and the
+  Spectator stores none.
+- Correct: `Atlas: Spectator booted. <N> parameters, 4 spaces registered, Hub at 127.0.0.1:9050` in the
+  Console; two viewports side by side, the mirror view (72 % of the width) and the panels (28 %); the room
+  outline once the Hub has one; the head following the walk; space switches following the phone.
+- Furniture: the Spectator shows the same objects as the phone. A box takes its built-in mesh where the
+  phone placed one, and a Forge mesh is downloaded by its hash from the Forge the Hub announced; nothing is
+  uploaded from the Spectator. With ReplayPhone's synthetic walk and no Forge, expect boxes or built-in
+  meshes only. A line `Atlas: Spectator: ...` is a warning about the built-in mesh set.
+- Never: `Atlas: the Spectator could not start.`
 - To watch the Editor-as-phone instead, the Spectator needs a second copy of the `ATLAS` folder outside the
   repository, opened in a second Editor. Optional.
+
+The Windows build of the Spectator (never run). With the Editor closed:
+
+```sh
+"$UNITY" -batchmode -quit -projectPath "$REPO/ATLAS" -buildTarget StandaloneWindows64 \
+  -executeMethod Atlas.EditorTools.AtlasBuild.Spectator -buildOutput Build/Spectator/AtlasSpectator.exe \
+  -logFile "$REPO/docs/verification/logs/spectator-build.log"
+```
+
+It builds `PC_Spectator` first, then the enabled `Space_*` scenes of the build list, for
+`StandaloneWindows64` with the define `ATLAS_SPECTATOR`. It needs Unity's Windows Build Support module on
+the Mac; whether that module is installed is not established from the source, and `-buildTarget` re-imports
+the assets for Windows. Correct: exit code 0, `ATLAS/Build/Spectator/AtlasSpectator.exe` and its data folder
+exist, no `error CS` in the log (the harness compiled the same sources with `ATLAS_SPECTATOR` in its
+Station configuration; this is the first build by Unity itself), and the log holds
+`Atlas: render set-up applied for the build.`, because `BeforeBuild.OnPreprocessBuild` runs for every
+player build. Do it after step 3e, and switch the Editor back to the iOS target afterwards. Running the
+`.exe` is for the Station PC (risk K8); do not judge it on the Mac.
 
 **7. ReplayPhone with no phone.**
 
@@ -733,7 +801,7 @@ answered within 10 s.
 
 **Capture.** `YYYYMMDD_3f_console_<tab>.png` for each tab, `YYYYMMDD_3f_station_connected.png`,
 `YYYYMMDD_3f_stop_cue.png`, `YYYYMMDD_3f_spectator.png`; the rehearsal script's output in
-`logs/station_rehearsal.txt`.
+`logs/station_rehearsal.txt`; `logs/spectator-build.log` if you ran the Windows build.
 
 **Most likely failures, and where to look.**
 
@@ -744,6 +812,10 @@ answered within 10 s.
 | A slider does nothing | The Hub log `hub.log` shows what was sent; the phone's `events_<session>.jsonl` shows the `param` event |
 | `uvicorn` not found | The Forge's `.venv` is not active |
 | The Spectator view is black or one viewport overwrites the other | `Spectator/SpectatorView.cs`: two cameras with viewports under URP |
+| Play in `PC_Spectator` starts nothing | `Spectator/SpectatorBoot.cs`, `ShouldBoot`: the active scene's name must be `PC_Spectator`, or a root object must be named `AtlasSpectatorBoot` |
+| The Spectator connects to another address than the one given | `Spectator/SpectatorApp.cs`, the end of `Build`: `pump.Pairing = null`, `SetAddress`, `Start` |
+| The Spectator's furniture stays boxes while the phone shows meshes | `Spectator/SpectatorFurniture.cs` and `Telemetry/Map/SpectatorAssets.cs`; the Forge address comes from the Hub's `Welcome` |
+| The Spectator build fails with errors only under `ATLAS_SPECTATOR` | Code inside `#if ATLAS_SPECTATOR` (`Spectator/SpectatorBoot.cs`, `App/AtlasBootstrap.cs`); the asmdef `Spectator/Atlas.Spectator.asmdef` (Editor and `WindowsStandalone64` only) |
 
 ### 3g. The iOS build
 
@@ -854,6 +926,13 @@ are under Finder > the iPhone > Files > ATLAS > `logs`.
       from the Console and record the values (section 5: today's numbers are placeholders).
 - [ ] Pre-scan path, with `scan.teamPrescan` on: relaunch, `Use the saved room`; the log line
       `Atlas: relocalised in room <id> after <n> s, ...`; at most 10 s and 5 cm.
+- [ ] Pre-scan path in another room: `Use the saved room` fails after at most 15 s with
+      `Atlas: world map dropped and tracking restarted: the room was not recognised`, and the new sweep
+      that follows finds the floor (risk C12).
+- [ ] The menu's `Rescan the room` from Home: hand view, the `Your room` card, a new scan replaces the room.
+- [ ] A paired gamepad in the headset: hold B for 1 s to go Home (a tap is still Back); d-pad up and down
+      cycle the four built spaces and wrap; start opens the menu on `Spaces`; all inert during a fade, under
+      the Console's lock and in the hand (risk F11).
 - [ ] With the Forge running: `Atlas: object photos: choosing from <N> key frames for <n> objects` with
       N above 0; boxes first, then meshes; every box ends as a generated or a built-in mesh; at most 60 s
       from job start to placed mesh; worst frame under 20 ms during a swap. Crops upright, not mirrored.
@@ -920,8 +999,9 @@ notes (`docs/contracts/unity-api/`) list as "only Unity or a phone can confirm",
    `Atlas HUD` Render Objects features on layer 7; three of the shaders carry no `LightMode` tag.
 6. **[TOP 6]** XR Simulation changes the Editor-first path (C7): the head is the simulated camera and the
    default room is `none`, so the Editor may not behave as the engineers' reports describe.
-7. **[TOP 7]** The onboarding card (F8): a UI Toolkit panel made in code with no theme style sheet and the
-   legacy built-in font; the text field and touch pass-through are the fragile parts.
+7. **[TOP 7]** The onboarding card (F8): a UI Toolkit panel made in code, with Unity's default runtime theme
+   loaded from a one-line `.tss` under Resources that Unity has never imported, and the legacy built-in
+   font; the theme import, the text field and touch pass-through are the fragile parts.
 8. **[TOP 8]** The portal stencil passes (A11, A12): features switched on at run time, a depth reset to the
    far plane, and a stencil reference per room; holes or an empty doorway if any part is off.
 9. **[TOP 9]** ARKit with the AR camera component disabled in the headset view (B5): if poses or depth stop,
@@ -936,7 +1016,7 @@ notes (`docs/contracts/unity-api/`) list as "only Unity or a phone can confirm",
 | A1 **[TOP 3]** | `Atlas/Surface` and `Hidden/Atlas/Background` compile; `Atlas/Surface` is "SRP Batcher: compatible", 1 pass, 1 variant, no keywords | Step 3c, Inspector | Magenta world; "not compatible"; extra variants | E, then X for Metal |
 | A2 | All `Atlas/Surface` draws of an eye are in SRP batches; no depth or shadow pass; skybox once per eye after the opaques | Frame Debugger | A batch break with "different MaterialPropertyBlock"; a DepthOnly or ShadowCaster pass | E |
 | A3 | The look: thin anti-aliased floor lines every 0.5 m, stronger every 1 m, stable and equal in both eyes; a box's top brighter than its sides and each side a different shade; geometry beyond about 14 m merges with the horizon; background darker at the horizon, lighter at the zenith; a portal-frame cell bright and unshaded; half opacity gives a checker dither; fade 0 blacks out world and sky | Home on `sample_4x5_table`; a space switch for the fade | Lines that crawl or differ between the eyes; flat boxes; a hard edge at the fog; sky not fading | E, P |
-| A4 | Everything loaded with `Resources.Load` is in a player build: the seven shaders, the five fixtures (`AtlasRooms/*.json`), the fallback set (`AtlasFallback/manifest` and `<name>.glb`) | Device log: no line with `not in Resources`; the fixtures load from the overlay in a development build | Black headset view, magenta, `The sample room is not in this build.`, boxes that never become built-in meshes | P |
+| A4 | Everything loaded with `Resources.Load` is in a player build: the seven shaders, the five fixtures (`AtlasRooms/*.json`), the fallback set (`AtlasFallback/manifest` and `<name>.glb`), the onboarding theme (`AtlasUi/AtlasRuntimeTheme`) | Device log: no line with `not in Resources`; the fixtures load from the overlay in a development build | Black headset view, magenta, `The sample room is not in this build.`, boxes that never become built-in meshes, an onboarding card with bare controls | P |
 | A5 | The skybox pass fills only far-depth pixels on Metal | Look at the horizon behind walls | Sky drawn over geometry, or holes | P |
 | A6 | Vertex colour reaches the shader as R = shade, G = line weight | Home: shading and line weights as in A3 | Uniform brightness, or lines everywhere | E |
 | A7 **[TOP 1]** | The set-up leaves the assets as step 3b's table says, and a second run changes nothing | Step 3b | See step 3b | E |
@@ -978,7 +1058,8 @@ notes (`docs/contracts/unity-api/`) list as "only Unity or a phone can confirm",
 | C8 | The pose-log recorder's thread and file under IL2CPP; the text matches the .NET 8 format | `pose.record` on for a minute; open the `walk_*.poselog` | No file; a file the replay refuses | P |
 | C9 | `Camera Offset` stays at height 0 on ARKit | Home: the floor is on the real floor | The whole room floats or sinks | P |
 | C10 | With depth switched off (`perf.run` = `soakNoDepth`) the LiDAR really rests and depth returns afterwards | The run's notes; `bump` reacts again after the run | Depth stays off after the run: a safety fault, report as blocker | P |
-| C11 | World map: tracking leaves Normal after the map is applied; the anchor returns under its id; saving answers within 10 s; relocalised within 10 s to 5 cm | H2's pre-scan row; the lines `Atlas: world map saved for room ...` and `Atlas: relocalised in room ...` | Every attempt runs into the 15 s time-out (the gate `SawSearch` in `Scan/Store/Relocaliser.cs`); `ARKit gave no world map` | P |
+| C11 | World map: tracking leaves Normal after the map is applied; the anchor returns under its id; saving answers within 10 s; relocalised within 10 s to 5 cm | H2's pre-scan row; the lines `Atlas: world map saved for room ...`, `Atlas: world map applied for room <id>: relocalising` and `Atlas: relocalised in room ...` | Every attempt runs into the 15 s time-out (the gate `SawSearch` in `Scan/Store/Relocaliser.cs`); `ARKit gave no world map` | P |
+| C12 | A relocalisation that fails takes the world map out of the session again and restarts tracking, so the new scan that follows can start | With `scan.teamPrescan` on and a room saved, relaunch in another room and choose `Use the saved room`. Expect `Atlas: room <id> not relocalised: ...`, then `Atlas: world map dropped and tracking restarted: the room was not recognised`, then the sweep with tracking Normal within a few seconds | The sweep never finds a floor after a failed attempt: the session is still searching for the saved room (`ARSession.Reset` and `ClearWorldMap` in `Scan/Store/WorldMapStore.cs`, `Scan/ARKit/WorldMap/ArKitWorldMapPlatform.cs`) | P |
 
 ### 4.4 Scan and RoomModel
 
@@ -1019,6 +1100,9 @@ notes (`docs/contracts/unity-api/`) list as "only Unity or a phone can confirm",
 | F1 | `Atlas/Reticle` compiles, reaches the build, draws through the `Atlas HUD` feature | Step 3e | No dot in the headset view | E, P |
 | F2 | The reticle: a dot, and a ring that fills clockwise from 12 o'clock during a dwell; hidden in the hand | Dwell on the menu chip | No ring; a ring in the hand view | E, P |
 | F3 | On the phone: the lever is a touch that begins on the screen; gamepad B tap is Back; start with select held opens the menu; no errors with no gamepad | Headset on a table, press the lever; pair a gamepad | A lever press does nothing; errors every frame without a pad | P |
+| F11 | The four space actions from a gamepad in the headset: B held 1 s returns Home while a tap of B is still Back; d-pad up and down cycle only the built spaces and wrap; start with select up opens the menu on `Spaces`. All four are inert during a fade, with `demoLock` on, and in the hand | Step 3e row 21 in the Editor with the keys; a paired pad on the phone | A hold of B that also fires Back; d-pad up that switches space while the menu is open; an action that works under the Console's lock | E, P |
+| F12 | The overlay's dead zone for the card matches the grey box IMGUI draws, at every Game view aspect, and on a development build in the hand | Step 3e, "The overlay's box and the card" | A press on an overlay button that also skips the countdown or places a corner; a strip beside the box where the lever is dead | E, P |
+| F13 | The menu's `Rescan the room` reaches onboarding: hand view, the `Your room` card, no old room drawn over the camera picture | Step 3e row 22; on the phone from the menu in the headset, then take the phone out | The hand view with no card | E, P |
 | F4 | In the Editor the keyboard is reported as its own source | `AtlasActionMapTests` green | Keys counted as gamepad | E |
 | F5 | The menu by gaze: the chip down-left (about 34 degrees) can be caught and is not opened by accident while walking; eight text lines sit on the row targets; 6 draw calls open, 2 closed; under 0.3 ms open | Use the menu with the reticle only | The chip runs away from the gaze; text beside its rows | E, P |
 | F6 | The overlay's buttons take clicks with the Input System active; the overlay is hidden on a phone in the headset view | Step 3e | Dead overlay buttons | E, P |
@@ -1038,12 +1122,13 @@ notes (`docs/contracts/unity-api/`) list as "only Unity or a phone can confirm",
 | G5 | The deep link on a warm open; files appear under `Documents/logs` | Scan the QR code with the app already running; Finder file sharing | The address is not taken; no files | P |
 | G6 | No Local Network prompt at first launch until the `Station` screen; a paired phone connects at boot | Clean install | A prompt over the Welcome screen | P |
 | G7 | The Hub's folder carries the phone's session id; the two perf CSV files are the same bytes | `cmp` after a run | Different names or bytes | E, P |
-| G8 | The Console unfolds a space's sliders on entry; a locked Hub shows `demoLock` on in the menu | Step 3f | Folded groups stay folded | E |
+| G8 | The Console unfolds a space's sliders on entry; a locked Hub shows `demoLock` on in the menu; a lock set in the phone's menu reaches the Hub and the Console | Step 3f, rows "Lock" and "Lock set on the phone" | Folded groups stay folded; the Console still offers sliders the phone ignores | E |
 | G9 | The `/pair` QR code decodes in the iPhone Camera | H1 | The Camera app does not offer to open ATLAS | P |
 | G10 | The Console in a real browser, laptop and tablet, both orientations: layout, the STOP strip, slider feel at 30 sends a second, charts and map at the device's pixel ratio | Step 3f | Blurry canvases; STOP off screen | E |
-| G11 | The performance runs: `perf.run` in the menu and the Console; each of the four runs completes on a phone and writes `tour_`, `perf_` and `events_` files; launch arguments arrive through the Xcode scheme; `-atlasPerfQuit` quits; a run started from the menu while onboarding owns the flow leaves the headset state consistent | `docs/evidence/README.md` | A run that never ends; the phone left in the hand view | E, P |
+| G11 | The performance runs: `perf.run` in the menu and the Console; each of the four runs completes on a phone and writes `tour_`, `perf_` and `events_` files; launch arguments arrive through the Xcode scheme; `-atlasPerfQuit` quits; a run started from the menu while onboarding owns the flow leaves the headset state consistent; after a tour or a soak the walker's own room and its anchor are in force again | `docs/evidence/README.md`; step 3e row 23; on the phone after a scan, walls back on the real walls | A run that never ends; the phone left in the hand view; `budget_room` still drawn after the run, which with a real room is a safety fault: report as blocker | E, P |
 | G12 | The mini-map costs at most 0.3 ms to rebuild on the phone, in Glued 7 x 7 and in Home with a full trail | `hud.map` on; the probe | Frame-time steps ten times a second | P |
 | G13 | Baked defaults: `Resources/AtlasParams/defaults.json` needs a `.meta` from the repository tools after a Bake | Only if the owner bakes | A build that ignores the baked values | E |
+| G14 | Leaving cleanly: quitting the app, or `link.enabled` off, shows at the Hub at once with its reason | Hub terminal: `phone left: <reason> (peer <n>)` | The Hub waits for its time-out | E, P |
 
 ### 4.8 Assets and Forge
 
@@ -1065,7 +1150,8 @@ notes (`docs/contracts/unity-api/`) list as "only Unity or a phone can confirm",
 |---|---|---|---|---|
 | I1 | Home: marks 4 mm above the floor without z-fighting at 3 to 5 m; `home.marks` hides and shows them; about 30 draw calls and 124k to 125k triangles per frame on `budget_room`; walls sink to kerbs over 0.5 s with no pop when another space asks; nothing left behind on exit | Step 3e rows 2 to 4, 17 | Flicker at the marks; counts far off | E, P |
 | I2 | Glued: mirrored Klein rows render and are not inside out (they use a negative X scale and rely on Unity flipping the winding); no seam at a cell edge in either eye; the fog hides the lattice's end at 3, 5 and 7 copies; grid lines line up across mirrored rows; no z-fighting between cell floors and the hidden room floor; `Configure` plus `Enter` (99 objects) within 50 ms on the phone; a forced tier changes the copies within a frame | Step 3e rows 10, 11 | Black or missing rows in `klein`; a visible lattice edge; a hitch on entry | E, P |
-| I3 | Impossible Rooms: no seam or pop when the head crosses the booth door or a corridor seam, 10 of 10; no hole when one eye is through; no sliver past the jamb; the hall visible through the door before entry; HUD and cue on top; the real room back after leaving | Step 3e row 12 | A flash on crossing; one eye black for a frame | E, P |
+| I3 | Impossible Rooms: no seam or pop when the head crosses the booth door or a corridor seam, 10 of 10; no hole when one eye is through; no sliver past the jamb; the hall visible through the door before entry; HUD and cue on top; the real room back after leaving. The frame logic (which room draws, when the walker's room swaps) now lives in the engine-free `Rendering/Portals/PortalFrameCore.cs` and is tested headless; what is left for Unity is the stencil drawing itself | Step 3e row 12 | A flash on crossing; one eye black for a frame | E, P |
+| I8 | Impossible Rooms in standing mode: the booth's doorway is in front of a walker at the middle of the floor, never under the head | Step 3e row 15 in `tiny_standing`; on the phone on a 1.4 x 1.4 m floor | The view flips between the room and the hall with every sway of the head | E, P |
 | I4 | Slicer: Burst compiles both jobs with the profiler markers inside; `Atlas.Slicer4D` p95 at most 0.5 ms for the tesseract and 1.0 ms for the tube on the phone; switching to the tube or the ball does not hitch; the slice is drawn with culling off; the shadow dithered; the lane 12 mm above the floor without z-fighting; handles can be gazed at | Step 3e row 13; Profiler | Missing faces on the slice; a long frame on `tube` | E, P |
 | I5 | The additive scene load path, then the factory fall-back | Each space loads from the overlay; the Hierarchy shows the scene `Space_<name>` loaded | `space.loadFailed` in the event log; Home in place of the asked space | E, P |
 | I6 | The space registrations survive stripping | The boot line says `4 spaces registered` on the phone | Fewer: the menu's Spaces page is short | P |
@@ -1077,6 +1163,9 @@ notes (`docs/contracts/unity-api/`) list as "only Unity or a phone can confirm",
 |---|---|---|---|---|
 | J1 | `Atlas/FlatTwin` compiles; the map draws in the `Atlas HUD` pass with its labels after it; colours right | `hud.map` on | No map; labels behind the quads | E, P |
 | J2 | The two viewports draw without overwriting each other under URP; the text on layer 23 is visible; portal rooms render through the mirror camera | Step 3f, part 6 | One viewport black; no panel text | E |
+| J5 | `PC_Spectator` boots the Spectator and not the walker's app; it dials only the Hub it was given | Step 3f, part 6 | Nothing boots; both apps boot; a connection to a stored address | E |
+| J6 | The Spectator's furniture: built-in meshes where the phone placed them, Forge meshes by hash, the same cross-fade, nothing uploaded | A phone with a furnished scan and the Forge running, Spectator watching | Boxes that stay boxes; a mirrored or misplaced mesh | E, P, S |
+| J7 | `AtlasBuild.Spectator` produces a Windows player that starts in `PC_Spectator` and can load the space scenes | Step 3f, the Windows build; then on the Station PC | A build error; a player that shows the walker's onboarding or an empty window | Mac, S |
 | J3 | Hub plus phone (or ReplayPhone) plus Spectator: the room arrives, the world check reads ok, space switches follow | Step 3f, part 6 | "world mismatch"; a Spectator that stays in Home | E |
 | J4 | The Spectator shows what the phone shows in Glued (layout and copies) and in the Slicer (object, cut, turns) | Change `glued.mode` and `slicer.w` on the phone side | The Spectator keeps its own values | E |
 
@@ -1090,7 +1179,7 @@ notes (`docs/contracts/unity-api/`) list as "only Unity or a phone can confirm",
 | K4 | Managed stripping Low keeps what is created by name or by attribute: the UDP transport, the space registrations, the menu, onboarding and perf-run hooks, `[AtlasParam]` fields | The boot line; the link connects; the card shows; `perf.run` is in the menu | A phone build that boots with no onboarding card (the rehearsal flow then runs) or no menu | P |
 | K5 | `tools/build_ios.sh` end to end with a Personal Team | Step 3g | See step 3g | Mac |
 | K6 | Burst compiles for iOS with no managed fallback: `SliceJob`, `BumpDepthJob`, the two Slicer jobs | The Unity build log: no `Burst error` | A build failure, or a slow job on the phone | X |
-| K7 **[TOP 2]** | The generated `.meta` files and scenes import cleanly; the five scenes are in the build list in the order boot, Home, Glued, Portal, Slicer | Step 3a; File > Build Profiles | GUID conflicts; a scene with a missing script | E |
+| K7 **[TOP 2]** | The generated `.meta` files and scenes import cleanly; the five scenes are in the build list in the order boot, Home, Glued, Portal, Slicer; `PC_Spectator` imports and is not in that list | Step 3a; File > Build Profiles | GUID conflicts; a scene with a missing script; `PC_Spectator` in the iOS list | E |
 | K8 | The Station PC: the firewall script, the timer resolution path, relay delay under 2 ms | On Windows only | | S |
 
 ---
@@ -1105,12 +1194,13 @@ Report them only if they behave differently from what is written here.
 |---|---|
 | Lane B spaces: S2 Curved Walk, S3 Aligned Cells, S4 Small Planet are not registered | `4 spaces registered`; no `S2`, `S3`, `S4` button in the overlay or the menu; the Console marks them "not in this build" and a request is answered with `space.refused`. The kernel is the flat stub. `curved.cullRho` and `curved.mode` exist with no user |
 | Scan route 4, the RoomPlan wall bridge (Extended) | `scan.route` 4 behaves as route 3: mesh and boxes |
-| The Spectator as a build | No `PC_Spectator` scene and no Windows build method in `Editor/AtlasBuild.cs`. It starts only from **Atlas > Start Spectator (play mode)** |
 | Hosted fallback of the Forge | The interface exists; no vendor is wired. `forge.backend` = `hosted` generates nothing |
 | A second phone | Refused by the Hub with `another phone is already connected`; it retries with back-off |
 | SimNet loss and latency simulation | The Hub has no `--sim-loss` or `--sim-latency`. The loss rows of L9 and L12 cannot be run against the Hub yet |
-| The Console's source selector, lattice, cube-net and room-graph drawings | The map is a floor plan for every space |
-| The Spectator's keyboard shortcuts, latency read-out and object meshes | Objects stay placeholder boxes there |
+| The Console's source selector, lattice, cube-net and room-graph drawings | The Console's map is a floor plan for every space. The Unity-side map (`hud.map`, the Spectator's panel) does have a cube-net drawing for S4, which no space in this build reaches; it is tested headless only |
+| The Spectator's keyboard shortcuts and latency read-out | Not there. Its furniture is: see step 3f, part 6 |
+| Gaze targets for the four space actions | `InputTwins` names a home beacon, a next sign, a previous sign and an exhibit sign owned by SpaceLab; nothing registers them. By gaze alone the route is the menu chip, then the `Spaces` rows and `Return to Home`. The gamepad and the keys work (step 3e row 21). Gate G5 read strictly still needs the four targets |
+| A way to keep overlay clicks from the lever in the headset view | In the Editor's headset view a mouse click on an overlay button also reaches `Atlas.Input` as the lever: it fires the gaze target under the reticle, or `Confirm`. Fixed for the onboarding card only (step 3e) |
 
 **Unverified or provisional, known.**
 
@@ -1137,6 +1227,9 @@ Report them only if they behave differently from what is written here.
 - Wall cells have diagonals of 0.354 m; the 0.25 m rule is applied along the floor.
 - The menu's text is legacy `TextMesh` with the built-in font; the HUD is TextMesh Pro; the onboarding card
   is UI Toolkit. Three text systems, on purpose for now.
+- `demoLock` stops the four space actions of the gamepad and the Station's sliders. It does not stop the
+  menu's own rows, the overlay, or the operator's commands.
+- With one space in the build, next and previous space do nothing.
 - The menu is not rigidly head-locked: it keeps a level heading and re-centres past 75 degrees.
 - The link reports `degraded` after 500 ms of silence.
 - A parameter changed while offline is logged on the phone and not queued for the Station; the next
@@ -1147,14 +1240,23 @@ Report them only if they behave differently from what is written here.
 - Gamepad rumble does nothing on iOS.
 - After a Forge restart, jobs that were waiting are marked failed and sent again by the phone.
 
+**Fixed since the first version of this brief; they are now checks, not known faults.**
+
+- `H`, `Page Up`, `Page Down` and `Tab` (gamepad: B held 1 s, d-pad up and down, start) are read by
+  `App/Commands/SpaceActions.cs`: step 3e row 21, risk F11.
+- The menu row `Rescan the room` reaches onboarding: step 3e row 22, risk F13. With `-atlasRoom` or
+  `-atlasReplay` nobody subscribes and the row falls back to the rehearsal flow's `BeginScan`, as intended.
+- A click on an overlay button during the headset countdown is no longer the lever tap: step 3e, risk F12.
+- A failed relocalisation no longer leaves the session searching for the saved room: risk C12.
+- A performance run gives the walker's room back: step 3e row 23, risk G11.
+- The Spectator has its scene, its Windows build, the walker's furniture, and dials only its own Hub: step
+  3f part 6, risks J5 to J7.
+
 **Seen while this brief was written; check and report what happens.**
 
-- `H`, `Page Up`, `Page Down` and `Tab` (gamepad: B held 1 s, d-pad up and down, start) fire the actions
-  `ReturnHome`, `NextSpace`, `PrevSpace` and `SpaceMenu`, and no code reads those four actions.
-- The menu row `Rescan the room`: `OnDeviceMenu.RescanRequested` has no subscriber, so with onboarding in
-  charge the row calls the rehearsal flow's `BeginScan`, which nothing then ticks, and the onboarding card
-  stays hidden. Expect the hand view with no screen. Confirm it and report it as a fault.
 - The Editor's default depends on XR Simulation (step 3e); the engineers' reports describe branch N.
+- Comma, period and the arrows outside the menu fire `VariantPrev`, `VariantNext`, `DialLeft` and
+  `DialRight`, and no space reads those four actions.
 
 ---
 

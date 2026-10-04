@@ -1,22 +1,7 @@
+using Atlas.World;
+
 namespace Atlas.Rendering
 {
-    /// <summary>What the ladder looks at on one evaluation.</summary>
-    public struct QualityInputs
-    {
-        /// <summary>Time on the app clock. Seconds.</summary>
-        public double Time;
-        /// <summary>NSProcessInfo.thermalState: 0 nominal, 1 fair, 2 serious, 3 critical.</summary>
-        public int ThermalState;
-        /// <summary>False while the frame-time percentiles are not ready; only the thermal terms count then.</summary>
-        public bool PerfValid;
-        /// <summary>GPU frame time, 95th percentile over the last 10 s. Milliseconds.</summary>
-        public float GpuP95Ms;
-        /// <summary>Whole frame time, 95th percentile over the last 10 s. Milliseconds.</summary>
-        public float FrameP95Ms;
-        /// <summary>-1: the ladder is automatic. 0 .. 4: this tier is forced.</summary>
-        public int ForcedTier;
-    }
-
     /// <summary>
     /// The stepping rule of the thermal quality ladder (Master Plan section 8.6, task P1-A07). Engine-free and
     /// clock-free: time comes in with the inputs. Automatic moves are one rung at a time and at most one per
@@ -60,10 +45,10 @@ namespace Atlas.Rendering
         {
             QualityTier before = _tier;
 
-            if (inputs.ForcedTier >= 0)
+            if (inputs.PinTier >= 0)
             {
                 // A forced tier ignores the spacing: the Console must see it within a second.
-                int forced = inputs.ForcedTier < QualityTable.Count ? inputs.ForcedTier : QualityTable.Count - 1;
+                int forced = inputs.PinTier < QualityTable.Count ? inputs.PinTier : QualityTable.Count - 1;
                 _tier = (QualityTier)forced;
                 _forced = true;
                 return _tier != before;

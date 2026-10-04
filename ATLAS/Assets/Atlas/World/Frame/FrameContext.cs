@@ -11,7 +11,7 @@ namespace Atlas.World
     {
         /// <summary>0 on the loop's first frame, then +1 per frame. Never reset.</summary>
         public int FrameIndex;
-        /// <summary>Seconds on the app clock; the pose log's clock in replay. Monotonic.</summary>
+        /// <summary>Seconds on the app clock (unscaled), also in replay. Monotonic.</summary>
         public double Time;
         /// <summary>Seconds since the previous frame, clamped to 0.004 to 0.1.</summary>
         public float DeltaTime;

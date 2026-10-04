@@ -25,7 +25,7 @@ namespace Atlas.World
     /// <summary>Optional. Lets the Spectator drive the module from a received State (Master Plan section 7.3.1).</summary>
     public interface ISpaceStateReader
     {
-        /// <summary>Called by SpaceLab in the Spectator build before Tick, with the newest State.</summary>
+        /// <summary>Called by the Spectator's host before Tick, with the newest State. The phone never calls it.</summary>
         void ReadState(in StateMessage state);
     }
 }

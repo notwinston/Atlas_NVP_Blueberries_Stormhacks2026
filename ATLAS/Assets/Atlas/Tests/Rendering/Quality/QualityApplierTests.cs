@@ -1,3 +1,4 @@
+using Atlas.World;
 using System.Collections.Generic;
 using NUnit.Framework;
 

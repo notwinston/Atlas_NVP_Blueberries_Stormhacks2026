@@ -49,7 +49,7 @@ namespace Atlas.App.Tests
             Assert.That(app.Boot.Head, Is.Not.Null);
             Assert.That(app.Boot.Hud.gameObject.layer, Is.EqualTo(7));
             Assert.That(app.Registry[0].Name, Is.EqualTo(AppParams.Space));
-            Assert.That(app.Spaces.IsAvailable(SpaceId.Home), Is.True, "the built-in grid space stands in for Home");
+            Assert.That(app.Spaces.IsAvailable(SpaceId.Home), Is.True, "Home is available: its own module, or the built-in grid space when Home is not in the build");
 
             // The fixture room is handed over and Home is entered through a fade.
             for (int i = 0; i < 300 && app.Spaces.State != SpaceHostState.Running; i++) yield return null;

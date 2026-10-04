@@ -56,8 +56,10 @@ namespace Atlas.World
         /// <summary>The row of a tier. An undefined value gives the Nominal row.</summary>
         public static QualityRow Row(QualityTier tier)
         {
-            int i = (int)tier;
-            return s_rows[i < Count ? i : 0];
+            int index = (int)tier;
+            if (index < 0 || index >= Count)
+                throw new System.ArgumentOutOfRangeException(nameof(tier));
+            return s_rows[index];
         }
 
         /// <summary>Bits 4 to 5 of State.flags: 0 to 3; High is sent as 0 because it shares the Nominal texture set.</summary>

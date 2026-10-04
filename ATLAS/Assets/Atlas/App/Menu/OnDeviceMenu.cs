@@ -133,6 +133,17 @@ namespace Atlas.App.Menu
             Present();
         }
 
+        /// <summary>
+        /// The space menu action: the menu on its Spaces page, opened first when it is closed.
+        /// </summary>
+        public void OpenOnSpaces()
+        {
+            Open();
+            if (!_open) return;
+            _model.SetPage(MenuPage.Spaces);
+            if (_model.Revision != _shownRevision) Present();
+        }
+
         public void Close()
         {
             if (!_open) return;

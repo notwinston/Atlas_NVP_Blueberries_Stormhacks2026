@@ -1,3 +1,4 @@
+using Atlas.World;
 using NUnit.Framework;
 
 namespace Atlas.Rendering.Tests.Quality

@@ -58,8 +58,9 @@ the space curves is carried by L alone: K = κ / L².
   (`CullRho`, the `rho` of `VisibleSet`), `CrossHysteresis`.
 - Metres: `KernelConfig.TileSideMetres`, `Step`'s `headFloorMetres`, `ResetToFloor`'s `floorMetres`,
   `KernelStep.AppliedMetres`, `KernelConstants.MaxStepMetres`, everything in the shader's object and world space.
-- **At κ = 0 any positive L describes the same geometry.** The composition root passes
-  `MetresPerUnit = 1.0` (decided here), so in this build one kernel unit is one metre. Nobody may rely on that:
+- **At κ = 0 any positive L describes the same geometry.** `SpaceLab.SetRoom` configures the kernel with
+  `KernelConfig.Flat(side)`, which sets `MetresPerUnit = KernelConstants.FlatMetresPerUnit = 1.0` (decided
+  here), so in this build one kernel unit is one metre. Nobody may rely on that:
   always multiply by `MetresPerUnit`. The test `FlatWalker_UnitFree` runs the kernel at L = 1.885 to keep callers
   honest.
 - Height (Unity Y) never enters the kernel. The curved spaces are H² × E and S² × E: the floor is curved, height
@@ -172,8 +173,15 @@ Every tile has four sides. In its own frame:
 | `FlatWalkerKernel.cs` | `FlatWalkerKernel` | B |
 
 Tests: `/workspace/ATLAS/Assets/Atlas/Tests/Kernel/` (assembly `Atlas.Kernel.Tests`, §7).
-Shader includes: `/workspace/ATLAS/Assets/Atlas/Rendering/Shaders/AtlasWarp.hlsl` and `AtlasGates.hlsl` (§5, §6).
-`Mesh4D` and its slicer job also live in `Atlas.Kernel` but belong to lane A; see lane A's page.
+Shader includes: `/workspace/ATLAS/Assets/Atlas/Rendering/Shaders/Resources/AtlasWarp.hlsl` and `AtlasGates.hlsl`
+(§5, §6). Both exist as the identity implementations of this page and are kept by lane A until lane B starts
+(`docs/scene-ownership.md`).
+Also in the assembly `Atlas.Kernel`, owned by lane A and described on lane A's page: `Kernel/Mesh4D/` (`Mesh4D`,
+`Polytopes4D`, `Rotation4D`, `Projector4D`, `Slicer4D`, `SliceJob`; namespace `Atlas.Kernel.FourD`) and
+`Kernel/Mesh/` (`AtlasVertex`, `AtlasShading`; namespace `Atlas.Kernel`). The rules above about `System` and
+`Unity.Mathematics` only hold for the eleven files of the table; the assembly itself also references Burst and
+Collections and allows unsafe code for the slicer.
+`Kernel/AssemblyInfo.cs` makes internals visible to `Atlas.Kernel.Tests`.
 
 Names and signatures below are binding. Bodies are free.
 
@@ -315,6 +323,10 @@ stores κ. The §6.5 signatures stay exactly as printed. Consequences:
   everything else → 0.
 - `default(Iso2)` is the zero matrix, not the identity. Never use it.
 - Size: ten doubles, 80 bytes, blittable.
+- `CopyTo` and `FromRowMajor` throw `ArgumentException` when the span holds fewer than nine elements.
+  `FromRowMajor` checks κ first.
+- `ToString()` is `[[M00, M01, M02], [M10, M11, M12], [M20, M21, M22]] kappa=K`, round-trip format, invariant
+  culture. It is for logs only; nothing parses it.
 
 **Semantics per member.**
 
@@ -324,7 +336,7 @@ stores κ. The §6.5 signatures stay exactly as printed. Consequences:
 | `Rot(θ)` | `[[cos θ, −sin θ, 0], [sin θ, cos θ, 0], [0, 0, 1]]` | The same matrix |
 | `a * b` | Ordinary 3 × 3 product. The last row stays exactly (0, 0, 1) | Ordinary 3 × 3 product |
 | `Inverse()` | With A the upper-left 2 × 2 block and t = (M02, M12): `[[Aᵀ, −Aᵀt], [0, 0, 1]]` | κ = −1: η·Mᵀ·η. κ = +1: Mᵀ |
-| `Orthonormalised()` | n = hypot(M00, M10), c = M00/n, s = M10/n; result `[[c, −s, M02], [s, c, M12], [0, 0, 1]]`. The translation is untouched bit for bit. `InvalidOperationException` when n < 1e-12 or not finite | Gram–Schmidt with respect to η (κ = −1) or the ordinary dot product (κ = +1) |
+| `Orthonormalised()` | n = sqrt(M00² + M10²), c = M00/n, s = M10/n; result `[[c, −s, M02], [s, c, M12], [0, 0, 1]]`. The translation is untouched bit for bit. `InvalidOperationException` when n < 1e-12 or not finite | Gram–Schmidt with respect to η (κ = −1) or the ordinary dot product (κ = +1) |
 | `Apply(p)` | M · p. For a floor point use p = (x, z, 1) | M · p |
 | `Defect()` | max of \|c0·c0 − 1\|, \|c0·c1\|, \|c1·c1 − 1\|, \|M20\|, \|M21\|, \|M22 − 1\|, with c0 = (M00, M10), c1 = (M01, M11) | Largest absolute entry of Mᵀ·J·M − J, J = diag(1, 1, −1) or the identity |
 
@@ -419,6 +431,9 @@ namespace Atlas.Kernel
   S5: room id; S0 and S6: zero). Those are built with the six-word constructor and are not kernel tiles.
 - No ordering is defined. Do not sort tile ids.
 - Size: 48 bytes, blittable.
+- `CopyTo` and `FromWords` throw `ArgumentException` when the span holds fewer than six elements.
+- `TryParse` accepts exactly six comma-separated decimal integers with an optional leading sign and no white
+  space. For anything else, including `null` and the empty string, it returns `false` and `id` is "no tile".
 
 ### 2.5 `WalkerPose`
 
@@ -514,7 +529,7 @@ Rules every implementation obeys:
 | `VisibleSet` order | Non-decreasing `GraphDistance`; the centre tile first with `Chain` = identity. Within one distance the order is fixed for a given graph and input, so the phone and the Station produce the same list |
 | `VisibleSet` chains | `Chain` is computed afresh on every call. Nothing accumulates between calls |
 | Allocation | `VisibleSet` allocates nothing once `into` has the capacity. Callers pre-size the list to 1,024 (the high tier needs about 500; 373 centres lie within ρ = 5, §8.5) |
-| Bad input | `edge` outside 0..3: `ArgumentOutOfRangeException`. A tile that is not of this tiling: `ArgumentException`. `rho` negative or not finite: `ArgumentOutOfRangeException` |
+| Bad input | `edge` outside 0..3: `ArgumentOutOfRangeException`. A tile that is not of this tiling: `ArgumentException`. `rho` negative or not finite: `ArgumentOutOfRangeException`. `into` null: `ArgumentNullException` |
 | Threading | Main thread only |
 
 ---
@@ -538,6 +553,7 @@ passes κ = 0; nothing reachable from `AtlasFrameLoop` can throw this.
 | `Curvature.Require(±1)` | `NotSupportedException`; `Curvature.IsSupported(±1)` is `false` |
 | `TileId.Step(edge)` | `NotSupportedException`: it is the {4,5} step |
 | `IWalkerKernel.Configure` with `Q` = 3, 5 or 6 | `NotSupportedException` |
+| `IWalkerKernel.Configure` with any other `Q` than 3, 4, 5, 6 | `ArgumentOutOfRangeException` from `Curvature.OfQ` (permanent) |
 | `IWalkerKernel.Reset` with a pose whose `Local.Kappa` ≠ 0 | Cannot occur: no such `Iso2` can be built |
 
 So in this build **no `Iso2` with `Kappa != 0` can exist**. The tag check in `operator *` is written now but
@@ -814,21 +830,45 @@ geometry head pose in the room frame.
 
 | When | Who | Call |
 |---|---|---|
-| App start | Composition root (`Atlas.App`) | `new FlatWalkerKernel()`, published through `AtlasServices` as `IWalkerKernel` |
-| A RoomModel becomes active (scan confirmed, file loaded, fixture chosen) | Composition root | `kernel.Configure(KernelConfig.Flat(s))`, then `kernel.ResetToFloor(headFloorMetres)` |
-| Just before `ISpaceModule.Enter` of a space with `Registered == true`; on the operator commands `home` and `recentre` | SpaceLab | `kernel.ResetToFloor(headFloorMetres)`, then pass `kernel.Pose` as `start` |
-| Every frame, step 4 | `AtlasFrameLoop` | `kernel.Step(headFloorMetres, trackingNormal)` |
+| App start | Composition root (`App/AtlasApp.cs`) | `WalkerKernel = new FlatWalkerKernel(); AtlasServices.Register(WalkerKernel);` The property is typed `IWalkerKernel`, so that is the service type. The same instance goes to `FrameLoopCore`, `SpaceLab`, `LookUploadStep` and `AppParams.DeclareRender` |
+| A RoomModel becomes active (scan confirmed, file loaded, fixture chosen) | `SpaceLab.SetRoom(room)` | `kernel.Configure(KernelConfig.Flat(side))` with `side = room.LapSide`, or `KernelConstants.DefaultFlatTileSideMetres` when `LapSide` is not positive; then `IWalkerReset.LatchRoomReset()`. The head is still in the old frame at that moment, so nothing calls `ResetToFloor` yet |
+| The first frame whose head pose is in the room frame (`pipeline.Sensors.RoomActive`), after step 3 and before step 4 | `FrameLoopCore.RunUpdate` | `ResetWalkerToFloor()`, then `pipeline.ResetGeometry()` |
+| Just before `ISpaceModule.Enter` | `SpaceLab` | `if (module.Registered) _walker.ResetWalkerToFloor(); module.Enter(_kernel.Pose);` A space that is not registered is entered with the pose the kernel already has |
+| Operator command `home` | `CommandRouter.Home` → `SpaceLab.ReturnHome` | Already in Home: `ResetWalkerToFloor()` unless a room reset is latched. Otherwise a switch to Home, which resets on `Enter` as above |
+| Operator command `recentre` | `CommandRouter.Recentre` | `IFrameLoop.ResetWalkerToFloor()`, then `pipeline.ResetGeometry()` |
+| Every frame, step 4 | `FrameLoopCore.RunUpdate`, driven by `AtlasFrameLoop` | `kernel.Step(headFloorMetres, trackingNormal)` (§4.2) |
+
+Nobody outside the frame loop calls `ResetToFloor` or `Reset` directly. The two entry points are on the loop
+(`App/Frame/FrameLoopCore.cs`; the interfaces are on lane A's page):
+
+```csharp
+// IFrameLoop and IWalkerReset: kernel.ResetToFloor at the geometry head's floor point of the frame in progress.
+// A head position that is not finite resets to the anchor, double2.zero.
+public void ResetWalkerToFloor();
+// IFrameLoop: kernel.Reset(in pose).
+public void ResetWalker(in WalkerPose pose);
+```
 
 `Configure` in this build: `Q` must be 4 (else §3.1). `MetresPerUnit` and `TileSideMetres` must be finite and
 positive, else `ArgumentOutOfRangeException`. The graph becomes `new FlatTileGraph(TileSideMetres /
-MetresPerUnit)`.
+MetresPerUnit)`; a ratio that underflows or overflows is refused by that constructor before any state changes.
+
+The `CullRho` setter throws `ArgumentOutOfRangeException` for a negative or non-finite value. It is driven by
+the parameter `curved.cullRho` (`AppParams.CullRho`, range 2 to 3.5, default 3), declared in
+`AppParams.DeclareRender`.
 
 ### 4.2 What the caller of `Step` does
 
 ```csharp
-// AtlasFrameLoop, step 4. Lane A's code; shown for the call shape only.
-kernel.Step(geometryHeadFloor, trackingIsNormal);   // room frame, metres, from the pose pipeline (lane C)
+// App/Frame/FrameLoopCore.cs, RunUpdate, step 4. Lane A's code.
+_frame.Kernel = _kernel.Step(new double2(_frame.HeadPosition.x, _frame.HeadPosition.z),
+    _frame.Tracking == TrackingState.Normal);
+_frame.Walker = _kernel.Pose;
 ```
+
+`FrameContext.HeadPosition` is the geometry head pose after the pose filter of step 3 (room frame, metres).
+`FrameContext.Kernel` (`KernelStep`) and `FrameContext.Walker` (`WalkerPose`) are how spaces read the result;
+`FrameContext.FloorDelta` is information for spaces only and is not what the kernel receives.
 
 - **The hook takes the position, not the displacement** (decided here). The kernel keeps the previous head
   position itself and forms d = head.xz − previousHead.xz as §4.6 writes it. No caller keeps a "previous
@@ -837,7 +877,13 @@ kernel.Step(geometryHeadFloor, trackingIsNormal);   // room frame, metres, from 
   `StepCount` rising by exactly one per frame is the check of `P1-B02`.
 - The pose filter (lane C, step 3) is the first line of defence against relocalisation jumps. The kernel applies
   the same 0.2 m rule again by itself, so it is safe when driven directly from a test or a replayed pose log.
-- `State.flags` bit 2 ("pose jump rejected") is set from the pose pipeline, not from `LastStep.Rejected`.
+  Both guards are kept.
+- `State.flags` bit 2 ("pose jump rejected", `StateMessage.PoseJumpRejected`) is set when either guard fired:
+  `_frame.PoseJumpRejected || _frame.Kernel.Rejected && _frame.Tracking == TrackingState.Normal`. A step the
+  kernel rejects only because tracking is not Normal does not set the bit.
+- The Spectator (`Telemetry/Map/SpectatorLoop.cs`) never calls `Step`: each frame it places its own kernel
+  from the received State, with `Reset(pose)` for a curved space id whose tile is a flat-grid cell and
+  `ResetToFloor(head)` otherwise. `StepCount` stays 0 there.
 
 ### 4.3 `Step`, exactly
 
@@ -850,20 +896,20 @@ if headFloorMetres is not finite:
 else:
     d = hasPrevious ? headFloorMetres − previous : (0, 0)
     previous = headFloorMetres ;  hasPrevious = true      # every call, also when the step is rejected
-    Rejected = not trackingNormal  or  d.x² + d.y² > MaxStepMetres²        # "over 0.2 m"
+    Rejected = not trackingNormal  or  not (d.x² + d.y² ≤ MaxStepMetres²)  # "over 0.2 m"
     if Rejected:  d = (0, 0)
 
-U = (U · Boost(d / L, 0)).Orthonormalised()
-
 Crossings = 0 ;  LastEdge = −1
-repeat at most MaxCrossingsPerStep times:
-    (px, pz) = (U.M02, U.M12)                              # the walker in tile coordinates
-    e[0] = px − a/2 ;  e[1] = pz − a/2 ;  e[2] = −px − a/2 ;  e[3] = −pz − a/2     # distance past each edge
-    k = index of the largest e[k]; on a tie the lowest k
-    if e[k] ≤ h:  stop                                    # inside the tile, or within the hysteresis band
-    U = Graph.EdgeStep(tile, k).Inverse() · U
-    tile = Graph.Neighbour(tile, k)
-    Crossings += 1 ;  LastEdge = k
+if not Rejected:                                           # a rejected step does not touch the pose at all
+    U = (U · Boost(d / L, 0)).Orthonormalised()
+    repeat at most MaxCrossingsPerStep times:
+        (px, pz) = (U.M02, U.M12)                          # the walker in tile coordinates
+        e[0] = px − a/2 ;  e[1] = pz − a/2 ;  e[2] = −px − a/2 ;  e[3] = −pz − a/2     # distance past each edge
+        k = index of the largest e[k]; on a tie the lowest k
+        if e[k] ≤ h:  stop                                # inside the tile, or within the hysteresis band
+        U = Graph.EdgeStep(tile, k).Inverse() · U
+        tile = Graph.Neighbour(tile, k)
+        Crossings += 1 ;  LastEdge = k
 
 if Crossings > 0 or Candidates is stale:
     Graph.VisibleSet(tile, CullRho + 2 · Graph.CircumRadius + h, Candidates)
@@ -888,10 +934,12 @@ Properties the flat implementation guarantees:
 
 ### 4.4 `Reset` and `ResetToFloor`
 
-- `Reset(start)`: `start.Tile` must be a tile of `Graph` and `start.Local.Kappa` must equal `Kappa`, else
-  `ArgumentException`. The pose is taken, then re-rooted with **no hysteresis** (h = 0, no bound on the number of
-  crossings) so that the walker is inside the tile it names. `Candidates` is rebuilt. `LastStep` is cleared
-  (all zero, `LastEdge` = −1). `hasPrevious` becomes false.
+- `Reset(start)`: `start.Tile` must be a tile of `Graph`, `start.Local.Kappa` must equal `Kappa` and
+  `start.IsValid` must be true, else `ArgumentException`. The pose is taken, then re-rooted with **no
+  hysteresis** (h = 0) so that the walker is inside the tile it names: a far-off pose is brought next to its
+  tile in one move (whole tiles, a point exactly on an edge stays), then the edge test of `Step` runs with h = 0,
+  at most 8 times, to settle rounding. A frame more than 1e15 tiles from its tile is an `ArgumentException`.
+  `Candidates` is rebuilt. `LastStep` is cleared (all zero, `LastEdge` = −1). `hasPrevious` becomes false.
 - `ResetToFloor(p)`: the pose that `Reset(WalkerPose.Start)` followed by one straight, unfiltered walk of p
   metres from the room centre would give. `previous` becomes p and `hasPrevious` true, so a caller that passes
   the current head floor point loses no movement. `Candidates` is rebuilt and `LastStep` cleared. At κ = 0 the
@@ -903,21 +951,29 @@ i = floor(u.x / a + 0.5) ;  j = floor(u.y / a + 0.5)        # a tie goes to the 
 Tile = FlatTileGraph.Cell(i, j) ;  Local = Iso2.Boost((u.x − a·i, u.y − a·j), 0)
 ```
 
-  A non-finite p is an `ArgumentOutOfRangeException`.
+  A non-finite p, or one more than 1e15 tiles from the anchor, is an `ArgumentOutOfRangeException`.
 
 ### 4.5 Step 6, for when a warped renderer exists
 
 Not built now; fixed so lane A's upload step and material pool leave room for it. For each drawn tile t of
-`Candidates`: `material.SetMatrix(anchorId, (kernel.Pose.Local.Inverse() * t.Chain).ToFloat4x4())`. The `float4x4`
-converts implicitly to `Matrix4x4` (`Unity.Mathematics`, `math_unity_conversion.cs`). One pooled material
-instance per tile; no `MaterialPropertyBlock` (README F7).
+`Candidates`: `MaterialPool.SetAnchor(material, (kernel.Pose.Local.Inverse() * t.Chain).ToFloat4x4())`. The
+`float4x4` converts implicitly to `Matrix4x4` (`Unity.Mathematics`, `math_unity_conversion.cs`). One pooled
+material instance per tile; no `MaterialPropertyBlock` (README F7). The setters lane A provides for this
+(`Rendering/Look/MaterialPool.cs`):
+
+```csharp
+public static void SetAnchor(Material material, in float4x4 anchor);
+public static void SetWarpMode(Material material, int mode);                    // 0 none, 1 hyperbolic, 2 spherical
+public static void SetGate(Material material, int gate, float2 post, float sign);   // gate 0..3; sign 0 = off
+public static void ClearGates(Material material);
+```
 
 ---
 
 ## 5 · `AtlasWarp.hlsl`
 
-File: `/workspace/ATLAS/Assets/Atlas/Rendering/Shaders/AtlasWarp.hlsl`. Owner: lane B. One entry point: object
-position in, world position out (§8.3).
+File: `/workspace/ATLAS/Assets/Atlas/Rendering/Shaders/Resources/AtlasWarp.hlsl`. Owner: lane B. One entry
+point: object position in, world position out (§8.3).
 
 ```hlsl
 #ifndef ATLAS_WARP_INCLUDED
@@ -945,24 +1001,35 @@ float3 AtlasWarp(float3 positionOS)
 }
 ```
 
-How `Atlas/Surface` calls it (lane A's vertex shader):
+The file holds the guard, the three defines and the function with this body; there is no separate prototype.
+
+How `Atlas/Surface` calls it (lane A's vertex shader `AtlasVert` in `AtlasSurface.shader`; `positionOS` is a
+`float3`):
 
 ```hlsl
-float3 positionWS = AtlasWarp(input.positionOS.xyz);
+float3 positionWS = AtlasWarp(input.positionOS);          // the only place a position is made
 output.positionCS = TransformWorldToHClip(positionWS);
+output.positionWS = positionWS;
 ```
 
 What it reads:
 
 | Name | Scope | HLSL type | Unit and meaning | Written by | Read in this build |
 |---|---|---|---|---|---|
-| `_WarpMode` | per material (`UnityPerMaterial`) | `float` | 0 none, 1 hyperbolic, 2 spherical. Default 0 | Whoever configures the pooled material | No |
-| `_Anchor` | per material (`UnityPerMaterial`) | `float4x4` | Upper-left 3 × 3 = `Iso2.ToFloat4x4()` of anchor[t] (§1.5): tile frame → walker frame, kernel units. Default identity | Tile renderer, step 6 | No |
-| `_HeadPosWS` | global | `float4` | xyz = the head in world space, metres: the midpoint between the two eye cameras. One value for both eyes. w unused | Upload step, once per frame at step 6 | No |
-| `_HypL` | global | `float` | `IWalkerKernel.MetresPerUnit`: L, or R on the sphere. Metres per unit, > 0 | Upload step, once per frame at step 6 | No |
+| `_WarpMode` | per material (`UnityPerMaterial`) | `float` | 0 none, 1 hyperbolic, 2 spherical. Default 0 | Whoever configures the pooled material, with `MaterialPool.SetWarpMode`. Nothing calls it in this build | No |
+| `_Anchor` | per material (`UnityPerMaterial`) | `float4x4` | Upper-left 3 × 3 = `Iso2.ToFloat4x4()` of anchor[t] (§1.5): tile frame → walker frame, kernel units. Default identity | Tile renderer, step 6, with `MaterialPool.SetAnchor` | No |
+| `_HeadPosWS` | global | `float4` | xyz = the head in world space, metres: `FrameContext.RawHeadPosition`, the raw tracked head (the eye midpoint), not the filtered geometry pose. One value for both eyes. w = 0 | `LookUploadStep` (`App/Frame/FrameSteps.cs`) through `AtlasLook.Upload`, once per frame at step 6 | Not by the warp. The fog of `AtlasCore.hlsl` reads it |
+| `_HypL` | global | `float` | `IWalkerKernel.MetresPerUnit`: L, or R on the sphere. Metres per unit, > 0; a value that is not positive is uploaded as 1 | The same call | No |
 
-The names are those of §4.6. The authoritative list of ids is `AtlasShaderIDs` on lane A's page; this page fixes
-what each value means and who writes it.
+```csharp
+// Rendering/Look/AtlasLook.cs
+public static void Upload(float3 headPositionWS, double metresPerUnit, double timeSeconds, float dt);
+```
+
+The names are those of §4.6. The authoritative list of ids is `AtlasShaderIDs`
+(`Rendering/Look/AtlasShaderIDs.cs`: `Anchor`, `WarpMode`, `Gate0` to `Gate3`, `HeadPosWS`, `HypL`), which
+carries exactly the names of this page; lane A keeps that file until lane B starts
+(`docs/scene-ownership.md`). This page fixes what each value means and who writes it.
 
 Mode switch:
 
@@ -977,7 +1044,8 @@ Rules of the include, now and later:
 - It declares **no uniform, no keyword and no `multi_compile`**. `_WarpMode` and `_Anchor` are declared in the
   single `UnityPerMaterial` block, and the two globals beside it, by `AtlasCore.hlsl` (lane A).
 - It is included after URP's `Core.hlsl` (for `TransformObjectToWorld`) and after those declarations, and before
-  the vertex function that calls it. How `AtlasCore.hlsl` is laid out to allow that is on lane A's page.
+  the vertex function that calls it. The order in `AtlasSurface.shader` is `Core.hlsl`, `AtlasCore.hlsl`,
+  `AtlasWarp.hlsl`, `AtlasPortalClip.hlsl`, `AtlasGates.hlsl`, each by bare file name from the same folder.
 - The mode is a per-material number, tested with an ordinary branch (decided here, following §8.3 "prefer a
   per-material number"). One material can warp while another in the same frame does not: the warning cue, the
   menu and anything fixed to the head stay unwarped.
@@ -995,8 +1063,8 @@ Rules of the include, now and later:
 
 ## 6 · `AtlasGates.hlsl`
 
-File: `/workspace/ATLAS/Assets/Atlas/Rendering/Shaders/AtlasGates.hlsl`. Owner: lane B. Per-pixel clip against up
-to four sight-line gates (Aligned Cells, §4.7).
+File: `/workspace/ATLAS/Assets/Atlas/Rendering/Shaders/Resources/AtlasGates.hlsl`. Owner: lane B. Per-pixel
+clip against up to four sight-line gates (Aligned Cells, §4.7).
 
 ```hlsl
 #ifndef ATLAS_GATES_INCLUDED
@@ -1018,7 +1086,9 @@ void AtlasGatesClip(float3 positionWS)
 }
 ```
 
-`Atlas/Surface` calls it first thing in the fragment shader, always. It declares no uniform and no keyword.
+`Atlas/Surface` calls it first thing in the fragment shader (`AtlasFrag`), always, before `AtlasPortalClip` and
+`AtlasShade`. It declares no uniform and no keyword. The gates are written with `MaterialPool.SetGate` and
+`ClearGates` (§4.5); nothing calls `SetGate` in this build.
 
 What it will read (reserved now so that the `UnityPerMaterial` block does not change when lane B lands):
 
@@ -1043,7 +1113,8 @@ A material whose gates are all zero is never clipped, so the default stays the i
 
 All in `/workspace/ATLAS/Assets/Atlas/Tests/Kernel/`, assembly `Atlas.Kernel.Tests`, plain NUnit, no engine
 (README F2). They run in the Unity Test Runner and under `tools/headless/verify.py test Atlas.Kernel.Tests`.
-Random tests use `new System.Random(20261004)` (written in full: `Unity.Mathematics` has a `Random` too). In the
+Random tests use `new System.Random(KernelTestUtil.Seed)`, with `Seed = 20261004` in `KernelTestUtil.cs`
+(written in full: `Unity.Mathematics` has a `Random` too). The same folder holds lane A's `Mesh4D/` tests. In the
 walker tests "a step of d" means one call of `Step` with the previous head position plus d and
 `trackingNormal: true`; every walk starts with `ResetToFloor` at the stated point.
 
@@ -1073,12 +1144,15 @@ walker tests "a step of d" means one call of `Step` with the previous head posit
 | `FlatWalkerKernelTests.cs` · `FlatWalker_LapSquare` | The 3-4-5 walk at q = 4, through the hook | Tile side s = 2.0 m. Start at a lap corner (−1, −1); walk four sides of 2.0 m in 5 cm steps turning left: back at the start to 1e-9 m, same tile, and no tile change on the way (the lap runs along tile zero's edges). The same lap from (−0.7, −0.8) crosses four edges and ends in the starting tile |
 | `FlatWalkerKernelTests.cs` · `FlatWalker_UnitFree` | L cancels at κ = 0 | The same 2,000-step walk on a 2.0 m tile with `MetresPerUnit` 1.0 and 1.885: floor points equal to 1e-9 m after every step; the same tile whenever the walker is more than 0.04 m from every tile edge (the hysteresis is in kernel units, so the moment of crossing may differ inside that band) |
 | `FlatWalkerKernelTests.cs` · `FlatWalker_Candidates` | The candidate list | After construction, `Candidates` is the `VisibleSet` of the origin at radius `CullRho + 2·CircumRadius + CrossHysteresis`. It is rebuilt on a tile change and after `CullRho` is set, and is the same `List` instance throughout |
-| `FlatWalkerKernelTests.cs` · `FlatWalker_ConfigureAndReset` | Set-up paths | `Configure` with `Q` = 5 throws `NotSupportedException`; with a tile side of 0 or NaN, `ArgumentOutOfRangeException`. `ResetToFloor((3.1, −2.2))` with side 2.0 gives `Cell(2, −1)` and local (−0.9, −0.2). `Reset` with `default(WalkerPose)` throws `ArgumentException` |
+| `FlatWalkerKernelTests.cs` · `FlatWalker_ConfigureAndReset` | Set-up paths | `Configure` with `Q` = 5 throws `NotSupportedException`; with a `Q` that is no tiling, or a tile side or `MetresPerUnit` of 0 or NaN, `ArgumentOutOfRangeException`. `ResetToFloor((3.1, −2.2))` with side 2.0 gives `Cell(2, −1)` and local (−0.9, −0.2); a non-finite point throws `ArgumentOutOfRangeException`. `Reset` with `default(WalkerPose)` throws `ArgumentException` |
+| `FlatWalkerKernelTests.cs` · `FlatWalker_StepAllocatesNothing` | No allocation on the frame path | Zero bytes allocated over 5,000 steps that include tile changes |
+| `TileIdTests.cs` · `TileId_SeedSpreads` | The seed separates tiles | Distinct `ContentSeed` values for distinct tiles of one world |
 
 ### 7.2 Red until lane B lands
 
 These §11.1 tests cannot pass on the flat stub. Until their task lands they are either absent or carry
-`[Ignore("lane B: P1-Bxx")]`. They are never present and failing, because the suite gates every merge.
+`[Ignore("lane B: P1-Bxx")]`. They are never present and failing, because the suite gates every merge. In this
+build all of them are absent.
 
 | §11.1 test | Needs | Flat part already covered by |
 |---|---|---|
@@ -1143,13 +1217,13 @@ the pose-jump half of `Safety_Independence` on a device (G5; its kernel half is 
 
 | From | Needed |
 |---|---|
-| Lane A | `AtlasFrameLoop` calls `IWalkerKernel.Step(headFloorMetres, trackingNormal)` exactly once per frame at step 4 (§4.2) and sets the globals `_HeadPosWS` and `_HypL` at step 6 |
+| Lane A | `AtlasFrameLoop`, through `FrameLoopCore.RunUpdate`, calls `IWalkerKernel.Step(headFloorMetres, trackingNormal)` exactly once per frame at step 4 (§4.2); `LookUploadStep` sets the globals `_HeadPosWS` and `_HypL` at step 6 |
 | Lane A | The single `UnityPerMaterial` block holds `float4x4 _Anchor`, `float _WarpMode` and `float4 _Gate0` to `_Gate3`; `AtlasShaderIDs` lists them and the two globals; the material pool initialises them to identity, 0 and zero |
 | Lane A | `Atlas/Surface` calls `AtlasWarp` in the vertex stage and `AtlasGatesClip` first in the fragment stage, for every material |
-| Lane A | SpaceLab calls `ResetToFloor` before entering a registered space, and does not register S2, S3, S4 |
+| Lane A | SpaceLab calls `ResetWalkerToFloor` (§4.1) before entering a registered space, and does not register S2, S3, S4 |
 | Lane A | `Atlas.Kernel.Tests.asmdef` lists `Unity.Mathematics` in its references: the tests use `double2` and `double3` |
 | Lane C | The geometry pose stream gives the head's floor point in the room frame after the pose filter, and the tracking state; the RoomModel exposes the lap-square side s |
-| Lane D | `State.tileId` = `Pose.Tile` in wire order and `State.xform` = `Pose.Local` row-major for curved spaces; flat spaces write what Appendix B.1 lists. `State.p[0]` = `(float)MetresPerUnit`, `p[1]` = `CullRho − 1`, `p[2]` = `CullRho`. Tile ids in JSON are the `ToString()` text |
+| Lane D | `State.tileId` = `Pose.Tile` in wire order and `State.xform` = `Pose.Local` row-major for curved spaces; flat spaces write what Appendix B.1 lists. `State.p[0]` = `(float)MetresPerUnit`, `p[1]` = `CullRho − 1`, `p[2]` = `CullRho` (`StateMessage.P0`, `P1`, `P2`). `FrameLoopCore.FillState` writes those three for every space, and writes the zero tile and the identity `xform` before the module's `WriteState` puts in its own. Tile ids in JSON are the `ToString()` text |
 
 ---
 
@@ -1171,19 +1245,16 @@ the pose-jump half of `Safety_Independence` on a device (G5; its kernel half is 
 4. **L at κ = 0.** Chosen 1.0 m per unit. The alternative is L = s / 1.0613, the room's q = 5 value, so that
    ρ and the fog radius mean the same metres on both sides of the dial. The kernel is unit-free and tested so;
    the change is one argument in the composition root.
-5. **Names shared with lane A's page.** `_Anchor`, `_HypL` and `_HeadPosWS` come from §4.6; `_WarpMode` and
-   `_Gate0` to `_Gate3` are named here. If lane A's `AtlasShaderIDs` list differs, lane A's list wins and this
-   page is corrected at the freeze. Likewise the step-4 hook: `IWalkerKernel.Step` is the kernel's side; if lane
-   A's page names a frame-loop hook of its own for step 4, it wraps this call.
-6. **Who edits `AtlasShaderIDs.cs`.** §6.4 says lanes A and B; `docs/scene-ownership.md` says B only. Lane B is
-   not staffed in this build. Proposal: lane A edits it until lane B starts.
-7. **Who writes the lane-B stub code.** The eleven kernel files, the two includes and the tests of §7.1 are
-   lane B's by ownership. Someone must be named to write them for G0. Apart from the one asmdef line of §8.3
-   they touch no other lane's file.
-8. **Jump rejection in two places.** The pose filter (lane C) and the kernel both apply the 0.2 m rule. This page
-   keeps both and takes `State.flags` bit 2 from the pose pipeline. Confirm that the duplicate guard is wanted.
-9. **Re-registration after tracking loss.** In this build SpaceLab may call `ResetToFloor` freely, because every
+5. **Re-registration after tracking loss.** In this build SpaceLab may call `ResetToFloor` freely, because every
    space is flat and registered. In a curved space it must never be called on tracking recovery: the world would
    jump. The rule for curved spaces ("only on Return to Home") belongs on lane A's page once S2 exists.
-10. **Normals under the warp.** The entry point returns a position only. If `AtlasCore` ever shades by normal,
-    lane B adds a companion function; that would be an addition to the contract, announced to all four lanes.
+6. **Normals under the warp.** The entry point returns a position only. If `AtlasCore` ever shades by normal,
+   lane B adds a companion function; that would be an addition to the contract, announced to all four lanes.
+7. **`ContentSeed` across worlds.** In the fold of §3.4 `worldSeed` and `Xu` enter the same addition, so
+   (`worldSeed` 1, `Xu` 1) and (`worldSeed` 0, `Xu` 0) give the same seed when the other five words agree.
+   Seeds are unique within one world. §3.4 calls the function final; decide whether to change it before any
+   content depends on it, since a change moves every golden value.
+8. **Which head position `_HeadPosWS` carries.** The upload step writes the raw head position; the kernel
+   integrates the filtered one. They differ in a frame where the pose filter rejects a jump. Harmless now (only
+   the fog reads the global); under the warp the world is drawn around `_HeadPosWS`, so decide before `P1-B03`
+   whether the warp wants the raw or the geometry pose.

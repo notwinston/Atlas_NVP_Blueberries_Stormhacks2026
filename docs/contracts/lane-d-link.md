@@ -6,7 +6,7 @@ One file, five parts:
 
 | Part | Fixes | Sections |
 |---|---|---|
-| [1 · Parameters](#part-1--parameters) | `ParamRegistry`, ids, the kill-switch list, `AtlasParamAttribute`, presets, `AtlasJson` | 1.1 – 1.8 |
+| [1 · Parameters](#part-1--parameters) | `ParamRegistry`, names and wire ids, the kill-switch list, `AtlasParamAttribute`, presets, `AtlasJson` | 1.1 – 1.8 |
 | [2 · Link](#part-2--link) | Transport, channels, every message of Appendix B byte by byte, clock, watchdog, events, operator commands, `LinkClient`, `LinkHost`, `ReplayPhone` | 2.1 – 2.13 |
 | [3 · Station HTTP](#part-3--station-http) | Hub process, relay rules, HTTP and WebSocket routes, log files, Console pages; Forge routes, job lifecycle, generator adapter, mesh clean-up | 3.1 – 3.10 |
 | [4 · Assets](#part-4--assets) | GLB asset contract, validator checks, asset client, built-in fallback set | 4.1 – 4.4 |
@@ -30,6 +30,7 @@ no measured source; confirmed or replaced at the gate that first checks it (§11
   (README F4) once a RoomModel is active.
 - `Atlas.Link` uses only `System` and LiteNetLib. No `UnityEngine` type, no `Unity.Mathematics` type (the Hub
   compiles the same sources with no Unity package). Vectors and matrices are plain `float` and `double` fields.
+  Only `Transport/LiteNetTransport.cs` names a LiteNetLib type.
 - Threading: every public member on this page is called on the main thread unless it says otherwise.
 - Protocol version `proto` = `[1, 0]`. Connection key `atlas-v1`.
 - Section numbers. `§1.1` to `§5.9`, `§6` and `§7` are sections of **this page**. Every other `§` is the Master
@@ -37,43 +38,44 @@ no measured source; confirmed or replaced at the gate that first checks it (§11
   written `plan §4.5`. "B.1" to "B.4" and "C.5", "C.7" are the plan's appendices.
 - Names of other lanes' types are those of their pages (`lane-a-platform.md`, `lane-b-kernel.md`,
   `lane-c-room.md`). §6 lists every one this page relies on.
-- Unity and package facts (LiteNetLib, glTFast, `UnityWebRequest`, deep links, TextMeshPro) are verified in
+- Unity and package facts (LiteNetLib, `UnityWebRequest`, deep links, TextMeshPro) are verified in
   `unity-api/input-net-assets.md`; this page cites it as "U-net".
 
 | Area | Assembly | Namespace | Folder |
 |---|---|---|---|
-| Registry, JSON, messages, clock, watchdog, client, host | `Atlas.Link` (engine-free) | `Atlas.Link` | `ATLAS/Assets/Atlas/Link/` |
-| Installer, attribute binder, step 8 glue, perf probe, HUD, event log, asset client, pairing, flat-twin core | `Atlas.Telemetry` | `Atlas.Telemetry` | `ATLAS/Assets/Atlas/Telemetry/` |
+| Registry, JSON, messages, clock, watchdog, client, host, transports | `Atlas.Link` (engine-free) | `Atlas.Link` | `ATLAS/Assets/Atlas/Link/` |
+| Installers, attribute binder, step 8 glue, perf probe, HUD, event log, asset client, pairing, flat twin, the Spectator's engine-free cores | `Atlas.Telemetry` | `Atlas.Telemetry` | `ATLAS/Assets/Atlas/Telemetry/` |
 | `IEventLog` | `Atlas.World` (lane D file) | `Atlas.World` | `ATLAS/Assets/Atlas/World/Services/IEventLog.cs` |
 | On-device menu | `Atlas.App` (lane D files) | `Atlas.App.Menu` | `ATLAS/Assets/Atlas/App/Menu/` |
 | Spectator | `Atlas.Spectator` | `Atlas.Spectator` | `ATLAS/Assets/Atlas/Spectator/` |
-| Tests | `Atlas.Link.Tests`, `Atlas.Telemetry.Tests` | same | `ATLAS/Assets/Atlas/Tests/Link/`, `…/Tests/Telemetry/` |
-| Hub and Console | .NET 8 console | `Atlas.Hub` | `station/hub/` |
+| Tests | `Atlas.Link.Tests`, `Atlas.Telemetry.Tests`; the menu's in `Atlas.App.Tests` | same | `ATLAS/Assets/Atlas/Tests/Link/`, `…/Tests/Telemetry/`, `…/Tests/App/Menu/` |
+| Hub and Console | .NET 8 web project `station/hub/Hub.csproj` (assembly `atlas-hub`) | `Atlas.Station` | `station/hub/` |
 | Forge | Python 3.11 package `forge` | – | `station/forge/` |
 | ReplayPhone | .NET 8 console | `Atlas.Tools` | `tools/ReplayPhone/` |
 | Fallback-set and palette generators | Python scripts | – | `tools/gen_fallback_set.py`, `tools/gen_forge_palette.py` |
 
-Files in `Atlas.Link` (one public type per file unless listed together):
+Files in `Atlas.Link`:
 
 ```
-Link/Params/   ParamTypes.cs (ParamKind, ParamFlags, ParamSource, ParamHandle, ParamInfo, ParamChanged)
-               ParamRegistry.cs  ParamSnapshot.cs  AtlasParams.cs
-Link/Json/     AtlasJson.cs  JsonValue.cs  JsonWriter.cs
-Link/Messages/ MsgId.cs (MsgId, LinkProto)  LinkBytes.cs  StateMessage.cs (StateMessage, StateFlags)
-               TelemetryMessage.cs  TelemetryCsv.cs  TimeMessages.cs (TPingMessage, TPongMessage)
-               ParamSetMessage.cs  RoomOutlineMessage.cs (RoomOutlineMessage, OutlineBox)
-               JsonMessages.cs (Hello, Welcome, SceneCmd, OperatorCmd, JobStatus, AssetReady, AssetAck, enums)
-               WorldHash.cs
-Link/Transport/ LinkClient.cs  LinkHost.cs  LoopbackLink.cs  LinkSinks.cs (the three sink interfaces)
-               ClockSync.cs  LinkWatchdog.cs  LinkClock.cs (ILinkClock, StopwatchClock)
+Link/Params/    ParamRegistry.cs (ParamKind, ParamSource, ParamChangedHandler, ParamHandle, ParamEntry, ParamRegistry)
+Link/Json/      AtlasJson.cs  JsonValue.cs (JsonKind, JsonValue)
+Link/Messages/  Wire.cs (MessageId, LinkProtocol, Wire)  StateMessage.cs
+                BinaryMessages.cs (TPingMessage, TPongMessage, ParamSetMessage, TelemetryMessage,
+                                   RoomOutlineBox, RoomOutlineMessage)
+                JsonMessages.cs (LinkRole, LinkRoles, JsonMessage and the ten JSON messages, ParamManifestEntry, LinkEvents)
+                TelemetryCsv.cs  WorldHash.cs
+Link/Transport/ ILinkTransport.cs (LinkDelivery, ILinkTransportListener, ILinkPeerAddresses, ILinkTransport)
+                LiteNetTransport.cs  LoopbackTransport.cs (LoopbackNetwork, LoopbackTransport)
+Link/           LinkClient.cs  LinkHost.cs  OperatorCommand.cs
+                ClockSync.cs (ILinkClock, StopwatchClock, ManualClock, ClockSync)
+                LinkWatchdog.cs (LinkState, LinkWatchdog)
 ```
 
-The public surface of `Atlas.Link` on this page was compiled against .NET Standard 2.1 with C# 9 and the
-project's LiteNetLib 2.1.4 assembly, and the `State` codec was run against the bytes of §2.3.
+The same sources compile into `Atlas.Link` (C# 9, .NET Standard 2.1), into the Hub and into ReplayPhone
+(`<Compile Include="../../ATLAS/Assets/Atlas/Link/**/*.cs" />`), so every byte layout exists once.
 
-**In this build.** Lanes A, C and D are built end to end. Everything on this page is built. Lane B's spaces
-(S2, S3, S4) are not: their parameters and their `State` rows are fixed here so that nothing changes when they
-arrive.
+**In this build.** Lanes A, C and D are built end to end. Lane B's spaces (S2, S3, S4) are not: their `State`
+rows are fixed here so that nothing changes when they arrive, and their parameters are named in 1.5.
 
 ---
 
@@ -84,320 +86,317 @@ Every tunable is one entry of one `ParamRegistry` (README F6). The composition r
 each space in `ISpaceModule.Configure`. The Spectator has its own instance. The Hub holds no registry: it
 stores the manifest and values as data.
 
-## 1.1 Ids, indices and groups
+## 1.1 Names, wire ids and groups
 
-A parameter has two names.
+A parameter has two identities.
 
-| Name | Type | Example | Used for |
+| Identity | Type | Example | Used for |
 |---|---|---|---|
-| **Id** | string | `render.scale` | Code, the contract pages, §12.2, §12.4, presets, logs, events. Stable across builds |
-| **Index** | `u16` | `3` | The wire: `ParamSet` and the `id` field of `ParamManifest`. Declaration order. Stable within one run of the app |
+| **Name** (`ParamEntry.Name`) | string | `render.scale` | Code, the contract pages, §12.2, §12.4, presets, logs, events. Stable across builds |
+| **Id** (`ParamEntry.Id`) | `u16` | `3` | The wire: `ParamSet` and the `id` field of `ParamManifest`. Declaration order, starting at 0. Stable within one run of the app |
 
-Appendix B.2 writes the manifest row as `{id, name, …}`: its `id` is the index and its `name` is the id. Lane A's
-page calls the id the "name".
+Appendix B.2 writes the manifest row as `{id, name, …}`: the same two. Where this page says "by name" it means
+the string. A wire id is never written into source code: the Hub, the Console and the Spectator learn it from
+the manifest.
 
-Id rules:
+Naming:
 
-- `<area>.<name>`; each segment matches `[a-z][a-zA-Z0-9]*`; at most 40 characters. One exception, kept from
-  §12.4: `demoLock`.
-- The first segment is the owning area: `space`, `render`, `thermal`, `pose`, `replay`, `scan`, `link`,
-  `telemetry`, `forge`, `hud`, or a space's own: `home`, `glued`, `curved`, `cells`, `planet`, `portal`, `rooms`,
-  `slicer`. A use case (Phase 2) takes its own first segment (`playground`, `lung`, …).
+- `<area>.<name>`, lower camel case per segment. One exception, kept from §12.4: `demoLock`. The registry
+  enforces only that the name is not empty; the form is a convention.
+- The first segment is the owning area: `space`, `render`, `thermal`, `pose`, `replay`, `scan`, `input`, `link`,
+  `telemetry`, `forge`, `hud`, `dev`, `perf`, or a space's own: `home`, `glued`, `curved`, `cells`, `planet`,
+  `portal`, `rooms`, `slicer`. A use case (Phase 2) takes its own first segment (`playground`, `lung`, …).
 - A space's parameters are written as §12.2 and §12.4 write them: `glued.copies`, not `space.glued.copies`. The
-  only id that starts with `space.` is `space.id`.
+  only name that starts with `space.` is `space.id`.
 - The **group** is a lower-case key. For a space it is `SpaceIds.ParamGroup(id)` (lane A §1): `home`, `glued`,
-  `curved`, `cells`, `planet`, `portal`, `slicer`. Others in use: `app`, `render`, `pose`, `scan`, `link`,
-  `forge`, `hud`. The Console and the menu show it as a heading (`glued` as "S1 Glued", and so on).
+  `curved`, `cells`, `planet`, `portal`, `slicer`. Others in use: `app`, `render`, `pose`, `scan`, `input`,
+  `link`, `forge`, `hud`, `dev`, `perf`. The Console and the menu show it as a heading. The group of an entry is
+  the one of its first declaration.
 - A group is **active** or **inactive** (lane A §4.3). SpaceLab marks a space's group inactive on `Exit` and
-  active on `Enter`. An inactive group is shown folded and greyed; its parameters keep their values and can
-  still be set. Parameters flagged as kill switches are shown always.
+  active on `Enter` (`SetGroupActive`). An inactive group is shown folded and greyed; its parameters keep their
+  values and can still be set.
 
-Every value is one `float` on the wire and in the registry, whatever its kind:
+Every value is one `float` on the wire and in the registry, whatever its kind (`ParamEntry.Sanitise`):
 
 | Kind | Stored value | Clamp applied by `Set` |
 |---|---|---|
-| `Float` | the number | to `[min, max]`; then to the nearest `min + k·step` when `step > 0`; or to the nearest entry of `choices` (a tie goes to the lower entry) |
-| `Int` | the integer as a float (exact below 2²⁴) | rounded half away from zero, then to `[min, max]`, or to the nearest entry of `choices` |
+| `Float` | the number | to `[min, max]`. The registry does not quantise: there is no step and no list of allowed values |
+| `Int` | the integer as a float (exact below 2²⁴) | rounded half away from zero, then to `[min, max]` |
 | `Bool` | 0 or 1 | `value ≥ 0.5` gives 1, else 0 |
-| `Enum` | the option index 0 … n − 1 | rounded, then to `[0, n − 1]` |
+| `Enum` | the option index 0 … n − 1 | rounded half away from zero, then to `[0, n − 1]` |
 
-A `NaN` is never stored: `Set` returns the current value unchanged.
+A `NaN` is never stored: `Set` leaves the value as it is and returns false.
 
 ## 1.2 `ParamRegistry`
 
 ```csharp
-// Files: ATLAS/Assets/Atlas/Link/Params/ParamTypes.cs, ParamRegistry.cs, ParamSnapshot.cs, AtlasParams.cs
+// File: ATLAS/Assets/Atlas/Link/Params/ParamRegistry.cs
 using System;
+using System.Collections.Generic;
 
 namespace Atlas.Link
 {
     public enum ParamKind : byte { Float = 0, Int = 1, Bool = 2, Enum = 3 }
 
-    [Flags]
-    public enum ParamFlags : byte
+    /// <summary>Who changed a parameter. The link echoes and the phone logs every change with its source.</summary>
+    public enum ParamSource : byte
     {
-        None       = 0,
-        OnRelease  = 1 << 0,   // the Console sends it when the slider is released; it regenerates geometry
-        KillSwitch = 1 << 1,   // listed by the on-device menu (sections 12.2 and 12.4); never hidden
-        NoRemote   = 1 << 2,   // Set with ParamSource.Link is ignored (demoLock)
-        ReadOnly   = 1 << 3,   // only ParamSource.Code may change it; shown greyed
-        Live       = 1 << 4,   // its owner writes it every frame; Code changes are not echoed as events
+        Local = 0,     // code on the phone or the on-device menu
+        Remote = 1,    // a ParamSet from the Station, or an operator command
+        Restore = 2    // a snapshot, a preset or the baked defaults being restored
     }
 
-    /// <summary>Who asked for a change. Written to the event log with every change.</summary>
-    public enum ParamSource : byte { Code = 0, Link = 1, Menu = 2, Operator = 3, Ladder = 4, Restore = 5 }
+    /// <summary>Called after a parameter took a new value.</summary>
+    public delegate void ParamChangedHandler(ParamEntry entry, ParamSource source);
 
-    /// <summary>A parameter, resolved once. default(ParamHandle) is invalid.</summary>
+    /// <summary>A cheap, copyable reference to one parameter: its wire id. default(ParamHandle) is invalid.</summary>
     public readonly struct ParamHandle : IEquatable<ParamHandle>
     {
         public bool IsValid { get; }
-        public ushort Index { get; }                 // the wire index; 65535 when invalid
+        public ushort Id { get; }                    // the wire id; only meaningful when IsValid
         public bool Equals(ParamHandle other);
     }
 
-    /// <summary>Called on the main thread, after the value is stored.</summary>
-    public delegate void ParamChanged(ParamHandle handle, float value, ParamSource source);
-
-    /// <summary>One row of the manifest. Returned by value; Labels and Choices are shared arrays: do not write.</summary>
-    public readonly struct ParamInfo
+    /// <summary>One declared parameter. Keep the entry a Declare call returns and read Float, Int or Bool on
+    /// the frame path: each is a field read.</summary>
+    public sealed class ParamEntry
     {
-        public readonly ParamHandle Handle;
-        public readonly string Id;
-        public readonly string Group;
-        public readonly ParamKind Kind;
-        public readonly ParamFlags Flags;
-        public readonly float Min, Max, Default, Step, Value;
-        public readonly string[] Labels;             // Enum: one per option; otherwise null
-        public readonly float[] Choices;             // Float or Int with a fixed value set; otherwise null
-        public readonly bool GroupActive;
+        public ParamRegistry Registry { get; }
+        public ushort Id { get; }                    // wire id: the order of declaration, starting at 0
+        public string Name { get; }
+        public string Group { get; }
+        public ParamKind Kind { get; }
+        public bool OnRelease { get; }               // the Console sends it when the slider is released
+        public float Min { get; }
+        public float Max { get; }
+        public float Default { get; }
+        public float Value { get; }                  // as it travels on the wire
+        public float Float { get; }
+        public int Int { get; }
+        public bool Bool { get; }
+        public ParamHandle Handle { get; }
+        public bool Active { get; }                  // false while the entry's group is inactive
+        public bool Live { get; set; }               // carried in the manifest as "live"; setting it bumps ManifestVersion
+        public int EnumCount { get; }                // 0 for the other kinds
+        public string EnumName(int value);           // null when out of range
+        public string CurrentName { get; }
+        public bool Set(float value, ParamSource source = ParamSource.Local);
+        public bool Set(int value, ParamSource source = ParamSource.Local);
+        public bool Set(bool value, ParamSource source = ParamSource.Local);
+        public bool Reset(ParamSource source = ParamSource.Local);
+        public float Sanitise(float requested);      // the value the entry would take: clamped, rounded
     }
 
     public sealed class ParamRegistry
     {
-        public const int MaxParams = 1024;
+        public const int MaxPerMessage = 255;        // entries one ParamSet can carry
 
-        /// <summary>A registry that already holds every row of section 1.4, in table order (indices 0..47).</summary>
-        public ParamRegistry();
-        /// <summary>wellKnown false: an empty registry, for tests.</summary>
-        public ParamRegistry(bool wellKnown);
+        public event Action<string, bool> GroupActiveChanged;   // (group, active)
+        public event ParamChangedHandler Changed;                // after the entry's own callback
+        public event Action<ParamEntry> Declared;                // first declaration of a name only
+        public int Version { get; }                  // +1 on every value change
+        public int ManifestVersion { get; }          // +1 per new entry, changed range, default, names, onRelease, Live or group state
 
-        // ---- declare (idempotent by id; see 1.3) -------------------------------------------------
-        public ParamHandle DeclareFloat(string id, string group, float min, float max, float def,
-            float step = 0f, ParamFlags flags = ParamFlags.None, ParamChanged onChanged = null);
-        public ParamHandle DeclareFloat(string id, string group, float[] choices, float def,
-            ParamFlags flags = ParamFlags.None, ParamChanged onChanged = null);
-        public ParamHandle DeclareInt(string id, string group, int min, int max, int def,
-            ParamFlags flags = ParamFlags.None, ParamChanged onChanged = null);
-        public ParamHandle DeclareInt(string id, string group, int[] choices, int def,
-            ParamFlags flags = ParamFlags.None, ParamChanged onChanged = null);
-        public ParamHandle DeclareBool(string id, string group, bool def,
-            ParamFlags flags = ParamFlags.None, ParamChanged onChanged = null);
-        public ParamHandle DeclareEnum(string id, string group, string[] labels, int def,
-            ParamFlags flags = ParamFlags.None, ParamChanged onChanged = null);
+        // ---- declare (see 1.3 for redeclaration) -------------------------------------------------
+        public ParamEntry DeclareFloat(string name, string group, float min, float max, float defaultValue,
+            Action<float> onChanged = null, bool onRelease = false);
+        public ParamEntry DeclareInt(string name, string group, int min, int max, int defaultValue,
+            Action<int> onChanged = null, bool onRelease = false);
+        public ParamEntry DeclareBool(string name, string group, bool defaultValue,
+            Action<bool> onChanged = null, bool onRelease = false);
+        public ParamEntry DeclareEnum(string name, string group, string[] names, int defaultValue,
+            Action<int> onChanged = null, bool onRelease = false);
 
-        // ---- read: an array read, no allocation, safe on the frame path --------------------------
-        public float GetFloat(ParamHandle h);        // the stored value, any kind
-        public int   GetInt(ParamHandle h);          // rounded to nearest
-        public bool  GetBool(ParamHandle h);         // value >= 0.5
-
-        // ---- find: a dictionary lookup; do it once and keep the handle ---------------------------
-        public ParamHandle Find(string id);          // KeyNotFoundException when unknown
-        public bool TryFind(string id, out ParamHandle h);
-
-        // ---- write: clamps, stores, calls back, returns the applied value ------------------------
-        public float Set(ParamHandle h, float value, ParamSource source = ParamSource.Code);
-        public bool  TrySet(string id, float value, ParamSource source, out float applied);
-        public float ResetToDefault(ParamHandle h, ParamSource source = ParamSource.Code);
-
-        // ---- listen ------------------------------------------------------------------------------
-        public void Subscribe(ParamHandle h, ParamChanged listener);
-        public void Unsubscribe(ParamHandle h, ParamChanged listener);
-        public event ParamChanged Changed;           // every applied change of any parameter
+        // ---- enumerate ---------------------------------------------------------------------------
+        public int Count { get; }
+        public ParamEntry this[int index] { get; }   // by position, which is the wire id
+        public IReadOnlyList<ParamEntry> Entries { get; }
+        public ParamEntry Find(string name);         // null when unknown
+        public bool TryGet(string name, out ParamEntry entry);
+        public bool TryGet(ushort id, out ParamEntry entry);
+        public ParamEntry Get(ParamHandle handle);   // null when the handle is invalid for this registry
+        public ParamHandle HandleOf(string name);    // an invalid handle when unknown
+        public void GetGroups(List<string> into);    // distinct groups in order of first declaration
 
         // ---- groups ------------------------------------------------------------------------------
         public void SetGroupActive(string group, bool active);    // every group starts active
         public bool IsGroupActive(string group);
 
-        // ---- enumerate (Console manifest, on-device menu) ----------------------------------------
-        public int Count { get; }
-        public int ManifestVersion { get; }          // +1 per new declaration, changed range, default, labels or group state
-        public ParamInfo GetInfo(int index);         // 0 .. Count-1, in declaration order
-        public ParamInfo GetInfo(ParamHandle h);
-        public void WriteManifest(JsonWriter w);     // the ParamManifest body of 2.5
+        // ---- read: allocation-free by handle; by name is a dictionary lookup ----------------------
+        public float GetFloat(ParamHandle handle, float fallback = 0f);
+        public int   GetInt(ParamHandle handle, int fallback = 0);
+        public bool  GetBool(ParamHandle handle, bool fallback = false);
+        public float GetFloat(string name, float fallback = 0f);
+        public int   GetInt(string name, int fallback = 0);
+        public bool  GetBool(string name, bool fallback = false);
 
-        // ---- snapshot, restore, baked defaults ---------------------------------------------------
-        public void Snapshot(ParamSnapshot into);                                // every id and current value
-        public int  Restore(ParamSnapshot from, ParamSource source = ParamSource.Restore);  // returns values changed
-        public void ApplyBakedDefaults(ParamSnapshot baked);                     // 1.7
-    }
+        // ---- write: clamps, stores, calls back; true when the stored value changed ---------------
+        public bool Set(ParamEntry entry, float value, ParamSource source = ParamSource.Local);
+        public bool Set(ParamHandle handle, float value, ParamSource source = ParamSource.Local);
+        public bool Set(ushort id, float value, ParamSource source = ParamSource.Local);
+        public bool Set(string name, float value, ParamSource source = ParamSource.Local);
+        public int  Apply(ParamSetMessage set, ParamSource source = ParamSource.Remote);   // how many changed
+        public int  ResetAll(ParamSource source = ParamSource.Local);
+        public void PushAll();                       // calls every entry's own callback with its current value
 
-    /// <summary>A set of (id, value) pairs: a preset, a saved state, the baked defaults.</summary>
-    public sealed class ParamSnapshot
-    {
-        public int Count { get; }
-        public string IdAt(int i);
-        public float ValueAt(int i);
-        public void Clear();
-        public void Add(string id, float value);                 // replaces an existing id
-        public bool TryGet(string id, out float value);
-        public void Write(JsonWriter w);                         // {"values":{"render.scale":0.8,...}}
-        public static bool TryRead(JsonValue json, out ParamSnapshot snapshot);
-    }
-
-    /// <summary>The ids of section 1.4 as constants, and the method that declares them.</summary>
-    public static class AtlasParams
-    {
-        public const string SpaceId = "space.id";
-        public const string DemoLock = "demoLock";
-        public const string ThermalPinTier = "thermal.pinTier";
-        public const string RenderScale = "render.scale";
-        // ... one constant per row of 1.4, named after the id in PascalCase.
-
-        /// <summary>Declares every row of 1.4 in table order. Called by the default constructor of ParamRegistry.</summary>
-        public static void DeclareWellKnown(ParamRegistry registry);
+        // ---- link and persistence ----------------------------------------------------------------
+        public int FillParamSet(ParamSetMessage into, int firstIndex = 0);   // returns the index to continue from
+        public JsonValue ToManifestJson();           // the ParamManifest body of 2.5
+        public JsonValue ToSnapshot();               // {"values":{"<name>": value}}; bools as true or false
+        public int Restore(JsonValue snapshot, ParamSource source = ParamSource.Restore);   // how many changed
+        public static string KindName(ParamKind kind);   // "float", "int", "bool", "enum"
     }
 }
 ```
+
+There is no table of parameters inside `Atlas.Link` and no class of name constants: a `new ParamRegistry()` is
+empty. Each owner holds the names it declares as constants of its own (`AppParams`, `TelemetryInstaller`,
+`AssetClientInstaller`, `FlatTwinHud`, the spaces, `CommandRouter`).
 
 ## 1.3 Rules
 
 | Topic | Rule |
 |---|---|
-| Declaring twice | Declaring an id that exists returns the **same handle** and keeps the current value. The kind is the one of 1.4. If a later declaration uses another kind (an `Int` 0 … 6 for the `Enum` `space.id`, say), the first kind, its labels and its choices are kept, an error is logged once, and the handle is still returned: a mismatch between two lanes must not stop the boot. Otherwise the new `min`, `max`, `def`, `group` and `labels` replace the old ones. A declaration by range keeps an existing `choices` list (cut to the new range) and an existing `step` when it passes `step` 0, so an owner that declares `render.scale` as plain 0.6 … 0.8 keeps the three choices of 1.4. Flags are OR-ed; a non-null `onChanged` replaces the owner callback; the value is clamped into the new range. `ManifestVersion` rises if anything changed |
-| Bad declaration | `ArgumentException` for an id that breaks 1.1, `min > max`, `def` outside the range, empty `labels` or `choices`, more than 64 labels or choices, or more than `MaxParams` entries |
-| `Set` | Clamps as in 1.1. If the applied value equals the stored one, nothing else happens. Otherwise: store, call the owner callback, call subscribers, raise `Changed`. Returns the applied value |
-| `Set` and flags | `ReadOnly`: ignored unless `source == Code`. `NoRemote`: ignored when `source == Link`. Ignored means the stored value is returned and no callback runs |
-| Invalid handle | `ArgumentException` from every method that takes a handle |
-| Reading | `GetFloat`, `GetInt`, `GetBool` are an array read: no allocation, no lock, no branch on kind. Keep the handle in a field; never call `Find` on the frame path |
-| Callbacks | Run synchronously inside `Set`, on the main thread. A callback may call `Set` on another parameter; it must not declare. A callback that throws is caught and logged as an error; the value stays applied |
-| Threading | Main thread only. The link applies `ParamSet` at step 8b (§5.1), so callbacks never run inside steps 2 to 6 |
-| Lock and watchdog | The registry knows nothing about the link. `LinkClient` drops a whole `ParamSet` while `demoLock` is on or the link is DEGRADED (§2.8), before it reaches the registry |
+| Declaring twice | Declaring a name that exists with the **same kind** returns the **same entry** and keeps the current value. The new `min`, `max`, default, `names` and `onRelease` replace the old ones; the value is clamped into the new range; `ManifestVersion` rises if anything changed. The entry's callbacks are **replaced**: the old owner's are dropped and the `onChanged` of this call is installed, so a redeclaration with `onChanged` null leaves the entry with no callback. The group and `Live` are kept. An owner that only wants to read an entry somebody else declared calls `Find` or `TryGet` and listens to `Changed`, as `AssetClientInstaller` does for `forge.backend` |
+| Declaring with another kind | `InvalidOperationException` |
+| Bad declaration | `ArgumentException` for an empty name, a `NaN` in range or default, `min > max`, or empty `names`. A default outside the range is clamped, not refused. `InvalidOperationException` when the registry holds 65,536 entries |
+| `Set` | Clamps as in 1.1. If the applied value equals the stored one, nothing else happens and the result is false. Otherwise: store, `Version` + 1, call the entry's own callback, raise `Changed`, return true. An unknown name, id or handle, or an entry of another registry, returns false |
+| Flags | There are none. `OnRelease` and `Live` are the two properties an entry carries beside its range. The demo lock is enforced by the link (below), not by the registry, and "kill switch" is a list of names (1.5) |
+| Reading | `ParamEntry.Float`, `Int`, `Bool` are field reads; `GetFloat`, `GetInt`, `GetBool` by handle are an array read with a fallback for an invalid handle. No allocation. The lookups by name are for set-up code and tools |
+| Callbacks | Run synchronously inside `Set`, on the main thread. A callback that throws is not caught by the registry |
+| `PushAll` | The composition root calls it once after all declarations (lane A §8.2), so the properties the callbacks drive start from the registry's values |
+| Threading | Main thread only. The link applies `ParamSet` inside `LinkClient.Poll` at step 8b (§5.1), so callbacks never run inside steps 2 to 6 |
+| Lock and watchdog | The registry knows nothing about the link. `LinkClient` drops a whole `ParamSet` while its `DemoLock` is on or the link is not CONNECTED (§2.8), before it reaches the registry |
 | `OnRelease` | The Console sends one `ParamSet` when the slider is released. The owner's handler rebuilds and calls `ISpaceHost.BumpWorldVersion()` (lane A §4.3) |
 | Removal | There is none. A parameter lives until the app exits. Leaving a space marks its group inactive (1.1) |
 | Bump Guard | Declares nothing and reads nothing. Its thresholds and its depth rate are constants in `Atlas.Safety` (plan §4.10, §7.5 rule 3). `Atlas.Safety` cannot reference `Atlas.Link` at all (README F1) |
 
 Who declares what (README F6):
 
-- `new ParamRegistry()` already holds the table of 1.4. That fixes the indices, and it makes every switch of
-  §12.2 and §12.4 exist from the first frame, lane B's included (test L22).
-- The owner then declares its rows again, with the same values, to attach its handler: `RenderParams` and
-  `QualityBinding` in `Atlas.App` for the rendering rows (lane A §9.6); each space through its `DeclareParams`
-  delegate at boot and again in `Configure` (lane A §4.3, §5); `Atlas.App` for lane C's rows, whose owners
-  cannot reference `Atlas.Link`; lane D's installer for its own.
-- A parameter that is not in 1.4 is declared by its owner the same way and takes the next free index. Its row
-  is added to 1.4 by the rule of §6.4 (announce, then commit).
-- The thermal ladder lives in `Atlas.Rendering`. `QualityBinding` writes each rung's row with
-  `registry.Set(handle, value, ParamSource.Ladder)` (lane A §9.5).
+- `Atlas.App.AppParams` declares the rows of the assemblies that may not reference `Atlas.Link` (rendering,
+  pose, scan, input) with the callbacks that drive their plain properties, and the kill switches of §12.4 that
+  have no owner in this build (`DeclareUnownedKillSwitches`: only when the name is not declared yet).
+- Each space declares its own through the delegate it gave `SpaceRegistry.Register`
+  (`SpaceRegistry.DeclareAllParams` at boot, in `SpaceId` order) and again in `Configure` (lane A §4.3, §5).
+- Lane D's installers declare theirs (`TelemetryInstaller`, `FlatTwinHud`, `AssetClientInstaller`).
+- The thermal ladder lives in `Atlas.Rendering`; `AppParams` writes each rung's values back with
+  `ParamSource.Local` (lane A §9.5).
 
 Typical use:
 
 ```csharp
-// A space, in DeclareParams and in Configure(RoomModel room, ParamRegistry registry):
-_copies = registry.DeclareInt(AtlasParams.GluedCopies, "glued", new[] { 3, 5, 7 }, 5,
-                              ParamFlags.KillSwitch | ParamFlags.OnRelease, OnCopiesChanged);
+// A space, in its DeclareParams delegate and in Configure(RoomModel room, ParamRegistry registry):
+_copies = registry.DeclareInt("glued.copies", "glued", 3, 7, 5, OnCopiesChanged, onRelease: true);
 // Frame path:
-int n = registry.GetInt(_copies);
+int n = _copies.Int;
 // Atlas.App, for an owner that may not reference Atlas.Link:
-var ipd = registry.Find(AtlasParams.RenderIpd);
-registry.Subscribe(ipd, (h, v, src) => rig.Ipd = v);
-rig.Ipd = registry.GetFloat(ipd);
+registry.DeclareFloat(AppParams.Ipd, "render", StereoRig.MinIpd, StereoRig.MaxIpd, StereoRig.DefaultIpd, v => rig.Ipd = v);
 ```
 
-## 1.4 Ids known now
+## 1.4 Names declared in this build
 
-Declared by `AtlasParams.DeclareWellKnown` in this order; the row number is the index. Flags: **K** kill switch,
-**R** on release, **N** no remote, **L** live. Names, ranges and defaults of lane A's rows are those of lane A
-§9.6 and §14; this table adds the index, the kind and the flags. Rows marked *(B)* have no consumer in this
-build.
+In the order of a full boot of the phone app: `AppParams` (lane A §8.2 step 16), the spaces, lane D's
+installers (step 18), then the dev and perf-tour rows. The wire id follows that order but is read from the
+manifest, never from this table. **R** = `onRelease`. **K** = kill switch (1.5). Names, ranges and defaults of
+lane A's rows are those of lane A §9.6 and §14.
 
-| # | Id | Kind | Range or options | Default | Unit | Flags | Group | Owner · consumer |
-|---:|---|---|---|---|---|---|---|---|
-| 0 | `space.id` | Enum | `S0 Home`, `S1 Glued`, `S2 Curved Walk`, `S3 Aligned Cells`, `S4 Small Planet`, `S5 Impossible Rooms`, `S6 Slicer` | 0 | – | K R | `app` | A · `ISpaceHost.RequestSwitch`; written back after every switch |
-| 1 | `demoLock` | Bool | | false | – | K N | `app` | D · `LinkClient` |
-| 2 | `thermal.pinTier` | Int | −1 … 4: −1 automatic, 0 … 3 the rows of §8.6, 4 the high tier | −1 | – | K R | `render` | A · `QualityInputs.PinTier` |
-| 3 | `render.scale` | Float | choices 0.8, 0.7, 0.6 | 0.8 | – | K R | `render` | A · `EyeTextures.Select` |
-| 4 | `render.msaa` | Int | choices 1, 2, 4 | 4 | samples | K R | `render` | A · `EyeTextures.Select` |
-| 5 | `render.ipd` | Float | 0.055 … 0.075, step 0.0005 | 0.064 | m | | `render` | A · `IStereoRig.Ipd` |
-| 6 | `render.lineWidth` | Float | 0.5 … 3, step 0.1 | 1.5 | px | | `render` | A · `AtlasLook.SetLineWidth` |
-| 7 | `render.lens` | Bool | | true | – | | `render` | A · `LensBlit.Distortion` |
-| 8 | `render.lensK1` | Float | 0 … 1, step 0.005 | 0.34 | – | | `render` | A · `LensParams.K1` |
-| 9 | `render.lensK2` | Float | 0 … 1, step 0.005 | 0.55 | – | | `render` | A · `LensParams.K2` |
-| 10 | `render.lensSeparation` | Float | 0.055 … 0.075, step 0.0005 | 0.064 | m | | `render` | A · `LensParams.LensSeparation` |
-| 11 | `render.screenToLens` | Float | 0.025 … 0.060, step 0.0005 | 0.039 | m | | `render` | A · `LensParams.ScreenToLens` |
-| 12 | `render.lensOffsetY` | Float | −0.02 … 0.02, step 0.0005 | 0 | m | | `render` | A · `LensParams.VerticalOffset` |
-| 13 | `render.headOffsetX` | Float | −0.10 … 0.10, step 0.001 | 0 | m | | `render` | A · `IStereoRig.HeadOffset` |
-| 14 | `render.headOffsetY` | Float | −0.10 … 0.10, step 0.001 | 0 | m | | `render` | A · the same |
-| 15 | `render.headOffsetZ` | Float | −0.10 … 0.10, step 0.001 | 0 | m | | `render` | A · the same |
-| 16 | `curved.cullRho` | Float | 2 … 3.5, step 0.05 | 3 | kernel units | K | `curved` | B · `IWalkerKernel.CullRho`; written by the ladder |
-| 17 | `curved.mode` | Enum | `Mode 1 Curved Walk`, `Mode 2 Aligned Cells` | 0 | – | K R | `curved` | *(B)* |
-| 18 | `curved.L` | Float | 0 … 6, step 0.05; 0 = the loop-fit value of the RoomModel | 0 | m | R | `curved` | *(B)* (`_HypL`, §7.3.2) |
-| 19 | `cells.viewDepth` | Int | 0 … 3 | 3 (proposed) | cells | K | `cells` | *(B)* |
-| 20 | `planet.R` | Float | 0 … 4, step 0.05; 0 = the loop-fit value | 0 | m | K R | `planet` | *(B)* |
-| 21 | `planet.fogRho` | Float | 0.5 … 3.2, step 0.05 | 1.6 (proposed) | kernel units | K | `planet` | *(B)* |
-| 22 | `glued.mode` | Enum | `T2`, `Klein`, `T3` | 0 | – | K R | `glued` | A · S1 |
-| 23 | `glued.copies` | Int | choices 3, 5, 7 | 5 | per side | K R | `glued` | A · S1; written by the ladder |
-| 24 | `glued.avatar` | Bool | | true | – | | `glued` | A · S1 |
-| 25 | `rooms.layout` | Enum | `booth`, `loop` | 0 | – | R | `portal` | A · S5 |
-| 26 | `rooms.count` | Int | 2 … 6 | 6 | rooms | K R | `portal` | A · S5 |
-| 27 | `portal.depth` | Int | 0 … 1 | 1 | – | K | `portal` | A · S5 |
-| 28 | `slicer.source` | Enum | `live`, `stepped`, `tesseract` | 0 | – | K R | `slicer` | A · S6 |
-| 29 | `slicer.object` | Enum | `tesseract`, `cell5`, `cell16`, `cell24`, `tube` | 0 | – | R | `slicer` | A · S6 |
-| 30 | `slicer.view` | Enum | `slice`, `shadow` | 0 | – | | `slicer` | A · S6 |
-| 31 | `slicer.w` | Float | −1.1 … 1.1, step 0.01 | 0 | model units | L | `slicer` | A · S6 |
-| 32 | `slicer.xw` | Float | −180 … 180, step 1 | 0 | degrees | L | `slicer` | A · S6 |
-| 33 | `slicer.yw` | Float | −180 … 180, step 1 | 0 | degrees | L | `slicer` | A · S6 |
-| 34 | `slicer.zw` | Float | −180 … 180, step 1 | 0 | degrees | L | `slicer` | A · S6 |
-| 35 | `slicer.tilt` | Float | 0 … 80, step 1 | 0 | degrees | | `slicer` | A · S6 (the tube only) |
-| 36 | `pose.gyroPredict` | Bool | | false | – | K | `pose` | C · pose pipeline |
-| 37 | `pose.gyroLeadMs` | Float | 0 … 60, step 1 | 40 (proposed; §8.7 gives 30–60) | ms | | `pose` | C · pose pipeline |
-| 38 | `pose.source` | Enum | `tracked`, `replay`, `walker` | 0 | – | R | `pose` | C · choice of pose source (README F9) |
-| 39 | `replay.speed` | Float | 0 … 4, step 0.25 | 1 | × | | `pose` | C · pose-log replay |
-| 40 | `replay.loop` | Bool | | true | – | | `pose` | C · pose-log replay |
-| 41 | `scan.route` | Int | 1 … 4 | 3 | – | K | `scan` | C · scan session |
-| 42 | `link.enabled` | Bool | | true | – | K | `link` | D · `LinkClient` |
-| 43 | `link.stateHz` | Int | choices 10, 30, 60 | 60 | Hz | K | `link` | D · `State` send rate |
-| 44 | `telemetry.mode` | Enum | `live`, `phoneCsv`, `hud` | 0 | – | K | `link` | D · telemetry |
-| 45 | `forge.backend` | Enum | `local`, `hosted`, `cache`, `off` | 0 | – | K | `forge` | D · asset client |
-| 46 | `hud.visible` | Bool | | false | – | | `hud` | D · HUD |
-| 47 | `hud.map` | Bool | | false | – | | `hud` | D · mini-map in the headset |
+| Name | Kind | Range or options | Default | Unit | | Group | Declared by · drives |
+|---|---|---|---|---|---|---|---|
+| `space.id` | Enum | `S0 Home`, `S1 Glued`, `S2 Curved Walk`, `S3 Aligned Cells`, `S4 Small Planet`, `S5 Impossible Rooms`, `S6 Slicer` | 0 | – | K R | `app` | `AppParams.DeclareSpace` · `ISpaceHost.RequestSwitch`; written back after every switch |
+| `thermal.pinTier` | Int | −1 … 4: −1 automatic, 0 … 3 the rows of §8.6, 4 the high tier | −1 | – | K R | `render` | `AppParams` · the quality applier's forced tier |
+| `render.scale` | Float | 0.6 … 0.8 | 0.8 | – | K R | `render` | `AppParams` · eye textures; written by the ladder |
+| `render.msaa` | Int | 1 … 4 | 4 | samples | K R | `render` | `AppParams` · eye textures; written by the ladder |
+| `render.ipd` | Float | 0.055 … 0.075 | 0.064 | m | | `render` | `AppParams` · `StereoRig.Ipd` |
+| `render.lineWidth` | Float | 0.5 … 3 | 1.5 | px | | `render` | `AppParams` · `AtlasLook.SetLineWidth` |
+| `render.lens` | Bool | | the lens blit's start state | – | | `render` | `AppParams` · `LensBlit.Distortion` |
+| `render.lensK1` | Float | 0 … 1 | 0.34 | – | | `render` | `AppParams` · `LensModel.K1` |
+| `render.lensK2` | Float | 0 … 1 | 0.55 | – | | `render` | `AppParams` · `LensModel.K2` |
+| `render.lensSeparation` | Float | 0.055 … 0.075 | 0.064 | m | | `render` | `AppParams` · `LensModel.LensSeparation` |
+| `render.screenToLens` | Float | 0.025 … 0.060 | 0.039 | m | | `render` | `AppParams` · `LensModel.ScreenToLens` |
+| `render.lensOffsetY` | Float | −0.02 … 0.02 | 0 | m | | `render` | `AppParams` · `LensModel.VerticalOffset` |
+| `render.headOffsetX`, `…Y`, `…Z` | Float | −0.10 … 0.10 | 0 | m | | `render` | `AppParams` · `StereoRig.HeadOffset` |
+| `curved.cullRho` | Float | 2 … 3.5 | 3 | kernel units | K | `curved` | `AppParams` · `IWalkerKernel.CullRho`; written by the ladder |
+| `glued.copies` | Int | 3 … 7 | 5 | per side | K R | `glued` | `AppParams`, then S1 · S1; written by the ladder |
+| `curved.mode` | Enum | `Mode 1 Curved Walk`, `Mode 2 Aligned Cells` | 0 | – | K R | `curved` | `AppParams.DeclareUnownedKillSwitches` · no consumer in this build |
+| `portal.depth` | Int | 0 … 1 | 1 | – | K | `portal` | `AppParams` (unowned), then S5 |
+| `slicer.source` | Enum | `live`, `stepped`, `tesseract` | 0 | – | K R | `slicer` | `AppParams` (unowned), then S6 |
+| `forge.backend` | Enum | `local`, `hosted`, `cache`, `off` | 0 | – | K | `forge` | `AppParams` (unowned); read by `AssetClientInstaller` · asset client (§4.3) |
+| `pose.gyroPredict` | Bool | | false | – | K | `pose` | `AppParams.DeclarePose` · pose pipeline |
+| `pose.gyroLeadMs` | Float | 0 … 60 | 40 (proposed; §8.7 gives 30–60) | ms | | `pose` | the same |
+| `pose.source` | Enum | `tracked`, `replay`, `walker` | 0 | – | R | `pose` | `AppParams` · choice of pose source (README F9) |
+| `replay.speed` | Float | 0 … 4 | 1 | × | | `pose` | `AppParams` · pose-log replay |
+| `replay.loop` | Bool | | true | – | | `pose` | `AppParams` · pose-log replay |
+| `pose.record` | Bool | | false | – | | `pose` | `AppParams` · the pose-log recorder (lane C §7.6) |
+| `scan.route` | Int | 1 … 4 | 3 | – | K | `scan` | `AppParams.DeclareScan` · `ScanSettings.Route` |
+| `scan.teamPrescan` | Bool | | false | – | | `scan` | `AppParams` · `ScanSettings.TeamPrescan` |
+| `input.dwell` | Float | 0.6 … 0.8 | 0.7 | s | | `input` | `AppParams.DeclareInput` · `IAtlasInput.DwellSeconds` |
+| `home.marks` | Bool | | true | – | | `home` | S0 |
+| `glued.mode` | Enum | `t2`, `klein`, `t3` | 0 | – | K R | `glued` | S1 |
+| `glued.avatar` | Bool | | true | – | | `glued` | S1 |
+| `rooms.layout` | Enum | `booth`, `loop` | 0 | – | R | `portal` | S5 |
+| `rooms.count` | Int | 2 … 6 | 6 | rooms | K R | `portal` | S5 |
+| `slicer.object` | Enum | `tesseract`, `cell5`, `cell16`, `cell24`, `tube`, `ball` | 0 | – | R | `slicer` | S6 |
+| `slicer.view` | Enum | `slice`, `shadow` | 0 | – | | `slicer` | S6 |
+| `slicer.w` | Float | −1.1 … 1.1 | 0 | model units | | `slicer` | S6, which writes it every frame |
+| `slicer.xw`, `slicer.yw`, `slicer.zw` | Float | −180 … 180 | 0 | degrees | | `slicer` | S6, which writes them every frame |
+| `slicer.tilt` | Float | 0 … 80 | 0 | degrees | | `slicer` | S6 (the tube only) |
+| `hud.map` | Bool | | false | – | | `hud` | `FlatTwinHud.Install` · mini-map in the headset (§5.9). Not declared in the Spectator |
+| `demoLock` | Bool | | false | – | K | `app` | `TelemetryInstaller` · `LinkClient.DemoLock` |
+| `link.enabled` | Bool | | true | – | K | `link` | `TelemetryInstaller` · starts and stops the link |
+| `link.stateHz` | Int | 10 … 60 | 60 | Hz | K | `link` | `TelemetryInstaller` · `LinkClient.StateHz` |
+| `telemetry.mode` | Enum | `live`, `phoneCsv`, `hud` | 0 | – | K | `link` | `TelemetryInstaller` · `LinkPump.Mode` |
+| `hud.visible` | Bool | | false | – | | `hud` | `TelemetryInstaller` · HUD |
+| `dev.room` | Enum | `none`, then the fixture rooms | by start options | – | R | `dev` | `AppParams.DeclareDev` · the rehearsal flow |
+| `dev.overlay` | Bool | | on in the Editor and in a development build | – | | `dev` | `AppParams.DeclareDev` |
+| `perf.run` | Enum | `off`, `tour`, `soak`, `soakNoDepth`, `ladder` | 0 | – | R | `perf` | the perf tour (`App/PerfTour`) |
+| `perf.visitSeconds`, `perf.soakMinutes`, `perf.soakIntervalSeconds` | Int | 5 … 120, 1 … 30, 15 … 300 | by start options | s, min, s | R | `perf` | the perf tour |
+| `perf.pose` | Enum | `auto`, `tracked`, `replay`, `synthetic` | by start options | – | R | `perf` | the perf tour |
 
 Notes:
 
 - Angles are **degrees** in the registry and radians in code and in `State.p[]` (README F4). The owner converts.
 - `render.scale` is the real scale and `render.msaa` the real sample count, not an index. Against §12.4,
   `render.msaa` gains 1, `glued.copies` gains 7 and `thermal.pinTier` gains 4, for the last and the high rung
-  (lane A, open item 4).
-- Build-dependent start values are set by lane D's installer, not by the table: `demoLock` to true in a build
-  with `ATLAS_DEMO_LOCK`, `hud.visible` to true in a development build.
+  (lane A, open item 4). The registry holds ranges, so `render.scale` 0.65 or `render.msaa` 3 are accepted;
+  the owner maps them to what it can do.
+- Build-dependent start values are set by `TelemetryInstaller`, not by the declaration: `demoLock` to 1 in a
+  build with `ATLAS_DEMO_LOCK`, `hud.visible` to 1 when `Debug.isDebugBuild`.
 - `space.id` set to a space that is not available (S2, S3, S4 in this build) is refused by SpaceLab
   (`space.refused`), which writes the parameter back to the entered space.
 - `telemetry.mode`: `live` sends `Telemetry` and writes the phone CSV; `phoneCsv` writes the CSV only; `hud`
   writes nothing and forces the HUD on (§12.2, the "Station: telemetry" row).
 - `forge.backend`: §4.3. With `off` the phone sends nothing to the Forge.
-- **L**: S6 writes `slicer.w` and the three angles every frame from the w lane and the sticks. Their values
-  travel in `State.p[3..6]`; they raise no `param.set` event unless a person set them.
-- Lane C's rows (36 to 41) are this page's reading of §8.7, plan §4.2, §12.4 and README F9. If lane C's page gives a
-  different range or default, that page wins and this table is corrected at the freeze.
+- S6 writes `slicer.w` and the three angles every frame from the w lane and the sticks. Their values travel in
+  `State.p[3..6]`; a change made by code (`ParamSource.Local`) raises no `param` event for these four names
+  (`LinkPump`, §2.6).
+- `pose.gyroPredict` is the on/off switch of §12.4 and `pose.gyroLeadMs` the lead; lane C's page writes the
+  lead as one number.
 
 ## 1.5 Kill switches
 
-The union of the "Switch" column of §12.2 and the list of §12.4: the 21 rows flagged **K** above. In menu order:
+The union of the "Switch" column of §12.2 and the list of §12.4. It is a list of names, in menu order
+(`Atlas.App.Menu.MenuModel.KillSwitchIds`), not a flag on the entry:
 
 `space.id`, `demoLock`, `thermal.pinTier`, `render.scale`, `render.msaa`, `curved.cullRho`, `curved.mode`,
 `cells.viewDepth`, `planet.R`, `planet.fogRho`, `glued.mode`, `glued.copies`, `rooms.count`, `portal.depth`,
 `slicer.source`, `pose.gyroPredict`, `scan.route`, `link.enabled`, `link.stateHz`, `telemetry.mode`,
 `forge.backend`.
 
+`cells.viewDepth`, `planet.R` and `planet.fogRho` are lane B's and are not declared in this build; the menu
+lists the 18 that are. When lane B lands they are declared as Int 0 … 3 (default 3, proposed), Float 0 … 4 m
+(0 = the loop-fit value) and Float 0.5 … 3.2 (default 1.6, proposed), and appear with no change here.
+
 Rules (§12.4):
 
 - Each is settable from the Console and from the on-device menu (§5.7). The menu needs no link.
-- Every change is logged: one `param.set` event (§2.6) in the phone's event log, with the source, and on the
-  Hub when it is connected.
-- `demoLock` is the one switch the Console cannot set with `ParamSet` (flag N): the Console's lock toggle sends
-  `OperatorCmd lock`, which ends in `registry.Set(registry.Find(AtlasParams.DemoLock), on ? 1 : 0,
-  ParamSource.Operator)` (lane A's `CommandRouter.SetLock`). The menu sets it directly.
+- Every change is logged: one `param` event (§2.6) in the phone's event log, with the source, and on the Hub
+  when it is connected.
+- `demoLock`: while the lock is on the phone drops every `ParamSet` and the Hub answers 423 to parameter
+  requests, so the lock cannot be lifted by a slider. The Console's lock toggle sends `OperatorCmd lock`, which
+  ends in `registry.Set("demoLock", on ? 1f : 0f, ParamSource.Remote)` (lane A's `CommandRouter.SetLock`). The
+  menu sets it directly. The phone's `State.flags` carries the lock, and the Hub follows it.
 - `link.enabled` set to off from the Console closes the link (`Bye {"reason": "link.enabled off"}`). It can then
-  only be set back from the menu.
+  only be set back from the menu, and the link starts again only on a phone that has paired before.
 - **Bump Guard has no kill switch, no parameter and no off state.**
 
 ## 1.6 `AtlasParamAttribute` and the binder
@@ -419,27 +418,33 @@ namespace Atlas.Telemetry
         public AtlasParamAttribute(string id, bool def);                          // bool field
         public AtlasParamAttribute(string id, int def);                           // enum field: default option index
 
-        public string Id { get; }
+        public string Id { get; }                // the parameter's name
         public float Min { get; }
         public float Max { get; }
         public float Default { get; }
-        public string Group { get; set; }        // null: the first id segment
-        public float Step { get; set; }          // float fields only
+        public string Group { get; set; }        // null: the first segment of the name, or "app" when it has none
+        public float Step { get; set; }          // carried for the Console; the registry does not quantise
         public bool OnRelease { get; set; }
-        public bool KillSwitch { get; set; }
+        public bool KillSwitch { get; set; }     // a marker; the menu's list is 1.5
+        public string ResolveGroup();
     }
 
     public static class ParamBinder
     {
-        /// <summary>Declares every [AtlasParam] field of target and keeps the field equal to the registry value.</summary>
+        /// <summary>Declares every [AtlasParam] instance field of target (its own and its base types') and keeps
+        /// each field equal to the registry value until the binding is disposed.</summary>
         public static ParamBinding Bind(object target, ParamRegistry registry);
+        /// <summary>As Bind, for the attributed static fields of a type (base types are not searched).</summary>
+        public static ParamBinding BindStatic(Type type, ParamRegistry registry);
     }
 
-    /// <summary>Dispose stops the field updates. The parameters stay declared.</summary>
+    /// <summary>Dispose stops the field updates. The parameters stay declared and keep their values.</summary>
     public sealed class ParamBinding : IDisposable
     {
+        public ParamRegistry Registry { get; }
         public int Count { get; }
-        public ParamHandle HandleOf(string id);      // KeyNotFoundException when the id was not bound here
+        public ParamHandle HandleOf(string id);      // KeyNotFoundException when the name was not bound here
+        public ParamEntry EntryOf(string id);        // likewise
         public void Dispose();
     }
 }
@@ -449,12 +454,15 @@ What `Bind` does, once, off the frame path:
 
 1. Finds every instance field of `target` (public or not, declared on its type or a base type) that carries
    the attribute, by reflection.
-2. Checks the field type: `float`, `int`, `bool`, or an enum whose values are exactly 0 … n − 1. Anything else,
-   or a constructor that does not fit the field type, is an `InvalidOperationException` that names the field.
-3. Declares the parameter (`DeclareFloat`, `DeclareInt`, `DeclareBool`, or `DeclareEnum` with
-   `Enum.GetNames` as labels). Declaring is idempotent (1.3), so binding a well-known id is allowed.
+2. Checks the field: `float`, `int`, `bool`, or an enum whose values are exactly 0 … n − 1, not read-only.
+   Anything else, an empty name, `min > max`, or a constructor that does not fit the field type, is an
+   `InvalidOperationException` that names the field.
+3. If the name is already declared, the field **follows** the existing entry (its owner, range and value are
+   kept; another kind is an `InvalidOperationException`). Otherwise it declares the parameter (`DeclareFloat`,
+   `DeclareInt`, `DeclareBool`, or `DeclareEnum` with the enum's names as labels) with no callback.
 4. Writes the registry's current value into the field.
-5. Subscribes a listener that writes the field on every change (it boxes; it runs only when a value changes).
+5. Subscribes one listener to `registry.Changed` that writes the field on every change of a bound entry (it
+   boxes; it runs only when a value changes).
 
 ```csharp
 public sealed class GluedSpace : MonoBehaviour, ISpaceModule
@@ -468,26 +476,28 @@ public sealed class GluedSpace : MonoBehaviour, ISpaceModule
 }
 ```
 
-The attribute is a convenience, not a duty: a space may call `Declare…` and keep handles, as lane A's spaces
+The attribute is a convenience, not a duty: a space may call `Declare…` and keep entries, as lane A's spaces
 do. `Atlas.Rendering`, `Atlas.Scan`, `Atlas.Input` and `Atlas.Safety` cannot use it (they do not reference
 `Atlas.Telemetry`). The first three expose plain properties (README F6); Safety has no parameter.
 
 ## 1.7 Presets, snapshots and baked defaults
 
-One JSON shape serves all three: `{"values": {"<id>": <number>, …}}`. Keys are ids, never indices **(decided
-here)**; Appendix B.3 writes the key as `id`.
+One JSON shape serves all three: `{"values": {"<name>": <number>, …}}`. Keys are names **(decided here)**;
+Appendix B.3 writes the key as `id`. `ParamRegistry.ToSnapshot` writes a `Bool` as `true` or `false`;
+`Restore` reads a number, a boolean, or for an enum the option's name, and also accepts the bare
+name-to-value map. The Hub accepts a wire id as a key too and translates it through the manifest.
 
 | What | Where | Written by | Read by |
 |---|---|---|---|
 | Preset | `station/hub/presets/<name>.json` | Hub, `POST /api/presets/{name}` | Hub; loading replays every value in one `ParamSet` (§3.3) |
-| Baked defaults | `ATLAS/Assets/Atlas/Telemetry/Resources/AtlasParams/defaults.json` | Hub, `POST /api/presets/{name}/bake`; committed by an engineer | Lane D's installer at boot: `Resources.Load<TextAsset>("AtlasParams/defaults")` → `ParamSnapshot.TryRead` → `registry.ApplyBakedDefaults` |
-| Last snapshot | Hub memory, per session | Hub, from every value the Console set | Hub, replayed at RESYNC (§2.8) |
+| Baked defaults | `ATLAS/Assets/Atlas/Telemetry/Resources/AtlasParams/defaults.json` | Hub, `POST /api/presets/{name}/bake`; committed by an engineer | `TelemetryInstaller` at boot: `Resources.Load<TextAsset>("AtlasParams/defaults")` → `AtlasJson.TryParse` → `registry.Restore(baked, ParamSource.Restore)` |
+| Last snapshot | Hub memory (`LinkHost`), kept until the Hub stops | Hub: every value it sent, every `param` event and manifest of the phone | Hub, replayed at RESYNC (§2.8) |
 
-- `ApplyBakedDefaults(baked)`: for every id in `baked` that is declared, the default becomes the baked value
-  (clamped) and the value is set to it with `ParamSource.Restore`. For an id declared later, the baked value
-  replaces the `def` passed to `Declare…`. A build started with the Hub off therefore runs with the baked values
-  (§7.3.2). It is called once, in lane D's installer (step 18 of lane A §8.2), before the frame loop is enabled.
-- An id in a preset that the phone does not know is skipped and reported in the Hub log. A value out of range
+- Baked defaults set the **value**, not the entry's `Default`: `Restore` for every name already declared, and
+  a listener on `registry.Declared` sets the baked value of a name as it is declared later. A build started
+  with the Hub off therefore runs with the baked values (§7.3.2); "Reset" still goes to the declared default.
+  It runs once, in `TelemetryInstaller.Install` (step 18 of lane A §8.2), before the frame loop is enabled.
+- A name in a preset that the phone does not know is skipped and counted in `hub.log`. A value out of range
   is clamped on the phone, as always.
 - `defaults.json` is absent until the first Bake. An absent or unreadable file means "no baked values".
 
@@ -496,104 +506,120 @@ here)**; Appendix B.3 writes the key as `id`.
 The engine-free JSON reader and writer of `Atlas.Link` (README F1). Used for the JSON link messages, events,
 parameter snapshots, RoomModel files and the JSON chunk of a GLB. No reflection, no attributes, no generics over
 user types. It replaces `JsonUtility` on the phone (§7.2 names `JsonUtility`; `Atlas.Link` cannot reference the
-engine, and `System.Text.Json` does not exist in Unity's profile, U-net §11). The Hub uses `System.Text.Json`
-for its own HTTP bodies and passes link JSON through as bytes.
+engine, and `System.Text.Json` does not exist in Unity's profile, U-net §11). The Hub reads and writes every
+HTTP and WebSocket body with it as well.
 
-**Decided here:** a small immutable DOM for reading, a forward writer for writing.
+**Decided here:** one DOM type, `JsonValue`, for reading and for building. There is no separate forward
+writer: a message builds a `JsonValue` and serialises it.
 
 ```csharp
-// Files: ATLAS/Assets/Atlas/Link/Json/JsonValue.cs, AtlasJson.cs, JsonWriter.cs
-using System;
+// Files: ATLAS/Assets/Atlas/Link/Json/JsonValue.cs, AtlasJson.cs
+using System.Text;
 
 namespace Atlas.Link
 {
-    public enum JsonKind : byte { Null = 0, Bool = 1, Number = 2, String = 3, Array = 4, Object = 5 }
+    public enum JsonKind : byte { Null, Bool, Number, String, Array, Object }
 
-    /// <summary>One parsed JSON value. Immutable. Never throws on a wrong kind or a missing member.</summary>
+    /// <summary>One JSON value. Reading never throws on a wrong kind or a missing member.</summary>
     public sealed class JsonValue
     {
         public static readonly JsonValue Null;       // the value every failed lookup returns
 
+        // ---- building ----------------------------------------------------------------------------
+        public static JsonValue Object();
+        public static JsonValue Array();
+        public static JsonValue Array(params JsonValue[] items);
+        public static JsonValue From(bool value);
+        public static JsonValue From(double value);
+        public static JsonValue From(float value);   // the shortest decimal that reads back to the same float
+        public static JsonValue From(int value);
+        public static JsonValue From(long value);
+        public static JsonValue From(string value);  // null gives Null
+        public static JsonValue Number(string text); // a number the caller formatted itself; FormatException if it is not one
+        public static JsonValue Number(double value, string format);   // invariant culture, for example "F4"
+        // implicit conversions from bool, int, long, float, double and string
+        public JsonValue Set(string key, JsonValue value);   // adds or replaces; returns this for chaining
+        public JsonValue Add(JsonValue item);                // appends to an array; returns this
+        public bool Remove(string key);
+        public void Clear();
+        public JsonValue Clone();
+        public bool DeepEquals(JsonValue other);
+
+        // ---- reading -----------------------------------------------------------------------------
         public JsonKind Kind { get; }
         public bool IsNull { get; }
+        public bool IsBool { get; }
+        public bool IsNumber { get; }
+        public bool IsString { get; }
+        public bool IsArray { get; }
+        public bool IsObject { get; }
+        public bool IsInteger { get; }               // a Number written with no fraction and no exponent
         public int Count { get; }                    // elements of an Array, members of an Object, else 0
-        public JsonValue this[int index] { get; }    // Array element, or Object member value in document order; Null when out of range
-        public JsonValue this[string key] { get; }   // Object member; Null when missing or not an Object
+        public JsonValue this[string key] { get; set; }   // Null when missing or not an Object
+        public JsonValue this[int index] { get; set; }    // Array element, or Object member value in document order; Null when out of range
+        public string KeyAt(int index);              // Object member name in document order
         public bool Has(string key);
-        public string KeyAt(int index);              // Object member name in document order; null otherwise
+        public bool TryGet(string key, out JsonValue value);
 
         public bool   AsBool(bool fallback = false);
         public double AsDouble(double fallback = 0.0);
         public float  AsFloat(float fallback = 0f);
-        public int    AsInt(int fallback = 0);       // a Number with no fraction that fits; else fallback
-        public long   AsLong(long fallback = 0L);    // exact for every integer token in the i64 range
+        public long   AsLong(long fallback = 0L);    // exact for an integer token; a fraction is truncated; out of range clamps
+        public int    AsInt(int fallback = 0);       // AsLong, clamped to the int range
         public string AsString(string fallback = null);
-        public byte[] AsBase64();                    // a String holding padded base64; null otherwise
+        public bool   GetBool(string key, bool fallback = false);
+        public double GetDouble(string key, double fallback = 0.0);
+        public float  GetFloat(string key, float fallback = 0f);
+        public long   GetLong(string key, long fallback = 0L);
+        public int    GetInt(string key, int fallback = 0);
+        public string GetString(string key, string fallback = null);
+
+        // ---- text --------------------------------------------------------------------------------
+        public static JsonValue Parse(string json);                        // AtlasJson.Parse
+        public static bool TryParse(string json, out JsonValue value);
+        public string ToJson(bool indent = false);   // compact: no whitespace at all; indented: two spaces and "\n"
+        public void WriteTo(StringBuilder sb, bool indent = false);
+        public override string ToString();           // ToJson(false)
     }
 
     public static class AtlasJson
     {
-        public const int MaxDepth = 32;
-        public const int MaxBytes = 4 * 1024 * 1024;
+        public const int MaxDepth = 128;
 
-        public static bool TryParse(string text, out JsonValue value, out string error);
-        public static bool TryParse(ReadOnlySpan<byte> utf8, out JsonValue value, out string error);
-        public static JsonValue Parse(string text);                           // FormatException with the same error text
-        public static string Serialize(JsonValue value, bool indented = false);
-        /// <summary>Appends value as a quoted, escaped JSON string: for text a caller lays out by hand.</summary>
-        public static void AppendQuoted(System.Text.StringBuilder sb, string value);
-    }
-
-    /// <summary>Writes compact UTF-8 into one growing buffer. Reset and reuse it; it does not shrink.</summary>
-    public sealed class JsonWriter
-    {
-        public JsonWriter(int initialCapacity = 1024);
-        public JsonWriter Reset();
-        public JsonWriter BeginObject();
-        public JsonWriter EndObject();
-        public JsonWriter BeginArray();
-        public JsonWriter EndArray();
-        public JsonWriter Name(string name);         // inside an object, before its value
-        public JsonWriter Value(string v);           // null writes null
-        public JsonWriter Value(bool v);
-        public JsonWriter Value(int v);
-        public JsonWriter Value(long v);
-        public JsonWriter Value(float v);
-        public JsonWriter Value(double v);
-        public JsonWriter Null();
-        public JsonWriter Base64(ReadOnlySpan<byte> bytes);
-        public JsonWriter RawNumber(string text);    // a number the caller formatted itself; checked against the grammar
-        public JsonWriter Raw(JsonValue v);          // re-serialises a parsed value in place
-
-        public int Length { get; }                   // UTF-8 bytes written
-        public ReadOnlySpan<byte> AsUtf8();          // valid until the next write or Reset
-        public int CopyTo(Span<byte> destination);
-        public override string ToString();
+        public static JsonValue Parse(string json);                        // FormatException with the error text
+        public static bool TryParse(string json, out JsonValue value);
+        public static bool TryParse(string json, out JsonValue value, out string error);
+        public static bool TryParse(string json, bool allowTrailing, out JsonValue value, out string error);
+        public static bool TryParseUtf8(byte[] buffer, int offset, int length, bool allowTrailing,
+            out JsonValue value, out string error);                        // a byte-order mark is skipped
+        public static JsonValue ParseUtf8(byte[] bytes);                   // a whole file image; FormatException
+        public static string ToJson(JsonValue value, bool indent = false); // a null reference is written as null
+        public static byte[] ToUtf8(JsonValue value, bool indent = false); // no byte-order mark
+        public static string Quote(string text);
+        /// <summary>Appends text as a quoted, escaped JSON string; a null reference is written as null.</summary>
+        public static void AppendQuoted(StringBuilder sb, string text);
     }
 }
 ```
 
 | Topic | Rule |
 |---|---|
-| Grammar | RFC 8259. UTF-8, no byte-order mark. No comments, no trailing commas, no single quotes |
-| Root | Any value. The reader stops at the end of the root value and **ignores every byte after it** (§7.5 rule 5) |
-| Limits | Depth 32, input 4 MB. Beyond either: `TryParse` returns false |
-| Errors | `error` reads `"<line>:<column> <message>"`; `value` is `JsonValue.Null` |
-| Duplicate keys | The last one wins for `this[string]`; all are kept for `this[int]` and `KeyAt` |
+| Grammar | RFC 8259. No comments, no trailing commas, no single quotes. `TryParseUtf8` skips a UTF-8 byte-order mark |
+| Root | Any value. With `allowTrailing` the reader stops at the end of the root value and **ignores everything after it**: that is how the link reads its JSON messages (§7.5 rule 5). Without it, text after the root value is an error |
+| Limits | Depth 128: a deeper document is refused instead of overflowing the stack. There is no size limit in the reader; callers bound their input (the Hub's HTTP bodies at 1 MB) |
+| Errors | `error` reads `"<message> at character <index>"`; `value` is `JsonValue.Null` |
+| Duplicate keys | The last one wins; the member keeps its first position |
 | Numbers, reading | Held as `double`. An integer token in the `i64` range is also held exactly, for `AsLong` |
-| Numbers, writing | `int` and `long`: decimal digits. `float`: the shorter of formats `G7` and `G9` that parses back to the same `float`. `double`: likewise `G15` and `G17`. Invariant culture. `NaN` and infinities are written as `null` |
-| Strings, writing | `"` `\` and controls below U+0020 escaped (`\n`, `\r`, `\t` in short form, others `\u00XX`); everything else as UTF-8 |
-| Writer misuse | `Name` outside an object, a value with no `Name` inside an object, an unbalanced `End…`: `InvalidOperationException` |
+| Numbers, writing | An integer: decimal digits. A `double`: the round-trip format `"R"` under the invariant culture, with `.0` appended when the text has no `.` or exponent, so a whole-valued float reads back as a float (`0.0`, `2.0`). A `float` is first turned into the shortest decimal that reads back to the same float (0.1, not 0.10000000149011612). `Number(text)` is written exactly as given. `NaN` and infinities are written as `null` |
+| Strings, writing | `"` `\` and the controls below U+0020 escaped (`\b`, `\f`, `\n`, `\r`, `\t` in short form, others `\u00xx`); U+2028 and U+2029 escaped too, so one event stays one line; everything else as it is |
+| Member order | The order of `Set` calls. Every message writes its members in a fixed order, so equal messages give equal bytes |
 | Unknown members | A reader of a message or a file ignores members it does not know and takes the documented default for members that are missing |
-| Allocation | Parsing allocates (the DOM). Writing allocates nothing once the buffer has grown, except for `float` and `double` values. JSON is never parsed or written in steps 1 to 7 of the frame; in step 8 only when a JSON message is actually sent or received |
+| Allocation | Parsing and building allocate. JSON is never parsed or built in steps 1 to 7 of the frame; in step 8 only when a JSON message is actually sent or received |
 | 64-bit values | Tile ids are written as lane B's `TileId.ToString()` text, hashes as hexadecimal strings. Only `t_us` and counters are JSON numbers |
 
-Golden files of the test `Link_RoundTrip` use only numbers that print the same on Mono, IL2CPP and .NET 8:
-integers and binary fractions such as 0.25 and 12.5.
-
 Lane C's `RoomModelJson` (lane C §2.6) reads through `AtlasJson.TryParse` and lays its canonical text out
-itself (its own line breaks and number format), with `AppendQuoted` for strings. `JsonWriter.RawNumber` serves
-a caller that uses the writer but formats numbers itself.
+itself (its own line breaks and number format), with `AppendQuoted` for strings. `JsonValue.Number` serves
+a caller that builds a `JsonValue` but formats numbers itself.
 
 ---
 
@@ -604,13 +630,18 @@ a caller that uses the writer but formats numbers itself.
 - **LiteNetLib 2.1.4** on both ends: OpenUPM `com.revenantx.litenetlib` in Unity (sources, never a precompiled
   DLL), NuGet `LiteNetLib` in the Hub and in ReplayPhone. Class `NetManager` (the multi-channel one), not
   `LiteNetManager`. `NetSerializer` and `NetPacketProcessor` are not used.
+- LiteNetLib sits behind `ILinkTransport` (below). `LiteNetTransport` is the real one; `LoopbackTransport` is
+  an in-memory one for tests. `LinkClient` and `LinkHost` name no LiteNetLib type.
 - Unicast UDP to a known address only. No discovery, no broadcast, no Bonjour (R4 §3.2).
 - The Hub is the only listener, on **UDP 9050**. The ATLAS app, the Spectator and Editors are clients and reject
   every connection request (`ConnectionRequest.Reject()`).
-- Connection key: `atlas-v1` (`NetManager.Connect(address, port, "atlas-v1")`;
-  the Hub answers with `ConnectionRequest.AcceptIfKey("atlas-v1")`).
+- Connection key: `atlas-v1`. A client connects with the key's bytes, made once
+  (`NetManager.Connect(IPEndPoint, ReadOnlySpan<byte>)`), so an attempt allocates nothing; the Hub answers with
+  `ConnectionRequest.AcceptIfKey("atlas-v1")`. The address must be an IP literal: a host name is refused, as
+  it would resolve on the calling thread.
 
-`NetManager` settings (§7.2, R4 §5.5). Every field name below exists in the installed package.
+`NetManager` settings (§7.2, R4 §5.5), set in `LiteNetTransport`. Every field name below exists in the installed
+package.
 
 | Field | Clients | Hub | Why |
 |---|---|---|---|
@@ -624,54 +655,115 @@ a caller that uses the writer but formats numbers itself.
 | `UnconnectedMessagesEnabled`, `BroadcastReceiveEnabled` | false | false | Nothing unconnected is accepted |
 | `ReconnectDelay` | 250 | default | With the next row: one connect attempt lasts 500 ms **(decided here)** |
 | `MaxConnectAttempts` | 1 | default | Two requests 250 ms apart, then the attempt has failed; the back-off of §2.8 decides the next one |
-| `AllowPeerAddressChange` | – | true | A phone that returns from the background keeps its peer |
-| `MtuDiscovery` | false | false | MTU stays 1,024; no datagram of ours reaches it |
+| `AllowPeerAddressChange` | false | true | A phone that roams between access points keeps its peer |
+| `MtuDiscovery` | default (off) | default (off) | MTU stays 1,024 |
 
-| Ch | LiteNetLib call | Direction | Messages | Rate | Size |
+| Ch | `LinkDelivery` · LiteNetLib call | Direction | Messages | Rate | Size |
 |---|---|---|---|---|---|
-| 0 | `peer.Send(buf, 0, n, 0, DeliveryMethod.ReliableOrdered)` | both | `Hello`, `Welcome`, `ParamManifest`, `ParamSet`, `SceneCmd`, `OperatorCmd`, `Telemetry`, `Event`, `RoomOutline`, `Log`, `JobStatus`, `AssetReady`, `AssetAck`, `Bye` | on demand; `Telemetry` 1 Hz | usually under 1 kB; at most 32,768 B. A message over the MTU is fragmented by LiteNetLib (it does so for `ReliableOrdered` only) |
-| 1 | `peer.Send(buf, 0, n, 1, DeliveryMethod.Sequenced)` | phone → Hub → spectators | `State` | `link.stateHz`: 60, 30 or 10 Hz; never more than one per frame | 202 B; 234 B on the wire (4 B LiteNetLib header, 8 B UDP, 20 B IPv4), about 14 kB/s at 60 Hz |
-| – | `peer.Send(buf, 0, n, 0, DeliveryMethod.Unreliable)` | both | `TPing`, `TPong` | client: 8 at connect, then 1 Hz. Hub: 4 Hz to every client | 13 B, 29 B |
+| 0 | `Reliable` · `peer.Send(buf, off, n, 0, DeliveryMethod.ReliableOrdered)` | both | `Hello`, `Welcome`, `ParamManifest`, `ParamSet`, `SceneCmd`, `OperatorCmd`, `Telemetry`, `Event`, `RoomOutline`, `Log`, `JobStatus`, `AssetReady`, `AssetAck`, `Bye` | on demand; `Telemetry` 1 Hz | usually under 1 kB. A message over the MTU is fragmented by LiteNetLib (it does so for `ReliableOrdered` only); the largest binary one is a full `RoomOutline`, 8,697 B |
+| 1 | `Sequenced` · `peer.Send(buf, off, n, 1, DeliveryMethod.Sequenced)` | phone → Hub → spectators | `State` | `link.stateHz`: 60, 30 or 10 Hz; never more than one per frame | 202 B; 234 B on the wire (4 B LiteNetLib header, 8 B UDP, 20 B IPv4), about 14 kB/s at 60 Hz |
+| – | `Unreliable` · `peer.Send(buf, off, n, 0, DeliveryMethod.Unreliable)` | both | `TPing`, `TPong` | client: 8 at connect, then 1 Hz. Hub: 8 after a client's `Hello`, then 4 Hz to every client | 13 B, 29 B |
 | HTTP | TCP | phone ⇄ Forge; Spectator → Forge | RoomModel, crops, GLB | on demand | Part 3 |
 
-- **Encoding.** Binary messages are written by span codecs (`WriteTo(Span<byte>)`, `ReadFrom(ReadOnlySpan<byte>)`)
-  into one reused 32,768-byte send buffer per `LinkClient` and per `LinkHost`: zero allocation. §7.2 names "one
-  reused `NetDataWriter`"; the bytes on the wire are the same, and the codecs do not depend on LiteNetLib, so the
+```csharp
+// File: ATLAS/Assets/Atlas/Link/Transport/ILinkTransport.cs
+namespace Atlas.Link
+{
+    public enum LinkDelivery : byte { Reliable = 0, Sequenced = 1, Unreliable = 2 }
+
+    /// <summary>Every call arrives inside ILinkTransport.Poll, on the thread that called it.</summary>
+    public interface ILinkTransportListener
+    {
+        void OnPeerConnected(int peerId);
+        void OnPeerDisconnected(int peerId, string reason);    // also a failed connect attempt
+        void OnReceive(int peerId, byte[] data, int offset, int length, LinkDelivery delivery);   // bytes valid during the call only
+    }
+
+    public interface ILinkPeerAddresses { string GetPeerAddress(int peerId); }
+
+    public interface ILinkTransport
+    {
+        ILinkTransportListener Listener { get; set; }
+        bool IsRunning { get; }
+        int LocalPort { get; }
+        bool StartClient();
+        bool StartHost(int port);                    // 0 picks a free port
+        void Connect(string address, int port);      // returns at once; the outcome arrives through the listener
+        void Poll();                                 // never blocks
+        bool Send(int peerId, byte[] data, int offset, int length, LinkDelivery delivery);
+        void Flush();
+        void Disconnect(int peerId);
+        void Disconnect(int peerId, byte[] data, int offset, int length);   // one last packet with the close itself
+        void Stop();
+        int GetRttMs(int peerId);
+        float GetSilenceMs(int peerId);              // keep-alives included; negative when unknown
+        int GetLossPermille(int peerId);
+    }
+}
+```
+
+- **Encoding.** Binary messages are written by array codecs (`int WriteTo(byte[] buffer, int offset)`,
+  `bool ReadFrom(byte[] buffer, int offset, int length)`) into buffers `LinkClient` and `LinkHost` allocate
+  once: zero allocation per send. Integers and floats go through the static `Wire` helpers (`PutU16` …
+  `GetF64`, written out by hand, so they behave the same on Mono, IL2CPP and .NET). §7.2 names "one reused
+  `NetDataWriter`"; the bytes on the wire are the same, and the codecs do not depend on LiteNetLib, so the
   Hub's log reader, ReplayPhone and the tests use them with no transport **(decided here)**.
 - **JSON messages** are the id byte followed by the UTF-8 text of one JSON object: no length prefix, no
-  terminator. The Hub forwards the bytes to the Console unchanged.
-- **Send point.** `State` is sent once per frame from step 8a (§5.1), then `NetManager.TriggerUpdate()` flushes
-  it. Unreliable sends (`TPing`, `TPong`) are also followed by `TriggerUpdate()`.
-- **Receive point.** `NetManager.PollEvents()` is called once per frame from step 8b on the phone, and every
-  millisecond in the Hub's main loop. All callbacks therefore run on the caller's thread.
+  terminator. The Hub parses the body, and hands the Console the parsed body with a member `t` added.
+- **Send point.** `State` is sent once per frame from step 8a (§5.1), then `ILinkTransport.Flush()`
+  (`NetManager.TriggerUpdate()`) puts it on the wire. `TPing`, `TPong` and `Hello` are flushed the same way.
+- **Receive point.** `NetManager.PollEvents()` is called inside `LinkClient.Poll()`, once per frame from step
+  8b on the phone, and every millisecond in the Hub's link loop. All callbacks therefore run on the caller's
+  thread.
 
 ## 2.2 Message ids
 
 ```csharp
-// File: ATLAS/Assets/Atlas/Link/Messages/MsgId.cs
+// File: ATLAS/Assets/Atlas/Link/Messages/Wire.cs
 namespace Atlas.Link
 {
-    public static class MsgId
+    public static class MessageId
     {
-        public const byte Hello = 0x01, Welcome = 0x02, TPing = 0x03, TPong = 0x04;
-        public const byte State = 0x10, PeerState = 0x11;
-        public const byte ParamManifest = 0x20, ParamSet = 0x21, SceneCmd = 0x22, OperatorCmd = 0x23;
+        public const byte Hello = 0x01;
+        public const byte Welcome = 0x02;
+        public const byte TPing = 0x03;
+        public const byte TPong = 0x04;
+        public const byte State = 0x10;
+        public const byte PeerState = 0x11;
+        public const byte ParamManifest = 0x20;
+        public const byte ParamSet = 0x21;
+        public const byte SceneCmd = 0x22;
+        public const byte OperatorCmd = 0x23;
         public const byte Telemetry = 0x30;
-        public const byte Event = 0x40, RoomOutline = 0x41, Log = 0x42;
-        public const byte JobStatus = 0x50, AssetReady = 0x51, AssetAck = 0x52;
+        public const byte Event = 0x40;
+        public const byte RoomOutline = 0x41;
+        public const byte Log = 0x42;
+        public const byte JobStatus = 0x50;
+        public const byte AssetReady = 0x51;
+        public const byte AssetAck = 0x52;
         public const byte Bye = 0x7F;
+
+        public static bool IsKnown(byte id);
+        public static bool IsJson(byte id);
+        public static string Name(byte id);
     }
 
-    public static class LinkProto
+    public static class LinkProtocol
     {
-        public const int Major = 1, Minor = 0;
-        public const string Key = "atlas-v1";
-        public const int HubUdpPort = 9050, HubHttpPort = 8080, ForgeHttpPort = 8000;
-        public const byte ChannelControl = 0, ChannelState = 1;
-        public const int MaxMessageBytes = 32768;
+        public const int ProtoMajor = 1;
+        public const int ProtoMinor = 0;
+        public const string ConnectionKey = "atlas-v1";
+        public const int DefaultPort = 9050;
+        public const byte ChannelControl = 0;   // ReliableOrdered
+        public const byte ChannelState = 1;     // Sequenced
+        public const byte ChannelsCount = 2;
+        public const int MaxBinaryMessageBytes = 2048;
     }
 }
 ```
+
+The HTTP ports are not link constants: 8080 is `HubOptions.HttpPort`'s default and 8000 is
+`AssetClientInstaller.ForgePort`.
 
 | Message | Id | Ch | Encoding | Direction | Size |
 |---|---|---|---|---|---|
@@ -681,26 +773,29 @@ namespace Atlas.Link
 | `TPong` | 0x04 | – | binary | both | 29 B |
 | `State` | 0x10 | 1 | binary | phone → Hub → spectators | 202 B |
 | `PeerState` | 0x11 | 1 | binary | Hub → phone | **Reserved** for Phase 3 (`P3-D07`). No codec in Phase 1. A receiver ignores it |
-| `ParamManifest` | 0x20 | 0 | JSON | phone → Hub → spectators | – |
-| `ParamSet` | 0x21 | 0 | binary | Hub → phone | 2 + 6 n B |
-| `SceneCmd` | 0x22 | 0 | JSON | Hub → phone | – |
-| `OperatorCmd` | 0x23 | 0 | JSON | Hub → phone | – |
+| `ParamManifest` | 0x20 | 0 | JSON | phone → Hub → spectators, editors, consoles | – |
+| `ParamSet` | 0x21 | 0 | binary | Hub → phone; editor or console → Hub → phone | 2 + 6 n B |
+| `SceneCmd` | 0x22 | 0 | JSON | Hub → phone; editor or console → Hub → phone | – |
+| `OperatorCmd` | 0x23 | 0 | JSON | Hub → phone; editor or console → Hub → phone | – |
 | `Telemetry` | 0x30 | 0 | binary | phone → Hub | 91 B |
-| `Event` | 0x40 | 0 | JSON | phone → Hub → spectators | – |
-| `RoomOutline` | 0x41 | 0 | binary | phone → Hub → spectators | 27 + 8 n + 26 m B |
+| `Event` | 0x40 | 0 | JSON | phone → Hub → spectators, editors | – |
+| `RoomOutline` | 0x41 | 0 | binary | phone → Hub → spectators, editors | 27 + 8 n + 26 m B |
 | `Log` | 0x42 | 0 | JSON | phone → Hub | – |
-| `JobStatus` | 0x50 | 0 | JSON | Hub → phone, spectators | – |
-| `AssetReady` | 0x51 | 0 | JSON | Hub → phone, spectators | – |
+| `JobStatus` | 0x50 | 0 | JSON | Hub → phone, spectators, editors | – |
+| `AssetReady` | 0x51 | 0 | JSON | Hub → phone, spectators, editors | – |
 | `AssetAck` | 0x52 | 0 | JSON | phone → Hub | – |
 | `Bye` | 0x7F | 0 | JSON | both | – |
 
 Compatibility (§7.5 rule 5), the same for every receiver:
 
-- An **unknown id** is dropped without an error. A counter (`UnknownMessages`) is kept for the link panel.
-- **Trailing bytes** after a binary message are ignored. A binary message that is **too short** is dropped.
-- A JSON message: unknown members are ignored; bytes after the root object are ignored.
-- A `Hello` whose `proto[0]` is not 1 is answered with `Bye {"reason": "proto 2.0 not supported, hub speaks
-  1.0"}` and the peer is disconnected. A different minor version is accepted.
+- An **unknown id** is dropped without an error.
+- **Trailing bytes** after a binary message are ignored. A binary message that is **too short**, or whose
+  first byte is not its id, is dropped (`ReadFrom` returns false).
+- A JSON message: unknown members are ignored; bytes after the root object are ignored; a body that is not a
+  JSON object is dropped.
+- A `Hello` whose `proto[0]` is not 1 is answered with `Bye {"reason": "protocol mismatch: the Hub speaks 1.0,
+  the client sent 2.0"}` and the peer is disconnected 250 ms later (`LinkHost.Kick`), so that the reason
+  arrives first. A different minor version is accepted.
 - A new field is only ever **appended** to a binary message, and bumps `proto[1]`.
 
 ## 2.3 `State` (0x10, channel 1, 202 bytes)
@@ -728,79 +823,81 @@ Total 1 + 1 + 2 + 4 + 8 + 12 + 16 + 1 + 1 + 48 + 2 + 72 + 32 + 2 = **202**.
 
 ```csharp
 // File: ATLAS/Assets/Atlas/Link/Messages/StateMessage.cs
-using System;
-
 namespace Atlas.Link
 {
-    public static class StateFlags
-    {
-        public const byte TrackingMask = 0x03;          // 0 normal, 1 limited, 2 lost
-        public const byte PoseJumpRejected = 0x04;
-        public const byte CueActive = 0x08;
-        public const byte TierMask = 0x30;
-        public const int  TierShift = 4;
-        public const byte DemoLock = 0x40;
-        public static byte Pack(int tracking, bool poseJumpRejected, bool cueActive, int tier, bool demoLock);
-    }
-
-    /// <summary>Appendix B.1. A plain blittable struct: no arrays, no references.</summary>
+    /// <summary>Appendix B.1. A plain struct of fields with no arrays: filling, copying and sending it allocates nothing.</summary>
     public struct StateMessage
     {
-        public const byte Id = MsgId.State;
         public const int Size = 202;
+        public const int TileLength = 6;
+        public const int XformLength = 9;
+        public const int ParamLength = 8;
+        public const int ParamL = 0;                      // indices into p[] fixed by Appendix B.1
+        public const int ParamFogStart = 1;
+        public const int ParamCullRho = 2;
+        public const int ParamSliceW = 3;
 
         public byte Flags;
         public ushort SceneId;
-        public uint Seq;                                  // set by LinkClient.SendState
-        public long TimeUs;                               // set by LinkClient.SendState
+        public uint Seq;                                  // written by the link
+        public long TimeUs;                               // written by the link
         public float HeadPosX, HeadPosY, HeadPosZ;
         public float HeadRotX, HeadRotY, HeadRotZ, HeadRotW;
         public byte SpaceId;
         public byte BumpLevel;
         public long Tile0, Tile1, Tile2, Tile3, Tile4, Tile5;      // Xu, Xv, Yu, Yv, Tu, Tv
         public short Sheet;
-        public double M00, M01, M02, M10, M11, M12, M20, M21, M22;  // row-major
+        public double Xform0, Xform1, Xform2, Xform3, Xform4, Xform5, Xform6, Xform7, Xform8;   // row-major: m00, m01, m02, m10, …
         public float P0, P1, P2, P3, P4, P5, P6, P7;
         public ushort WorldVer;
 
         /// <summary>All zero, except the head rotation (0, 0, 0, 1) and the xform, which are identities.</summary>
         public static StateMessage Identity { get; }
 
-        public void SetTile(long xu, long xv, long yu, long yv, long tu, long tv);
-        public void SetXform(double m00, double m01, double m02,
-                             double m10, double m11, double m12,
-                             double m20, double m21, double m22);
-        public void SetXformIdentity();
-        public readonly float GetP(int i);                // i = 0..7, else ArgumentOutOfRangeException
-        public void SetP(int i, float value);
+        // The bits of Flags.
+        public int Tracking { get; set; }                 // 0 normal, 1 limited, 2 lost
+        public bool PoseJumpRejected { get; set; }
+        public bool CueActive { get; set; }
+        public int QualityTier { get; set; }              // 0-3; the setter keeps the two low bits, so the high tier is sent as 0
+        public bool DemoLock { get; set; }
 
-        /// <summary>Writes exactly 202 bytes and returns 202. ArgumentException when destination is shorter.</summary>
-        public readonly int WriteTo(Span<byte> destination);
-        /// <summary>False when source is shorter than 202 bytes or source[0] is not 0x10. Extra bytes are ignored.</summary>
-        public static bool ReadFrom(ReadOnlySpan<byte> source, out StateMessage message);
+        // Indexed access; an index out of range is an ArgumentOutOfRangeException.
+        public long GetTile(int i);
+        public void SetTile(int i, long value);
+        public void SetTile(long t0, long t1, long t2, long t3, long t4, long t5);
+        public double GetXform(int i);
+        public void SetXform(int i, double value);
+        public void SetXformIdentity();
+        public float GetParam(int i);
+        public void SetParam(int i, float value);
+
+        /// <summary>Writes exactly 202 bytes at offset and returns 202. ArgumentException when the buffer is too small.</summary>
+        public readonly int WriteTo(byte[] buffer, int offset);
+        /// <summary>False when length is under 202 or the first byte is not 0x10. Extra bytes are ignored.</summary>
+        public bool ReadFrom(byte[] buffer, int offset, int length);
     }
 }
 ```
 
-`Span<byte>` is the choice **(decided here)**. It is part of .NET Standard 2.1 and compiles under IL2CPP with no
-unsafe code: integers go through `System.Buffers.Binary.BinaryPrimitives`, `f32` through
-`BitConverter.SingleToInt32Bits` / `Int32BitsToSingle`, `f64` through `DoubleToInt64Bits` / `Int64BitsToDouble`
-(`BinaryPrimitives.WriteSingleLittleEndian` does not exist in .NET Standard 2.1). `LinkBytes` holds these
-helpers. A `byte[]` converts to a span implicitly, so `state.WriteTo(buffer)` works with an array.
+`byte[]` with an offset is the choice **(decided here)**: it is what the transport hands over and takes, it
+compiles under IL2CPP with no unsafe code, and the `Wire` helpers write each width byte by byte, so nothing
+depends on the host's endianness or on `BitConverter` overloads that .NET Standard 2.1 lacks.
 
 ### Who fills what
 
-Step 8a of the frame, in `AtlasFrameLoop.LateUpdate` (lane A §7.2):
+Step 8a of the frame, in `FrameLoopCore.RunState` (`App/Frame/FrameLoopCore.cs`, lane A §7.2):
 
 | Field | Written by | From |
 |---|---|---|
-| `flags`, `sceneId`, `spaceId`, `worldVer`, `headPos`, `headRot`, `bumpLevel` | `AtlasFrameLoop.FillState` (lane A) | `FrameContext` (raw head pose, tracking, pose-jump flag), `IBumpGuard.Level`, whether a cue is showing, `IQualityState.Tier`, `demoLock`, `ISpaceHost` |
-| `p[0]`, `p[1]`, `p[2]` | `AtlasFrameLoop.FillState` | `(float)IWalkerKernel.MetresPerUnit`, `CullRho − 1`, `CullRho`, in every space (lane B §8.3) |
+| `flags` (tracking, pose jump, tier), `sceneId`, `spaceId`, `worldVer`, `headPos`, `headRot` | `FrameLoopCore.FillState` (lane A) | `FrameContext` (raw head pose, tracking, pose-jump flag, tier), `ISpaceHost` |
+| `bumpLevel`, the cue bit of `flags` | Bump Guard's state writer, called from `FillState` | lane C §8 |
+| `p[0]`, `p[1]`, `p[2]` | `FrameLoopCore.FillState` | `(float)IWalkerKernel.MetresPerUnit`, `CullRho − 1`, `CullRho`, in every space (lane B §8.3) |
 | `tileId`, `sheet`, `xform`, `p[3]` to `p[7]` | The entered space, in `ISpaceModule.WriteState(ref StateMessage state)` | Its own state. On entry they hold six zeros, 0, identity and zeros |
-| `seq`, `t_us` | Lane D's `IStateSink`, through `LinkClient.SendState` | Its counter and its clock, at the send. Whatever the caller put there is overwritten |
+| `seq`, `t_us`, the lock bit of `flags` | `LinkClient.SendState`, through lane D's `IStateSink` (`LinkPump`) | Its counter, its clock and its `DemoLock`, at the send. Whatever the caller put there is overwritten |
 
-`FillState` starts from `StateMessage.Identity`. `WriteState` must not allocate and must write the values the
-frame was drawn with. With no space entered the defaults are sent, with `spaceId` 255 and `sceneId` 0xFFFF.
+`FillState` resets every field each frame. `WriteState` must not allocate and must write the values the
+frame was drawn with. With no space entered the defaults are sent, with `spaceId` 255 (`SpaceIds.NoSpace`) and
+`sceneId` 0xFFFF (`SpaceIds.NoScene`).
 
 | Space | `tileId` | `sheet` | `xform` | `p[3]` to `p[7]` | Source |
 |---|---|---|---|---|---|
@@ -812,24 +909,24 @@ frame was drawn with. With no space entered the defaults are sent, with `spaceId
 | S5 Impossible Rooms | `(room id, 0, 0, 0, 0, 0)` | current room id | identity | layout, room count, portal depth, 0, 0 | lane A §14.2 |
 | S6 Slicer | six zeros | 0 | identity | w₀; the XW, YW, ZW angles in radians; object + 16 · view | lane A §14.3 |
 
-A curved space writes `state.SetTile(t.Xu, t.Xv, t.Yu, t.Yv, t.Tu, t.Tv)` and
-`state.SetXform(u.M00, u.M01, u.M02, u.M10, u.M11, u.M12, u.M20, u.M21, u.M22)` with `t = kernel.Pose.Tile` and
-`u = kernel.Pose.Local` (lane B §2.4, §2.2).
+A curved space writes `state.SetTile(t.Xu, t.Xv, t.Yu, t.Yv, t.Tu, t.Tv)` and the nine `Xform0` … `Xform8`
+fields from `u.M00` … `u.M22`, row by row, with `t = kernel.Pose.Tile` and `u = kernel.Pose.Local` (lane B
+§2.4, §2.2).
 
 What reaches the Spectator, and how:
 
 - Per-frame values travel in `State`. A space that also implements `ISpaceStateReader` (lane A §2) gets the
   newest `State` before each `Tick` in the Spectator and takes its per-frame values (`p[3..7]`, `tileId`,
   `sheet`) from it.
-- Everything slower travels as parameters: `ParamManifest`, then one `param.set` event per change (§2.6). The
-  Spectator applies them to its own registry by id.
+- Everything slower travels as parameters: `ParamManifest`, then one `param` event per change (§2.6). The
+  Spectator applies them to its own registry by name.
 - `worldVer` is `ISpaceHost.WorldVersion` (lane A §4). Every change of it is followed by one `world` event
   (§2.6), which carries the world hash.
 
 ### The 202-byte example
 
-A `State` as S3 Aligned Cells would send it once lane B has landed. It is the golden vector of `Link_RoundTrip`
-(`Tests/Link/Golden/state.hex`).
+A `State` as S3 Aligned Cells would send it once lane B has landed. `Link_RoundTrip` checks the same layout
+field by field against a sample of its own.
 
 | Offset | Size | Field | Type | Bytes (hex) | Value |
 |---:|---:|---|---|---|---|
@@ -894,8 +991,8 @@ these bytes followed by any extra bytes returns the same struct; given the first
 
 ## 2.4 The other binary messages
 
-All follow the pattern of `StateMessage`: `const byte Id`, a size, `int WriteTo(Span<byte>)`,
-`static bool ReadFrom(ReadOnlySpan<byte>, out T)`.
+All are in `Messages/BinaryMessages.cs` and follow the pattern of `StateMessage`: a size, `int WriteTo(byte[]
+buffer, int offset)`, `bool ReadFrom(byte[] buffer, int offset, int length)`.
 
 ### `TPing` (0x03, 13 B) and `TPong` (0x04, 29 B)
 
@@ -918,10 +1015,10 @@ Examples: ping `seq` 7, `t1` 1 000 000 → `03 07 00 00 00 40 42 0F 00 00 00 00 
 `04 07 00 00 00 40 42 0F 00 00 00 00 00 3A 4C 4C 00 00 00 00 00 6C 4C 4C 00 00 00 00 00`.
 
 ```csharp
-public struct TPingMessage { public const byte Id = MsgId.TPing; public const int Size = 13;
+public struct TPingMessage { public const int Size = 13;
                              public uint Seq; public long T1Us; /* WriteTo, ReadFrom */ }
-public struct TPongMessage { public const byte Id = MsgId.TPong; public const int Size = 29;
-                             public uint Seq; public long T1Us, T2Us, T3Us; /* WriteTo, ReadFrom */ }
+public struct TPongMessage { public const int Size = 29;
+                             public uint Seq; public long T1Us; public long T2Us; public long T3Us; /* WriteTo, ReadFrom */ }
 ```
 
 ### `ParamSet` (0x21, 2 + 6 n bytes)
@@ -929,28 +1026,34 @@ public struct TPongMessage { public const byte Id = MsgId.TPong; public const in
 | Offset | Field | Type | Meaning |
 |---:|---|---|---|
 | 0 | `msgType` | u8 | 0x21 |
-| 1 | `count` | u8 | n = 1 … 255 |
-| 2 + 6 i | `id` | u16 | parameter index (1.1) |
+| 1 | `count` | u8 | n = 0 … 255 |
+| 2 + 6 i | `id` | u16 | wire id (1.1) |
 | 4 + 6 i | `value` | f32 | requested value; the phone clamps it |
 
-Example, `render.scale` (index 3) to 0.7 and `curved.cullRho` (index 16) to 3:
+Example, the parameters with wire ids 3 and 16 to 0.7 and 3:
 `21 02 03 00 33 33 33 3F 10 00 00 00 40 40` (14 B).
 
 ```csharp
-public static class ParamSetMessage
+/// <summary>A reusable buffer object: Clear, Add, WriteTo. It owns its arrays; nothing is allocated per send.</summary>
+public sealed class ParamSetMessage
 {
-    public const byte Id = MsgId.ParamSet;
-    public const int MaxEntries = 255;
-    public static int SizeOf(int count);                                       // 2 + 6 * count
-    public static int Begin(Span<byte> destination, int count);               // writes id and count, returns 2
-    public static int Put(Span<byte> destination, int offset, ushort index, float value);   // returns the next offset
-    public static bool TryReadCount(ReadOnlySpan<byte> source, out int count); // false when too short for count
-    public static void ReadEntry(ReadOnlySpan<byte> source, int i, out ushort index, out float value);
+    public const int MaxCount = 255;
+    public const int HeaderSize = 2;
+    public const int EntrySize = 6;
+    public const int MaxSize = HeaderSize + MaxCount * EntrySize;
+    public readonly ushort[] Ids;                     // MaxCount
+    public readonly float[] Values;                   // MaxCount
+    public int Count { get; }
+    public int Size { get; }                          // 2 + 6 * Count
+    public void Clear();
+    public bool Add(ushort id, float value);          // false when full
+    public int WriteTo(byte[] buffer, int offset);
+    public bool ReadFrom(byte[] buffer, int offset, int length);   // false when too short for its count
 }
 ```
 
-The phone applies the entries in order with `registry.Set(handle, value, ParamSource.Link)`. An index it does not
-know is skipped. The whole message is dropped under `demoLock` and while DEGRADED (§2.8).
+The phone applies the entries in order with `registry.Apply(set, ParamSource.Remote)`. An id it does not know
+is skipped. The whole message is dropped under the demo lock and while the link is not CONNECTED (§2.8).
 
 ### `Telemetry` (0x30, 91 bytes)
 
@@ -999,31 +1102,34 @@ One row per second (§7.3.3). The CSV has the same fields in the same order (§5
 ```csharp
 public struct TelemetryMessage
 {
-    public const byte Id = MsgId.Telemetry;
     public const int Size = 91;
     public long TimeUs; public uint Seq; public ushort SceneId; public byte SpaceId; public byte Tier;
-    public float Fps, P50, P95, P99, Max, Over17_2, Over33_8, CpuMainP95, CpuRenderP95, GpuP95, RenderScale;
+    public float Fps, P50, P95, P99, Max;
+    public float Over17_2, Over33_8;
+    public float CpuMainP95, CpuRenderP95, GpuP95, RenderScale;
     public ushort DrawCalls, SetPass, TrisK, MemMB, VisibleTiles, Copies, RttMs, LossPermille, CueCount;
     public uint GcAllocB;
-    public byte Thermal, Battery, Tracking, Msaa, StateHz, BumpMax, AssetsPlaced, AssetsPending;
-    public readonly int WriteTo(Span<byte> destination);
-    public static bool ReadFrom(ReadOnlySpan<byte> source, out TelemetryMessage message);
+    public byte Thermal;
+    public byte Battery, Tracking, Msaa, StateHz, BumpMax, AssetsPlaced, AssetsPending;
+    public const string CsvHeader = "t_us,seq,sceneId,…,assetsPending";   // the header line of 5.3
+    public readonly int WriteTo(byte[] buffer, int offset);
+    public bool ReadFrom(byte[] buffer, int offset, int length);
 }
 ```
 
 ### `RoomOutline` (0x41, 27 + 8 n + 26 m bytes)
 
-The floor plan the Spectator and the Console's map draw. Sent when a RoomModel becomes active and at every
-RESYNC. All coordinates are in the room frame, metres and radians.
+The floor plan the Spectator and the Console's map draw. Sent when a RoomModel becomes active and after every
+handshake. All coordinates are in the room frame, metres and radians.
 
 | Offset | Field | Type | Meaning |
 |---:|---|---|---|
 | 0 | `msgType` | u8 | 0x41 |
-| 1 | `count` | u8 | n = 3 … 255 outline vertices |
+| 1 | `count` | u8 | n = 0 … 255 outline vertices |
 | 2 + 8 i | `x`, `z` | 2 × f32 | `RoomModel.Outline[i]`: wall to wall, counter-clockwise seen from above |
-| 2 + 8 n | `height` | f32 | `RoomModel.MaxWallHeight` |
+| 2 + 8 n | `height` | f32 | the tallest of `RoomModel.Walls[i].Height`; `RoomModel.DefaultWallHeight` (2.4 m) when no wall gives one |
 | 6 + 8 n | `rect` | 5 × f32 | free rectangle: centre x, centre z, Wf, Df, yaw. In the room frame the first two and the last are 0 |
-| 26 + 8 n | `boxCount` | u8 | m = 0 … 64 objects |
+| 26 + 8 n | `boxCount` | u8 | m = 0 … 255 objects |
 | 27 + 8 n + 26 j | `id` | u8 | `Objects[j].Id` (the link's `boxId`) |
 | + 1 | `cat` | u8 | `(byte)Objects[j].Category`: lane C's `ObjectCategory`, 0 `Unknown` … 22 `Other` |
 | + 2 | `cx`, `cz` | 2 × f32 | `Base.x`, `Base.z` |
@@ -1033,36 +1139,57 @@ RESYNC. All coordinates are in the room frame, metres and radians.
 A 3 × 4 m rectangle with one table is 27 + 32 + 26 = 85 B.
 
 ```csharp
-public struct OutlineBox { public byte Id, Category; public float Cx, Cz, W, D, H, Yaw; }
+public struct RoomOutlineBox { public const int Size = 26; public byte Id; public byte Category; public float Cx, Cz, W, D, H, Yaw; }
 
 /// <summary>A reusable buffer object: fill it, then WriteTo. It owns its arrays; nothing is allocated per send.</summary>
 public sealed class RoomOutlineMessage
 {
-    public const byte Id = MsgId.RoomOutline;
-    public const int MaxVertices = 255, MaxBoxes = 64;
-    public int VertexCount;
-    public readonly float[] X, Z;                     // MaxVertices each
+    public const int MaxPoints = 255;
+    public const int MaxBoxes = 255;
+    public const int MaxSize = 2 + MaxPoints * 8 + 4 + 20 + 1 + MaxBoxes * RoomOutlineBox.Size;
+    public readonly float[] PointsXZ;                 // x0, z0, x1, z1, …; MaxPoints * 2
+    public int PointCount;
     public float Height;
-    public float RectCx, RectCz, RectWf, RectDf, RectYaw;
+    public float RectCx, RectCz, RectW, RectD, RectYaw;
+    public readonly RoomOutlineBox[] Boxes;           // MaxBoxes
     public int BoxCount;
-    public readonly OutlineBox[] Boxes;               // MaxBoxes
-    public int Size { get; }                          // 27 + 8 * VertexCount + 26 * BoxCount
-    public int WriteTo(Span<byte> destination);
-    public static bool ReadFrom(ReadOnlySpan<byte> source, RoomOutlineMessage into);
+    public int Size { get; }                          // 27 + 8 * PointCount + 26 * BoxCount
+    public void Clear();
+    public bool AddPoint(float x, float z);           // false when full
+    public bool AddBox(in RoomOutlineBox box);
+    public int WriteTo(byte[] buffer, int offset);
+    public bool ReadFrom(byte[] buffer, int offset, int length);
 }
 ```
 
-`Atlas.Link` knows no RoomModel type. `Atlas.Telemetry` fills a `RoomOutlineMessage` from the RoomModel
-(lane C's types) and calls `LinkClient.SendRoomOutline`: lane D's glue does it on `ISpaceHost.RoomChanged` (§5.1).
+`Atlas.Link` knows no RoomModel type. `Atlas.Telemetry.LinkPump.SetRoom(RoomModel)` fills a
+`RoomOutlineMessage` from the RoomModel (lane C's types) and calls `LinkClient.SendRoomOutline`: the installer
+subscribes it to `ISpaceHost.RoomChanged` (§5.1).
 
 ## 2.5 The JSON messages
 
 Byte 0 is the id; the rest is one JSON object (§1.8). Every member is listed; a missing member takes the default
-in brackets. Each message is a struct in `JsonMessages.cs` with `void Write(JsonWriter w)` and
-`static bool TryRead(JsonValue v, out T message)`.
+in brackets. Each message is a class in `JsonMessages.cs` named `<Message>Message`, derived from `JsonMessage`:
 
-**`Hello` (0x01), client → Hub.** Sent first after every connect, and again whenever the room or the session
-changes.
+```csharp
+public abstract class JsonMessage
+{
+    public abstract byte Id { get; }
+    public abstract JsonValue ToJson();                              // member order is fixed
+    public abstract void FromJson(JsonValue json);                   // missing members take defaults; unknown ones are ignored
+    public byte[] ToBytes();                                         // id byte + compact UTF-8 JSON
+    public int WriteTo(byte[] buffer, int offset);
+    public bool ReadFrom(byte[] buffer, int offset, int length);     // false for another id or a body that is not an object
+    public static byte[] Encode(byte id, JsonValue body);
+    public static bool TryDecode(byte[] buffer, int offset, int length, out byte id, out JsonValue body);
+}
+// HelloMessage, WelcomeMessage, ParamManifestMessage, SceneCmdMessage, OperatorCmdMessage, EventMessage,
+// LogMessage, JobStatusMessage, AssetReadyMessage, AssetAckMessage, ByeMessage: public fields named after the
+// JSON members in PascalCase (HelloMessage.WorldHash, AssetReadyMessage.BoundsX, …).
+```
+
+**`Hello` (0x01), client → Hub.** Sent first after every connect, and again whenever the room, the world or
+the session changes (`LinkClient.SetWorld`, `SetSession`).
 
 ```json
 {"proto":[1,0],"role":"phone","device":"iPhone16,2","app":"atlas","build":"d0e9127",
@@ -1072,15 +1199,16 @@ changes.
 | Member | Type | Meaning |
 |---|---|---|
 | `proto` | `[int, int]` | `[1, 0]` |
-| `role` | string | `phone`, `spectator` or `editor` (§2.11) |
+| `role` | string | `phone`, `spectator`, `editor` or `console` (§2.11); anything else is read as unknown: that peer gets a `Welcome` and nothing more |
 | `device` | string [`""`] | `SystemInfo.deviceModel`, or `ReplayPhone` |
-| `app` | string [`"atlas"`] | |
-| `build` | string [`""`] | Git short hash, or `Application.version` |
-| `worldHash` | string [`""`] | 16 hexadecimal digits (below); empty when there is no world |
+| `app` | string [`""`] | `atlas` |
+| `build` | string [`""`] | `Application.version` |
+| `worldHash` | string [`""`] | 16 hexadecimal digits (below); empty while no space is entered |
 | `roomId` | string [`""`] | `RoomModel.Id`; empty when there is no RoomModel |
-| `sessionId` | string [`""`] | Phone and editor only **(decided here)**: the session id the phone made at start (§5.5). The Hub adopts it, so the phone's files and the Hub's folder carry the same name. Empty from a spectator |
+| `sessionId` | string [`""`] | Phone only **(decided here)**: the session id the phone made at start (§5.5). The Hub adopts it, so the phone's files and the Hub's folder carry the same name. Empty from a spectator |
 
-**`Welcome` (0x02), Hub → client.**
+**`Welcome` (0x02), Hub → client.** Answers every `Hello`. Sent again to every spectator and editor when the
+phone's session, world, room or the Forge URL changed since the last one that client got.
 
 ```json
 {"proto":[1,0],"sessionId":"20261004T153012Z-a3f9","worldHash":"141060c2fc138145","roomId":"sample_3x3",
@@ -1089,10 +1217,13 @@ changes.
 
 | Member | Type | Meaning |
 |---|---|---|
-| `sessionId` | string | The session in force. To a phone: its own id back. To a spectator: the active source's |
-| `worldHash`, `roomId` | string | To a spectator: the active source's last values. To a phone: its own, echoed |
+| `sessionId` | string | The session in force. To a phone: its own id back, unless the Hub was started with `--session` |
+| `worldHash`, `roomId` | string | The phone's last values: from its `Hello`, kept current from its `world` events |
 | `demoLock` | bool [false] | True asks the phone to switch `demoLock` on. False changes nothing: a lock is never lifted by `Welcome` |
 | `forgeUrl` | string [`""`] | Base URL of the Forge, no trailing slash. Empty: the client uses `http://<hub address>:8000` |
+
+A client that receives a `Welcome` with another `proto[0]` does not go on with the handshake and notes the
+mismatch in `LastByeReason`.
 
 **`worldHash`.** `WorldHash.Compute(spaceId, q, seed, generatorVersion, geometryHash, lMillimetres)` (§7.3.1):
 
@@ -1103,106 +1234,111 @@ worldHash = the first 16 hexadecimal digits (lower case) of SHA-256(text)
 spaceId          State.spaceId                                     q        IWalkerKernel.Graph.Q (4 in this build)
 seed             the world generator's seed; 0 in this build       genVer   1 in Phase 1
 geometryHash     lane C's RoomModelJson.GeometryHash(room): 64 lower-case hexadecimal digits (lane C §2.6);
-                 64 zeros when no RoomModel is active
-lMillimetres     round(IWalkerKernel.MetresPerUnit × 1000)
+                 64 zeros (WorldHash.NoGeometry) when no RoomModel is active or the room has no hash yet
+lMillimetres     WorldHash.Millimetres(IWalkerKernel.MetresPerUnit): × 1000, rounded half away from zero
 ```
 
-Lane D's glue computes it at step 8a whenever `State.worldVer` or `spaceId` changes, puts it into the next
-`Hello` (`LinkClient.SetWorld`) and logs the `world` event. The Spectator computes the same from its own kernel,
-room and space and compares. Test vector: space 1, q 4, seed 0, version 1, geometry hash
-`9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08`, L 1000 mm → text
-`1|4,4|0|1|9f86…0a08|1000` → `141060c2fc138145`.
+`LinkPump` computes it at step 8a whenever `State.worldVer` or `spaceId` changes, and when the room changes;
+it hands it to `LinkClient.SetWorld` (which says `Hello` again when it changed) and logs the `world` event.
+The Spectator computes the same from its own kernel, room and space and compares. Test vector: space 1, q 4,
+seed 0, version 1, geometry hash `9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08`,
+L 1000 mm → text `1|4,4|0|1|9f86…0a08|1000` → `141060c2fc138145`.
 
-**`ParamManifest` (0x20), phone → Hub → spectators.** Sent in RESYNC and whenever `ManifestVersion` changed
-since the last one sent (checked once per second). Always the whole registry.
+**`ParamManifest` (0x20), phone → Hub → spectators, editors, consoles.** Sent as the last step of the
+handshake and whenever `ManifestVersion` changed since the last one sent (compared every frame at step 8b by
+`LinkPump`). Always the whole registry. A client that joins later is given the kept manifest with the values
+the Hub knows at that moment.
 
 ```json
-{"ver":3,"params":[
- {"id":3,"name":"render.scale","group":"render","min":0.6,"max":0.8,"def":0.8,"val":0.8,"onRelease":true,
-  "kind":"float","step":0,"flags":3,"active":true,"choices":[0.8,0.7,0.6]},
- {"id":22,"name":"glued.mode","group":"glued","min":0,"max":2,"def":0,"val":0,"onRelease":true,
-  "kind":"enum","step":1,"flags":3,"active":false,"labels":["T2","Klein","T3"]}]}
+{"params":[
+ {"id":2,"name":"render.scale","group":"render","min":0.6,"max":0.8,"def":0.8,"val":0.8,"onRelease":true,
+  "kind":"float","active":true},
+ {"id":31,"name":"glued.mode","group":"glued","min":0.0,"max":2.0,"def":0.0,"val":0.0,"onRelease":true,
+  "kind":"enum","active":false,"names":["t2","klein","t3"]}]}
 ```
 
-`id`, `name`, `group`, `min`, `max`, `def`, `val`, `onRelease` are Appendix B.2. `ver`, `kind` (`float`, `int`,
-`bool`, `enum`), `step`, `flags` (the `ParamFlags` bits), `active` (the group's state, 1.1), `choices` and
-`labels` are added **(decided here)** so the Console can draw a switch, a selector or stepped buttons, and fold
-an inactive group, with no further code.
+`id`, `name`, `group`, `min`, `max`, `def`, `val`, `onRelease` are Appendix B.2. `kind` (`float`, `int`,
+`bool`, `enum`), `active` (the group's state, 1.1; read as true when missing), `names` (enum options, enums
+only) and `live` (written only when true) are added **(decided here)** so the Console can draw a switch or a
+selector and fold an inactive group with no further code. `ParamManifestMessage.FromRegistry(registry)` makes
+it; `ApplyTo(registry)` brings another registry in step with it by name.
 
 **`SceneCmd` (0x22), Hub → phone.**
 
 ```json
-{"space":"S1","variant":"klein","args":{"glued.copies":3},"n":17,"t_us":5000250}
+{"space":"S1","variant":"klein","args":{"glued.copies":3}}
 ```
 
 | Member | Type | Meaning |
 |---|---|---|
-| `space` | string | `S0` … `S6` |
-| `variant` | string [`""`] | A name the space understands: `t2`, `klein`, `t3` (S1); `booth`, `loop` (S5); `tesseract`, `cell5`, `cell16`, `cell24`, `tube` (S6) (lane A §14) |
-| `args` | object [`{}`] | Parameter id → number, applied before the switch |
-| `n` | int [0] | Hub's command counter, echoed in the `op` event **(decided here)** |
-| `t_us` | int [0] | Hub clock at send, for test L10 **(decided here)** |
+| `space` | string | `S0` … `S6`; anything else is dropped |
+| `variant` | string [`""`] | One option of the space's variant parameter, by name, case ignored: `glued.mode` (S1), `rooms.layout` (S5), `slicer.object` (S6) (lane A §14). Other spaces ignore it |
+| `args` | object [`{}`] | Parameter name → number or boolean, set before the switch |
 
 **`OperatorCmd` (0x23), Hub → phone.**
 
 ```json
-{"cmd":"quality","args":{"tier":2},"n":18,"t_us":5000900}
+{"cmd":"quality","args":{"tier":2}}
 ```
 
 | `cmd` | `args` | Meaning |
 |---|---|---|
 | `home` | `{}` | Return to Home |
 | `recentre` | `{}` | Re-centre the current space on the walker |
-| `quality` | `{"tier": 0 … 3}`; also −1 (automatic) and 4 (the high tier), as lane A's `SetQuality` takes them | Pin a ladder rung |
+| `quality` | `{"tier": −1 … 4}`: −1 automatic, 0 … 3 the ladder's rungs, 4 the high tier; clamped | Pin a ladder rung |
 | `cue` | `{}` | The Console's **STOP** button: the warning cue at STRONG level |
 | `lock` | `{"on": true \| false}` | Demo lock |
 
-An unknown `cmd` is ignored and logged. §2.9 gives the local call each one becomes.
+An unknown `cmd` is dropped. §2.9 gives the local call each one becomes. Neither command carries a counter or
+a send time; the Hub notes the time it sent each one in `hub.log`.
 
-**`Event` (0x40), phone → Hub → spectators.** §2.6.
+**`Event` (0x40), phone → Hub → spectators, editors.** §2.6.
 
 **`Log` (0x42), phone → Hub.** Warnings and errors from `Application.logMessageReceived`, and from lane D's own
 code.
 
 ```json
-{"t_us":1234567890,"level":"warning","msg":"Forge unreachable, placing the built-in set"}
+{"t_us":1234567890,"level":"warn","msg":"Forge unreachable, placing the built-in set"}
 ```
 
-`level` is `warning` or `error`. `msg` is cut at 500 characters. At most 10 per second are sent; the rest are
-counted and reported once per second as `"<n> more suppressed"`.
+`level` is `warn` or `error`. At most 20 lines per second are taken from `Application.logMessageReceived`; the
+rest of that second are dropped.
 
-**`JobStatus` (0x50), Hub → phone, spectators.** The Forge's body, relayed (§3.7).
+**`JobStatus` (0x50), Hub → phone, spectators, editors.** The Forge's notification, relayed (§3.7).
 
 ```json
-{"jobId":"j-1a2b3c4d","roomId":"sample_3x3","boxId":4,"state":"generating","source":"local","error":"",
- "queuePos":0,"triTarget":5000}
+{"jobId":"1a2b3c4d5e6f7a8b","roomId":"sample_3x3","boxId":4,"state":"generating","source":"local","error":""}
 ```
 
-`state`: `queued`, `matting`, `generating`, `cleaning`, `ready`, `failed`. `source`: `local`, `hosted`, `cache`.
-`error`: empty unless `failed` (codes in §3.7). `queuePos` and `triTarget` are added **(decided here)**.
+`state`: `queued`, `matting`, `generating`, `cleaning`, `ready`, `failed`, and `placeholder` for a box that
+receives no mesh. `source`: `local`, `hosted`, `cache`. `error`: empty unless `failed`; a sentence for a
+person, not a code (§3.7).
 
-**`AssetReady` (0x51), Hub → phone, spectators.**
+**`AssetReady` (0x51), Hub → phone, spectators, editors.**
 
 ```json
-{"jobId":"j-1a2b3c4d","roomId":"sample_3x3","boxId":4,
+{"jobId":"1a2b3c4d5e6f7a8b","roomId":"sample_3x3","boxId":4,
  "sha256":"3f0a…64 hexadecimal digits…9c1e","url":"/assets/3f0a…9c1e.glb",
  "bytes":183220,"tris":4998,"maxEdge":0.2496,"bounds":[1.2,0.75,0.8],"palette":110}
 ```
 
-`url` is a path on the Forge; the client prepends `forgeUrl`. `bounds` is the size of the mesh's bounding box
-`[x, y, z]` in metres. `palette` is the palette entry (§4.1). `maxEdge` is in metres.
+`url` is a path on the Forge, to which the client prepends the Forge URL, or an absolute `http://` URL when
+the Forge was started with `FORGE_PUBLIC_URL`. `bounds` is the size of the mesh's bounding box `[x, y, z]` in
+metres. `palette` is the palette entry (§4.1). `maxEdge` is in metres.
 
 **`AssetAck` (0x52), phone → Hub.**
 
 ```json
-{"jobId":"j-1a2b3c4d","boxId":4,"sha256":"3f0a…9c1e","ok":true,"loadMs":212.5,"worstFrameMs":17.25,"reason":""}
+{"jobId":"1a2b3c4d5e6f7a8b","boxId":4,"sha256":"3f0a…9c1e","ok":true,"loadMs":212.5,"worstFrameMs":17.25,"reason":""}
 ```
 
 `reason` when `ok` is false: `download_failed`, `hash_mismatch`, `too_large`, `validate:<check>` (§4.2),
-`load_failed`, `room_changed`.
+`load_failed`.
 
-**`Bye` (0x7F), both.** `{"reason":"quit"}`. Reasons in use: `quit`, `link.enabled off`, `hub shutdown`,
-`replaced`, and the proto refusal of §2.2. The sender disconnects after sending; the receiver does not answer.
+**`Bye` (0x7F), both.** `{"reason":"quit"}`. Reasons in use: `quit`, `stop`, `link.enabled off`, `hub
+stopping`, `another phone is already connected`, and the proto refusal of §2.2. A side that leaves sends the
+`Bye` inside the disconnect itself (`ILinkTransport.Disconnect(peer, bytes, …)`), so it cannot be overtaken;
+the receiver does not answer.
 
 ## 2.6 Events
 
@@ -1216,41 +1352,47 @@ Wire and file format, exactly Appendix B.2:
 |---|---|---|
 | `t_us` | int | Phone clock, microseconds |
 | `scene` | string | `S0` … `S6` while that space is entered, `none` otherwise; a use case's name in Phase 2 |
-| `ev` | string | `<area>.<name>` or one word; segments match `[a-z][A-Za-z0-9]*`; at most 40 characters |
-| `data` | object | Always present, `{}` when empty; at most 2 kB |
+| `ev` | string | `<area>.<name>` or one word |
+| `data` | object | Always present, `{}` when empty |
 
 Every event is appended to the phone's event log (§5.5) whether or not the link is up, and sent as `Event` when
-it is. While OFFLINE up to 256 events wait in a queue and are sent at RESYNC; older ones are dropped from the
-queue, never from the file.
+it is. While the link is not ready up to 256 events wait in a queue (`EventLog.MaxQueued`) and are sent after
+the next handshake, 16 per frame, in order; older ones are dropped from the queue, never from the file.
 
-Events known now. A lane adds a name by adding a row.
+Events in this build. A lane adds a name by adding a row.
 
 | `ev` | `data` | Raised by | When |
 |---|---|---|---|
-| `boot` | `{build, device, os}` | D | App start |
+| `boot` | `{build, device, os}` | D (`TelemetryInstaller`) | App start |
 | `session` | `{sessionId}` | D | A session starts (§5.5) |
-| `link.state` | `{state, prev}` | D | Watchdog state change |
-| `param.set` | `{"src": "link" \| "menu" \| "operator" \| "ladder" \| "restore" \| "code", "values": {"<id>": number, …}}` | D | Every applied change: one event per frame at most, per source, with all changes of that frame. A change of a `Live` parameter by `Code` is left out. This is the echo of §7.3.2 |
-| `param.ignored` | `{reason: "lock" \| "degraded", count}` | D | A `ParamSet` was dropped |
-| `op` | `{cmd, args, n}` | D | An operator command was handed to `IOperatorCommands` (§2.9) |
-| `space.entered` | `{from, to}` | D, from `ISpaceHost.SpaceEntered` | A space was entered |
-| `space.refused` | `{to, reason: "noRoom" \| "unavailable"}` | A (SpaceLab) | `RequestSwitch` refused (lane A §4.1) |
-| `space.loadFailed` | `{to}` | A (SpaceLab) | A module could not be created |
-| `world` | `{worldVer, worldHash, space, roomId, geomHash, q, seed, genVer, lMm}` | D, at step 8a | `State.worldVer` or `spaceId` changed (§2.5, `worldHash`) |
+| `link` | `{state, prev}`: `offline`, `resync`, `connected`, `degraded` | D (`LinkPump`) | Watchdog state change |
+| `param` | `{id, name, value, source: "local" \| "remote" \| "restore"}` (`LinkEvents.ParamChanged`) | D (`LinkPump`) | One event per applied change: this is the echo of §7.3.2. A `remote` or `restore` change is reported at once. A `local` change only marks the entry and is reported at step 8b at most once per second, with the value of that moment. A `local` change of `slicer.w`, `slicer.xw`, `slicer.yw`, `slicer.zw` is not reported. A change made while the Station is away goes to the phone's file only; the manifest of the next handshake carries the values |
+| `param.set` | `{name, value, src: "menu"}` | D (`MenuModel`) | The on-device menu applied a value (§5.7); the `param` event follows |
+| `param.ignored` | `{reason: "lock" \| "degraded", count, ids: [wire ids]}` | D (`LinkPump`) | A `ParamSet` was dropped. The Hub puts its record of those parameters back to what the phone holds |
+| `cmd` | `{cmd: "space" \| "home" \| "recentre" \| "quality" \| "cue" \| "lock"}` plus `space` and `variant`, `tier`, or `on` (`OperatorCommand.ToEvent`) | D (`LinkPump`) | An operator command was handed to `IOperatorCommands` (§2.9) |
+| `space.entered` | `{from, to}` | D (`LinkPump`), from `State.spaceId` at step 8a | A space was entered |
+| `space.refused` | `{space, reason}` | A (SpaceLab) | `RequestSwitch` refused (lane A §4.1) |
+| `space.loadFailed`, `space.error` | `{space}`, `{<where>: message}` | A (SpaceLab) | A module could not be created; a module threw |
+| `world` | `{worldVer, worldHash, space, roomId, geomHash, q, seed, genVer, lMm}` | D (`LinkPump`), at step 8a | `State.worldVer` or `spaceId` changed (§2.5, `worldHash`). The Hub keeps the newest and gives it to a spectator that joins later |
 | `quality.tier` | `{from, to, thermal}` | D, from `IQualityState.TierChanged` | The quality tier changed |
-| `quality.critical` | `{}` | A (ladder) | The last rung was reached |
-| `thermal` | `{state}` | D | `IQualityState.ThermalState` changed |
 | `bump.level` | `{level, prev}` | D, from `State.bumpLevel` | The Bump Guard level changed |
-| `tracking.lost`, `tracking.back` | `{}` | D, from `State.flags` | Tracking left `Normal`; tracking is `Normal` again |
+| `tracking.lost`, `tracking.back` | `{state}`, `{}` | D, from `State.flags` | Tracking left normal (`state` 1 limited, 2 lost); tracking is normal again |
 | `pose.jump` | `{}` | D, from `State.flags` | A pose jump was rejected |
-| `scan.state` | `{state, route}` | D's `EventTaps`, from `IScanSession.StateChanged` | Scan milestones (§11.2: "scan end → walkable Home" is the time from the scan's last state to `room.ready`) |
-| `room.ready` | `{roomId, objects}` | `EventTaps`, from `IRoomContent.Built` | Home's shell and placeholder boxes exist |
-| `object.mesh` | `{id, mesh}` | `EventTaps`, from `IRoomContent.ObjectChanged` | An object's `MeshState` changed |
-| `input.action` | `{action, source, tag}` | `EventTaps`, from `IAtlasInput.ActionFired` | A walker's action fired (the numeric values of lane C §13.1) |
-| `asset` | `{boxId, step, jobId, sha256, ms, reason}`; `step`: `upload`, `requested`, `cached`, `ready`, `placed`, `builtin`, `failed`, `rejected` | D | Asset client (§4.3; §11.4.7 reads these) |
-| `menu` | `{open}` | D | On-device menu opened or closed |
-| `materials.grow` | `{capacity}` | A (`MaterialPool`) | The pool had to grow (lane A §11) |
-| `fms`, `note` | `{score}`, `{text}` | Hub | Console entries (§3.5); written by the Hub with the Hub clock and `"scene": "hub"`, never sent to the phone |
+| `room.active`, `room.noEntrySpace`, `room.loadFailed` | `{id}`, `{space}`, … | A (`RoomHandOver`) | A RoomModel became active; its entry space is not in the build; a room could not be loaded |
+| `onboarding.step` | `{step}` | C (onboarding) | Onboarding moved to another step |
+| `headset.on`, `headset.off` | `{}` | A | The display mode changed |
+| `portal.cross`, `rooms.loop`, `slicer.object` | `{from, to}`, `{room, laps}`, `{object}` | A (S5, S6) | Space milestones |
+| `asset` | `{step, boxId, …}`; `step`: `room`, `upload`, `requested`, `cached`, `ready`, `placed`, `builtin`, `failed`, `rejected`, `unreachable`, `reachable`; with `jobId`, `sha256`, `reason`, `attempt`, `tris`, `loadMs` as the step has them | D (`AssetClientCore`) | Asset client (§4.3; §11.4.7 reads these) |
+| `menu` | `{state: "open" \| "close"}` | D (`MenuModel`) | On-device menu opened or closed |
+| `perf.runBegin`, `perf.runEnd`, `perf.summary`, `perf.note` | the perf tour's | A (`App/PerfTour`) | The scripted performance tour |
+| `fms`, `note`, `asset_ack` | `{score}`, `{text}`, the `AssetAck` body | Hub | Console entries (§3.5) and acknowledgements; written by the Hub with the Hub clock and `"scene": "hub"`, never sent to the phone |
+
+`LinkEvents` in `Atlas.Link` holds the names the link itself reads: `Param` (`"param"`), `Command` (`"cmd"`),
+`Link` (`"link"`), `World` (`"world"`), `ParamIgnoredEvent` (`"param.ignored"`), the two reasons, and
+`ParamChanged(…)`, `ParamIgnored(…)`, `TryReadParam(EventMessage, out ushort id, out string name, out float value)`.
+
+There is no `scan.state`, `object.mesh`, `input.action`, `thermal` or `quality.critical` event in this build:
+a scan's progress is read from `onboarding.step` and `room.active`, an object's mesh from the `asset` events.
 
 Tile ids inside `data` are lane B's `TileId.ToString()` text.
 
@@ -1280,65 +1422,97 @@ namespace Atlas.Telemetry
 {
     public sealed class EventLog : Atlas.World.IEventLog
     {
+        public const int MaxQueued = 256;
+        public const string NoScene = "none";
+
+        public EventLog(Atlas.Link.ILinkClock clock, LogFileWriter files);   // files null: nothing goes to disk
+        public Atlas.Link.LinkClient Link { get; set; }       // set by LinkPump
+        public string Scene { get; set; }                     // "S0".."S6" or "none"; set by LinkPump at step 8a
+        public int Count { get; }
+        public int Queued { get; }
+        public event System.Action<Atlas.Link.EventMessage> Logged;
+
         // IEventLog members, and for code that references Atlas.Link:
-        /// <summary>Starts an event and returns the shared writer, positioned inside "data":{ . Add members, then End().
-        /// Not re-entrant.</summary>
-        public Atlas.Link.JsonWriter Begin(string ev);
-        public void End();
+        public void Log(string ev, Atlas.Link.JsonValue data);
+        public void Log(Atlas.Link.EventMessage message);
+        public void LogLocal(Atlas.Link.EventMessage message);    // the phone's file only
+        public int SendQueued(int max = 16);
+        /// <summary>A warning or an error: one line in the phone log, and a Log message when toLink and the link is up.</summary>
+        public void LogLine(string level, string message, bool toLink = true);
     }
 }
 ```
 
 - `AtlasServices.TryGet<IEventLog>(out log)`; a caller that finds none skips the event.
-- Calls are main thread only, cheap (one queue entry), and allowed at step 8 and outside the frame path. A space
-  does not log from `Tick`.
+- `IEventLog.Log` writes a whole-valued `double` as an integer. `LogJson` with text that is not a JSON object
+  logs `{"text": "<the text>"}`.
+- Calls are main thread only, and allowed at step 8 and outside the frame path. Logging is for edges and
+  milestones: a space does not log from `Tick`.
 - `Atlas.Safety` raises no event and cannot (README F1): its level reaches the log through `State.bumpLevel`.
 - `Atlas.Input` cannot either; the code that reacts to an input logs.
 
 ## 2.7 Clock sync
 
-Both clocks are monotonic microseconds from `Stopwatch` (`StopwatchClock`, zero at process start). The Hub's
-clock is the reference for the phone and for the spectators (§7.2).
+Both clocks are monotonic microseconds from `Stopwatch` (`StopwatchClock`). The Hub's clock is the reference
+for the phone and for the spectators (§7.2).
 
 ```text
 A sends TPing(seq, t1).   B receives it at t2 and answers at once with TPong(seq, t1, t2, t3).   A receives it at t4.
 rtt    = (t4 − t1) − (t3 − t2)
 offset = ((t2 − t1) + (t3 − t4)) / 2                      # B's clock minus A's clock, µs, integer
-discard the sample when rtt < 0 or rtt > 500 000
-keep the last 16 accepted samples; best = the one with the smallest rtt (the newest on a tie)
-first 8 accepted samples after a restart:   OffsetUs = best.offset
-afterwards:                                 OffsetUs = OffsetUs + round(0.1 × (best.offset − OffsetUs))
+discard the pong when rtt < 0, or when it answers no open ping of this instance (a duplicate, one from before a restart)
+keep the last 16 accepted samples; best = the one with the smallest rtt
+first 8 accepted samples after a restart:   offset = best.offset
+afterwards:                                 offset = offset + 0.1 × (best.offset − offset);  OffsetUs = round(offset)
 ```
 
-- Schedule on a client: 8 pings 50 ms apart at connect, then one per second.
-- The Hub also pings every client, 4 times per second **(decided here)**. That is its heartbeat (§2.8) and gives
-  the Hub its own offset and RTT per client, used for the latency figures of tests L4 and L10.
+- Schedule on a client: 8 pings 50 ms apart after `Welcome`, then one per second.
+- The Hub also pings every client: 8 pings 50 ms apart after its `Hello`, then 4 times per second **(decided
+  here)**. That is its heartbeat (§2.8) and gives the Hub its own offset and RTT per client, from which it
+  computes the latency of each `State` (§3.2).
 - `t4` is read when `Poll` dispatches the pong, so on the phone it can be up to one frame late. The
   minimum-RTT rule is what removes that delay.
 - Example: `t1` 1 000 000, `t2` 5 000 250, `t3` 5 000 300, `t4` 1 000 650 → `rtt` 600 µs, `offset` 3 999 950 µs.
 - LiteNetLib's `RoundTripTime` feeds the link indicator only. Its NTP helper is not used.
 
 ```csharp
-// Files: ATLAS/Assets/Atlas/Link/Transport/LinkClock.cs, ClockSync.cs
+// File: ATLAS/Assets/Atlas/Link/ClockSync.cs
 namespace Atlas.Link
 {
     public interface ILinkClock { long NowUs { get; } }
     public sealed class StopwatchClock : ILinkClock { public long NowUs { get; } }
+    /// <summary>A clock that moves only when told to. Tests and replay tools.</summary>
+    public sealed class ManualClock : ILinkClock
+    {
+        public ManualClock(long startUs = 0);
+        public long NowUs { get; set; }
+        public void AdvanceUs(long us);
+        public void AdvanceMs(double ms);
+    }
 
     /// <summary>Engine-free. Reads no clock: every time is an argument.</summary>
     public sealed class ClockSync
     {
-        public const int BurstCount = 8, BurstSpacingMs = 50, SteadyPeriodMs = 1000, Window = 16;
+        public const int BurstCount = 8;
+        public const long BurstIntervalUs = 50000;
+        public const long SteadyIntervalUs = 1000000;
+        public const int WindowSize = 16;
         public const double Alpha = 0.1;
-        public const long MaxRttUs = 500000;
+        public const long BurstGraceUs = 250000;
+        public long SteadyPeriodUs = SteadyIntervalUs;    // the Hub sets 250 000
 
-        public bool HasOffset { get; }
+        public bool HasEstimate { get; }              // at least one pong accepted since the last restart
         public long OffsetUs { get; }                 // remote clock minus local clock
         public long RttUs { get; }                    // of the best sample in the window
-        public bool BurstDone { get; }                // 8 samples accepted, or 600 ms since Restart
+        public long LastRttUs { get; }
+        public int SampleCount { get; }
+        public int PingsSent { get; }
+        public bool BurstComplete(long nowUs);        // 8 pongs accepted, or 250 ms after the eighth ping left
         public void Restart(long nowUs);
-        public bool ShouldPing(long nowUs, out TPingMessage ping);   // true when one is due; fills seq and t1
-        public void OnPong(in TPongMessage pong, long t4Us);
+        public void Stop();
+        public bool TryNextPing(long nowUs, out TPingMessage ping);   // true when one is due; fills seq and t1
+        public bool OnPong(in TPongMessage pong, long t4Us);          // false for a pong that was not accepted
+        public static TPongMessage Answer(in TPingMessage ping, long t2Us, long t3Us);
         public long ToRemoteUs(long localUs);
         public long ToLocalUs(long remoteUs);
     }
@@ -1351,46 +1525,64 @@ namespace Atlas.Link
 |---|---|---|
 | `Connected` | A packet from the Hub within the last 500 ms | Normal |
 | `Degraded` | Silent for 500 ms or more, peer still connected. Left only after 2,000 ms in which the silence never reached 500 ms | `ParamSet` is dropped. Everything else continues |
-| `Offline` | No peer: never connected, timed out after 3,000 ms of silence, or closed by `Bye` | The app is unchanged. Reconnect attempts with back-off. The asset client polls the Forge (§4.3) |
-| `Resync` | Connected a moment ago | The sequence below; `ParamSet` is accepted |
+| `Offline` | No peer: never connected, timed out after 3,000 ms of silence, or the transport dropped it | The app is unchanged. Reconnect attempts with back-off. The asset client polls the Forge (§4.3) |
+| `Resync` | Connected a moment ago: from the transport's connect until the handshake is done | The sequence below. `ParamSet` is dropped until `Connected` |
 
-- "A packet" is any LiteNetLib packet from the peer: `silence = peer.TimeSinceLastPacket` (milliseconds). The
-  Hub's 4 Hz ping makes the longest healthy gap 250 ms, so "two missed pings" (§7.2) is the 500 ms above.
-- **Back-off.** One attempt is one `Connect` call; it has failed after 500 ms (§2.1). The wait between the end
-  of a failed attempt and the next one is 0.5, 1, 2, 4, 4, … s. A successful connect resets it to 0.5 s.
-  `Reconnect()`, a new Hub address and a return from the background (`OnApplicationPause(false)` with no peer)
-  start an attempt at once and reset the back-off.
-- **Resync**, in order: (1) client sends `Hello`; (2) Hub answers `Welcome`, or `Bye`; no answer in 2 s → the
-  client disconnects and is `Offline`; (3) the clock burst, 8 pings; (4) the client sends `ParamManifest`,
-  `RoomOutline` if a RoomModel is active, the last `world` event, then its queued events and up to 600 `Telemetry`
-  rows it could not send; (5) the client is `Connected`; (6) on the manifest the Hub sends its last parameter
-  snapshot as one `ParamSet` (matched by id) and every `AssetReady` of this room that has no `AssetAck`.
+- "A packet" is any LiteNetLib packet from the peer, keep-alives included: `ILinkTransport.GetSilenceMs`
+  (`peer.TimeSinceLastPacket`). The Hub's 4 Hz ping makes the longest healthy gap 250 ms, so "two missed
+  pings" (§7.2) is the 500 ms above.
+- **Back-off.** One attempt is one `Connect` call; it has failed after 500 ms (§2.1). After `Start` the first
+  attempt is made at once and the next ones follow 0.5, 1, 2, 4, 4, … s apart. After a drop the first attempt
+  comes 0.5 s later, then 1, 2, 4, 4, … s. A successful connect resets it. `LinkClient.ReconnectNow()`, a new
+  Hub address (`SetAddress`) and a return from the background while offline start an attempt at once and
+  reset the back-off.
+- **Resync**, in order: (1) the client sends `Hello`; (2) the Hub answers `Welcome`, or `Bye`; with no answer
+  the watchdog goes `Offline` at 3 s of silence; (3) the clock burst, 8 pings; (4) a phone sends
+  `ParamManifest` and is `Connected`; (5) at step 8b `LinkPump` then sends the `RoomOutline` if a RoomModel is
+  active, its queued events (16 per frame) and up to 600 `Telemetry` rows it could not send (16 per frame);
+  (6) on the first manifest of a new connection the Hub sends every snapshot value that differs from the
+  manifest's in `ParamSet`s (matched by name) and every `AssetReady` that has no `AssetAck`.
 - With `link.enabled` off there is no socket and the state is `Offline`.
 
 ```csharp
-// File: ATLAS/Assets/Atlas/Link/Transport/LinkWatchdog.cs
+// File: ATLAS/Assets/Atlas/Link/LinkWatchdog.cs
 namespace Atlas.Link
 {
     public enum LinkState : byte { Offline = 0, Resync = 1, Connected = 2, Degraded = 3 }
 
-    /// <summary>Engine-free state machine. Reads no clock and no socket.</summary>
+    /// <summary>Engine-free state machine. Reads no clock and no socket: the caller reports what happened and when.</summary>
     public sealed class LinkWatchdog
     {
-        public const int DegradedAfterMs = 500, HealthyHoldMs = 2000, OfflineAfterMs = 3000, AttemptMs = 500;
-        public static int BackoffMs(int failedAttempts);        // 0 → 500, 1 → 1000, 2 → 2000, 3 and more → 4000
+        public const long DefaultDegradedAfterUs = 500000;
+        public const long DefaultOfflineAfterUs = 3000000;
+        public const long DefaultRecoverAfterUs = 2000000;
+        public const long FirstBackoffUs = 500000;
+        public const long MaxBackoffUs = 4000000;
+        public long DegradedAfterUs = DefaultDegradedAfterUs;
+        public long OfflineAfterUs = DefaultOfflineAfterUs;
+        public long RecoverAfterUs = DefaultRecoverAfterUs;
 
         public LinkState State { get; }
-        public int FailedAttempts { get; }
-        public void OnAttemptStarted(long nowMs);
-        public void OnPeerConnected(long nowMs);                // → Resync
-        public void OnResyncDone(long nowMs);                   // → Connected
-        public void OnPeerDisconnected(long nowMs);             // → Offline; also a failed attempt
-        public void Tick(long nowMs, int silenceMs);            // Connected ↔ Degraded
-        public bool ShouldConnect(long nowMs);                  // Offline and the back-off has run out
-        public void ResetBackoff(long nowMs);                   // the next ShouldConnect is true
+        public event System.Action<LinkState, LinkState> StateChanged;   // (previous, current)
+        public bool AcceptsRemoteParams { get; }                // State == Connected
+        public bool HasPeer { get; }
+        public long BackoffUs { get; }
+        public long NextAttemptUs { get; }
+        public long SilenceUs(long nowUs);
+        public void Start(long nowUs);                          // Offline, first attempt due at once
+        public void Stop();
+        public bool ShouldConnect(long nowUs);                  // true when an attempt is due; schedules the next
+        public void OnTransportConnected(long nowUs);           // → Resync, back-off reset
+        public void OnResyncComplete(long nowUs);               // → Connected
+        public void OnTransportDisconnected(long nowUs);        // → Offline, first retry in 0.5 s
+        public void OnPacket(long nowUs);
+        public void OnSilence(long nowUs, long silenceUs);      // what the transport says, keep-alives included
+        public LinkState Tick(long nowUs);                      // Connected ↔ Degraded, Offline at 3 s
     }
 }
 ```
+
+The Hub runs one `LinkWatchdog` per client as well and frees a phone's seat after 3 s of silence.
 
 **Link indicator** (§7.2). In hand: a state dot (green `Connected`, amber `Degraded` or `Resync`, grey
 `Offline`), Hub address, RTT, loss, Forge reachability, "Reconnect", "Change IP" (§5.6). In the headset: one
@@ -1402,251 +1594,338 @@ Exactly six (§7.3.2): switch space (`SceneCmd`), and `OperatorCmd` `home`, `rec
 The path has three steps, and no link type goes further than the second:
 
 ```text
-LinkClient (Atlas.Link)  ──ILinkCommandSink──▶  OperatorBridge (Atlas.Telemetry)  ──IOperatorCommands──▶  CommandRouter (Atlas.App)
-   parses the JSON                                 translates, logs the "op" event                       calls SpaceLab, the ladder, BumpCue.Fire
+LinkClient (Atlas.Link)  ──TryDequeueCommand──▶  LinkPump (Atlas.Telemetry)  ──IOperatorCommands──▶  CommandRouter (Atlas.App)
+   parses the JSON, queues an OperatorCommand      translates, logs the "cmd" event                 calls SpaceLab, the ladder, BumpCue.Fire
 ```
 
 `IOperatorCommands` is lane A's interface in `Atlas.World` (lane A §7.1) and has no link type. `CommandRouter`
 is the handler of §6.2 that turns `cue` into `BumpCue.Fire`, so `Atlas.Safety` never sees a link type.
 
 ```csharp
-// File: ATLAS/Assets/Atlas/Link/Transport/LinkSinks.cs
+// File: ATLAS/Assets/Atlas/Link/OperatorCommand.cs
 namespace Atlas.Link
 {
-    public enum OperatorVerb : byte { Unknown = 0, Home = 1, Recentre = 2, Quality = 3, Cue = 4, Lock = 5 }
+    public enum OperatorCommandKind : byte { None = 0, SwitchSpace = 1, Home = 2, Recentre = 3, Quality = 4, Cue = 5, Lock = 6 }
 
-    public struct SceneCmd
+    /// <summary>One operator command as the app consumes it.</summary>
+    public struct OperatorCommand
     {
-        public byte Space;                  // 0..6
+        public const string CmdHome = "home";
+        public const string CmdRecentre = "recentre";
+        public const string CmdQuality = "quality";
+        public const string CmdCue = "cue";
+        public const string CmdLock = "lock";
+        public const int TierAuto = -1;
+        public const int TierHigh = 4;
+
+        public OperatorCommandKind Kind;
+        public int Space;                   // SwitchSpace: 0..6
         public string Variant;              // "" when none
-        public JsonValue Args;              // an Object; JsonValue.Null when absent
-        public uint N; public long HubTimeUs;
-    }
+        public int Tier;                    // Quality: -1..4
+        public bool On;                     // Lock
+        public JsonValue Args;              // the raw args object; may be null
 
-    public struct OperatorCmd
-    {
-        public OperatorVerb Verb;
-        public int Tier;                    // quality: -1..4
-        public bool On;                     // lock
-        public JsonValue Args;
-        public uint N; public long HubTimeUs;
-    }
-
-    /// <summary>Called on the main thread from LinkClient.Poll, at step 8b.</summary>
-    public interface ILinkCommandSink
-    {
-        void OnSceneCmd(in SceneCmd cmd);
-        void OnOperatorCmd(in OperatorCmd cmd);
+        public static OperatorCommand SwitchSpace(int space, string variant = null, JsonValue args = null);
+        public static OperatorCommand Home();
+        public static OperatorCommand Recentre();
+        public static OperatorCommand Quality(int tier);     // clamped to -1..4
+        public static OperatorCommand Stop();                // the STOP button: Kind Cue
+        public static OperatorCommand Lock(bool on);
+        public JsonMessage ToMessage();                      // a SceneCmdMessage or an OperatorCmdMessage; null for None
+        public static bool TryFrom(SceneCmdMessage message, out OperatorCommand command);
+        public static bool TryFrom(OperatorCmdMessage message, out OperatorCommand command);
+        public string Name { get; }                          // "space", "home", "recentre", "quality", "cue", "lock"
+        public EventMessage ToEvent(long timeUs, string scene);   // the "cmd" event
     }
 }
 ```
 
-`Atlas.Telemetry.OperatorBridge : ILinkCommandSink` takes `IOperatorCommands` from `AtlasServices` (absent in the
-Spectator, where commands are ignored) and does this:
+`LinkClient` keeps the newest 32 commands in a ring. `LinkPump` drains it at step 8b into
+`LinkPump.Commands` (lane A's `IOperatorCommands`, taken from `AtlasServices` once the app has booted; absent
+in the Spectator, where commands wait and are never applied) and does this:
 
-| Command | `OperatorBridge` | `CommandRouter` then (lane A §7.2) |
+| Command | `LinkPump` | `CommandRouter` then (lane A §7.2) |
 |---|---|---|
-| `SceneCmd` | For each member of `args`: `registry.TrySet(id, value, ParamSource.Operator, out _)`. Then `SwitchSpace((SpaceId)Space, Variant)` | Sets the variant's parameter, then `ISpaceHost.RequestSwitch` |
+| `SceneCmd` | For each member of `args`: `registry.Set(name, value, ParamSource.Remote)`. Then `SwitchSpace((SpaceId)Space, Variant)` (`null` for an empty variant) | Sets the variant's parameter, then `ISpaceHost.RequestSwitch` |
 | `home` | `Home()` | `ISpaceHost.ReturnHome()` |
-| `recentre` | `Recentre()` | `IFrameLoop.ResetWalkerToFloor()`, then lane C's recentre entry point if there is one |
+| `recentre` | `Recentre()` | `IFrameLoop.ResetWalkerToFloor()`, then the pose pipeline's `ResetGeometry()` |
 | `quality` | `SetQuality(Tier)` | Sets `thermal.pinTier` |
 | `cue` | `Cue()` | `BumpCue.Fire(BumpLevel.Strong, float2.zero, CueSource.Operator)` (lane C §8.8): the same local entry point Bump Guard uses (`P1-C14`). Indicator, tone and continuous haptic; the world keeps rendering; nothing freezes |
-| `lock` | `SetLock(On)` | `registry.Set(registry.Find(AtlasParams.DemoLock), on ? 1 : 0, ParamSource.Operator)` |
+| `lock` | `SetLock(On)` | `registry.Set("demoLock", on ? 1f : 0f, ParamSource.Remote)` |
 
-- After each command `OperatorBridge` logs one `op` event with `cmd`, `args` and `n`. Test L10 compares its
-  `t_us` (clock-corrected) with the Hub's send time: 250 ms at most.
+- After each command `LinkPump` logs one `cmd` event (§2.6). A handler that throws is logged as an error line
+  and does not stop the commands behind it. Test L10 compares the event's `t_us` (clock-corrected) with the
+  time the Hub noted in `hub.log`: 250 ms at most.
 - A command is handed over at step 8b of the frame in which it is polled, so it takes effect in the next frame.
   Nothing in steps 1 to 7 waits for it.
-- All six work under `demoLock`. The lock stops `ParamSet` only.
+- All six work under the demo lock, the `args` of a `SceneCmd` included. The lock stops `ParamSet` only. An
+  `OperatorCmd lock` sets `LinkClient.DemoLock` the moment it is received, so a `ParamSet` queued behind it is
+  already dropped.
 - `cue` is an extra trigger, never the only one (§7.5 rule 1). With no link, Bump Guard is unchanged. An
   operator cue is held for lane C's `OperatorHoldSeconds` (3.0 s); the command carries no duration.
 
 ## 2.10 `LinkClient`
 
-One class for the phone, the Spectator and an Editor. It owns the socket, the watchdog, the clock and the
-resync. Its public API has no LiteNetLib type, so only `Atlas.Link` references LiteNetLib.
+One class for the phone, the Spectator and an Editor. It owns the handshake, the watchdog, the clock and the
+reconnect back-off, and talks to the network through the `ILinkTransport` it is given. Its public API has no
+LiteNetLib type.
 
 ```csharp
-// File: ATLAS/Assets/Atlas/Link/Transport/LinkClient.cs
+// File: ATLAS/Assets/Atlas/Link/LinkClient.cs      (LinkRole is in Messages/JsonMessages.cs)
 using System;
 
 namespace Atlas.Link
 {
-    public enum LinkRole : byte { Phone = 0, Spectator = 1, Editor = 2 }
-    public enum LogLevel : byte { Warning = 0, Error = 1 }
+    public enum LinkRole : byte { Unknown = 0, Phone = 1, Spectator = 2, Editor = 3, Console = 4 }
 
-    public struct LinkIdentity { public string Device, App, Build, SessionId; }
-
-    /// <summary>A copy of the link's state for a UI. Strings are shared, nothing is allocated.</summary>
-    public struct LinkStatus
+    public static class LinkRoles
     {
-        public LinkState State; public bool Enabled;
-        public string HubAddress; public int HubPort;
-        public int RttMs; public int LossPermille; public float StateHz;
-        public bool ClockSynced; public long ClockOffsetUs;       // Hub clock minus local clock
-        public string SessionId; public string ForgeUrl; public string LastError;
-        public int UnknownMessages;
+        public static string Name(LinkRole role);            // "phone", "spectator", "editor", "console", "unknown"
+        public static LinkRole Parse(string name);
+        public static bool Watches(LinkRole role);           // Spectator, Editor: receive the relayed State
+        public static bool Operates(LinkRole role);          // Console, Editor: their parameters and commands go to the phone
     }
 
-    public sealed class LinkClient : IDisposable
+    public delegate void LinkStateHandler(in StateMessage state);
+
+    public sealed class LinkClient : ILinkTransportListener
     {
-        public LinkClient(LinkRole role, ParamRegistry registry, LinkIdentity identity, ILinkClock clock = null);
+        /// <param name="registry">The phone's registry; null for a client that holds no parameters.</param>
+        public LinkClient(ILinkTransport transport, ILinkClock clock, LinkRole role, ParamRegistry registry = null);
 
+        // ---- identity sent in Hello ---------------------------------------------------------------
+        public LinkRole Role { get; }
+        public string Device;
+        public string App;                                    // "atlas"
+        public string Build;
+        public string WorldHash;
+        public string RoomId;
+        public string SessionId;
+        public string Scene;                                  // written into the events the client emits itself
+
+        // ---- state --------------------------------------------------------------------------------
+        public ParamRegistry Registry { get; }
+        public ClockSync ClockSync { get; }
+        public LinkWatchdog Watchdog { get; }
+        public ILinkTransport Transport { get; }
         public LinkState State { get; }
-        public bool Enabled { get; set; }                         // follows link.enabled; false closes the socket
-        public ILinkClock Clock { get; }
-        public void GetStatus(out LinkStatus status);
-        public event Action<LinkState, LinkState> StateChanged;   // (previous, current), main thread
+        public bool IsReady { get; }                          // the handshake is done and messages flow
+        public bool DemoLock { get; set; }                    // while true a received ParamSet is dropped
+        public int StateHz { get; set; }                      // clamped to 1..60
+        public bool EchoParamChanges;                         // default true; LinkPump sets it false and owns the echo
+        public WelcomeMessage Welcome { get; }                // the last one received; null before the first
+        public bool WorldMatches { get; }
+        public string LastByeReason { get; }
+        public string Address { get; }
+        public int Port { get; }
+        public int RttMs { get; }
+        public int LossPermille { get; }
+        public long NowUs { get; }
+        public long HubNowUs { get; }                         // the Hub's clock now, from the clock estimate
+
+        // ---- events, all raised inside Poll --------------------------------------------------------
+        public event Action<LinkState, LinkState> StateChanged;   // (previous, current)
+        public event Action<WelcomeMessage> Welcomed;
+        public event LinkStateHandler StateReceived;              // spectator, editor
+        public event Action<RoomOutlineMessage> RoomOutlineReceived;   // the instance is reused: copy what must be kept
+        public event Action<JobStatusMessage> JobStatusReceived;
+        public event Action<AssetReadyMessage> AssetReadyReceived;
+        public event Action<ParamManifestMessage> ManifestReceived;
+        public event Action<EventMessage> EventReceived;          // the phone's events, relayed
+        public event Action<int> ParamsApplied;                   // a ParamSet was applied: how many values changed
         public event Action<string, int> ParamSetIgnored;         // (reason "lock" or "degraded", entries dropped)
+        public ParamSetMessage IgnoredParamSet { get; }           // valid during ParamSetIgnored
+        public event Action<string> ByeReceived;
 
-        public void Start(string hubAddress, int port = LinkProto.HubUdpPort);   // opens the socket, first attempt
-        public void Stop(string reason = "quit");                 // Bye, then closes
-        public void Reconnect();                                  // attempt now, back-off reset
-        public void SetHubAddress(string hubAddress, int port = LinkProto.HubUdpPort);   // then Reconnect
-        public void SetWorld(string worldHash, string roomId);    // goes into the next Hello; re-sends Hello when connected
-        public void SetSession(string sessionId);                 // likewise
-        public void OnApplicationPause(bool paused);
-
-        /// <summary>Step 8b, once per frame: PollEvents, watchdog, clock pings, back-off, resync steps.
-        /// Received ParamSets are applied to the registry here; commands and asset messages reach their sinks here.</summary>
+        // ---- lifecycle ----------------------------------------------------------------------------
+        public bool Start(string address, int port = LinkProtocol.DefaultPort);   // false when the socket cannot open
+        public void SetAddress(string address, int port = LinkProtocol.DefaultPort);   // "Change IP": reconnects
+        public void SetSession(string sessionId);             // a new id restarts the Telemetry Seq and says Hello again
+        public void SetWorld(string worldHash, string roomId);    // says Hello again when either changed
+        public void ReconnectNow();
+        public void Stop(string reason = "stop");             // Bye, then closes the socket
+        /// <summary>Step 8b, once per frame: delivers what arrived, runs the handshake, the clock pings, the
+        /// watchdog and the back-off. Received ParamSets are applied to the registry here. Never blocks.</summary>
         public void Poll();
 
-        // ---- phone → Hub. Each returns false, and sends nothing, when there is no peer. -----------
-        public bool SendState(ref StateMessage state);            // stamps Seq and TimeUs; channel 1; TriggerUpdate
-        public bool SendTelemetry(in TelemetryMessage row);
-        public bool SendRoomOutline(RoomOutlineMessage outline);  // also kept and re-sent at every Resync
-        public bool SendEvent(long timeUs, string scene, string ev, JsonWriter data);   // data: a complete object, or null for {}
-        public bool SendLog(LogLevel level, string message);
-        public bool SendAssetAck(in AssetAck ack);
+        // ---- sending. Each returns false, and sends nothing, when the link is not ready. -----------
+        public bool SendState(ref StateMessage state);        // stamps Seq, TimeUs and the lock bit; channel 1; flushes
+        public bool SendStateCopy(in StateMessage state);     // for a sink that holds the state read-only
+        public bool SendTelemetry(ref TelemetryMessage telemetry);   // stamps Seq and, when zero, TimeUs
+        public bool SendTelemetryRow(in TelemetryMessage row);       // exactly as given
+        public bool SendRoomOutline(RoomOutlineMessage outline);
+        public bool Send(JsonMessage message);                // any JSON message; from the moment a peer exists
+        public bool SendEvent(string scene, string ev, JsonValue data);
+        public bool SendLog(string level, string msg);
+        public bool SendManifest();
+        public bool SendParamSet(ParamSetMessage set);        // console and editor roles
+        public bool SendParam(ushort id, float value);
+        public bool SendCommand(in OperatorCommand command);
 
-        // ---- Hub → client ----------------------------------------------------------------------
-        public ILinkCommandSink CommandSink { get; set; }         // SceneCmd, OperatorCmd (phone, editor)
-        public ILinkAssetSink AssetSink { get; set; }             // JobStatus, AssetReady (every role)
-        public ILinkMirrorSink MirrorSink { get; set; }           // relayed State, outline, manifest, events (spectator)
-
-        public void Dispose();
-    }
-
-    public interface ILinkAssetSink
-    {
-        void OnJobStatus(in JobStatus status);
-        void OnAssetReady(in AssetReady ready);
-    }
-
-    public interface ILinkMirrorSink
-    {
-        void OnWelcome(in Welcome welcome);
-        void OnState(in StateMessage state, long localReceiveUs);
-        void OnRoomOutline(RoomOutlineMessage outline);           // valid during the call only
-        void OnParamManifest(JsonValue manifest);
-        void OnEvent(long timeUs, string scene, string ev, JsonValue data);
+        // ---- received operator commands ------------------------------------------------------------
+        public int PendingCommands { get; }
+        public bool TryDequeueCommand(out OperatorCommand command);
     }
 }
 ```
+
+There are no sink interfaces: what the client receives is raised as events, and operator commands wait in its
+queue. On the phone `LinkPump` (§5.1) is the client's only caller; other code reads it and subscribes.
 
 | Topic | Rule |
 |---|---|
-| `SendState` rate | The caller offers one `State` per frame. `LinkClient` sends it when at least `1 / link.stateHz` − 2 ms has passed since the last one sent, so 60, 30 and 10 Hz hold at any frame rate |
-| `ParamSet` | Applied in `Poll` with `ParamSource.Link` when the state is `Connected` or `Resync` and `demoLock` is off; otherwise dropped, and `ParamSetIgnored` is raised (lane D's glue logs `param.ignored`) |
-| `ParamManifest` | Sent by `LinkClient` itself, from the registry it was given: in Resync and when `ManifestVersion` changes |
-| Echo | Lane D's glue subscribes to `registry.Changed` and logs the batched `param.set` event of §2.6; `LinkClient` only carries it |
-| Allocation | `Poll`, `SendState`, `SendTelemetry` and the clock allocate nothing in steady state. JSON sends and receives may allocate; they happen on demand |
-| Failure | No public member throws for a network reason. A socket error sets `LastError` and the state |
-| Offline cost | With no peer `SendState` returns at once. `Poll` costs one `PollEvents` call |
+| `SendState` rate | The caller offers one `State` per frame. At 60 Hz every call is sent. Below, `LinkClient` sends when at least `1 / StateHz` − 8 ms has passed since the last one sent, so 30 Hz on a 60 fps loop is every second frame |
+| `ParamSet` | Applied in `Poll` with `ParamSource.Remote` when the state is `Connected` and `DemoLock` is off; otherwise dropped, and `ParamSetIgnored` is raised (`LinkPump` logs `param.ignored`) |
+| `ParamManifest` | Sent by `LinkClient` itself as the last step of the handshake (role phone, when it has a registry). `LinkPump` sends it again when `ManifestVersion` changed |
+| Echo | `LinkPump` subscribes to `registry.Changed` and logs the `param` events of §2.6. A bare `LinkClient` with `EchoParamChanges` true sends one `param` event per change itself, wherever the value is written |
+| Allocation | `Poll`, `SendState`, `SendStateCopy`, `SendTelemetry`, `SendTelemetryRow` and the clock allocate nothing in steady state, a connect attempt included. JSON sends and receives allocate; they happen on demand |
+| Failure | No public member throws for a network reason. A `Bye` from the Hub is kept in `LastByeReason` |
+| Offline cost | With no peer every send returns false at once. `Poll` costs one `PollEvents` call and, when the back-off says so, one connect attempt |
 
-## 2.11 `LinkHost`, roles and the loopback link
+## 2.11 `LinkHost`, roles and the loopback network
 
 ```csharp
-// Files: ATLAS/Assets/Atlas/Link/Transport/LinkHost.cs, LoopbackLink.cs
+// File: ATLAS/Assets/Atlas/Link/LinkHost.cs
 using System;
-using System.Collections.Generic;
 
 namespace Atlas.Link
 {
-    public struct LinkPeerInfo
-    {
-        public int PeerId; public LinkRole Role; public string Device, Build, Address;
-        public int RttMs; public long ClockOffsetUs; public bool Active;      // Active: the source in force
-    }
+    public delegate void LinkPeerJoinedHandler(int peerId, HelloMessage hello);
+    public delegate void LinkPeerLeftHandler(int peerId, LinkRole role, string reason);
+    public delegate void LinkHostStateHandler(int peerId, in StateMessage state, byte[] raw, int offset, int length);
+    public delegate void LinkHostTelemetryHandler(int peerId, in TelemetryMessage telemetry);
+    public delegate void LinkHostJsonHandler(int peerId, byte messageId, JsonValue body);
+    public delegate void LinkHostPongHandler(int peerId, in TPongMessage pong, long hubReceiveUs);
 
-    /// <summary>What the owner of a LinkHost implements: the Hub, a Unity host scene, a test.</summary>
-    public interface ILinkHostHandler
-    {
-        /// <summary>Return false to refuse; refuseReason goes out as Bye. LinkHost has already checked proto.</summary>
-        bool OnHello(int peerId, in Hello hello, out Welcome welcome, out string refuseReason);
-        void OnPeerLeft(int peerId, string reason);
-        void OnState(int peerId, ReadOnlySpan<byte> message, long hubReceiveUs);     // the 202 bytes, for relay and log
-        void OnTelemetry(int peerId, in TelemetryMessage row);
-        void OnRoomOutline(int peerId, ReadOnlySpan<byte> message);
-        void OnJson(int peerId, byte msgId, ReadOnlySpan<byte> utf8Json);            // every JSON message but Hello
-    }
-
-    public sealed class LinkHost : IDisposable
+    public sealed class LinkHost : ILinkTransportListener
     {
         public const int HeartbeatMs = 250;
+        public const long KickDelayUs = 250000;
 
-        public LinkHost(ILinkHostHandler handler, int port = LinkProto.HubUdpPort,
-                        string key = LinkProto.Key, ILinkClock clock = null);
-        public bool Start();                           // false when the port is taken
-        public void Stop();                            // Bye {"reason":"hub shutdown"} to every peer
-        public void Poll();                            // call every millisecond
+        public LinkHost(ILinkTransport transport, ILinkClock clock);
+
+        // What Welcome carries. The owner sets them; a handler of HelloReceived may set them for that Welcome.
+        public string SessionId;
+        public string WorldHash;
+        public string RoomId;
+        public string ForgeUrl;
+        public bool DemoLock;                          // kept in step with OperatorCmd lock commands passing through
+
+        public ILinkTransport Transport { get; }
+        public bool IsRunning { get; }
         public int Port { get; }
-        public ILinkClock Clock { get; }
-        public int PeerCount { get; }
-        public void GetPeers(List<LinkPeerInfo> into);
-        public bool TryGetPeer(int peerId, out LinkPeerInfo info);
+        public int PeerCount { get; }                  // clients that have said Hello
+        public int PhonePeer { get; }                  // -1 when no phone is connected
+        public bool HasPhone { get; }
+        public long NowUs { get; }
+        public ParamManifestMessage Manifest { get; }  // the phone's last; null before the first
+        public int UnackedAssetCount { get; }
+        public LinkRole RoleOf(int peerId);
+        public int CountRole(LinkRole role);
+        public int GetRttMs(int peerId);
+        public int GetLossPermille(int peerId);
+        public string GetAddress(int peerId);
+        public bool TryGetClock(int peerId, out long offsetUs, out long rttUs);   // the client's clock minus the Hub's
+        public long ToHubUs(int peerId, long peerUs);
 
-        public bool Send(int peerId, ReadOnlySpan<byte> message, byte channel);          // ch 0 reliable ordered, ch 1 sequenced
-        public int SendToRole(LinkRole role, ReadOnlySpan<byte> message, byte channel);  // returns peers reached
-        public void Disconnect(int peerId, string reason);
+        // Events, all raised inside Poll.
+        public event LinkPeerJoinedHandler PeerJoined;              // the first Hello of a connection
+        public event LinkPeerJoinedHandler HelloReceived;           // every Hello, before its Welcome is written
+        public event LinkPeerLeftHandler PeerLeft;
+        public event LinkHostStateHandler StateReceived;            // decoded, with the raw 202 bytes; already relayed
+        public event LinkHostTelemetryHandler TelemetryReceived;
+        public event Action<int, ParamManifestMessage> ManifestReceived;
+        public event Action<int, RoomOutlineMessage> RoomOutlineReceived;   // the instance is reused
+        public event LinkHostJsonHandler JsonReceived;              // Hello, ParamManifest, SceneCmd, OperatorCmd, Event, Log, AssetAck, Bye
+        public event Action<int, ParamSetMessage> ParamSetReceived; // from an editor or console; already forwarded
+        public event LinkHostPongHandler TPongReceived;
+        public event Action<string, int> ParamSetIgnored;           // (reason, values put back in the snapshot)
 
-        /// <summary>Loss in percent, latency range in ms, on everything this host receives. Returns false, and does
-        /// nothing, when LiteNetLib was built without DEBUG or SIMULATE_NETWORK (see below).</summary>
-        public bool SimulateNetwork(int lossPercent, int minLatencyMs, int maxLatencyMs);
-        public void Dispose();
-    }
+        public bool Start(int port = LinkProtocol.DefaultPort);     // false when the port is taken
+        public void Stop(string reason = "hub stopping");           // Bye to every client
+        public void Poll();                                         // call in a loop; never blocks
 
-    /// <summary>A LinkHost and a phone LinkClient joined over 127.0.0.1 in one process: the "loopback link" stub
-    /// of gate G0 and the fixture of the link tests.</summary>
-    public sealed class LoopbackLink : IDisposable
-    {
-        public LoopbackLink(ParamRegistry registry, ILinkHostHandler handler = null);    // a free port; null: accept everyone
-        public LinkHost Host { get; }
-        public LinkClient Client { get; }
-        public void Pump(int milliseconds);            // polls both ends for that long
-        public void Dispose();
+        // Towards the phone.
+        public bool SendParam(ushort id, float value);
+        public bool SendParam(string name, float value);            // resolved through the phone's manifest
+        public bool SendParamSet(ParamSetMessage set);              // also records the values in the snapshot
+        public int SendPreset(JsonValue preset);                    // one ParamSet; returns values sent
+        public bool SendCommand(in OperatorCommand command);
+        public void SendJobStatus(JobStatusMessage status);         // to the phone and every watcher
+        public void SendAssetReady(AssetReadyMessage asset);        // likewise; kept until its AssetAck
+        public bool SendTo(int peerId, JsonMessage message);
+        public void SendToRole(LinkRole role, byte[] data, int offset, int length, LinkDelivery delivery);
+        public void Kick(int peerId, string reason);                // Bye now, disconnect 250 ms later
+        public int SendWelcomeToWatchers();                         // to those whose last Welcome is stale
+
+        // The parameter snapshot.
+        public JsonValue SnapshotToJson();                          // {"values":{name: value}}
+        public bool TryGetSnapshotValue(string name, out float value);
+        public void ClearSnapshot();
     }
 }
 ```
 
-**Loss and latency simulation** (§7.6, tests L9 and L12). LiteNetLib compiles `SimulatePacketLoss` and
-`SimulateLatency` only under `DEBUG` or `SIMULATE_NETWORK`. The Unity Editor and development builds define
-`DEBUG`, so the simulation works there and in the headless tests. The NuGet release build defines neither. The
-Hub therefore has a second build configuration, `SimNet`, that compiles LiteNetLib 2.1.4 from source with
-`/p:SimulateNetwork=true` **(decided here)**; `--sim-loss` and `--sim-latency` are refused in the normal
-configuration with a message that says so (§3.1).
+`LinkHost` does by itself: `Hello` / `Welcome` and the proto refusal, the one-phone rule, `TPong` answers, the
+heartbeat `TPing` with one `ClockSync` per client, the relay of `State`, `RoomOutline`, `ParamManifest` and
+`Event`, forwarding `ParamSet` and commands from operators to the phone, the parameter snapshot and its replay,
+the list of unacknowledged `AssetReady`, what a late joiner is given, and dropping unknown ids. The key check
+is the transport's. Logs, the Console and the session are the owner's (§3.2).
 
-`LinkHost` does by itself: the key check, `Hello` / `Welcome` and the proto refusal, `TPong` answers, the 4 Hz
-heartbeat `TPing` with one `ClockSync` per peer, and dropping unknown ids. Everything else is the handler's.
+```csharp
+// File: ATLAS/Assets/Atlas/Link/Transport/LoopbackTransport.cs
+namespace Atlas.Link
+{
+    /// <summary>An in-memory network for tests and offline tools, driven by an injected clock. Reliable packets
+    /// always arrive and in order; sequenced ones may be lost but never arrive out of order; a silent peer is
+    /// dropped after the disconnect timeout.</summary>
+    public sealed class LoopbackNetwork
+    {
+        public LoopbackNetwork(ILinkClock clock, int seed = 1);
+        public double Loss;                            // chance 0..1 that a sequenced or unreliable packet is lost
+        public double DelayMs;                         // one way
+        public double JitterMs;
+        public double DisconnectTimeoutMs = 3000.0;
+        public double ConnectFailMs = 500.0;
+        public long PacketsSent { get; }
+        public long PacketsLost { get; }
+        public bool Cut { get; set; }                  // the cable is pulled
+        public LoopbackTransport CreateEndpoint();
+    }
 
-| Role | Who | Transport | Sends | Receives |
-|---|---|---|---|---|
-| `phone` | The ATLAS app on a phone; ReplayPhone | LiteNetLib | `Hello`, `State`, `Telemetry`, `ParamManifest`, `RoomOutline`, `Event`, `Log`, `AssetAck`, `TPing`, `TPong`, `Bye` | `Welcome`, `ParamSet`, `SceneCmd`, `OperatorCmd`, `JobStatus`, `AssetReady`, `TPing`, `TPong`, `Bye` |
-| `editor` | The ATLAS app in an Editor in play mode | LiteNetLib | as `phone` | as `phone` |
-| `spectator` | The Spectator build, or an Editor running `PC_Spectator` | LiteNetLib | `Hello`, `TPing`, `TPong`, `Log`, `Bye` | `Welcome`, relayed `State`, `RoomOutline`, `ParamManifest`, `Event`, `JobStatus`, `AssetReady`, `TPing`, `TPong`, `Bye` |
-| console | A browser on `http://<station>:8080/` | WebSocket `/ws` (§3.3). It is not a LiteNetLib peer and sends no `Hello` | `param`, `scene`, `op` and the frames of §3.3 | JSON digests |
+    public sealed class LoopbackTransport : ILinkTransport, ILinkPeerAddresses { /* one endpoint */ }
+}
+```
 
-**The active source (decided here).** `phone` and `editor` peers are sources. One source is active at a time:
-the first `phone` to connect; an `editor` only while no `phone` is connected. The active source's `State` is
-relayed, and it alone receives commands and `ParamSet`. A second phone is accepted and waits (its `State` is
-logged, not relayed). When the active source leaves, the longest-connected remaining source becomes active. The
-Console can switch by hand (§3.3). This is what lets phone B stand by during a hot swap.
+**Loss and latency simulation** (§7.6, tests L9 and L12). In the headless tests it is `LoopbackNetwork`
+(`Loss`, `DelayMs`, `JitterMs`, `Cut`) with a `ManualClock`. On the real link LiteNetLib compiles
+`SimulatePacketLoss` and `SimulateLatency` only under `DEBUG` or `SIMULATE_NETWORK`; `LiteNetTransport.Manager`
+exposes the `NetManager` for a tool that sets them. The Hub has no loss or latency option and no second build
+configuration in this build (open item).
 
-A message from a role that may not send it is dropped and counted.
+| Role | Who | Sends | Receives |
+|---|---|---|---|
+| `phone` | The ATLAS app, on a phone or in an Editor in play mode; ReplayPhone | `Hello`, `State`, `Telemetry`, `ParamManifest`, `RoomOutline`, `Event`, `Log`, `AssetAck`, `TPing`, `TPong`, `Bye` | `Welcome`, `ParamSet`, `SceneCmd`, `OperatorCmd`, `JobStatus`, `AssetReady`, `TPing`, `TPong`, `Bye` |
+| `spectator` | The Spectator build, or an Editor running `PC_Spectator` | `Hello`, `TPing`, `TPong`, `Log`, `Bye` | `Welcome`, relayed `State`, `RoomOutline`, `ParamManifest`, `Event`, `JobStatus`, `AssetReady`, `TPing`, `TPong`, `Bye` |
+| `editor` | A link client that watches and operates (no code in this build takes the role) | as `spectator`, and `ParamSet`, `SceneCmd`, `OperatorCmd` | as `spectator` |
+| `console` | A link client that operates only (none in this build) | `Hello`, `ParamSet`, `SceneCmd`, `OperatorCmd`, `TPing`, `TPong`, `Bye` | `Welcome`, `ParamManifest`, `TPing`, `TPong`, `Bye` |
+| browser Console | A browser on `http://<station>:8080/` | WebSocket `/ws` (§3.3). It is not a LiteNetLib peer and sends no `Hello` | JSON frames |
+
+The walker's app is role `phone` wherever it runs, the Editor included (`TelemetryInstaller`), so the whole
+flow can be rehearsed against the Station with no device.
+
+**One phone (decided here).** The first `phone` to say `Hello` holds the seat: its `State` is relayed and it
+alone receives commands and `ParamSet`. A second phone is refused with `Bye {"reason": "another phone is
+already connected"}` and disconnected; it retries with its back-off and gets in once the seat is free (the
+phone left, or the Hub's watchdog dropped it after 3 s of silence). A phone that changes address keeps its
+peer, so a roamer is not locked out. For a hot swap, phone A is stopped before phone B connects.
+
+A message from a role that may not send it is dropped.
 
 ## 2.12 ReplayPhone and `state.bin`
 
-`state.bin` (Hub log, §3.4) is the replay source (R4 §6.5, Appendix C.8).
+`state.bin` (Hub log, §3.4) is the replay source (R4 §6.5, Appendix C.8). `station/hub/Logging/StateLog.cs`
+defines the layout; ReplayPhone compiles the same file.
 
 ```text
 header, 16 bytes:  "ATLSTATE" (8 ASCII bytes)   version u16 = 1   recordSize u16 = 210   reserved u32 = 0
@@ -1656,17 +1935,21 @@ record, 210 bytes: hubReceive_us i64 (Hub clock)   then the 202 bytes of the Sta
 `tools/ReplayPhone` is a .NET 8 console that compiles the `Atlas.Link` sources:
 
 ```text
-dotnet run --project tools/ReplayPhone -- <session folder or state.bin> [--hub 127.0.0.1:9050] [--loop] [--speed 1.0]
+dotnet run --project tools/ReplayPhone -- [session folder or state.bin] [--hub 127.0.0.1[:9050]] [--port 9050]
+                                          [--seconds s] [--loop] [--speed 1.0] [--hz 60] [--no-telemetry] [--quiet]
 ```
 
 - Connects as role `phone`, device `ReplayPhone`, with a new session id.
-- From the same folder, when present: sends `manifest.json` as `ParamManifest`, `outline.bin` as `RoomOutline`,
-  and the `world` events of `events.jsonl`.
-- Sends each record at its original spacing (`hubReceive_us` differences ÷ `--speed`). It rewrites `seq` and
-  `t_us` to its own counter and clock and leaves every other byte alone.
-- It ignores `ParamSet` and commands, and logs them. It needs no Forge.
+- With a recording: from the same folder, when present, it sends `manifest.json` as `ParamManifest`,
+  `outline.bin` as `RoomOutline`, and the `world` events of `events.jsonl`. It sends each record at its
+  original spacing (`hubReceive_us` differences ÷ `--speed`), rewrites `seq` and `t_us` to its own counter and
+  clock and leaves every other byte alone. It holds no registry, so `ParamSet` changes nothing; commands are
+  logged and otherwise ignored. It needs no Forge.
+- With no recording it plays a **synthetic walk** at `--hz`: it declares a few of the app's parameters,
+  applies what the Console sets, answers the six commands and sends `Telemetry` once a second, so the Console
+  and the Spectator can be developed against it.
 
-The Editor twin: the ATLAS app in play mode runs the same `LinkClient` as role `editor` against a Hub on
+The Editor twin: the ATLAS app in play mode runs the same `LinkClient` as role `phone` against a Hub on
 `127.0.0.1` (C.8). A recorded pose log (lane C) drives it with no phone.
 
 ## 2.13 Link rules
@@ -1693,19 +1976,23 @@ GPU and never sees live pose. Default ports: Hub UDP 9050 and TCP 8080, Forge TC
 
 ```
 station/hub/
-  AtlasHub.csproj     net8.0, Microsoft.NET.Sdk.Web. NuGet: LiteNetLib 2.1.4, QRCoder (MIT).
+  Hub.csproj          net8.0, Microsoft.NET.Sdk.Web, assembly atlas-hub. NuGet: LiteNetLib 2.1.4, QRCoder 1.6.0 (MIT).
                       <Compile Include="../../ATLAS/Assets/Atlas/Link/**/*.cs" />  (the Atlas.Link sources, linked)
-                      Configuration SimNet: LiteNetLib from source with SIMULATE_NETWORK (§2.11)
-  Program.cs          options, Kestrel, the main loop
-  HubCore.cs          ILinkHostHandler: roles, active source, relay, snapshot, session (§3.2)
-  HubLogs.cs          the files of §3.4
-  ConsoleSocket.cs    /ws: fan-out to browsers, the 10 Hz digest
-  Presets.cs          presets/*.json, load, bake
-  ForgeWatch.cs       GET /health every 2 s; POST /internal/job
-  Pairing.cs          /pair, the QR code
-  wwwroot/            index.html, console.js, console.css, uPlot (vendored, MIT): the Console
-  presets/            <name>.json
+  Program.cs          options, start, the banner, Ctrl+C
+  HubOptions.cs       HubOptions (the command line), HubPaths, Names
+  HubServer.cs        owns the LinkHost: session, watchdogs, digest, snapshot use, commands, the JSON views (§3.2)
+  Web/HubWeb.cs       Kestrel: every route of §3.3 and the /ws socket
+  Web/PairPage.cs     /pair, the QR code
+  ConsoleFeed.cs      fan-out of frames to the connected browsers
+  PresetStore.cs      presets/*.json, load, bake
+  ForgeProbe.cs       GET <forge>/health every 2 s
+  LanAddress.cs       the Station's LAN addresses
+  Logging/            SessionLog.cs (the files of §3.4), StateLog.cs (state.bin), PerfCsv.cs, TelemetryJson.cs
+  wwwroot/            index.html, console.css, js/*.js (ES modules, no bundler, no vendored library): the Console
+  presets/            <name>.json (created on the first save)
   logs/<session>/     §3.4 (not committed)
+station/hub.tests/            dotnet test: the Hub on the in-memory network
+station/console-tests/        node tests of the Console's modules
 station/setup_firewall.ps1    the three rules of Appendix C.7
 ```
 
@@ -1713,107 +2000,160 @@ Run: `dotnet run --project station/hub -- [options]`.
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--udp <port>` | 9050 | LiteNetLib listener |
-| `--http <port>` | 8080 | Kestrel, on `0.0.0.0` |
-| `--forge <url>` | `http://127.0.0.1:8000` | The Forge this Hub watches. Clients are told `http://<advertised address>:8000` in `Welcome.forgeUrl` |
-| `--advertise <ip>` | the first private IPv4 address of the machine | The address in the QR code and in `forgeUrl` |
-| `--logs <dir>` | `logs` | Parent of the session folders; on an encrypted volume (C.7) |
-| `--presets <dir>` | `presets` | |
-| `--project <dir>` | `../../ATLAS` | Where Bake writes `defaults.json` (1.7) |
-| `--demo-lock` | off | `Welcome.demoLock` is true |
-| `--sim-loss <percent>`, `--sim-latency <min>-<max>` | off | `SimNet` configuration only (§2.11) |
+| `--udp <port>` | 9050 | LiteNetLib listener; 0 picks a free port |
+| `--http <port>` | 8080 | Kestrel; 0 picks a free port |
+| `--bind <ip>` | `0.0.0.0` | The address the web server binds to |
+| `--forge <url>` | `http://127.0.0.1:8000` | The Forge this Hub watches. A loopback URL is announced to clients as `http://<Station address>:<port>` in `Welcome.forgeUrl`; any other is announced as given |
+| `--no-forge` | – | Do not poll the Forge |
+| `--advertise <ip>` | the Station's LAN address | The address in the QR code and in `forgeUrl` |
+| `--logs <dir>` | `station/hub/logs` | Parent of the session folders; on an encrypted volume (C.7) |
+| `--presets <dir>` | `station/hub/presets` | |
+| `--project <dir>` | the repository's `ATLAS` | Where Bake writes `defaults.json` (1.7) |
+| `--wwwroot <dir>` | `wwwroot` beside the Hub | The Console's files |
+| `--session <id>` | the phone's, else the Hub's start time | A fixed session id and log folder, kept whatever the phone says |
+| `--demo-lock` | off | Start with the demo lock on: `Welcome.demoLock` is true |
+| `--quiet` | off | No banner and no status line |
 
-Threads: one main loop (`host.Poll()`, timers, file appends, then `Thread.Sleep(1)`); Kestrel's pool for HTTP and
-WebSocket. The two sides exchange work through concurrent queues; no handler touches a LiteNetLib object.
+Run from its project the Hub finds its own folder (`HubPaths`); a published copy uses the current directory.
 
-At start the Hub prints its addresses, the pairing URL and the session folder. With no packet after 10 s it
-prints "no packets received yet: check the firewall rule for UDP 9050" (R4 §9).
+Threads: one link thread (`HubServer.Pump()`: `host.Poll()`, watchdogs, the 10 Hz digest, the once-a-second
+work, then `Thread.Sleep(1)`); Kestrel's pool for HTTP and WebSocket. HTTP handlers reach the link through
+one lock held for microseconds; no handler touches a LiteNetLib object.
+
+At start the Hub prints its ports, the Console and pairing URLs and the session folder, then one status line
+per second while a phone is connected. With no packet after 10 s it prints "no packets received yet: check
+the firewall rule for UDP 9050 (station/setup_firewall.ps1)" (R4 §9).
 
 ## 3.2 Hub: what it does with each message
 
 | From | Message | Hub |
 |---|---|---|
-| Active source | `State` | Relays the 202 bytes unchanged to every spectator (channel 1, sequenced). Appends to `state.bin`. Updates rate, loss (from `seq`) and latency (`hubReceive − ToLocal(t_us)`). Feeds the 10 Hz digest. Target: relay adds under 2 ms (`P1-D02`) |
-| Active source | `Telemetry` | One line in `perf.csv` (rows with a `seq` already written are skipped). WebSocket `telemetry` |
-| Active source | `ParamManifest` | Keeps it. Writes `manifest.json`. WebSocket `manifest`. Relays to spectators. Then the snapshot replay of §2.8 |
-| Active source | `Event` | One line in `events.jsonl`. WebSocket `event`. Relays to spectators |
-| Active source | `Log` | One line in `phone.log`. WebSocket `log` |
-| Active source | `RoomOutline` | Keeps it. Writes `outline.bin`. Relays to spectators. WebSocket `outline` |
-| Active source | `AssetAck` | Marks the `AssetReady` acknowledged. `events.jsonl`. WebSocket `job` |
-| Waiting source | `State`, `Telemetry` | Logged to its own session folder; not relayed |
-| Forge (`/internal/job`) | `JobStatus`, `AssetReady` | Sends to the active source and to every spectator (channel 0). WebSocket `job`. Keeps each `AssetReady` until its `AssetAck` |
-| Console | `param` | `ParamSet` to the active source. Stores the value in the snapshot, by id |
-| Console | `scene`, `op` | `SceneCmd` / `OperatorCmd` to the active source, with `n` and `t_us` added. One line in `hub.log` |
-| New spectator | `Hello` | `Welcome` with the active source's session, `worldHash` and `roomId`; then the kept `ParamManifest`, `RoomOutline`, last `world` event and unacknowledged `AssetReady` |
-| Any client | `TPing` | `TPong` at once |
-| Timer, 250 ms | – | `TPing` to every client |
-| Any client | `Bye`, time-out | Removes the peer; a new active source is chosen (§2.11); WebSocket `link` |
+| Phone | `Hello` | Adopts the phone's `sessionId` (a new or continued log folder, unless `--session` fixed one), its `worldHash` and `roomId`; `Welcome`; `Welcome` again to watchers whose last one is stale. On the first `Hello` of a connection: `hub.log` `join`, the phone's watchdog goes to RESYNC |
+| Phone | `State` | Relays the 202 bytes unchanged to every spectator and editor (channel 1, sequenced) and flushes. Appends to `state.bin`. Updates rate, loss (from `seq`) and latency (Hub receive time minus `t_us` brought onto the Hub's clock by the Hub's own pings). Feeds the 10 Hz digest. Follows the lock bit of `flags`. Target: relay adds under 2 ms (`P1-D02`) |
+| Phone | `Telemetry` | One line in `perf.csv`; in a session the phone named, a row whose `seq` the file already holds is skipped and the file is kept in `seq` order. WebSocket `telemetry` |
+| Phone | `ParamManifest` | Keeps it. On the first of a connection: the snapshot replay of §2.8 and the unacknowledged `AssetReady`; the phone's watchdog goes to CONNECTED. Relays it to spectators, editors and consoles. Writes `manifest.json`. WebSocket `manifest` |
+| Phone | `Event` | A `param` event updates the snapshot; a `param.ignored` event puts it back (§2.6); a `world` event is kept for late joiners and keeps `Welcome` current. Relays to spectators and editors. One line in `events.jsonl`. WebSocket `event` |
+| Phone | `Log` | One line in `phone.log`. WebSocket `log` |
+| Phone | `RoomOutline` | Keeps it. Writes `outline.bin`. Relays to spectators and editors. WebSocket `outline` |
+| Phone | `AssetAck` | Forgets the `AssetReady` of that job. An `asset_ack` line in `events.jsonl`. WebSocket `job` |
+| Second phone | `Hello` | `Bye`, then disconnect (§2.11) |
+| Forge (`/internal/job`) | `JobStatus`, `AssetReady` | Sends to the phone and to every spectator and editor (channel 0). WebSocket `job`. Keeps each `AssetReady` until its `AssetAck`. One line in `hub.log` |
+| Console | `param`, `preset` | Refused while the demo lock is on. Else `ParamSet` to the phone; the value the phone will hold after its clamp goes into the snapshot. One line in `hub.log` |
+| Console | `scene`, `op` | `SceneCmd` / `OperatorCmd` to the phone. One line in `hub.log`, with the Hub's time |
+| Editor, console (link) | `ParamSet`, `SceneCmd`, `OperatorCmd` | Forwarded to the phone; `hub.log` |
+| New spectator or editor | `Hello` | `Welcome` with the session, `worldHash` and `roomId` of the phone; then the kept `RoomOutline`, the manifest with the values of that moment, the last `world` event and the unacknowledged `AssetReady` |
+| Any client | `TPing` | `TPong` at once, before any `Hello` |
+| Timer, 250 ms | – | `TPing` to every client that has said `Hello` |
+| Any client | `Bye`, time-out | Removes the peer; `hub.log` `leave`; WebSocket `link`. A client silent for 3 s is disconnected by the Hub's own watchdog |
 
-The Hub restarts cleanly: it keeps nothing a client cannot send again. Every client reconnects within 5 s
-(`P1-D02`); the phone's `Hello` carries its session id, so the Hub appends to the same session folder.
+The Hub restarts cleanly: it keeps nothing a client cannot send again, except the parameter snapshot, which
+is lost with the process. Every client reconnects within 5 s (`P1-D02`); the phone's `Hello` carries its
+session id, so the Hub appends to the same session folder.
 
 ## 3.3 Hub: HTTP and WebSocket (port 8080)
 
-Appendix B.3. Rows marked ✚ are added here **(decided here)**. JSON bodies are UTF-8; errors are
-`{"error": "<text>"}` with the status shown.
+Appendix B.3. Rows marked ✚ are added here **(decided here)**. JSON bodies are UTF-8, at most 1 MB; errors are
+`{"error": "<text>"}` with the status shown. A request that needs the phone answers 409 when none is
+connected, 423 while the demo lock is on, 404 for an unknown parameter, command, space or preset, 400 for a
+bad body.
 
 | Route | Request | Response |
 |---|---|---|
-| `GET /` | – | 200 `text/html`: the Console (§3.5) |
+| `GET /` | – | 200 `text/html`: the Console (§3.5), with its files under `/console.css` and `/js/…`, served with `Cache-Control: no-cache` |
 | `GET /pair` | optional `?ip=<address>` | 200 `text/html`: the pairing page (§3.5) |
-| ✚ `GET /pair/qr.svg` | optional `?ip=` | 200 `image/svg+xml`: the QR code of `atlas://<ip>:9050` |
-| `WS /ws` | frames below | frames below |
-| `GET /api/session` | – | 200 `{"sessionId": "…", "phone": {"state": "connected" \| "degraded" \| "offline", "rttMs": 3, "loss": 0.2}, "spectators": 1, "forge": {"up": true, "queue": 2, "debugKeep": false, "hosted": false}}`. `loss` is the percentage of `State` lost in the last 5 s. `debugKeep` true makes the Console show the red "crops kept" banner (§7.4). ✚ `hosted` (§3.10) |
+| ✚ `GET /pair/qr.svg` | optional `?ip=` | 200 `image/svg+xml`: the QR code of `atlas://<ip>:<udp port>` |
+| ✚ `GET /api/pair` | optional `?ip=` | 200 `{"url": "atlas://…", "address": "…", "udpPort": 9050, "httpPort": 8080, "candidates": ["…"]}` |
+| `WS /ws` | frames below | frames below; 400 for a plain request |
+| `GET /api/session` | – | 200: the object below |
+| ✚ `GET /api/state` | – | 200: the `state` digest below without `t`; 404 before the first `State` |
+| ✚ `GET /api/telemetry` | – | 200: the last row, members named as the CSV columns of §5.3; 404 before the first |
+| ✚ `GET /api/params` | – | 200 `{"ver": 3, "params": […], "locked": false}`: the manifest with the value the Hub knows for each parameter |
+| ✚ `GET /api/params/{key}` | `key`: a name or a wire id | 200: one manifest row; 404 |
+| ✚ `POST` or `PUT /api/params/{key}` | `{"value": number \| boolean}` | 200 `{"id": 2, "name": "render.scale", "value": 0.7, "sent": true}`, `value` being what the phone will hold; 404, 423 |
+| ✚ `POST /api/params` | `{"values": {"<name or id>": number, …}}` | 200 `{"sent": n}`: one `ParamSet`; 409, 423 |
+| ✚ `POST /api/op` | `{"cmd": "cue", "args": {}}` | 200 `{"ok": true, "cmd": "cue"}`; 404 unknown command; 409 (`lock` succeeds with no phone) |
+| ✚ `POST /api/scene` | `{"space": "S1" \| 1, "variant": "klein", "args": {}}` | 200 `{"ok": true, "space": "S1"}`; 404, 409 |
 | `GET /api/presets` | – | 200 `{"presets": [{"name": "demo", "count": 12, "modified": "2026-10-04T15:30:12Z"}]}` |
-| `POST /api/presets/{name}` | `{"values": {"<id>": number, …}}`; `name` matches `[A-Za-z0-9_-]{1,40}` | 204; 400 for a bad name or body |
+| `POST /api/presets/{name}` | `{"values": {"<name>": number, …}}`, or an empty body to save the Hub's current snapshot; `name` matches `[A-Za-z0-9_-]{1,40}` | 204; 400 for a bad name or body |
 | ✚ `GET /api/presets/{name}` | – | 200 `{"name": "demo", "values": {…}}`; 404 |
-| ✚ `POST /api/presets/{name}/load` | – | 204: every value sent to the phone in **one** `ParamSet`; 404; 409 when no phone is connected |
-| ✚ `POST /api/presets/{name}/bake` | – | 204: the preset written to `<project>/Assets/Atlas/Telemetry/Resources/AtlasParams/defaults.json` (1.7); 404 |
-| `GET /logs/{session}/perf.csv` | – | 200 `text/csv`; 404 |
-| ✚ `PUT /logs/{session}/perf.csv` | the phone's CSV | 204: rows the Hub lacks are merged by `seq` (§12.2, "CSV on the phone, uploaded over HTTP later") |
-| ✚ `GET /api/sessions` | – | 200 `{"sessions": ["20261004T153012Z-a3f9", …]}`, newest first |
-| `POST /internal/job` | A `JobStatus` or an `AssetReady` body (§2.5); a body with `sha256` and `url` is an `AssetReady` | 204. **Loopback only**: 403 from any other address |
+| ✚ `DELETE /api/presets/{name}` | – | 204; 404 |
+| ✚ `POST /api/presets/{name}/load` | – | 204: every value the phone's manifest knows, sent in **one** `ParamSet`; 404; 409 when no phone is connected; 423 |
+| ✚ `POST /api/presets/{name}/bake` | – | 204: the preset written to `<project>/Assets/Atlas/Telemetry/Resources/AtlasParams/defaults.json` (1.7); 404; 409 when the project folder does not exist |
+| ✚ `GET /api/sessions`, `GET /logs` | – | 200 `{"current": "…", "sessions": ["20261004T153012Z-a3f9", …]}`, newest first |
+| ✚ `GET /logs/{session}` | – | 200 `{"session": "…", "files": [{"name": "perf.csv", "bytes": 1234}, …]}`; 404 |
+| `GET /logs/{session}/perf.csv` | – | 200 `text/csv`, as an attachment; 404 |
+| ✚ `GET /logs/{session}/{file}` | `file`: one of the names of §3.4; `telemetry.csv` is an alias of `perf.csv` | 200; 404 |
+| ✚ `PUT /logs/{session}/perf.csv` | the phone's CSV, at most 32 MB | 204: rows the Hub lacks are merged by `seq` (§12.2, "CSV on the phone, uploaded over HTTP later"); a session the Hub never saw gets its folder. 400 when the first line is not the header |
+| `POST /internal/job` | A `JobStatus` or an `AssetReady` body (§2.5) with a `jobId`; a body with `sha256` and `url` is an `AssetReady`. Other members (the Forge's `type`) are ignored | 204; 400. **Loopback only**: 403 from any other address |
 
-WebSocket frames are JSON objects with a member `t`.
+`GET /api/session`, and the `link` frame, which is the same object with `"t": "link"`:
+
+```json
+{"sessionId":"20261004T153012Z-a3f9",
+ "phone":{"state":"connected","rttMs":3,"loss":0.2,"stateHz":59.8,"states":12345,"lost":2,"clockOffsetMs":3999.95,
+          "device":"iPhone16,2","build":"0.1.0","address":"192.168.0.23","worldHash":"141060c2fc138145","roomId":"sample_3x3"},
+ "sources":[{"peer":1,"role":"phone","device":"iPhone16,2","active":true}],
+ "spectators":1,"editors":0,"consoles":1,
+ "forge":{"up":true,"queue":2,"debugKeep":false,"hosted":false,"gpu":true,"pipelineVer":"1"},
+ "demoLock":false,"station":"192.168.0.10","udpPort":9050,"httpPort":8080,"pair":"atlas://192.168.0.10:9050",
+ "uptimeS":812.4,"telemetryRows":812,"events":57}
+```
+
+`phone.state` is `connected`, `degraded`, `resync` or `offline`. `loss` is the percentage of `State` lost in
+the last 5 s. `clockOffsetMs`, `device`, `build`, `address`, `worldHash` and `roomId` are present while a
+phone is connected. `debugKeep` true makes the Console show the red "crops kept" banner (§7.4); `hosted`
+the amber one (§3.10).
+
+WebSocket frames are JSON objects with a member `t`. A frame the Hub cannot serve is answered with
+`{"t": "error", "msg": "…"}`.
 
 | Direction | Frame | Meaning |
 |---|---|---|
-| Console → Hub | `{"t": "param", "id": 3, "value": 0.7}` | Set a parameter by index. `"name": "render.scale"` may stand in for `id` ✚ |
+| Console → Hub | `{"t": "param", "id": 3, "value": 0.7}` | Set a parameter by wire id. `id` may be the name as a string, or `"name": "render.scale"` may stand in for it ✚ |
+| Console → Hub ✚ | `{"t": "preset", "values": {"<name>": number, …}}` | Several values in one `ParamSet` |
 | Console → Hub | `{"t": "scene", "space": "S1", "variant": "klein", "args": {}}` | `SceneCmd` |
 | Console → Hub | `{"t": "op", "cmd": "cue", "args": {}}` | `OperatorCmd` |
 | Console → Hub ✚ | `{"t": "fms", "score": 3}` · `{"t": "note", "text": "…"}` | Comfort score (0–20) and operator note; written to `events.jsonl` |
-| Console → Hub ✚ | `{"t": "source", "peer": 2}` | Make that source active (§2.11) |
-| Hub → Console | `{"t": "manifest", "ver": 3, "params": […]}` | The `ParamManifest` body; on connect and on change |
+| Console → Hub ✚ | `{"t": "ping"}` | Answered with `{"t": "pong"}` |
+| Hub → Console | `{"t": "manifest", "ver": 3, "params": […], "locked": false}` | The manifest rows of §2.5 with the values the Hub knows; on connect and on change. `ver` counts manifests received |
 | Hub → Console | `{"t": "telemetry", "t_us": …, "seq": …, …}` | One per row; the members are the CSV column names of §5.3 |
 | Hub → Console | `{"t": "state", …}` | 10 Hz digest, below |
-| Hub → Console | `{"t": "event", …}` · `{"t": "log", …}` | The `Event` or `Log` body |
+| Hub → Console | `{"t": "event", …}` · `{"t": "log", …}` | The `Event` body with `hub_us` added, or the `Log` body |
 | Hub → Console | `{"t": "job", "kind": "status" \| "ready" \| "ack", …}` | The `JobStatus`, `AssetReady` or `AssetAck` body |
-| Hub → Console ✚ | `{"t": "outline", "outline": [[x, z], …], "height": 2.5, "rect": {"wf": 2.4, "df": 3.4}, "boxes": [{"id": 1, "cat": "table", "cx": 0, "cz": 0.5, "w": 1.2, "d": 0.8, "h": 0.75, "yaw": 0}]}` | The `RoomOutline`, decoded |
-| Hub → Console | `{"t": "link", "sessionId": "…", "phone": {"state": "connected", "rttMs": 3, "loss": 0.2, "device": "iPhone16,2", "build": "d0e9127", "address": "192.168.0.23"}, "sources": [{"peer": 1, "role": "phone", "device": "iPhone16,2", "active": true}], "spectators": 1, "forge": {"up": true, "queue": 2, "debugKeep": false, "hosted": false}}` | 1 Hz and on change |
+| Hub → Console ✚ | `{"t": "outline", "outline": [[x, z], …], "height": 2.5, "rect": {"cx": 0, "cz": 0, "wf": 2.4, "df": 3.4, "yaw": 0}, "boxes": [{"id": 1, "cat": 2, "cx": 0, "cz": 0.5, "w": 1.2, "d": 0.8, "h": 0.75, "yaw": 0}]}` | The `RoomOutline`, decoded; `cat` is the category number |
+| Hub → Console | `{"t": "link", …}` | The session object above; 1 Hz and on change |
+
+On connect a Console is sent `link`, then `manifest`, the last `telemetry`, `outline` and `state` when there
+are any.
 
 The `state` digest, from the newest `State`:
 
 ```json
 {"t":"state","seq":12345,"t_us":1234567890,"scene":3,"space":3,"tracking":0,"jump":false,"cue":true,"tier":1,
- "lock":false,"bump":1,"tile":"-1,0,0,0,0,1","sheet":3,"head":[0.25,1.5,-0.5],"yawDeg":90,
- "p":[1.885,2,3,0,0,0,0,0],"worldVer":7,"hz":59.8,"lossPct":0.2,"latencyMs":{"p50":4.1,"p95":9.8,"p99":14.2}}
+ "lock":false,"bump":1,"tile":"-1,0,0,0,0,1","sheet":3,"head":[0.25,1.5,-0.5],"yawDeg":90.0,
+ "rot":[0.0,0.7071068,0.0,0.7071068],"p":[1.885,2.0,3.0,0.0,0.0,0.0,0.0,0.0],"worldVer":7,"hz":59.8,"lossPct":0.2,
+ "latencyMs":{"p50":4.1,"p95":9.8,"p99":14.2},"received":12345,"lost":2}
 ```
 
 `tile` is the six words as text (a 64-bit integer does not survive a JavaScript number). `yawDeg` is the heading
-of the head's forward axis on the floor, `atan2(forward.x, forward.z)`.
+of the head's forward axis on the floor, `atan2(forward.x, forward.z)`. `latencyMs` is over the newest 512
+`State` packets.
 
 ## 3.4 Hub: log files
 
-`logs/<session>/`, one folder per session id (§5.5).
+`logs/<session>/`, one folder per session id (§5.5). A folder that already exists is continued, never
+overwritten. Until a phone names the session the Hub uses an id of its own, `yyyyMMdd-HHmmss` of its start;
+if nothing but the Hub's own start lines was written there, that folder is removed when the phone's session
+takes over.
 
 | File | Content |
 |---|---|
 | `perf.csv` | The header of §5.3, then one line per `Telemetry` row, in `seq` order, `\n` line ends, no byte-order mark. Byte for byte the phone's file when no row was lost (test L11) |
 | `state.bin` | §2.12: every `State` received, with the Hub's receive time |
-| `events.jsonl` | One event per line: the phone's object with a member `hub_us` (Hub clock at receipt) added. Hub-made events (`fms`, `note`, `asset_ack`, `source`) carry `"scene": "hub"` and the Hub clock in `t_us` |
+| `events.jsonl` | One event per line: the phone's object with a member `hub_us` (Hub clock at receipt) added. Hub-made events (`fms`, `note`, `asset_ack`) carry `"scene": "hub"` and the Hub clock in `t_us` |
 | `phone.log` | `<t_us> <level> <msg>` per `Log` |
-| `hub.log` ✚ | Connects and leaves, every command and `ParamSet` sent (with `n` and Hub time), preset actions, refused or dropped messages |
-| `manifest.json` ✚ | The last `ParamManifest` body |
+| `hub.log` ✚ | `<hub_us> <kind> <JSON>` per line. Kinds: `start`, `stop`, `session`, `join`, `leave`, `bye`, `link`, `cmd`, `param`, `param.ignored`, `preset`, `lock`, `job`, `forge`, `perf` |
+| `manifest.json` ✚ | The last `ParamManifest` body, indented |
 | `outline.bin` ✚ | The last `RoomOutline` message, as received |
 
 Motion logs are treated as health data (§13.5): the folder sits on an encrypted volume, and delete-by-id removes
@@ -1821,69 +2161,88 @@ it whole.
 
 ## 3.5 Console
 
-One page (`GET /`) with four tabs and a separate pairing page. It opens one WebSocket and builds itself from the
-manifest: a new parameter needs no Console code.
+One page (`GET /`) with six tabs, and a separate pairing page. It opens one WebSocket and builds itself from
+the manifest: a new parameter needs no Console code.
 
 Always visible, on every tab: session id; phone state dot with RTT and loss; current space; Bump Guard level
 bar; quality tier and thermal state; lock badge; the red **"crops kept"** banner while `forge.debugKeep` is
-true; the amber **"hosted fallback armed"** banner while `forge.hosted` is true (§3.10).
+true; the amber **"hosted fallback armed"** banner while `forge.hosted` is true (§3.10); a thermal banner; a
+banner when the Console has lost the Hub.
 
 | Page | Shows | Does |
 |---|---|---|
-| **Tuner** (`#tuner`) | One block per `group`, folded and greyed while the group is inactive; in it one control per parameter: slider (`float`, `int`), stepped buttons (`choices`), switch (`bool`), selector (`enum`). Each shows the applied value from the echo, min, max and a default mark | Dragging sends `param` at most 30 times per second; an `onRelease` parameter sends once, on release. "Reset" sends the default. Presets: save (current values), load, bake. Under lock the controls are greyed |
-| **Operator** (`#operator`) | The six commands; walker's comfort score; notes; the job list with `local`, `hosted`, `cache` and `built-in` tags | Seven space buttons S0 to S6 (unavailable spaces greyed), **Home**, **Recentre**, quality tier 0–4 and "auto", **STOP** (large, red; also the space bar), **Lock** switch, `forge.backend` selector, FMS entry 0–20, note field, source selector |
+| **Tuner** (`#tuner`) | One block per `group`, folded and greyed while the group is inactive; in it one control per parameter: slider (`float`, `int`), switch (`bool`), selector (`enum`). Each shows the applied value from the echo, min, max and a default mark | Dragging sends `param` at most 30 times per second; an `onRelease` parameter sends once, on release. "Reset" sends the default. Presets: save (current values), load, bake. Under lock the controls are greyed |
+| **Operator** (`#operator`) | The six commands; walker's comfort score; notes | Seven space buttons S0 to S6, **Home**, **Recentre**, quality tier 0–4 and "auto", **STOP** (large, red; also the space bar), **Lock** switch, FMS entry 0–20, note field |
 | **Dashboard** (`#dashboard`) | One tile per `Telemetry` field; line charts of frame-time p95 and fps over the last 15 minutes; a thermal colour bar; Forge queue length; `State` rate, loss and latency | CSV download link |
-| **Map** (`#map`) | The room from `RoomOutline`: outline, free rectangle, object boxes coloured by category and marked placeholder, requested, ready or built-in; the walker's position and heading at 10 Hz; the trail of the last 600 points; current tile or cell | – |
-| **Pairing** (`GET /pair`) | The QR code of `atlas://<ip>:9050`, the same address as text, every IPv4 address of the Station as a link (`?ip=`), and whether a phone is connected | – |
+| **Map** (`#map`) | The room from `RoomOutline`: outline, free rectangle, object boxes coloured by category; the walker's position and heading at 10 Hz; the trail of the last 600 points; current tile or cell; the nearest wall or object | – |
+| **Assets** (`#assets`) | The job list from the `job` frames, with `local`, `hosted`, `cache` tags and each job's state | – |
+| **Pairing** (`#pairing`) and `GET /pair` | The QR code of `atlas://<ip>:9050`, the same address as text, every IPv4 address of the Station as a link (`?ip=`), and whether a phone is connected | – |
 
 ## 3.6 Forge: process and routes (port 8000)
 
 ```
 station/forge/
-  requirements.lock        Python 3.11; FastAPI, uvicorn, pydantic v2, trimesh, rembg, gltfpack; TripoSG at a pinned commit
-  forge/app.py             the routes below
-  forge/jobs.py            queue, one GPU worker, lifecycle (§3.7)
-  forge/store.py           rooms, assets, cache index
-  forge/matting.py         rembg
-  forge/generators/        __init__.py (Generator, GeneratorError), triposg.py, hosted.py, test.py (§3.8)
+  requirements.txt, requirements.lock   Python 3.11; FastAPI, uvicorn, pydantic v2, python-multipart, numpy, pillow,
+                                        trimesh, fast-simplification. requirements-gpu.txt: what TripoSG needs on the Station
+  forge/app.py             the routes below (create_app)
+  forge/service.py         rooms, jobs, the queue and its one worker, the cache, the Hub notifications (§3.7)
+  forge/models.py          request and response bodies
+  forge/budget.py          the furniture budget: 20 meshes, 60,000 triangles
+  forge/imaging.py         crop decoding, background removal (rembg when installed), dominant colour
+  forge/generators/        base.py (Generator, GenerationRequest, RawMesh, GeneratorError), triposg.py, hosted.py, procedural.py (§3.8)
   forge/cleanup.py         §3.9
-  forge/validate.py        the checks of §4.2
-  forge/glb.py             the deterministic GLB writer
-  forge/palette.json       the 64 object colours of lane A's palette, written by tools/gen_forge_palette.py (§4.1)
-  forge/hub.py             POST /internal/job
-  tests/
-  data/                    rooms/<roomId>/room.json, mesh.bin · assets/<sha256>.glb · cache.json (not committed)
+  forge/validator.py       the checks of §4.2; also a command line
+  forge/glb.py             the deterministic GLB writer and reader
+  forge/palette.py         the 64 object colours of lane A's palette and the vertex-colour encoding (§4.1)
+  forge/config.py          every setting
+  tests/                   pytest; needs no GPU
+  data/                    rooms/<roomId>/room.json, room.meta.json, mesh.bin · jobs/<jobId>/job.json ·
+                           assets/<sha256>.glb, <sha256>.json · cache/<key>.json (not committed)
 ```
 
-Run: `uvicorn forge.app:app --host 0.0.0.0 --port 8000` (C.7). One process; one worker thread owns the GPU.
+Run from `station/forge`: `uvicorn forge.app:app --host 0.0.0.0 --port 8000` (C.7). One process; one worker
+thread owns the GPU.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `FORGE_GENERATOR` | `triposg` | `triposg` or `test` |
-| `FORGE_HOSTED_URL`, `FORGE_HOSTED_KEY` | unset | The hosted fallback (§3.10). Unset: no request ever leaves the Station |
-| `FORGE_DEBUG_KEEP` | unset | `1` keeps crops in `data/debug/<jobId>/`; reported as `debugKeep` |
-| `FORGE_HUB` | `http://127.0.0.1:8080` | Where job changes are posted |
-| `FORGE_DATA` | `data` | Storage root |
+| `FORGE_GENERATOR` | `triposg` | `triposg`, `procedural` or `hosted` |
+| `FORGE_HOSTED_ENABLED`, `FORGE_HOSTED_URL`, `FORGE_HOSTED_KEY` | off, unset | The hosted fallback (§3.10). Unless all three are set, no request ever leaves the Station |
+| `FORGE_DEBUG_KEEP` | unset | `1` keeps crops in `data/jobs/<jobId>/view<i>.jpg`; reported as `debugKeep` |
+| `FORGE_HUB_URL` | `http://127.0.0.1:8080/internal/job` | Where job changes are posted; empty switches the notifications off |
+| `FORGE_PUBLIC_URL` | empty | Prefix of the asset URL in `AssetReady`; empty gives the path `/assets/<sha256>.glb` |
+| `FORGE_DATA_DIR` | `station/forge/data` | Storage root |
+| `FORGE_MATTING_TIMEOUT_S`, `FORGE_GENERATE_TIMEOUT_S`, `FORGE_HOSTED_TIMEOUT_S`, `FORGE_CLEANING_TIMEOUT_S` | 10, 90, 120, 20 | Stage time-outs (§3.7) |
+| `FORGE_MAX_ANISOTROPY` | 0.15 | Stretch allowed per axis when fitting a mesh to its box |
+| `FORGE_TRIPOSG_REPO`, `_WEIGHTS`, `_STEPS`, `_GUIDANCE`, `_SEED`, `_FP16`; `FORGE_RMBG_WEIGHTS` | empty, empty, 50, 7.0, 42, on; empty | TripoSG checkout, weights and inference settings |
 
-Appendix B.4, with status codes. Errors are `{"error": "<code>"}`.
+Appendix B.4, with status codes. Errors are FastAPI's `{"detail": …}`: a sentence, or for a body that does not
+validate the list of what is wrong.
 
 | Route | Request | Response |
 |---|---|---|
-| `GET /health` | – | 200 `{"ok": true, "gpu": "NVIDIA GeForce RTX 5070", "queue": 2, "pipelineVer": "1.0.0", "debugKeep": false, "hosted": false, "generator": "triposg"}`. `gpu` is null with no CUDA device. `queue` counts jobs not yet `ready` or `failed`. ✚ `hosted`, `generator` |
-| `POST /rooms` | RoomModel JSON (`docs/contracts/roommodel.schema.json`), at most 1 MB | 201 `{"roomId": "…", "roomHash": "…"}`; 200 with the same body when the id existed (the record is replaced). 400 `bad_room` when it does not validate; 413 |
+| `GET /health` | – | 200 `{"ok": true, "gpu": true, "gpuName": "NVIDIA GeForce RTX 5070", "queue": 2, "pipelineVer": "1", "debugKeep": false, "generator": "triposg", "generatorReady": true, "generatorNote": "", "hosted": false, "hostedEnabled": false, "matting": "rembg"}`. `gpu` is false and `gpuName` null with no CUDA device. `queue` counts jobs not yet `ready`, `failed` or `placeholder`. `hostedEnabled` is the same flag as `hosted` under its older name. `matting` is `rembg` or `none` |
+| `POST /rooms` | RoomModel JSON (`docs/contracts/roommodel.schema.json`), at most 2 MB. The Forge checks `version` 1, `id`, and each object's `id` (1 … 255, unique) and `size`; at most 64 objects | 201 `{"roomId": "…", "roomHash": "…", "generated": [ids], "placeholders": [ids], "triTarget": 5000}`, also when the id existed (the record is replaced). 422 when it does not validate; 413 |
 | `PUT /rooms/{roomId}/mesh` | Binary mesh, at most 2 MB | 204; 404; 413. Optional (§7.4); the app does not send it in Phase 1 |
 | `GET /rooms/{roomId}` | – | 200: the exact bytes that were posted; 404 |
-| `DELETE /rooms/{roomId}` | – | 204: the room record, its mesh, its jobs and the GLBs made for it are removed (§13.5); 404 |
-| `POST /rooms/{roomId}/objects` | `multipart/form-data`: field `meta` (JSON, below); files `view0` (required), `view1`, `view2` (`image/jpeg`, each at most 200 kB and 768 × 768) | 202 `{"jobId": "j-1a2b3c4d"}`; or 200 `{"jobId": "…", "cached": true, "sha256": "…"}`. 400 `bad_meta`; 404; 409 `room_full` for a 21st object of a room; 413 |
-| `GET /jobs/{jobId}` | – | 200: the `JobStatus` body; when `ready`, also the `AssetReady` members and `report` (§3.9); 404 |
-| `GET /jobs?room={roomId}` | – | 200 `{"jobs": [ … ]}`: the same objects, largest box first |
-| `GET /assets/{sha256}.glb` | – | 200 `model/gltf-binary`, `ETag: "<sha256>"`, `Cache-Control: public, max-age=31536000, immutable`; 404 |
+| `DELETE /rooms/{roomId}` | – | 204: the room record, its mesh, its jobs and the GLBs made for it alone are removed (§13.5); 404 |
+| `POST /rooms/{roomId}/objects` | `multipart/form-data`: field `meta` (JSON, below); files `view0` (required), `view1`, `view2`, each at most 1 MB | 202 `{"jobId": "1a2b3c4d5e6f7a8b"}`; or 200 `{"jobId": "…", "cached": true, "sha256": "…"}`; or 200 `{"jobId": "…", "placeholder": true}` for a box beyond the room's 20. 422 bad `meta`, missing or empty view; 404 unknown room or a `boxId` the room does not have; 413 |
+| `GET /jobs/{jobId}` | – | 200: the job object below; 404 |
+| `GET /jobs?room={roomId}` | – | 200: a JSON **array** of the same objects, in order of submission; without `room`, every job |
+| ✚ `GET /queue` | – | 200 `{"active": {…} \| null, "queued": […], "placeholders": […], "generator": "triposg"}`; `queued` is in the order the worker takes it. Entries are `{jobId, roomId, boxId, volume, state}` |
+| `GET /assets/{sha256}.glb` | – | 200 `model/gltf-binary`, `ETag: "<sha256>"`, `Cache-Control: public, max-age=31536000, immutable`; 304 for a matching `If-None-Match`; 404 |
+
+The job object of `GET /jobs/…`: `{"jobId", "roomId", "boxId", "state", "source", "error", "triTarget",
+"cached", "generator"}`, with `queuePosition` while `queued`, and when `ready` the `AssetReady` members
+(`sha256`, `url`, `bytes`, `tris`, `maxEdge`, `bounds`, `palette`) and `report` (§3.9).
 
 - `roomId` is the RoomModel's `id` (lane C's schema: `[A-Za-z0-9_]{1,40}`). The body is lane C's canonical text
   (`RoomModelJson.Write`). `roomHash` is the SHA-256 of the posted bytes, 64 lower-case hexadecimal digits: a
   receipt for the upload. It is **not** the hash inside `worldHash`, which is lane C's geometry hash (§2.5).
-- Lane C keeps a RoomModel file under 300 kB (§7.4; lane C §2.6). The Forge accepts up to 1 MB, so the limit
+- Lane C keeps a RoomModel file under 300 kB (§7.4; lane C §2.6). The Forge accepts up to 2 MB, so the limit
   is the phone's to enforce and a larger grid does not need a Forge change **(decided here)**.
+- At `POST /rooms` the Forge ranks the room's boxes by volume (`size[0] · size[1] · size[2]`; equal volumes
+  keep the lower id first). The 20 largest are `generated`; the rest are `placeholders`. `triTarget` is the
+  rule of plan §4.5 for the `generated` count.
 
 `meta`:
 
@@ -1899,96 +2258,121 @@ Appendix B.4, with status codes. Errors are `{"error": "<code>"}`.
 | `category` | string | `ObjectCategories.Name(Category)`: `couch`, `table`, … (lane C §6) |
 | `dims` | 3 numbers, m | `RoomObject.Size`: `[w, h, d]` = extent along the box's local X, Y (up), Z |
 | `yaw` | number, rad | `RoomObject.Yaw` |
-| `triTarget` | int 3000 … 5000 | `clamp(floor(60000 / n), 3000, 5000)`, n = objects of this room that receive meshes (plan §4.5): 5,000 up to twelve objects, 3,000 at twenty |
-| `backend` | string | `local`, `hosted` or `cache`: the phone's `forge.backend`. `off` is never sent; it is a 400 |
-| `views[i]` | one per file `view<i>` | Lane C's `ObjectView` (lane C §11.4). `score` 0 … 1; `azimuthDeg`: direction from the box centre to the camera in the box's local frame, `atan2(x, z)`; `intrinsics`: `fx, fy, cx, cy` of the crop, pixels; `camToBox`: 4 × 4 row by row, camera frame (Unity: +X right, +Y up, +Z forward) to the box-local frame of §4.1, metres |
+| `triTarget` | int 1500 … 5000 | The phone sends `ObjectMeshRules.TriTarget(n)` = `clamp(floor(60000 / n), 3000, 5000)`, n = objects of this room that receive meshes (plan §4.5): 5,000 up to twelve objects, 3,000 at twenty. The Forge works to the smaller of this and its own figure for the room |
+| `backend` | string | `local`, `hosted` or `cache`: the phone's `forge.backend`. `off` is never sent; it is a 422 |
+| `views[i]` | one per file `view<i>`, at most 3 | Lane C's `ObjectView` (lane C §11.4). `score` 0 … 1; `azimuthDeg`: direction from the box centre to the camera in the box's local frame, `atan2(x, z)`; `intrinsics`: `fx, fy, cx, cy` of the crop, pixels; `camToBox`: 4 × 4 row by row, camera frame (Unity: +X right, +Y up, +Z forward) to the box-local frame of §4.1, metres |
 
 ## 3.7 Forge: job lifecycle and queue
 
 | State | Work | Time-out | Next |
 |---|---|---|---|
-| `queued` | Cache lookup by SHA-256 of the `view0` bytes, `triTarget` and `pipelineVer`. Waits for the GPU | – | hit → `ready` (source `cache`); `backend` `cache` and miss → `failed` `cache_miss`; else `matting` |
-| `matting` | Decode the JPEG; background removal (`rembg`) | 10 s | `generating`; `failed` `bad_image` or `matting_timeout` |
-| `generating` | The generator (§3.8). `local`: TripoSG with `view0`, 90 s; then once more with `view1` (with `view0` again when there is none), 90 s; then the hosted service if a key is configured, 120 s. `hosted`: the hosted service at once, 120 s | as stated | `cleaning`; `failed` `generate_timeout`, `generate_failed` or `no_generator` |
-| `cleaning` | §3.9, then the validator of §4.2 | 20 s | `ready`; `failed` `clean_failed` or `validate:<check>` |
+| (at upload) | Cache lookup by a key made of the SHA-256 of the `view0` bytes, the job's triangle target, `pipelineVer`, the box (`dims`, `yaw`), the category and the generator's name | – | hit → `ready` (source `cache`, 200 `cached`); `backend` `cache` and miss → `failed`; a box in `placeholders` → `placeholder`; else `queued` |
+| `queued` | Waits for the worker | – | `matting` (or `ready` when the cache gained the asset meanwhile) |
+| `matting` | Decode the JPEG; background removal (`rembg` when installed). A removal that fails is skipped: the plain crop goes on | 10 s | `generating`; `failed` for a crop that cannot be decoded or a time-out |
+| `generating` | The generator (§3.8). `local`: the configured generator with `view0`, 90 s; then once more with `view1` when there is one, 90 s; then the hosted service if it is armed, 120 s. `hosted`: the hosted service at once, 120 s | as stated | `cleaning`; `failed` |
+| `cleaning` | §3.9, then the validator of §4.2 | 20 s | `ready`; `failed` |
 | `ready` | The GLB is stored under its hash; the cache index is updated | – | – |
-| `failed` | `error` holds the code | – | – |
+| `failed` | `error` holds a sentence for a person, for example `view 0: …`, `clean-up: …`, `asset contract: [edge.long] …` | – | – |
+| `placeholder` | The box is beyond the 20 largest of its room and receives no mesh | – | – |
 
 - **Queue order:** largest box first, by volume `dims[0] · dims[1] · dims[2]`; ties in arrival order. One job on
   the GPU at a time. The order is across all rooms.
-- **At most 20 objects per room** receive meshes (plan §4.5). The phone sends at most 20; the Forge refuses a 21st
-  `boxId` of a room with 409.
-- A second upload for a `boxId` replaces its earlier job unless that job is on the GPU, in which case the new one
-  queues behind it.
-- **Notification.** At every change of state the Forge posts the `JobStatus` to `FORGE_HUB/internal/job`; at
-  `ready` it posts the `AssetReady` as well. If the post fails it is not retried: the phone polls (§4.3).
-- **Crops** are held in memory and dropped when the job reaches `ready` or `failed`. `FORGE_DEBUG_KEEP=1` is the
-  only thing that writes one to disk (§7.4, test L20).
-- `jobId` is `j-` and eight hexadecimal digits. `pipelineVer` is a version string; changing it empties the cache.
-- A corrupt image ends as `failed` `bad_image`; the worker goes on with the next job (`P1-D08`).
-- `DELETE /rooms/{roomId}` ends that room's jobs as `failed` `cancelled`.
+- **At most 20 objects per room** receive meshes (plan §4.5). The phone sends at most 20; a job for a box
+  outside the Forge's own 20 is answered with `placeholder: true` and is never generated.
+- A second upload for a `boxId` whose job is still waiting or running returns that job.
+- **Notification.** At every change of state the Forge posts `{"type": "JobStatus", "jobId", "roomId",
+  "boxId", "state", "source", "error"}` to `FORGE_HUB_URL`; at `ready` it posts `{"type": "AssetReady", …}`
+  as well. A post that fails is not retried: the phone polls (§4.3).
+- **Crops** are held in memory and dropped when the job ends. `FORGE_DEBUG_KEEP=1` is the only thing that
+  writes one to disk (§7.4, test L20).
+- **Restart.** Rooms, finished jobs and assets are read back from `data/`. A job that was waiting or running is
+  marked `failed` (its crops are gone) and the phone sends it again; with `FORGE_DEBUG_KEEP=1` it runs again
+  by itself.
+- `jobId` is sixteen hexadecimal digits. `pipelineVer` is a version string (`"1"`), part of the cache key:
+  raising it makes every earlier cache entry a miss.
+- A corrupt image ends as `failed`; the worker goes on with the next job (`P1-D08`).
+- `DELETE /rooms/{roomId}` removes that room's jobs; one that is on the GPU is dropped when its stage ends.
 
 ## 3.8 Forge: generator adapter
 
 ```python
-# station/forge/forge/generators/__init__.py
-from typing import Protocol
-import PIL.Image, trimesh
+# station/forge/forge/generators/base.py
+from dataclasses import dataclass
+from typing import Optional, Protocol, Sequence
+import numpy as np
+from PIL import Image
 
-class GeneratorError(Exception): ...
+class GeneratorError(RuntimeError): ...
+class GeneratorUnavailable(GeneratorError): ...
+
+@dataclass
+class GenerationRequest:
+    image: Image.Image          # the matted crop, RGBA
+    category: str
+    dims: Sequence[float]       # scanned box [w, h, d], metres
+    seed: int = 42
+
+@dataclass
+class RawMesh:
+    vertices: np.ndarray        # (N, 3), the generator's own frame and scale
+    faces: np.ndarray           # (M, 3)
 
 class Generator(Protocol):
-    name: str      # "triposg", "hosted" or "test"
+    name: str      # "triposg", "hosted" or "procedural"
     source: str    # what JobStatus.source reports: "local" or "hosted"
 
-    def available(self) -> bool: ...
-    def generate(self, image: PIL.Image.Image, *, seed: int, timeout_s: float) -> trimesh.Trimesh: ...
+    def availability(self) -> tuple[bool, str]: ...     # (usable, reason), without loading any model
+    def gpu(self) -> Optional[str]: ...                 # the GPU's name, or None
+    def generate(self, request: GenerationRequest) -> RawMesh: ...
 ```
 
 Contract of `generate`:
 
-- Input: the matted crop, RGBA, square, at most 768 × 768; alpha is the object.
-- Output: one triangle mesh, any scale and triangle count, **+Y up, the photographed side towards +Z**. The
-  adapter converts from its model's own convention.
-- It returns within `timeout_s` or raises `TimeoutError`; any other failure is a `GeneratorError`.
+- Input: the matted crop, RGBA; alpha is the object.
+- Output: one triangle mesh, any scale, any triangle count, in the generator's own frame. Clean-up finds the
+  up axis and the quarter turn that fit the box (§3.9).
+- The worker runs it on a helper thread and gives up after the stage's time-out; any failure is a
+  `GeneratorError`. One call at a time.
 - It writes no file and keeps no reference to the image.
-- `seed` is the first four bytes of the SHA-256 of the view's JPEG, as an unsigned integer.
+- `seed` is the fixed `FORGE_TRIPOSG_SEED` (42).
 
-| Adapter | `source` | What it is | `available()` |
+| Adapter | `source` | What it is | Usable when |
 |---|---|---|---|
-| `triposg` | `local` | TripoSG (MIT) on the RTX 5070, about 8 GB of memory, commit pinned in the lock file | Weights loaded and a CUDA device present |
-| `hosted` | `hosted` | A hosted image-to-3D service: open item 8 | `FORGE_HOSTED_URL` and `FORGE_HOSTED_KEY` both set |
-| `test` | `local` | Deterministic, no GPU, no network: a closed, bumpy 20,000-triangle solid whose proportions follow the crop's silhouette and whose bumps come from `seed`. For the Forge's own tests, for a Station with no GPU, and for cache tests (L18) | Always |
+| `triposg` | `local` | TripoSG (MIT) on the RTX 5070. Written from the public repository's inference script and not yet run on a GPU | PyTorch, a CUDA device and the TripoSG checkout are present |
+| `hosted` | `hosted` | A hosted image-to-3D service: open item 8. The interface exists; no vendor is wired (`HostedGenerator._request` raises `GeneratorUnavailable`) | `FORGE_HOSTED_ENABLED=1` and `FORGE_HOSTED_URL` and `FORGE_HOSTED_KEY` both set |
+| `procedural` | `local` | Deterministic, no GPU, no network: a plausible mesh for the category built from the box size alone (table, chair, couch, bed, storage, lamp, plant, screen, stairs, basin, toilet, plain box), returned normalised to a unit cube. The photo is not looked at. For the Forge's own tests, for a Station with no GPU, and for cache tests (L18) | Always |
 
 ## 3.9 Forge: mesh clean-up and its report
 
-In this order (§7.4, `P1-D09`). Every step is deterministic: the same raw mesh and `meta` give the same bytes,
-and so the same hash.
+In this order (§7.4, `P1-D09`; `forge/cleanup.py`, `clean(…)`). Every step is deterministic: the same raw mesh
+and box give the same bytes, and so the same hash.
 
 | # | Step | Detail |
 |---:|---|---|
-| 1 | Repair | Weld vertices closer than 0.01 mm; drop degenerate faces; keep the components that hold at least 2 % of the area; outward normals |
-| 2 | Orient | +Y up from the adapter. Yaw among 0°, 90°, 180°, 270°: the one whose bounding box best matches `dims` after a uniform scale; on a tie, the one whose +Z faces the camera of `view0` (`azimuthDeg`) |
-| 3 | Scale to the box | One uniform scale, then a correction per axis of at most ± 15 %. Centre on x and z; lowest point at y = 0 |
-| 4 | Decimate | To `triTarget` (quadric edge collapse) |
-| 5 | Regrid | Split every edge longer than 0.25 m. If the count now exceeds `triTarget`, decimate lower and repeat, at most five rounds. If it is under 1,500, subdivide until it is not |
-| 6 | Palette | The dominant colour of the matted `view0`; the nearest of the 64 object colours of `palette.json` (cells 64 to 127) in OKLab; `TEXCOORD_0` of every vertex is that cell's centre |
-| 7 | Normals | Area-weighted vertex normals |
-| 8 | Shade | Per vertex: ambient occlusion (64 hemisphere rays of 0.5 m, mapped to 0.35 … 1) times the face shade of lane A's `AtlasShading`, with the normal turned into the room frame by `yaw`. Written to `COLOR_0` (§4.1) |
-| 9 | Export | GLB with a fixed layout and no generator stamp (§4.1); SHA-256 of the bytes |
-| 10 | Validate | Every check of §4.2. A failure is `failed` `validate:<check>` |
+| 1 | Weld | Merge coincident vertices; drop degenerate, duplicate and unreferenced elements |
+| 2 | Decimate | When the mesh has more triangles than the target (quadric collapse through `fast-simplification`; vertex clustering when that cannot do it) |
+| 3 | Drop floaters | Remove connected pieces holding less than 0.5 % of the surface area |
+| 4 | Orient and scale to the box | Up axis among Y, Z, X and yaw among 0° and 90° (bounds cannot tell 0° from 180°): the generator's own frame unless another fits the box clearly better. One uniform scale, then a correction per axis of at most ± 15 %. Centre on x and z; lowest point at y = 0 |
+| 5 | Regrid | Split every edge longer than 0.25 m (against 0.2499 m, so float32 storage cannot push one over). If the count then exceeds the target, decimate lower and split again, in up to six rounds. If it is under 1,500, split the longest edges until it is not |
+| 6 | Normals | Vertex normals that stay sharp across creases of more than 40° |
+| 7 | Shade | Per vertex: ambient occlusion (32 directions, mapped to 0.35 … 1) times the face shade of lane A's `AtlasShading`, with the normal turned into the room frame by `yaw`. Written to `COLOR_0` (§4.1) |
+| 8 | Palette | The dominant colour of the matted `view0`; the nearest of the 64 object colours (cells 64 to 127) in OKLab; `TEXCOORD_0` of every vertex is that cell's centre |
+| 9 | Export | GLB with a fixed layout (§4.1), 16-bit indices, `asset.generator` `"ATLAS Forge <pipelineVer>"`; SHA-256 of the bytes |
+| 10 | Validate | Every check of §4.2. A failure is `failed` with `asset contract: [<code>] …` |
 
-`report`, returned by `GET /jobs/{jobId}` when `ready` and kept for §11.4.7:
+`report`, returned by `GET /jobs/{jobId}` when `ready` and kept beside the asset for §11.4.7:
 
 ```json
-{"tris": 4998, "verts": 2601, "maxEdge": 0.2496, "bounds": [1.2, 0.75, 0.8], "scaleErr": 0.03, "yawDeg": 90,
- "palette": 110, "source": "local", "generator": "triposg", "pipelineVer": "1.0.0", "triTarget": 5000,
- "retries": 0, "bytes": 183220, "sha256": "3f0a…9c1e",
- "ms": {"queue": 4100, "matting": 900, "generating": 31000, "cleaning": 2400, "total": 38400}}
+{"triangles": 4998, "vertices": 2601, "longestEdge": 0.2496, "size": [1.2, 0.75, 0.8], "box": [1.2, 0.75, 0.8],
+ "scaleError": [0.0, 0.0, 0.0], "maxScaleError": 0.0, "sourceTriangles": 21344, "triTarget": 5000,
+ "upAxis": "Y", "yawDegrees": 90,
+ "colour": {"paletteIndex": 110, "name": "wood", "rgb": [148, 122, 96], "photoRgb": [151, 120, 90]},
+ "bytes": 183220, "sha256": "3f0a…9c1e", "notes": ["decimated from 21344 triangles"]}
 ```
 
-`scaleErr` is the largest `|bounds[i] − dims[i]|` divided by the longest side of the box (must: ≤ 0.10; should:
-≤ 0.05, §11.2). "Forge job start" in §11.2 is the moment the job leaves `queued`; `ms.queue` is reported apart.
+`scaleError[i]` is `(size[i] − box[i]) / box[i]`, and `maxScaleError` its largest magnitude (must: ≤ 0.10;
+should: ≤ 0.05, §11.2). The time each stage took is kept in the job record (`timings`: `matting`,
+`generating`, `cleaning`, seconds), not in the report.
 
 ## 3.10 Forge: the hosted fallback and its disclosure
 
@@ -1996,11 +2380,11 @@ The hosted service receives a crop of the walker's room. Its retention is not ou
 
 | # | Rule |
 |---:|---|
-| 1 | With no key configured, no request ever leaves the Station, whatever `backend` says (test L21). `GET /health` reports `"hosted": false` |
-| 2 | With a key configured, `"hosted": true`, and the Console shows the amber "hosted fallback armed" banner on every page |
-| 3 | A crop is sent to the hosted service only when the job's `backend` is `hosted`, or it is `local` and both local tries failed. Never when it is `cache` |
-| 4 | Before a walker from outside the team scans, the operator tells them (the booth sign's data line says the same). If they decline, the operator sets `forge.backend` to `cache` on the Operator page: their objects come from the cache or the built-in set |
-| 5 | Every hosted job says so: `JobStatus.source` is `hosted`, the Console's job list tags it, and `forge.log` records job id, host and byte count, never the image |
+| 1 | Unless `FORGE_HOSTED_ENABLED=1` and a URL and a key are configured, no request ever leaves the Station, whatever `backend` says (test L21). `GET /health` reports `"hosted": false` |
+| 2 | When it is armed, `"hosted": true`, and the Console shows the amber "hosted fallback armed" banner on every page |
+| 3 | A crop is sent to the hosted service only when the job's `backend` is `hosted`, or it is `local` and the local tries failed. Never when it is `cache` |
+| 4 | Before a walker from outside the team scans, the operator tells them (the booth sign's data line says the same). If they decline, `forge.backend` is set to `cache` on the Tuner page: their objects come from the cache or the built-in set |
+| 5 | Every hosted job says so: `JobStatus.source` is `hosted`, the Console's job list tags it, and the Forge's log records each use with the host, never the image |
 | 6 | Hosted output is credited in the licence ledger (§8.4) |
 
 ---
@@ -2009,30 +2393,30 @@ The hosted service receives a crop of the walker's room. Its retention is not ou
 
 ## 4.1 The GLB asset contract
 
-What every mesh the Forge serves must satisfy (§6.4, §7.4, §8.4). The validator of §4.2 checks all of it.
+What every mesh the Forge serves must satisfy (§6.4, §7.4, §8.4). The validators of §4.2 check it.
 
 | Topic | Rule |
 |---|---|
 | Container | GLB, glTF 2.0: one JSON chunk, one BIN chunk. At most 1 MB (1,048,576 B) |
 | Content | Exactly one scene, one node, one mesh, one primitive. The node has no translation, rotation, scale or matrix. Primitive mode 4 (triangles) |
 | Forbidden | `materials`, `textures`, `images`, `samplers`, `skins`, `animations`, `cameras`, `extensionsUsed`, `extensionsRequired`. The primitive has no `material`. No Draco, no meshopt, no KTX |
-| Attributes | Exactly `POSITION`, `NORMAL`, `TEXCOORD_0`, `COLOR_0`, with the same count. Indices `UNSIGNED_SHORT` (or `UNSIGNED_INT` above 65,535 vertices) |
+| Attributes | Exactly `POSITION`, `NORMAL`, `TEXCOORD_0`, `COLOR_0`, with the same count. Indices `UNSIGNED_SHORT` (the Forge writes nothing else; the phone also reads `UNSIGNED_INT`) |
 | `POSITION` | `VEC3` `FLOAT`, metres, with the accessor's `min` and `max` |
 | `NORMAL` | `VEC3` `FLOAT`, unit length within 0.01 |
 | `TEXCOORD_0` | `VEC2` `FLOAT`: the **palette coordinate** of lane A's vertex format (lane A §10.2, §10.7). The same value on every vertex: the centre of cell `palette`, one of the object colours 64 … 127. Unity UV of cell i: `((i mod 16 + 0.5) / 16, (i div 16 + 0.5) / 16)`. Written in glTF's convention (v downwards): `(u, 1 − v)` |
 | `COLOR_0` | `VEC4` `UNSIGNED_BYTE`, normalised, linear: lane A's vertex colour. **R = shade**: ambient occlusion times the face shade, `round(255 · saturate(ao · shade))`. **G = 255** (line weight; furniture has no line coordinates), **B = 255, A = 255** (reserved) |
 | Units and axes | Metres, +Y up |
 | Frame | The **box-local frame** of the object: origin at the centre of the box's base (RoomModel `objects[].base`), +X along the box's `w`, +Y up, +Z along its `d`, as lane C defines the box in Unity's left-handed convention |
-| Handedness | A GLB is right-handed. The file stores `x_glTF = −x_box`, `y` and `z` unchanged, with counter-clockwise front faces. glTFast negates X and re-winds the triangles on import, which gives the box-local frame exactly. A mesh that looks mirrored on the phone means the Forge skipped this |
-| Size | The mesh fills its box: on each axis the extent differs from `dims` by at most 10 % of the longest side of the box (should: 5 %) |
-| Placement | Centred on x and z within 5 % of the longest side (proposed); lowest point within 0.02 m of y = 0 (proposed) |
+| Handedness | A GLB is right-handed. The file stores `x_glTF = −x_box`, `y` and `z` unchanged, with counter-clockwise front faces. The phone's reader (`GlbMeshReader`) negates X on positions and normals, flips v and re-winds the triangles, which gives the box-local frame exactly. A mesh that looks mirrored on the phone means one side skipped this |
+| Size | The mesh fills its box: on each axis the extent differs from `dims` by at most 10 % (should: 5 %). The Forge measures against that axis's own side, with 5 mm of slack; the phone against the longest side of the box |
+| Placement | The Forge: footprint centre within 0.01 m of the origin on x and z, lowest point within 0.01 m of y = 0. The phone accepts 5 % of the longest side and 0.02 m (proposed) |
 | Triangles | 1,500 … 5,000, and never more than the `triTarget` of its job |
 | Edges | No triangle edge longer than 0.25 m, so the mesh can bend in a curved space |
 | Identity | The SHA-256 of the file is its name (`<sha256>.glb`), its cache key and its `ETag` |
 | Material | None in the file. The phone draws it with a pooled instance of the shared look material (README F7) |
 
 The room's furniture is at most 20 such meshes and 60,000 triangles (plan §4.5): `triTarget = clamp(floor(60000 /
-n), 3000, 5000)`.
+n), 3000, 5000)` (`ObjectMeshRules.TriTarget` on the phone, `forge/budget.py` on the Station).
 
 The shade, as the Forge bakes it (lane A's `AtlasShading`, the same formula every mesh generator uses):
 
@@ -2045,52 +2429,57 @@ ao      = 0.35 … 1, from the ambient-occlusion pass (§3.9)
 R       = round(255 · clamp(shade · ao, 0, 1))
 ```
 
-The file has no `TEXCOORD_1`, so no grid or edge line is drawn on furniture; the object's material keeps its
-line strengths at 0.
+The file has no `TEXCOORD_1`, so no grid or edge line is drawn on furniture; the reader leaves the line
+coordinates at (0, 0).
 
-`palette.json` in the Forge lists the 64 object colours the Forge may choose: index, cell-centre UV (Unity
-convention) and sRGB colour. `tools/gen_forge_palette.py` writes it from the formulas of lane A §10.7 (rows 4 to
-7: index 64 + 16 k + column; value V = 0.28, 0.42, 0.58, 0.74 for k = 0 … 3; columns 0 … 11 HSV(column · 30°,
-0.50, V); column 12 HSV(30°, 0.12, V); 13 HSV(210°, 0.12, V); 14 HSV(28°, 0.35, V); 15 HSV(0°, 0, V)). The
-indices are frozen; if lane A retunes a colour the script is run again.
+The 64 object colours the Forge may choose are computed in `forge/palette.py` from the formulas of lane A
+§10.7 (rows 4 to 7: index 64 + 16 k + column; value V = 0.28, 0.42, 0.58, 0.74 for k = 0 … 3; columns 0 … 11
+HSV(column · 30°, 0.50, V); column 12 HSV(30°, 0.12, V); 13 HSV(210°, 0.12, V); 14 HSV(28°, 0.35, V); 15
+HSV(0°, 0, V)). `tools/gen_forge_palette.py` prints the same table as JSON (index, cell-centre UV in Unity's
+convention, sRGB colour), writes it with `--out`, and with `--check` compares it with what the Forge
+computes. No `palette.json` is committed. The indices are frozen; if lane A retunes a colour the constants
+are changed in both places.
 
-## 4.2 The validator
+## 4.2 The validators
 
-The same checks run twice: in the Forge before a job may become `ready` (`forge/validate.py`), and on the phone
-on the downloaded bytes, on a worker thread, before glTFast sees them. The code in the last column is what
-appears in `JobStatus.error` (`validate:<code>`) and in `AssetAck.reason`.
+The contract is checked twice: in the Forge before a job may become `ready` (`forge/validator.py`,
+`validate_glb`), and on the phone on the downloaded bytes, on a worker thread, before a mesh is built from
+them (`GlbValidator.Validate`). The two are separate implementations with their own code names. The phone
+stops at the first failed check, in the order of the table; its code is what appears in `AssetAck.reason`
+(`validate:<code>`, except `hash_mismatch` and `too_large`). The Forge collects every violation; its codes
+appear in `JobStatus.error` as `asset contract: [<code>] <sentence>`.
 
-| # | Check | Forge | Phone | Code |
-|---:|---|---|---|---|
-| 1 | Magic `glTF`, version 2, the declared length equals the file length, a JSON chunk then a BIN chunk | ✔ | ✔ | `container` |
-| 2 | File size ≤ 1,048,576 B | ✔ | ✔ | `size` |
-| 3 | SHA-256 of the file equals `AssetReady.sha256` | – | ✔ | `hash` |
-| 4 | One scene, one node with no transform, one mesh, one primitive, mode triangles | ✔ | ✔ | `structure` |
-| 5 | None of the forbidden members of §4.1 | ✔ | ✔ | `no_material` |
-| 6 | Exactly the four attributes with the types of §4.1 and equal counts; the index count is a multiple of 3; every index is below the vertex count | ✔ | ✔ | `attributes` |
-| 7 | Triangles ≥ 1,500 | ✔ | ✔ | `tris_min` |
-| 8 | Triangles ≤ 5,000 | ✔ | ✔ | `tris_max` |
-| 9 | Triangles ≤ the job's `triTarget` | ✔ | ✔ | `tris_target` |
-| 10 | Longest triangle edge ≤ 0.25 m (0.5 mm of slack for rounding) | ✔ | ✔ | `edge` |
-| 11 | Each bounding-box side within 10 % of the longest box side of `dims` | ✔ | ✔ | `bounds` |
-| 12 | Centred on x and z within 5 % of the longest box side; lowest y within 0.02 m of 0 | ✔ | ✔ | `origin` |
-| 13 | Every position and normal is finite; no triangle of area under 10⁻¹⁰ m² | ✔ | ✔ | `finite` |
-| 14 | Every normal has length 1 ± 0.01 | ✔ | – | `normals` |
-| 15 | Every `TEXCOORD_0` is the cell centre of `palette`, and `palette` is 64 … 127 | ✔ | – | `palette` |
-| 16 | `COLOR_0`: G = B = A = 255 | ✔ | – | `colour` |
+| # | Check | Phone code | Forge code |
+|---:|---|---|---|
+| 1 | Magic `glTF`, version 2, the declared length equals the file length, a JSON chunk then a BIN chunk | `container` | `glb.malformed` |
+| 2 | File size ≤ 1,048,576 B | `size` (`AssetAck` `too_large`) | `glb.size` |
+| 3 | SHA-256 of the file equals `AssetReady.sha256` | `hash` (`AssetAck` `hash_mismatch`) | – |
+| 4 | One scene, one node with no transform, one mesh, one primitive, mode triangles | `structure` | `mesh.count`, `frame.transform`, `mesh.mode` |
+| 5 | None of the forbidden members of §4.1 | `no_material` | `material.present`, `texture.present`, `glb.extension`, `mesh.count` |
+| 6 | Exactly the four attributes with the types of §4.1 and equal counts; the index count is a multiple of 3; every index is below the vertex count | `attributes` | `attributes.missing`, `glb.malformed` |
+| 7 | Triangles ≥ 1,500 | `tris_min` | `triangles.range` |
+| 8 | Triangles ≤ 5,000 | `tris_max` | `triangles.range` |
+| 9 | Triangles ≤ the job's `triTarget` | `tris_target` | `triangles.target` |
+| 10 | Every position and normal is finite; no triangle of area under 10⁻¹⁰ m² | `finite` | `glb.malformed` (finite positions only) |
+| 11 | Longest triangle edge ≤ 0.25 m (phone: 0.5 mm of slack; Forge: 0.01 mm) | `edge` | `edge.long` |
+| 12 | Each bounding-box side within 10 % of the box (§4.1, Size) | `bounds` | `frame.bounds`; with no box given, `frame.units` for an extent over 6.6 m |
+| 13 | Centred on x and z; lowest y at 0 (§4.1, Placement) | `origin` | `frame.origin` |
 
-On the phone, `triTarget` and `dims` come from the RoomModel (`objects[].triTarget`, `objects[].size`).
+Unit normals, the palette cell of `TEXCOORD_0` and `COLOR_0`'s G = B = A = 255 are the Forge's to write
+(`forge/palette.py`, `encode_vertex_attributes`) and are covered by its clean-up tests; neither validator
+checks them.
+
+On the phone, `triTarget` is `ObjectMeshRules.TriTarget(n)` for the n objects the client follows and `dims`
+is the object's `Size`.
 
 ```csharp
-// File: ATLAS/Assets/Atlas/Telemetry/Assets/GlbValidator.cs   (engine-free core: System and Atlas.Link only)
-using System;
-
+// File: ATLAS/Assets/Atlas/Telemetry/Assets/GlbValidator.cs   (engine-free: System and Atlas.Link only)
 namespace Atlas.Telemetry
 {
     public struct GlbExpectation
     {
         public float DimX, DimY, DimZ;        // RoomModel size [w, h, d], metres
-        public int TriTarget;                 // 3000..5000
+        public int TriTarget;                 // 3000..5000; 0 skips check 9
         public string Sha256;                 // null: skip check 3
     }
 
@@ -2108,61 +2497,86 @@ namespace Atlas.Telemetry
         public const int MaxBytes = 1048576, MinTriangles = 1500, MaxTriangles = 5000;
         public const float MaxEdgeMetres = 0.25f, EdgeSlack = 0.0005f;
         public const float BoundsTolerance = 0.10f, CentreTolerance = 0.05f, BaseTolerance = 0.02f;
+        public const double MinTriangleArea = 1e-10;
+        public const int MaxTemplateTriangles = 300;
+        // CodeContainer = "container", CodeSize = "size", CodeHash = "hash", CodeStructure = "structure", … one const per code above
 
         /// <summary>Checks 1 to 13 on the raw file. No Unity API: safe on a worker thread.</summary>
-        public static GlbReport Validate(ReadOnlySpan<byte> glb, in GlbExpectation expect);
+        public static GlbReport Validate(byte[] glb, in GlbExpectation expect);
+        public static GlbReport Validate(byte[] glb, int length, in GlbExpectation expect);
+        /// <summary>The template row of section 4.4: POSITION and NORMAL only, at most 300 triangles, the unit box.</summary>
+        public static GlbReport ValidateTemplate(byte[] glb);
+        public static string Sha256Hex(byte[] bytes, int length);
     }
 }
 ```
 
+Beside it, also engine-free: `GlbFile` (`Assets/GlbFile.cs`: the parsed container, `TryParse`, `TryAccessor`,
+`TryPrimitive`) and `GlbMeshReader.TryRead(byte[] glb, int length, MeshData into)` (`Assets/GlbMeshReader.cs`).
+
 ## 4.3 The asset client
 
-`Atlas.Telemetry.AssetClient`, created by lane D's installer (§5.1). It uploads the RoomModel and the crops,
-follows the jobs, downloads, validates, loads and hands each mesh to lane C's room content. It never blocks a
-frame: HTTP goes through `UnityWebRequest`, started and completed at step 8b; hashing, the validator and file
-writes run on a worker thread; glTFast runs under a time budget.
+`Atlas.Telemetry.AssetClient`, created by `AssetClientInstaller.Install(boot, telemetry)` right after
+`TelemetryInstaller.Install` (§5.1); null in the Spectator, which has its own reader (§5.8). It is the thin
+Unity adapter round `AssetClientCore`, the engine-free state machine that uploads the RoomModel and the
+crops, follows the jobs, downloads, validates, reads and hands each mesh to lane C's room content. It never
+blocks a frame: HTTP goes through `UnityWebRequest` (`UnityForgeTransport`), started and looked at from step
+8b; hashing, the validator, mesh reading and the cache files run on the thread pool; the frame only uploads
+the finished vertex and index buffers.
 
 It is driven from three sides, all on the main thread:
 
 | From | Call | Meaning |
 |---|---|---|
-| Room content (lane C §9.1) | event `IRoomContent.Built(room)` | A room is active and its placeholder boxes exist. The client starts a room: cached meshes are placed |
+| Room content (lane C §9.1) | event `IRoomContent.Built(room)` (`AssetClient.Bind(content)`, once the app has booted) | A room is active and its placeholder boxes exist. The client starts a room: cached meshes are placed |
 | Photo capture (lane C §11.4) | `IObjectPhotoSink.BeginRoom(room, roomJson)`, `Submit(photos)`, `ReportNoPhoto(objectId)`, `EndRoom()` | A fresh scan: the RoomModel text to post, then the crops of each object, largest first |
-| The link | `ILinkAssetSink.OnJobStatus`, `OnAssetReady` | Job progress from the Hub |
+| The link | `LinkClient.JobStatusReceived`, `AssetReadyReceived` → `AssetClient.OnJobStatus`, `OnAssetReady` | Job progress from the Hub |
+
+The Forge's base URL is `Welcome.forgeUrl` when the Hub gave one, else `http://<paired Station address>:8000`
+(`AssetClientInstaller.ForgeUrl`).
 
 ### States per object
 
 | State | Meaning | RoomModel `mesh` (`MeshState`) | On screen |
 |---|---|---|---|
-| `Placeholder` | Not picked (`TriTarget` 0), or nothing sent yet | `Placeholder` | Placeholder box |
-| `Uploading` | Its crops are being sent: attempt 1, 2 or 3 | `Placeholder` | Placeholder box |
+| `Placeholder` | Not one of the objects the client follows, or nothing sent yet | `Placeholder` | Placeholder box |
+| `Uploading` | Its crops are waiting to be sent or being sent: attempt 1, 2 or 3 | `Placeholder` | Placeholder box |
 | `Requested` | The Forge holds a job for it | `Requested` | Placeholder box |
-| `Downloading` | `AssetReady` known; the GLB is being fetched, hashed and validated | `Requested` | Placeholder box |
-| `Loading` | glTFast import | `Requested` | Placeholder box |
-| `Ready` | The generated mesh is placed; `AssetAck ok` sent | `Ready`, with `AssetHash` | Generated mesh |
-| `BuiltIn` | The built-in mesh of its category is placed (§4.4) | `BuiltIn` | Built-in mesh |
+| `Downloading` | `AssetReady` known; the GLB is being read from the cache or fetched, hashed, validated and read | `Requested` | Placeholder box |
+| `Loading` | The mesh data is ready and waits for its hand-over | `Requested` | Placeholder box |
+| `Ready` | The generated mesh is placed; `AssetAck ok` follows 0.5 s later | `Ready`, with `AssetHash` | Generated mesh |
+| `BuiltIn` | The built-in mesh of its category stands in (§4.4) | `BuiltIn` | Built-in mesh, or the box when there is none |
+
+The objects the client follows are those with `TriTarget > 0` whose `Mesh` is not `MeshState.StandIn`, the 20
+largest by volume at most (`AssetClientCore.MaxObjects`). A stand-in object (the fixtures' own furniture) is
+left alone.
 
 The RoomModel entry is changed only by room content, through the three calls the asset client makes:
 `IRoomContent.SetObjectState(objectId, MeshState.Requested)`, `SetGeneratedMesh(objectId, mesh, assetHash)` and
-`SetBuiltInMesh(objectId, mesh, Vector3.one)` (lane C §9.1). The composition root saves the RoomModel on
-`ObjectChanged`, which keeps the `boxId → sha256` record of §7.4.
+`SetBuiltInMesh(objectId, mesh, Vector3.one)` (lane C §9.1). Saving the RoomModel when an object changes,
+which keeps the `boxId → sha256` record of §7.4, is lane C's.
 
 ```csharp
-// File: ATLAS/Assets/Atlas/Telemetry/Assets/AssetClient.cs
+// Files: ATLAS/Assets/Atlas/Telemetry/Assets/AssetClient.cs, AssetClientCore.cs, AssetClientInstaller.cs, ForgeTransport.cs
 namespace Atlas.Telemetry
 {
     public enum ObjectAssetState : byte
     { Placeholder = 0, Uploading = 1, Requested = 2, Downloading = 3, Loading = 4, Ready = 5, BuiltIn = 6 }
 
-    public sealed class AssetClient : Atlas.World.IObjectPhotoSink, Atlas.Link.ILinkAssetSink
+    public sealed class AssetClient : Atlas.World.IObjectPhotoSink, Atlas.World.IAfterFrameStep, IAssetRoom
     {
-        public const float LoadedRoomGraceSeconds = 2f;
+        public const float LoadedRoomGraceSeconds = AssetClientCore.LoadedRoomGraceSeconds;   // 2 s
 
+        public AssetClient(AssetClientCore core);
+        public static AssetClient Create(IForgeTransport transport, IAssetCache cache, IAssetWorker worker,
+                                         FallbackSet fallback, Atlas.World.IEventLog events);
+        public AssetClientCore Core { get; }
         public bool ForgeReachable { get; }          // the last GET /health answered 200
         public int PlacedCount { get; }              // Ready                  → Telemetry.assetsPlaced
         public int PendingCount { get; }             // Uploading … Loading    → Telemetry.assetsPending
         public int BuiltInCount { get; }
         public ObjectAssetState GetState(int objectId);
+        public void Bind(Atlas.World.IRoomContent content);   // follows its Built event; null detaches
 
         // IObjectPhotoSink (lane C section 11.4)
         public void BeginRoom(Atlas.World.RoomModel room, string roomJson);
@@ -2170,55 +2584,95 @@ namespace Atlas.Telemetry
         public void ReportNoPhoto(int objectId);
         public void EndRoom();
 
-        // ILinkAssetSink (section 2.10)
-        public void OnJobStatus(in Atlas.Link.JobStatus status);
-        public void OnAssetReady(in Atlas.Link.AssetReady ready);
+        // The link (section 2.10)
+        public void OnJobStatus(Atlas.Link.JobStatusMessage status);
+        public void OnAssetReady(Atlas.Link.AssetReadyMessage ready);
 
         /// <summary>DELETE /rooms/{roomId} and removal of this room's cached GLBs (section 13.5).</summary>
         public void ForgetRoom(string roomId);
+        public void AfterFrame(in Atlas.World.FrameContext frame);   // step 8b
+        public void Dispose();
     }
+
+    public static class AssetClientInstaller
+    {
+        public const string ParamForgeBackend = "forge.backend";
+        public const int ForgePort = 8000;
+        /// <summary>Publishes the client as IObjectPhotoSink and as AssetClient. Null in the Spectator.</summary>
+        public static AssetClient Install(Atlas.World.AtlasBootContext boot, AtlasTelemetry telemetry);
+        public static string ForgeUrl(Atlas.Link.WelcomeMessage welcome, PairingController pairing);
+    }
+
+    // What the core is given, so that it runs with no engine and under test:
+    public interface IForgeTransport          // UnityForgeTransport in the app
+    {
+        int Begin(string method, string url, byte[] body, string contentType, float timeoutSeconds);
+        bool TryTake(int handle, out int status, out byte[] body);    // status 0: no answer
+        void Cancel(int handle);
+    }
+    public interface IAssetRoom               // AssetClient, towards IRoomContent
+    {
+        bool SetRequested(int objectId);
+        bool PlaceGenerated(int objectId, Atlas.Kernel.MeshData mesh, string sha256);
+        bool PlaceBuiltIn(int objectId, Atlas.Kernel.MeshData mesh);
+    }
+    public interface IAssetCache              // FileAssetCache: persistentDataPath/assets/<sha256>.glb
+    {
+        byte[] TryRead(string sha256);
+        void Write(string sha256, byte[] glb);
+        void Delete(string sha256);
+    }
+    public interface IAssetWorker { void Run(System.Action<object> work, object state); }   // ThreadPoolAssetWorker
 }
 ```
 
+`AssetClientCore` holds the constants of the tables below (`MaxAttempts`, `HealthTimeout`, `RoomTimeout`,
+`ObjectTimeout`, `PollTimeout`, `DownloadTimeout`, `PollInterval`, `ProbeInterval`, `JobSilenceSeconds`,
+`WorkTimeout`, `AckWindowSeconds`, `BuiltInPerTick`) and `ForgeUrl`, `Backend`, `AckSink`, `RoomBuilt`,
+`RoomCleared`, `Tick(double timeSeconds, float frameMs)`. `ForgeProtocol` builds the `meta` JSON and the
+multipart body.
+
 ### The round trip
 
-1. **`Built`.** The objects that take part are those with `TriTarget > 0` (lane C picks them: all, or the 20
-   largest by volume, §7.4). Every object whose `AssetHash` is set and whose file is in the cache
-   (`persistentDataPath/assets/<sha256>.glb`) goes straight to step 6: the pre-scan path needs no Station (D21).
-   A `Built` for another room ends the previous one: its requests are cancelled and late answers are dropped
-   (`room_changed`).
-2. **`BeginRoom(room, roomJson)`.** `POST /rooms` with `roomJson` as UTF-8, unless `forge.backend` is `off`.
-   If no `BeginRoom` for this room has come within 2 s of `Built` (proposed), the room came from a file or a
-   fixture and no photo will follow: every taking-part object with no cached mesh becomes `BuiltIn`.
-3. **`Submit(photos)`.** `POST /rooms/{roomId}/objects`, in the order received (largest box first). `meta` is
-   built from the `ObjectPhotoSet`: `boxId` = `ObjectId`, `category` = `ObjectCategories.Name(Category)`,
-   `dims` = `Size`, `yaw`, `triTarget`, `backend`, and per view `score`, `azimuthDeg`, `intrinsics`
-   (`x, y, z, w` = fx, fy, cx, cy) and `camToBox` row by row (row r, column c = `CamToBox[c][r]`). 202 →
-   `SetObjectState(Requested)`. 200 with `cached` → step 5. The JPEG arrays are released when the request ends.
-   **`ReportNoPhoto(objectId)`** → `BuiltIn` at once.
-4. Job progress arrives as `JobStatus` and `AssetReady` through the Hub. While the link is not `Connected` and
-   an object is `Requested`, the client polls `GET /jobs?room={roomId}` every 2 s (§7.4).
-5. `failed` → `BuiltIn` at once. `AssetReady` → `Downloading`: `GET <forgeUrl><url>` into
-   `persistentDataPath/assets/<sha256>.glb.part`; on a worker thread, SHA-256 and `GlbValidator.Validate`; then
-   rename to `<sha256>.glb`. A file already in the cache skips the download.
-6. `Loading`: on the main thread, `new GltfImport(null, deferAgent, materialGenerator, logger)` and
-   `Load(byte[], …)` (U-net §4: glTFast loads on the main thread only; its decoding runs in jobs). The defer
-   agent is one shared `TimeBudgetPerFrameDeferAgent` with `SetFrameBudget(0.1f)` (proposed: 1.7 ms per frame at
-   60 fps). The material generator is lane D's own and is never asked for a material: the file has none and
-   nothing is instantiated. **One import at a time.** The one mesh of `GltfImport.Meshes` is copied
-   (`Object.Instantiate`) and the import disposed, because `Dispose` destroys what it made.
-7. Hand-over: `IRoomContent.SetGeneratedMesh(objectId, mesh, sha256)`. Room content owns the mesh from then on,
-   assigns the pooled look material, cross-fades from what is shown over 0.3 s, begins at most one swap per
-   frame, and raises `ObjectChanged` (lane C §9.1). The asset client never touches a renderer or a material:
-   `Atlas.Telemetry` cannot reference `Atlas.Rendering`.
-8. `AssetAck`: `ok` true, `loadMs` = download complete → hand-over, `worstFrameMs` = the worst frame time
+1. **`Built`.** Every followed object whose `AssetHash` is set goes straight to step 5 and is read from the
+   cache (`persistentDataPath/assets/<sha256>.glb`): the pre-scan path needs no Station (D21). A `Built` for
+   another room ends the previous one: its requests are cancelled and late answers are dropped.
+2. **`BeginRoom(room, roomJson)`.** `POST /rooms` with `roomJson` as UTF-8, before the first object, unless
+   `forge.backend` is `off`. If no `BeginRoom` for this room has come within 2 s of `Built` (proposed), the
+   room came from a file or a fixture and no photo will follow: every followed object that is still
+   `Placeholder` becomes `BuiltIn`.
+3. **`Submit(photos)`.** `POST /rooms/{roomId}/objects`, one upload at a time, in the order received (largest
+   box first). `meta` is built from the `ObjectPhotoSet`: `boxId` = `ObjectId`, `category` =
+   `ObjectCategories.Name(Category)`, `dims` = `Size`, `yaw`, `triTarget`, `backend`, and per view `score`,
+   `azimuthDeg`, `intrinsics` (`x, y, z, w` = fx, fy, cx, cy) and `camToBox` row by row (row r, column c =
+   `CamToBox[c][r]`). 202 → `SetObjectState(Requested)`. 200 with `cached` → step 5. 200 with `placeholder` →
+   the box stays. A 404 means the Forge no longer knows the room: it is posted again first. Any other refusal
+   → `BuiltIn`. The JPEG arrays are released when the upload ends. **`ReportNoPhoto(objectId)`**, a
+   `Submit` with no view, and at **`EndRoom`** every object neither submitted nor reported → `BuiltIn` at once.
+4. Job progress arrives as `JobStatus` and `AssetReady` through the Hub. While an object is `Requested` the
+   client also polls `GET /jobs?room={roomId}` every 2 s (§7.4), whatever the link's state; it reads the
+   Forge's array and a `{"jobs": […]}` wrapper alike. A job the Forge no longer lists → `BuiltIn`.
+5. `failed` → `BuiltIn` at once. `ready` → `Downloading`, one object at a time: the worker first looks in the
+   cache; if the file is not there, `GET <forgeUrl><url>` and the worker again: SHA-256,
+   `GlbValidator.Validate`, `GlbMeshReader.TryRead` into a `MeshData` in lane A's vertex format, and the
+   cache write (`<sha256>.glb.part`, then renamed). A damaged file in the cache is fetched again.
+6. Hand-over, on the main thread at step 8b, at most one generated mesh per frame: the adapter makes a
+   `UnityEngine.Mesh` from the `MeshData` (`SetVertexBufferData`, `SetIndexBufferData`, one sub-mesh, bounds
+   from the data) and calls `IRoomContent.SetGeneratedMesh(objectId, mesh, sha256)`. Room content owns the
+   mesh from then on, assigns the pooled look material, cross-fades from what is shown over 0.3 s and raises
+   `ObjectChanged` (lane C §9.1). The asset client never touches a renderer or a material: `Atlas.Telemetry`
+   cannot reference `Atlas.Rendering`.
+   (differs from plan §7.4: the phone reads the GLB with its own reader instead of glTFast, so that all
+   decoding is off the main thread and no importer object is made per asset; the reader accepts exactly the
+   encoding of §4.1.)
+7. `AssetAck`: `ok` true, `loadMs` = download complete → hand-over, `worstFrameMs` = the worst frame time
    from the hand-over until 0.5 s later (must: < 20 ms, test L17). Also sent with `ok` false and a `reason`
-   whenever step 5 or 6 rejects the asset; that object becomes `BuiltIn`.
-9. Every step writes one `asset` event (§2.6): `upload`, `requested` or `cached`, `ready`, `placed`,
-   `builtin`, `failed`, `rejected`. §11.4.7 is read from them.
+   whenever step 5 or 6 rejects the asset; that object becomes `BuiltIn`. A mesh that came from the cache of
+   a saved room belongs to no job and is not acknowledged.
+8. Every step writes one `asset` event (§2.6). §11.4.7 is read from them.
 
 `forge.backend`: `local`, `hosted` and `cache` are sent in `meta.backend`. `off`: nothing is sent to the Forge;
-every taking-part object with no cached mesh becomes `BuiltIn` at once.
+every followed object with no cached mesh becomes `BuiltIn` at once.
 
 ### Time-outs and retries
 
@@ -2227,12 +2681,12 @@ every taking-part object with no cached mesh becomes `BuiltIn` at once.
 | Reachability, before every upload attempt: `GET /health` | 2 s | – | The attempt has failed |
 | `POST /rooms` | 10 s | 3 attempts in all, waits of 1 s and 2 s between them | Forge unreachable |
 | `POST /rooms/{roomId}/objects` | 15 s | 3 attempts in all, waits of 1 s and 2 s | Forge unreachable |
-| Forge unreachable | – | `GET /health` every 4 s | Every object not yet `Ready` becomes `BuiltIn`. At most 9 s after the first attempt (3 × 2 s + 1 s + 2 s), so within the 10 s of test L19. When `/health` answers again, the client posts the room and the crops it still holds again, and each generated mesh replaces its built-in one |
+| Forge unreachable | – | `GET /health` every 4 s | Every object not yet `Ready` takes its built-in mesh. At most 9 s after the first attempt (3 × 2 s + 1 s + 2 s), so within the 10 s of test L19. When `/health` answers again, the client posts the room and the crops it still holds again, and each generated mesh replaces its built-in one |
 | Job silence: no `JobStatus` and no successful poll | 30 s | – | Forge unreachable |
 | `GET /jobs?room=` | 5 s | every 2 s while needed | – |
-| `GET /assets/<sha256>.glb` | 20 s | 2 more, waits of 1 s and 2 s | `AssetAck` `download_failed`; `BuiltIn` |
-| Hash and validator | – | – | `AssetAck` `hash_mismatch`, `too_large` or `validate:<code>`; the `.part` file is deleted; `BuiltIn` |
-| glTFast import | 10 s | – | `AssetAck` `load_failed`; `BuiltIn` |
+| `GET /assets/<sha256>.glb` | 20 s | 2 more | `AssetAck` `download_failed`; `BuiltIn` |
+| Hash and validator | – | – | `AssetAck` `hash_mismatch`, `too_large` or `validate:<code>`; `BuiltIn` |
+| Worker (hash, validate, read) | 10 s | – | `AssetAck` `load_failed`; `BuiltIn` |
 
 An object that is `BuiltIn` because its job failed, its asset was rejected, or it had no photo stays `BuiltIn`.
 Only "Forge unreachable" is retried. For that retry the client keeps the crops of objects it could not upload,
@@ -2247,81 +2701,150 @@ One mesh per object category, shipped in the build, placed when the Forge cannot
 
 | Topic | Rule |
 |---|---|
-| Categories | Every `ObjectCategory` of lane C §6 except `Unknown` and `Other`: `couch`, `table`, `bed`, `lamp`, `plant`, `screen`, `storage`, `bathtub`, `chair`, `dishwasher`, `fireplace`, `oven`, `refrigerator`, `sink`, `stairs`, `stove`, `toilet`, `washerDryer`, `keyboard`, `mouse`, `laptop` (21), keyed by `ObjectCategories.Name`. An object of category `Unknown` or `Other` keeps its placeholder box |
-| Files | `ATLAS/Assets/Atlas/Telemetry/Resources/AtlasFallback/<name>.glb.bytes`, loaded with `Resources.Load<TextAsset>("AtlasFallback/<name>.glb")`, and `manifest.json` beside them |
-| Template | A GLB with one mesh, `POSITION` and `NORMAL` only, in the frame of §4.1, filling the **unit box**: x and z in [−0.5, 0.5], y in [0, 1]. At most 300 triangles. CC0 |
+| Categories | Every `ObjectCategory` of lane C §6 except `Unknown` and `Other`: `couch`, `table`, `bed`, `lamp`, `plant`, `screen`, `storage`, `bathtub`, `chair`, `dishwasher`, `fireplace`, `oven`, `refrigerator`, `sink`, `stairs`, `stove`, `toilet`, `washerDryer`, `keyboard`, `mouse`, `laptop` (21), keyed by `ObjectCategories.Name`. An object of category `Unknown` or `Other` keeps its placeholder box (`asset` event `builtin` with `kept` `no_template`) |
+| Files | `ATLAS/Assets/Atlas/Telemetry/Resources/AtlasFallback/<name>.glb.bytes`, loaded with `Resources.Load<TextAsset>("AtlasFallback/<name>.glb")`, and `manifest.json` beside them (`Resources` name `AtlasFallback/manifest`), read by `FallbackSet.Load` |
+| Template | A GLB with one mesh, `POSITION` and `NORMAL` only, in the frame of §4.1, filling the **unit box**: x and z in [−0.5, 0.5], y in [0, 1]. At most 300 triangles. CC0 (`GlbValidator.ValidateTemplate`) |
 | How they are made | `tools/gen_fallback_set.py` (lane D; Python standard library only) builds each one from a short list of boxes (a chair is a seat, a back and four legs) and writes the 21 files and `manifest.json`. Deterministic: running it again changes no byte. The meshes are the team's own work, released CC0; a CC0 kit mesh may replace any file if it meets the template row. `.meta` files come from the repository's own tool |
-| Placement | `FallbackMeshBuilder` (engine-free core, `Telemetry/Assets/FallbackMeshBuilder.cs`) fills a `MeshData` (lane A §10.2) for **this** box: scale the template to the box's `Size`; split every edge longer than 0.25 m (both triangles of a shared edge together, so no crack); recompute normals; palette coordinate = the cell centre of the colour below; shade = `AtlasShading.FaceShade` of the normal turned by the box's `Yaw`, times an occlusion of 0.7 at the floor rising to 1.0 at 0.3 m; line weight 255; line coordinates (0, 0) |
-| Colour | An object colour (cells 64 … 127), not the placeholder's tint, so that a built-in mesh can be told from a placeholder. `manifest.json` gives the cell per category; the script's table is the source **(decided here)** |
-| The `Mesh` | Lane D builds a `UnityEngine.Mesh` from the `MeshData` with the five vertex attributes of lane A §10.2 in one stream. One mesh per object, already at the box's size |
-| Hand-over | `IRoomContent.SetBuiltInMesh(objectId, mesh, Vector3.one)`. Room content does not destroy a built-in mesh (lane C §9.1): the asset client keeps it and destroys it when the object's mesh is replaced or the room ends |
-| Limits | At most 1,500 triangles and no edge over 0.25 m **after** scaling (§8.4, test L19). A box so large that the split passes 1,500 triangles keeps its placeholder box, with an `asset` event `builtin` and reason `too_large` |
-| When | (a) Forge unreachable after 3 failed attempts; (b) no photo; (c) job `failed`; (d) asset rejected; (e) `forge.backend` `off`; (f) a room loaded from a file with no cached mesh for the object |
-| Tagging | The RoomModel object's `mesh` is `builtIn`; the `asset` event has step `builtin`; the Console's map and job list show "built-in" |
+| Placement | `FallbackMeshBuilder.Build(template, size, yaw, into)` (engine-free, `Telemetry/Assets/FallbackMeshBuilder.cs`) fills a `MeshData` (lane A §10.2) for **this** box: scale the template to the box's `Size`; cut every face into a grid of cells no longer than 0.1767 m, so no edge passes 0.25 m and two faces that share an edge cut it alike (no crack); bisect what is still too long; normals from the template; palette coordinate = the cell centre of the colour below; shade = `AtlasShading.FaceShade` of the normal turned by the box's `Yaw`, times an occlusion of 0.7 at the floor rising to 1.0 at 0.3 m; line weight 255; line coordinates (0, 0) |
+| Colour | An object colour (cells 64 … 127), not the placeholder's tint, so that a built-in mesh can be told from a placeholder. `manifest.json` gives the cell per category (`templates.<name>.palette`); the script's table is the source **(decided here)** |
+| The `Mesh` | `AssetClient` builds a `UnityEngine.Mesh` from the `MeshData` with the five vertex attributes of lane A §10.2 in one stream. One mesh per object, already at the box's size. At most two are built and placed per frame |
+| Hand-over | `IRoomContent.SetBuiltInMesh(objectId, mesh, Vector3.one)`. Room content does not destroy a built-in mesh (lane C §9.1): the asset client keeps it and destroys it one second after the object's mesh is replaced, or when the room is built again |
+| Limits | At most 1,500 triangles and no edge over 0.25 m **after** scaling (§8.4, test L19). A box so large that the split passes 1,500 triangles keeps its placeholder box, with an `asset` event `builtin` and `kept` `too_large` |
+| When | (a) Forge unreachable after 3 failed attempts; (b) no photo; (c) job `failed`, lost or refused; (d) asset rejected; (e) `forge.backend` `off`; (f) a room loaded from a file with no mesh named for the object, or whose named mesh is not in the cache and no Forge answers |
+| Tagging | The RoomModel object's `mesh` is `builtIn`; the `asset` event has step `builtin` with its `reason` |
 | Replacement | In case (a) each built-in mesh is replaced by the generated one when the Forge returns |
 
 ---
 
 # Part 5 · Telemetry
 
-Everything of lane D that runs inside the Unity app: the installer, the step 8 glue, the perf probe, the HUD,
+Everything of lane D that runs inside the Unity app: the installers, the step 8 glue, the perf probe, the HUD,
 the event log, pairing, the on-device menu, the Spectator and the mini-map.
 
-## 5.1 The installer and step 8
+## 5.1 The installers and step 8
 
-Lane A's frame loop gives lane D three hooks (lane A §7): `IStateSink` at step 8a, and two `IAfterFrameStep`
-at step 8b. Lane D adds nothing else to the frame.
+Lane A's frame loop gives lane D two kinds of hook (lane A §7): one `IStateSink` at step 8a, and
+`IAfterFrameStep`s at step 8b. Lane D adds nothing else to the frame.
 
 ```csharp
-// File: ATLAS/Assets/Atlas/Telemetry/TelemetryInstaller.cs
+// Files: ATLAS/Assets/Atlas/Telemetry/TelemetryInstaller.cs, AtlasTelemetry.cs, SessionId.cs
 namespace Atlas.Telemetry
 {
     public static class TelemetryInstaller
     {
+        public const string ParamDemoLock = "demoLock";
+        public const string ParamLinkEnabled = "link.enabled";
+        public const string ParamStateHz = "link.stateHz";
+        public const string ParamTelemetryMode = "telemetry.mode";
+        public const string ParamHudVisible = "hud.visible";
+        public const string BakedDefaultsResource = "AtlasParams/defaults";
+
         /// <summary>Step 18 of the creation order (lane A section 8.2). Creates lane D's systems under boot.Systems
-        /// and boot.Hud, publishes its services and adds its three hooks.</summary>
-        public static void Install(Atlas.World.AtlasBootContext boot);
+        /// and boot.Hud, publishes IEventLog, IPerfSource, PairingController and AtlasTelemetry, and adds the frame
+        /// hooks when the frame loop is already published. transport null means the real UDP one.</summary>
+        public static AtlasTelemetry Install(Atlas.World.AtlasBootContext boot, Atlas.Link.ILinkTransport transport = null);
     }
 
-    /// <summary>What the installer made. Published through AtlasServices for lane D's code in Atlas.App and
-    /// Atlas.Spectator, and for onboarding.</summary>
+    /// <summary>What the installer made. Published through AtlasServices for onboarding, the menu and the Spectator.</summary>
     public sealed class AtlasTelemetry
     {
         public Atlas.Link.ParamRegistry Params { get; }
-        public Atlas.Link.LinkClient Link { get; }
+        public Atlas.Link.LinkClient Link { get; }       // read it, do not poll it: its owner is Pump
+        public LinkPump Pump { get; }
         public PairingController Pairing { get; }
         public EventLog Events { get; }
         public AtlasPerfProbe Probe { get; }
-        public AssetClient Assets { get; }
+        public AtlasHud Hud { get; }
+        public LogFileWriter Files { get; }              // null in the Spectator
         public string SessionId { get; }
-        /// <summary>A new session: a new id, new files, a new Hello. Onboarding calls it when a new walker starts.</summary>
+        public Atlas.Link.LinkState LinkState { get; }
+        public void AddHooks(Atlas.World.IFrameLoop loop);   // once; the installer calls it when the loop is published
+        public bool Hooked { get; }
+        /// <summary>A new session: a new id, new files, row numbers from 0 and the id announced to the Station.
+        /// Onboarding calls it when a new walker starts.</summary>
         public string BeginSession();
+        public void Shutdown();                          // Bye, flush, close; safe to call twice
+    }
+
+    public static class SessionId
+    {
+        public static string Make(System.DateTime utc, int random);
+        public static string New();
     }
 }
 ```
 
-What `Install` does, in order:
+The asset client has its own installer, `AssetClientInstaller.Install(boot, telemetry)` (§4.3), which the
+composition root calls next; the menu announces itself through `AppHooks.Menu` (§5.7).
+
+What `TelemetryInstaller.Install` does, in order:
 
 | # | Creates | Publishes · hooks |
 |---|---|---|
-| 1 | The session id; the cached `Application.persistentDataPath`; the file writer thread (§5.5) | – |
-| 2 | Baked defaults into `boot.Params` (1.7); `demoLock` and `hud.visible` for the build (1.4); handlers of lane D's own parameters | – |
-| 3 | `EventLog`; the `Application.logMessageReceived` tap for `Log` | `AtlasServices.Register<IEventLog>` |
-| 4 | `LinkClient` (role `phone` on a device, `editor` in the Editor, `spectator` when `boot.IsSpectator`); `PairingController`; `OperatorBridge` (§2.9) | `Register<PairingController>` |
-| 5 | `AtlasPerfProbe` | `Register<IPerfSource>`; `IFrameLoop.AddAfterFrame(probe)` |
-| 6 | `LinkPump` | `IFrameLoop.SetStateSink(pump)`; `IFrameLoop.AddAfterFrame(pump)`. In the Spectator also `IFrameLoop.AddSense(spectatorSense)` (§5.8) |
-| 7 | `AssetClient` | `Register<IObjectPhotoSink>`; subscribes to `IRoomContent.Built` and `ObjectChanged` |
-| 8 | HUD and link dot under `boot.Hud` (§5.4) | – |
-| 9 | `AtlasTelemetry` | `Register<AtlasTelemetry>` |
-| 10 | The link is started when `link.enabled` is on **and** this phone has paired before (§5.6). On a first launch nothing is sent until onboarding asks | – |
+| 1 | The session id; the cached `Application.persistentDataPath`; `LogFileWriter` with its writer thread (§5.5). No files in the Spectator | – |
+| 2 | `EventLog` | `AtlasServices.Replace<IEventLog>` |
+| 3 | `LinkClient` (role `phone` in the walker's app, the Editor included; `spectator` when `boot.IsSpectator`, then with no registry) on a `LiteNetTransport`, created by type name because `Atlas.Telemetry` does not reference LiteNetLib (`Telemetry/link.xml` keeps it through stripping). `LinkPump`; `PairingController` on `PlayerPrefs` | `Replace<PairingController>` |
+| 4 | `AtlasPerfProbe`; `AtlasHud` under `boot.Hud` (§5.4); on the phone `FlatTwinHud.Install(boot)` (§5.9) | `Replace<IPerfSource>` |
+| 5 | The parameters of 1.4 with their callbacks; baked defaults (1.7); `demoLock` and `hud.visible` for the build | – |
+| 6 | Taps: `Application.deepLinkActivated` and `Application.absoluteURL` to pairing; `Application.logMessageReceived` to the phone log and `Log`; a `TelemetryLifecycle` component under `boot.Systems` for pause, resume and quit | `Replace<AtlasTelemetry>`; events `boot` and `session` |
+| 7 | – | `AddHooks(loop)` now if `IFrameLoop` is published. On `AtlasServices.Booted`: the hooks if still missing; `IWalkerKernel` and `IOperatorCommands` for `LinkPump`; `ISpaceHost.RoomChanged` → `LinkPump.SetRoom`; `IQualityState` for the probe and the `quality.tier` event |
+| 8 | The link is started when `link.enabled` is on **and** this phone has paired before (§5.6). On a first launch nothing is sent until onboarding asks | – |
 
-The three hooks:
+The hooks, in the order they run:
 
 | Step | Hook | Class | Work, in order |
 |---|---|---|---|
-| 8a, `LateUpdate` | `IStateSink.Send(in StateMessage state)` | `LinkPump` | 1. Compare with the previous frame's `State` and log the edges: `bump.level`, `tracking.lost`, `tracking.back`, `pose.jump`; on a change of `worldVer` or `spaceId`, the world hash and the `world` event. 2. Keep the second's highest `bumpLevel` and the cue count. 3. `LinkClient.SendState` (it rate-limits to `link.stateHz`, §2.10) |
-| 8b, after rendering | `IAfterFrameStep.AfterFrame(in FrameContext frame)` | `AtlasPerfProbe` | Sample this frame's timings and counters. Once per second: make the `Telemetry` row, queue its CSV line, send it (§5.2, §5.3) |
-| 8b | `IAfterFrameStep.AfterFrame(in FrameContext frame)` | `LinkPump` | 1. `LinkClient.Poll()`: applies `ParamSet`, hands commands to `OperatorBridge` and asset messages to `AssetClient`. 2. Sends the batched `param.set` event of this frame. 3. `AssetClient` tick: start or finish requests, at most one mesh hand-over. 4. Pairing tick. 5. HUD and link dot, every 0.5 s. 6. Hands queued log lines to the writer thread |
+| 8a | `IStateSink.Send(in StateMessage state)` | `LinkPump` | 1. Compare with the previous frame's `State` and log the edges: `bump.level`, `tracking.lost`, `tracking.back`, `pose.jump`; on a change of `worldVer` or `spaceId`, the world hash, `space.entered` and the `world` event. 2. Keep the second's highest `bumpLevel` and the cue count. 3. `LinkClient.SendStateCopy` (it thins to `link.stateHz`, §2.10); only role `phone` sends |
+| 8b | `IAfterFrameStep.AfterFrame(in FrameContext frame)` | `FlatTwinHud` | While `hud.map` is on, rebuild the map every 0.1 s (§5.9) |
+| 8b | the same | `AtlasPerfProbe` | Sample this frame's timings and counters. Once per second: take the link's share of the row from `LinkPump.TakeSecond`, make the `Telemetry` row, hand it to `LinkPump.SubmitRow` (§5.2, §5.3) |
+| 8b | the same | `LinkPump` | 1. While pairing, one connect attempt per second. 2. `LinkClient.Poll()`: applies `ParamSet`. 3. Hands queued commands to `IOperatorCommands`. 4. When ready: the manifest if `ManifestVersion` changed, the `RoomOutline` if not yet sent, up to 16 queued events and 16 waiting rows. 5. The `param` events of `Local` changes, at most once per second. 6. Pairing tick |
+| 8b | the same | `AtlasHud` | Show or hide the panel and the dot; rebuild their content every 0.5 s |
+| 8b | the same | the asset client's wiring | `AssetClient.AfterFrame`: start or finish requests, at most one generated mesh handed over; then `AssetsPlaced` and `AssetsPending` to the probe and `ForgeReachable` to pairing |
+| 6, 8b | `IUploadStep`, `IAfterFrameStep` | `OnDeviceMenu` | §5.7 |
+
+`LinkPump`, the link driver (`Telemetry/Link/LinkPump.cs`), is what other code talks to:
+
+```csharp
+public enum TelemetryMode : byte { Live = 0, PhoneCsv = 1, Hud = 2 }
+
+public sealed class LinkPump : Atlas.World.IStateSink, Atlas.World.IAfterFrameStep
+{
+    public const double RetrySeconds = 1.0;       // connect attempts while pairing
+    public const int RowBacklog = 600;            // telemetry rows kept while offline
+
+    public LinkPump(Atlas.Link.LinkClient client, EventLog events = null, LogFileWriter files = null);
+    public Atlas.Link.LinkClient Client { get; }
+    public Atlas.Link.LinkState State { get; }
+    public long NowUs { get; }
+    public bool IsStarted { get; }
+    public string Host { get; }
+    public int Port { get; }
+    public Atlas.World.IOperatorCommands Commands { get; set; }
+    public TelemetryMode Mode { get; set; }
+    public PairingController Pairing { get; set; }
+    public Atlas.Kernel.IWalkerKernel Kernel { get; set; }    // for the world hash; null: q 4, one metre per unit
+    public string WorldHashNow { get; }
+    public event System.Action<byte, byte> SpaceChanged;      // (previous, current); 255 is "no space"
+    public int BumpLevel { get; }
+    public int CommandsApplied { get; }
+    public int RowsWaiting { get; }
+
+    public void SetAddress(string host, int port);
+    public bool Start();
+    public bool Start(string host, int port);
+    public void Stop(string reason = "stop");
+    public void ReconnectNow();
+    public void Send(in Atlas.Link.StateMessage state);                // step 8a
+    public void AfterFrame(in Atlas.World.FrameContext frame);         // step 8b: Tick()
+    public void Tick();
+    public bool TryDequeueCommand(out Atlas.Link.OperatorCommand command);   // for a root that applies commands itself
+    public static string StateName(Atlas.Link.LinkState state);       // "offline", "resync", "connected", "degraded"
+    public void TakeSecond(ref PerfRowContext context);
+    public void SubmitRow(in Atlas.Link.TelemetryMessage row);
+    public void ResetSession();
+    public void SetRoom(Atlas.World.RoomModel room);                   // the RoomOutline and the world's room; null clears
+}
+```
 
 Rules:
 
@@ -2330,15 +2853,16 @@ Rules:
   0 B allocated per frame in steady state.
 - With no `IStateSink` call (no frame loop yet) nothing is sent. With `link.enabled` off nothing is sent either;
   the edge events of 8a, the probe, the HUD, the asset client's local work and the event file still run.
-- On `RoomChanged` (`ISpaceHost`), `LinkPump` fills a `RoomOutlineMessage` from the RoomModel (`Outline`,
-  `MaxWallHeight`, `FreeRect`, `Objects`: lane C §14.4) and sends it.
-- `OnApplicationPause` and `OnApplicationQuit` reach lane D through a small `MonoBehaviour` the installer puts
-  under `boot.Systems`. It does no per-frame work.
+- On `RoomChanged` (`ISpaceHost`), `LinkPump.SetRoom` fills a `RoomOutlineMessage` from the RoomModel
+  (`Outline`, the tallest wall, `FreeRect`, `Objects`: lane C §14.4), takes the room's id and geometry hash for
+  the world hash, and sends the outline.
+- Pause, resume and quit reach lane D through `TelemetryLifecycle`, a `MonoBehaviour` with no `Update`. On
+  pause the files are flushed; on resume an offline link tries at once; on quit `AtlasTelemetry.Shutdown`.
 
 ## 5.2 `AtlasPerfProbe`
 
 ```csharp
-// Files: ATLAS/Assets/Atlas/Telemetry/Perf/AtlasPerfProbe.cs, PerfRing.cs
+// Files: ATLAS/Assets/Atlas/Telemetry/Perf/AtlasPerfProbe.cs, PerfProbeCore.cs, PerfRing.cs
 using System;
 using Atlas.Link;
 using Atlas.World;
@@ -2346,37 +2870,60 @@ using Atlas.World;
 namespace Atlas.Telemetry
 {
     /// <summary>Frame timings and render counters: a 3,600-frame ring, one Telemetry row per second
-    /// (Master Plan sections 7.3.3, 8.8, 11.2).</summary>
-    public sealed class AtlasPerfProbe : IPerfSource, IAfterFrameStep
+    /// (Master Plan sections 7.3.3, 8.8, 11.2). Reads the engine; the arithmetic is in PerfProbeCore.</summary>
+    public sealed class AtlasPerfProbe : IPerfSource, IAfterFrameStep, IDisposable
     {
         public const int RingFrames = 3600;        // one minute at 60 fps
         public const int LadderFrames = 600;       // the window of IPerfSource
         public const int MinFramesForData = 120;
 
+        public AtlasPerfProbe(LinkPump pump = null);
+        public PerfProbeCore Core { get; }
+        public IQualityState Quality { get; set; } // found through AtlasServices when null
+        public byte AssetsPlaced { get; set; }     // written by the asset client's wiring
+        public byte AssetsPending { get; set; }
+        public ushort VisibleTiles { get; set; }   // written by the tile renderer; 0 until there is one
+
         // IPerfSource (lane A section 9.5): what the thermal ladder reads
         public bool HasData { get; }               // false until 120 frames have been sampled
         public float GpuP95Ms10s { get; }          // GPU frame time, p95 of the last 600 frames; refreshed once per second
         public float FrameP95Ms10s { get; }        // frame time, p95 of the last 600 frames
+        public int ThermalState { get; }           // what the ladder last published, 0..3
 
         public int SampleCount { get; }            // frames in the ring, 0 .. 3600
         public bool TryGetLastRow(out TelemetryMessage row);
         public event Action<TelemetryMessage> RowReady;     // once per second, at step 8b
 
         public void AfterFrame(in FrameContext frame);
-        public void ClearRing();                   // also done by itself when State.spaceId changes
+        public void ClearRing();                   // also done by itself when the space changes (LinkPump.SpaceChanged)
+        public void ResetSession();                // empties the ring and restarts the row counter
+        public void Dispose();
     }
 
-    /// <summary>The engine-free core: fixed arrays, percentiles on a scratch copy, no allocation after construction.</summary>
+    /// <summary>The engine-free arithmetic: AddFrame(timeSeconds, in PerfSample) returns true once per second;
+    /// BuildRow(timeUs, in PerfRowContext, out TelemetryMessage) makes the row and numbers it.</summary>
+    public sealed class PerfProbeCore { /* PerfSample, PerfRowContext beside it */ }
+
+    /// <summary>Fixed arrays, percentiles on a scratch copy, no allocation after construction.</summary>
     public sealed class PerfRing
     {
+        public const int ChannelFrame = 0;
+        public const int ChannelCpuMain = 1;
+        public const int ChannelCpuRender = 2;
+        public const int ChannelGpu = 3;
+        public const int ChannelCount = 4;
         public PerfRing(int capacity);
+        public int Capacity { get; }
         public int Count { get; }
         public void Clear();
         public void Add(float frameMs, float cpuMainMs, float cpuRenderMs, float gpuMs);
+        public float Recent(int channel, int age);
         /// <summary>Nearest rank over the last `window` samples (0 = all): the value at index ceil(q * n) - 1 of the
-        /// sorted samples. channel: 0 frame, 1 CPU main, 2 CPU render, 3 GPU. 0 when there is no sample.</summary>
+        /// sorted samples. 0 when there is no sample.</summary>
         public float Percentile(int channel, float q, int window = 0);
         public float ShareOver(float thresholdMs, int window = 0);     // percent of frame-time samples above it
+        public float Mean(int channel, int window = 0);
+        public float Max(int channel, int window = 0);
     }
 }
 ```
@@ -2388,16 +2935,16 @@ row from `IQualityState`. `Atlas.Telemetry` and `Atlas.Rendering` never referenc
 
 | Value | Source |
 |---|---|
-| Frame time, CPU main, CPU render, GPU | `FrameTimingManager.CaptureFrameTimings()`, then `GetLatestTimings(1, timings)`: `cpuFrameTime`, `cpuMainThreadFrameTime`, `cpuRenderThreadFrameTime`, `gpuFrameTime`, in ms. The values are a few frames late. When no timing is returned (Editor, feature off) the frame time is `FrameContext.DeltaTime` and the other three are 0 |
+| Frame time, CPU main, CPU render, GPU | When `FrameTimingManager.IsFeatureEnabled()`: `CaptureFrameTimings()`, then `GetLatestTimings(1, timings)`: `cpuFrameTime`, `cpuMainThreadFrameTime`, `cpuRenderThreadFrameTime`, `gpuFrameTime`, in ms. The values are a few frames late. When no timing is returned (Editor, feature off) the frame time is `FrameContext.DeltaTime` and the other three are 0 |
 | Draw calls, set-pass calls, triangles | `ProfilerRecorder.StartNew(ProfilerCategory.Render, name)` with `"Draw Calls Count"`, `"SetPass Calls Count"`, `"Triangles Count"`; `LastValue` |
 | Memory | `ProfilerCategory.Memory`, `"System Used Memory"`, in MiB |
 | Managed allocation | `ProfilerCategory.Memory`, `"GC Allocated In Frame"` |
 | Tier, thermal, render scale, MSAA | `IQualityState` (lane A §9.5) |
 | Tracking | `FrameContext.Tracking`, coded by lane C's `TrackingStates.ToWire` |
 | Battery | `SystemInfo.batteryLevel` × 100; 255 when it is negative |
-| RTT, loss, `State` rate | `LinkClient` |
-| Scene, space, highest bump level, cue count, Glued copies | The `State` of each frame, through `LinkPump`. The cue count rises with every rise of `bumpLevel` and with every rising edge of the cue flag that comes without one (an operator cue): lane C's `BumpCue.FireCount` |
-| Assets placed and pending | `AssetClient` |
+| RTT, loss, `State` rate | `LinkClient`, through `LinkPump.TakeSecond` |
+| Scene, space, highest bump level, cue count, Glued copies | The `State` of each frame, through `LinkPump`. The cue count rises with every rise of `bumpLevel` and with every rising edge of the cue flag that comes without one (an operator cue) |
+| Assets placed and pending | `AssetClient.PlacedCount`, `PendingCount`, written to the probe once per frame |
 | Visible tiles | 0 until lane B's tile renderer reports it |
 
 - Percentiles of the row (`p50`, `p95`, `p99`, `over17_2`, `over33_8`, the three `…P95`) are over the whole ring.
@@ -2429,11 +2976,19 @@ namespace Atlas.Link
 {
     public static class TelemetryCsv
     {
-        public const string Header = "t_us,seq,sceneId,…,assetsPending";       // the line above
+        public const string Header = TelemetryMessage.CsvHeader;               // the line above
+        public const int ColumnCount = 34;
+        public const int MaxRowLength = 384;
+        public static void AppendHeader(System.Text.StringBuilder sb);         // with its \n
         public static void AppendRow(System.Text.StringBuilder sb, in TelemetryMessage row);   // one line with its \n
+        public static void AppendInt(System.Text.StringBuilder sb, long value);
+        public static void AppendFixed3(System.Text.StringBuilder sb, float value);
     }
 }
 ```
+
+`Atlas.Telemetry.TelemetryCsv` (`Telemetry/Perf/TelemetryCsv.cs`) forwards to it and adds
+`AppendFixed(sb, value, decimals)` for the HUD.
 
 Example row:
 
@@ -2441,58 +2996,68 @@ Example row:
 1234567890,42,1,1,0,60.000,16.667,16.900,17.400,18.250,0.500,0.000,4.100,2.900,4.600,0.800,142,22,231,612,0,25,3,0,1,0,0,87,0,4,60,1,3,1
 ```
 
-- A row the phone could not send (OFFLINE) stays in a ring of 600 rows and is sent at RESYNC, so the Hub's CSV
-  has no hole for an outage of up to ten minutes (§7.3.3: "reliable, so the CSV has no holes").
-- §12.2, "CSV on the phone, uploaded over HTTP later": `PUT /logs/{session}/perf.csv` on the Hub (§3.3).
+- The probe numbers the rows (`seq` 0 at session start). The row goes out as numbered
+  (`LinkClient.SendTelemetryRow`), so the Hub recognises one it already holds.
+- A row the phone could not send stays in a ring of 600 rows and is sent after the next handshake, so the Hub's
+  CSV has no hole for an outage of up to ten minutes (§7.3.3: "reliable, so the CSV has no holes").
+- §12.2, "CSV on the phone, uploaded over HTTP later": `PUT /logs/{session}/perf.csv` on the Hub (§3.3). The
+  app does not make that request itself in this build; the file is taken off the phone (C.5) and uploaded
+  from the Station.
 
 ## 5.4 HUD and link dot
 
 Both hang under `boot.Hud` (lane A §8.1), on its layer (`AtlasHud`), so they are drawn in both eyes after the
-world and are not faded with it. Text is TextMeshPro (§8.1). Together at most 4 draw calls per frame of the 20
-the layer may use (lane A §12.1).
+world and are not faded with it. Text is TextMeshPro (§8.1), with the project's default TMP font asset; a
+build without the TMP resources has no HUD and runs on. Together at most 4 draw calls per frame of the 20 the
+layer may use (lane A §12.1).
 
 | Item | Rule |
 |---|---|
-| HUD panel | One TextMeshPro object, 1.0 m ahead, 14° below the view axis, 0.45 m wide, five lines. Shown while `hud.visible` is on, or `telemetry.mode` is `hud` |
-| Refresh | Every 0.5 s, from the last `Telemetry` row, into one cached `StringBuilder`, then `TMP_Text.SetText(StringBuilder)`: no allocation. Cost under 0.2 ms (`P1-D04`) |
+| HUD panel | One TextMeshPro object, 1.0 m ahead, 14° below the view axis, 0.45 m wide, five lines of 0.02 m. Shown while `hud.visible` is on, or `telemetry.mode` is `hud` |
+| Refresh | Every 0.5 s, from the last `Telemetry` row, into one cached `StringBuilder` (`HudText.Build`, engine-free), then `TMP_Text.SetText(StringBuilder)`: no allocation. Cost under 0.2 ms (`P1-D04`) |
 | Line 1 | `60 fps  p95 16.9  tier 0  therm 0` |
 | Line 2 | `cpu 4.1 / 2.9  gpu 4.6 ms` |
 | Line 3 | `draws 142  sp 22  tris 231k` |
-| Line 4 | `mem 612 MB  bat 87  gc 0` |
-| Line 5 | `S1  link 3 ms 0.0%  assets 3/1` (space; RTT and loss, or `offline`; placed / pending) |
-| "Session over" | On tier `Critical` the panel shows that line whatever `hud.visible` says (lane A §9.5) |
-| Link dot | The character `•`, TextMeshPro, 1.0 m ahead, 22° below the view axis, centred. Green `Connected`, amber `Degraded` or `Resync`, grey `Offline` (the colours of lane A's cells `LinkOk`, `LinkDegraded`, `LinkOff`). Refreshed every 0.5 s. **Hidden while `Connected` under `demoLock`** (§7.2) and while `link.enabled` is off |
+| Line 4 | `mem 612 MB  bat 87  gc 0` (`bat -` when unknown) |
+| Line 5 | `S1  link 3 ms 0.0%  bump 0  assets 3/1` (space; RTT and loss, prefixed `resync` or `degraded`, or `offline`; the Bump Guard level; placed / pending) |
+| "Session over" | On tier `Critical` the panel is shown whatever `hud.visible` says, with a sixth line `Session over` (lane A §9.5) |
+| Link dot | The character `•`, TextMeshPro, 1.0 m ahead, 22° below the view axis, centred. Green `Connected`, amber `Degraded` or `Resync`, grey `Offline` (three colours fixed in `AtlasHud`). Refreshed every 0.5 s. **Hidden while `Connected` under `demoLock`** (§7.2) and while `link.enabled` is off |
 | In the hand | No HUD and no dot: the head-locked layer is not drawn in `DisplayMode.Hand`. The link panel of the onboarding screen is §5.6 |
 | Mini-map | §5.9, while `hud.map` is on |
 
 ## 5.5 Session, event log and files on the phone
 
-**Session.** A session id is made at app start and by `AtlasTelemetry.BeginSession()`: `yyyyMMddTHHmmssZ-xxxx`,
-UTC time and four random hexadecimal digits, for example `20261004T153012Z-a3f9`. It names the phone's files
-and, through `Hello`, the Hub's folder. `BeginSession` closes the open files, opens new ones, restarts `seq` of
-`Telemetry` at 0 and sends `Hello` again.
+**Session.** A session id is made at app start and by `AtlasTelemetry.BeginSession()` (`SessionId.New()`):
+`yyyyMMddTHHmmssZ-xxxx`, UTC time and four random hexadecimal digits, for example `20261004T153012Z-a3f9`. It
+names the phone's files and, through `Hello`, the Hub's folder. `BeginSession` opens new files (lines still
+waiting go to the old ones first), empties the probe's ring, restarts `seq` of `Telemetry` at 0, drops the
+rows still waiting for the link, says `Hello` again and logs `session`.
 
-**Files** (README F8, which puts both logs under `logs/`; §7.3.3 wrote `perf/`):
+**Files** (README F8: both logs under `logs/`).
+(differs from plan §7.3.3: the plan puts the CSV in `persistentDataPath/perf/`; the code follows README F8 and
+keeps one folder.)
 
 | File | Content | Written |
 |---|---|---|
-| `<persistentDataPath>/logs/perf_<session>.csv` | §5.3 | One line per second |
+| `<persistentDataPath>/logs/perf_<session>.csv` | §5.3, header first | One line per second |
 | `<persistentDataPath>/logs/events_<session>.jsonl` | One event per line: the `Event` body of §2.6 | When an event is logged |
 | `<persistentDataPath>/logs/phone_<session>.log` | `<t_us> <level> <msg>`: the lines that go out as `Log` | When a warning or an error is raised |
 | `<persistentDataPath>/assets/<sha256>.glb` | The GLB cache (§4.3) | By the asset client's worker |
 
-- One writer thread owns the three log files. The main thread hands it finished lines through a queue; the
-  thread appends and flushes once per second, and at pause and quit. A lost link loses nothing (§7.3.3).
+- `LogFileWriter` (`Telemetry/Files/LogFileWriter.cs`) owns the three log files (`Perf`, `Events`, `Phone`).
+  The main thread hands it finished lines, which are copied into a preallocated buffer; one background thread
+  appends and flushes once per second, and at pause and quit. A lost link loses nothing (§7.3.3). More than a
+  megabyte waiting is dropped and counted (`Dropped`); a failed write is counted (`Errors`) and never takes
+  the app down.
 - `Application.persistentDataPath` is read once on the main thread and cached (it is not thread-safe, U-net §6).
 - `UIFileSharingEnabled` makes the folder readable from the Mac (C.5).
 - No camera frame and no crop is ever written (rule 10).
-- §13.5: delete-by-id removes the three log files of a session; `AssetClient.ForgetRoom` removes a room's GLBs.
+- §13.5: `LogFileWriter.DeleteSession(sessionId)` removes the three log files of a session;
+  `AssetClient.ForgetRoom` removes a room's GLBs.
 
-**Events.** §2.6 has the format, the names and `IEventLog`. Where lane C's events come from: lane D's code in
-`Atlas.App` (`App/Menu/EventTaps.cs`, created by `MenuInstaller`) subscribes to `IScanSession.StateChanged`,
-`IRoomContent.Built` and `ObjectChanged`, and `IAtlasInput.ActionFired`, and logs `scan.state`, `room.ready`,
-`object.mesh` and `input.action` (lane C §14.4). The tracking, jump and bump events are taken from `State` at
-step 8a (§5.1), so they need no reference to `Atlas.Safety`.
+**Events.** §2.6 has the format, the names and `IEventLog`. The tracking, jump and bump events are taken from
+`State` at step 8a (§5.1), so they need no reference to `Atlas.Safety`. Lane C's and lane A's own events are
+logged by their code through `IEventLog`; lane D has no tap on the scan session, the room content or the input.
 
 ## 5.6 Pairing
 
@@ -2503,23 +3068,52 @@ scheme `atlas` (written to Info.plist by lane A's post-build step, C.5).
 |---|---|
 | QR content | Exactly `atlas://<ip>:9050`, for example `atlas://192.168.0.10:9050`. `<ip>` is a dotted IPv4 address |
 | Deep link | At start `Application.absoluteURL`, and afterwards the event `Application.deepLinkActivated` (U-net §6): both go to `TrySetAddress` |
-| Accepted text | `atlas://<ip>[:port]`, `<ip>:<port>` or `<ip>`. Port 1 … 65535, default 9050. Anything after the port is ignored. A host name is refused: LiteNetLib would resolve it on the calling thread (U-net §3.3). Parsed by lane D's own code, not by `System.Uri` |
-| Stored | `PlayerPrefs` key **`atlas.hub.address`** = `"<ip>:<port>"`; key `atlas.hub.paired` = 1 once the link has been `Connected`. `PlayerPrefs.Save()` after each write |
-| Default | With no stored address: `192.168.0.10:9050`, the Station's reserved address (C.7). The third number is the router's: open for the lead |
+| Accepted text | `atlas://<ip>[:port]`, `<ip>:<port>` or `<ip>`, with white space round it ignored. Port 1 … 65535, default 9050. Anything after the port is ignored. A host name is refused: LiteNetLib would resolve it on the calling thread (U-net §3.3). Parsed by `PairingAddress.TryParse`, not by `System.Uri` |
+| Stored | `IPairingStore` (`PlayerPrefs` on the phone) key **`atlas.hub.address`** = `"<ip>:<port>"`; key `atlas.hub.paired` = 1 once the link has been `Connected`. `Save()` after each write |
+| Default | With no stored address: `192.168.0.10:9050`, the Station's reserved address (C.7). The third number is the router's: open for the lead. A default address that connected is stored |
 | Fallback | A typed address on the onboarding screen ("Change IP") |
 | Local Network prompt | iOS raises it at the first UDP send to a local address. There is no API to ask for it or to read the answer. `BeginPairing()` makes that send: in the foreground, phone in hand, at onboarding step 1 (lane C §10.4). `NSLocalNetworkUsageDescription` is in the Info.plist (C.5) |
-| Retry | While pairing: one connect attempt every 1 s (C.7, R4 §3.3), because iOS drops the request while the prompt is up. After 15 s without a connection the screen shows "Settings › Privacy & Security › Local Network › ATLAS" and "Continue without Station". After 60 s the attempts stop |
+| Retry | While the phase is `Trying` or `Hint`, `LinkPump` makes one connect attempt every 1 s (C.7, R4 §3.3), because iOS drops the request while the prompt is up. After 15 s without a connection the phase is `Hint`: the screen shows "Settings › Privacy & Security › Local Network › ATLAS" and "Continue without Station". After 60 s it is `TimedOut` and the one-second attempts stop |
 | Afterwards | The back-off of §2.8. On a later launch the link starts at boot, with no prompt (test L1) |
 | After a delete and reinstall | The permission and the stored address are gone: pair again (C.7) |
 
 ```csharp
-// File: ATLAS/Assets/Atlas/Telemetry/Pairing/PairingController.cs
+// Files: ATLAS/Assets/Atlas/Telemetry/Pairing/PairingController.cs, PairingAddress.cs, PlayerPrefsPairingStore.cs
 using System;
 using Atlas.Link;
 
 namespace Atlas.Telemetry
 {
     public enum PairingPhase : byte { Idle = 0, Trying = 1, Connected = 2, Hint = 3, TimedOut = 4, Skipped = 5 }
+
+    /// <summary>The link as the in-hand link panel shows it.</summary>
+    public struct LinkStatus
+    {
+        public LinkState State;
+        public string Address;                         // "<ip>:<port>" of the Station
+        public int RttMs;
+        public int LossPermille;
+        public string LastError;                       // the reason of the Hub's last Bye, or null
+    }
+
+    public interface IPairingStore
+    {
+        string GetString(string key, string fallback);
+        void SetString(string key, string value);
+        int GetInt(string key, int fallback);
+        void SetInt(string key, int value);
+        bool HasKey(string key);
+        void Save();
+    }
+    // PlayerPrefsPairingStore on the phone; MemoryPairingStore for tests.
+
+    public static class PairingAddress
+    {
+        public const string Scheme = "atlas://";
+        public const int DefaultPort = LinkProtocol.DefaultPort;
+        public static bool TryParse(string text, out string host, out int port);
+        public static string Format(string host, int port);
+    }
 
     public sealed class PairingController
     {
@@ -2528,12 +3122,17 @@ namespace Atlas.Telemetry
         public const string DefaultAddress = "192.168.0.10";
         public const float RetrySeconds = 1f, HintAfterSeconds = 15f, GiveUpAfterSeconds = 60f;
 
+        public PairingController(IPairingStore store, LinkPump pump = null);
         public string Address { get; }                 // "192.168.0.10:9050"
+        public string Host { get; }
+        public int Port { get; }
         public bool HasStoredAddress { get; }
         public bool WasPaired { get; }
         public PairingPhase Phase { get; }
         public float SecondsTrying { get; }
+        public bool ForgeReachable { get; set; }       // written by the asset client
         public event Action<PairingPhase> PhaseChanged;
+        public event Action<string> AddressChanged;    // a new address was stored
 
         /// <summary>True for the three accepted forms; host is a dotted IPv4 address.</summary>
         public static bool TryParse(string text, out string host, out int port);
@@ -2543,6 +3142,7 @@ namespace Atlas.Telemetry
         public void BeginPairing();
         /// <summary>"Continue without Station": stops the one-second attempts. The link keeps its normal back-off.</summary>
         public void Skip();
+        public void Tick(long nowUs, LinkState link);  // called by LinkPump once per frame
         /// <summary>For the link panel: state, address, RTT, loss, last error, and whether the Forge answers.</summary>
         public void GetStatus(out LinkStatus link, out bool forgeReachable);
     }
@@ -2551,150 +3151,225 @@ namespace Atlas.Telemetry
 
 Onboarding (lane C's files) draws the pairing step and the in-hand link panel from this class: a state dot
 (green, amber, grey), the Hub address, RTT, loss, Forge reachability, and the buttons "Reconnect"
-(`LinkClient.Reconnect`) and "Change IP" (`TrySetAddress`) (§7.2). Lane D draws nothing in the hand.
+(`AtlasTelemetry.Pump.ReconnectNow()`) and "Change IP" (`TrySetAddress`) (§7.2). Lane D draws nothing in the
+hand.
 
 ## 5.7 The on-device menu
 
-`Atlas.App.Menu` (lane D's files in `Atlas.App`; `P1-D13`). An in-headset list of the kill switches, driven by
-the same registry. It needs no link: every change is `registry.Set(handle, value, ParamSource.Menu)` and is
-written to the phone's event log as `param.set` with `src` `menu` (tests L22, G6).
+`Atlas.App.Menu` (lane D's files in `Atlas.App`; `P1-D13`). An in-headset menu of four pages, driven by the
+same registry. It needs no link: every change is `registry.Set(entry, value, ParamSource.Local)`, which is
+clamped there, written to the phone's event log (`param.set` with `src` `menu`, then the `param` echo of
+§2.6) and sent to the Station when the link is up (tests L22, G6).
 
 ```csharp
-// Files: ATLAS/Assets/Atlas/App/Menu/MenuInstaller.cs, OnDeviceMenu.cs, EventTaps.cs, FlatTwinPanel.cs
+// Files: ATLAS/Assets/Atlas/App/Menu/MenuInstaller.cs, OnDeviceMenu.cs, MenuModel.cs, MenuLayout.cs, MenuText.cs, MenuView.cs
 namespace Atlas.App.Menu
 {
     public static class MenuInstaller
     {
-        /// <summary>Step 19 of the creation order (lane A section 8.2). Not called in the Spectator.</summary>
-        public static void Install(Atlas.World.AtlasBootContext boot);
+        // [RuntimeInitializeOnLoadMethod(BeforeSceneLoad)] puts Create into AppHooks.Menu; the composition root
+        // creates and installs the menu at row 19 of its creation order. The Spectator never runs the hook.
+        public static IAppMenu Create();
     }
 
-    /// <summary>The panel. Ticked at step 8b as an IAfterFrameStep, after IAtlasInput.Tick of the same frame.</summary>
-    public sealed class OnDeviceMenu : Atlas.World.IAfterFrameStep
+    /// <summary>The thin adapter: reads the input service, feeds the model, places the panel and its gaze targets.</summary>
+    public sealed class OnDeviceMenu : IAppMenu, Atlas.World.IAfterFrameStep, Atlas.World.IUploadStep, IMenuActions
     {
+        public const float StatusSeconds = 0.5f;
         public bool IsOpen { get; }
+        public MenuModel Model { get; }                // null before Install
+        public event System.Action RescanRequested;    // "Rescan the room", after the menu has closed
+        public void Install(AtlasApp app);
+        public void Shutdown();
         public void Open();
+        public void OpenOnSpaces();                    // the space-menu action
         public void Close();
-        public void AfterFrame(in Atlas.World.FrameContext frame);
+        public void AfterFrame(in Atlas.World.FrameContext frame);   // step 8b: input
+        public void Upload(in Atlas.World.FrameContext frame);       // step 6: where the menu stands
+        public void Recentre();
+        public void Rescan();
     }
-}
 
-// File: ATLAS/Assets/Atlas/Telemetry/Menu/MenuModel.cs
-namespace Atlas.Telemetry
-{
-    /// <summary>The engine-free core of the menu: rows, selection, stepping, pending values. Tested headless.</summary>
+    public enum MenuPage : byte { Spaces = 0, Quality = 1, Parameters = 2, Session = 3 }
+    public enum MenuRowKind : byte { Page = 0, Heading = 1, Info = 2, Param = 3, Space = 4, Command = 5 }
+    public enum MenuCommand : byte { None = 0, ReturnHome = 1, ResetSwitches = 2, Recentre = 3, Rescan = 4, Close = 5 }
+    public interface IMenuActions { void Recentre(); void Rescan(); }
+
+    /// <summary>The engine-free core of the menu: pages, rows, focus, step sizes, pending values. Tested headless.</summary>
     public sealed class MenuModel
     {
-        public MenuModel(Atlas.Link.ParamRegistry registry);
-        public int RowCount { get; }                   // kill switches + "Reset all" + "Close"
-        public int Selected { get; }
-        public void Refresh();                         // re-reads the registry when ManifestVersion changed
-        public void Move(int delta);                   // selection up or down, clamped
-        public void Select(int row);                   // a gaze dwell on a row
-        public void Step(int direction);               // -1 or +1 on the selected row
-        public void Confirm();                         // applies a pending value, or runs "Reset all" / "Close"
+        public const int VisibleRows = 8;
+        public const int PageCount = 4;
+        public const float FloatStepFraction = 1f / 20f;
+        public const string EventMenu = "menu";
+        public const string EventParamSet = "param.set";
+        public static readonly string[] KillSwitchIds;     // the 21 names of 1.5, in order
+
+        public MenuModel(Atlas.Link.ParamRegistry registry, Atlas.World.ISpaceHost spaces = null, IMenuActions actions = null);
+        public Atlas.World.IEventLog Events { get; set; }
+        public MenuPage Page { get; }
+        public int RowCount { get; }
+        public MenuRow Row(int index);
+        public int Selected { get; }                   // the focused row
+        public int Top { get; }                        // the first visible row
+        public int Revision { get; }                   // goes up whenever what the view shows may have changed
         public bool CloseRequested { get; }
+        public bool HasPending { get; }
+        public float PendingValue { get; }
+        public event System.Action<Atlas.World.SpaceId> SpaceRequested;
+
+        public void NoteOpened();
+        public void NoteClosed();
+        public void Sync();                            // once per frame while open: rebuilds when the manifest or the space changed
+        public void SetStatus(in MenuStatus status);
+        public void Rebuild();
+        public void SetPage(MenuPage page);
+        public void Move(int delta);                   // focus up or down by that many focusable rows, stopping at the ends
+        public void Select(int row);                   // a gaze dwell on a row
+        public static float StepSize(Atlas.Link.ParamEntry entry);
+        public static float Stepped(Atlas.Link.ParamEntry entry, float from, int direction);
+        public void Step(int direction);               // -1 or +1 on the focused row
+        public void Confirm();                         // applies a pending value, toggles a bool, runs a space or command row
+        public int ResetSwitches();                    // every kill switch but space.id back to its default
     }
 }
 ```
 
 | Topic | Rule |
 |---|---|
-| Lists | Every parameter flagged `KillSwitch`, in index order: the 21 of 1.5, which are the parameters of §12.2 and §12.4. Then "Reset all to defaults" and "Close". A header shows link state, Hub address, session id, tier and thermal state |
-| Row | Id, value (the label for a `Bool` or `Enum`, the number with its unit otherwise), and a mark when it differs from the default. An inactive group's rows are greyed but can be changed |
-| A step | `Float`: ± `step`, or ± 1/20 of the range when `step` is 0, or the next entry of `choices`. `Int`: ± 1, or the next entry of `choices`. `Bool`: toggles. `Enum`: the next option, no wrap |
-| Applying | At once, except a parameter flagged `OnRelease` (`space.id`, `glued.mode`, …): its row shows the pending value and `Confirm` applies it. That is the menu's "release" |
-| Input | The service `IAtlasInput`, taken once from `AtlasServices` (lane C §13.3) |
-| Open and close | Lane C's action `AtlasAction.ParamMenu`: the gamepad chord `start` while `select` is held, F1 in the Editor (lane C §13.1). `AtlasAction.Back` closes. On open `IAtlasInput.PushContext(InputContext.Menu)`, on close `PopContext` |
-| Gamepad | `NavUp`, `NavDown` move the selection; `NavLeft`, `NavRight` step the row; `Confirm` applies; `Back` closes. Read with `IAtlasInput.Pressed` |
-| Gaze dwell (rule 5) | While closed: one target for `ParamMenu`, head-locked at (−0.55, −0.40, 1.0) m, radius 0.05 m (proposed). While open: each visible row is a target that selects it (`NavDown` with the row in `Tag`); the selected row has a "−" and a "+" target (`NavLeft`, `NavRight`, `GazeMode.Repeat`); one target each for `Confirm` and `Back`. All registered with `IAtlasInput.RegisterGazeTarget`, `GazeSpace.Head`, context `Menu` |
-| Panel | Under `boot.Hud`, 1.2 m ahead, 0.7 × 0.5 m: one background quad (`Atlas/Surface`, pooled material, fog and fade weights 0) and two TextMeshPro objects. Eight rows visible; the list scrolls with the selection. At most 6 draw calls per frame |
+| Pages | Row 0 of every page is the page row; stepping it changes the page. **Spaces**: one row per available space, then "Return to Home". **Quality**: the tier in force, then every kill switch of 1.5 that is declared, in that order, then "Reset switches to defaults". **Parameters**: every parameter under its group heading, the entered space's group first. **Session**: "Recentre", "Rescan the room", link state and RTT, Station address, session id, room id, version, "Close the menu" |
+| Row | Name and value (the option's name for an `Enum`, the number otherwise). Headings and status lines are skipped by the focus. An inactive group is marked "(inactive)" in its heading; its rows can be changed |
+| A step | `Float`: ± 1/20 of the range, on the grid that starts at `min`. `Int`: ± 1. `Bool`: toggles. `Enum`: the next option, no wrap. A space or command row runs on "+" |
+| Applying | At once, except a parameter with `OnRelease` (`space.id`, `glued.mode`, …): its row shows the pending value and `Confirm` applies it. That is the menu's "release". `Confirm` on a `Bool` toggles it |
+| Reset | "Reset switches to defaults" resets the kill switches except `space.id`, which would walk the wearer out of the space they stand in. It does not touch the rest of the registry |
+| Input | The service `IAtlasInput`, taken from the app at `Install` (lane C §13.3) |
+| Open and close | Lane C's action `AtlasAction.ParamMenu`: the gamepad chord `start` while `select` is held, F1 in the Editor (lane C §13.1). `ParamMenu` again or `AtlasAction.Back` closes. On open `IAtlasInput.PushContext(InputContext.Menu)`, on close `PopContext`. A space switch that is accepted, "Return to Home" and "Rescan" close the menu; so does leaving `DisplayMode.Headset` |
+| Gamepad | `NavUp`, `NavDown` move the focus; `NavLeft`, `NavRight` step the row; `Confirm` applies; `Back` closes. Read with `IAtlasInput.Pressed` |
+| Gaze dwell (rule 5) | While a space runs: one chip for `ParamMenu`, down and to the left at (−0.55, −0.40, 1.0) m in the menu frame, radius 0.06 m (proposed). While open: each visible focusable row is a target that selects it (`NavDown` with the row's slot + 1 in `Tag`); the focused row has a "−" and a "+" target (`NavLeft`, `NavRight`, `GazeMode.Repeat`); one chip each for `Confirm` ("apply") and `Back` ("close"). All registered with `IAtlasInput.RegisterGazeTarget` in the room frame, context `Menu`, and moved with the head's position |
+| Where it stands | The gaze ray is the head's forward axis, so a panel that turned with the head could never be looked at off its centre. The menu follows the head's **position** and keeps its own heading, level (`MenuFrame`). Closed: the heading trails the walker's at 90°/s, never by more than 40°, and holds still while they look down past −8° or the gaze is on the chip. Open: the heading is fixed, and is brought round when the walker has turned 75° away |
+| Panel | Under `boot.Hud`, 1.2 m ahead, 0.70 × 0.50 m: one mesh of flat quads (`Atlas/Surface`, pooled material) for the panel, the focused row and the chips, and text objects. Eight rows visible; the list scrolls with the focus. Six draw calls while open, two while closed. Text is legacy `TextMesh` with the built-in font, not TextMeshPro (open item 6) |
 | The world | Keeps running. Bump Guard and its cue are unaffected and are drawn over the menu's layer order by lane C |
-| Logging | `menu` event on open and close; `param.set` per change |
-| Cost | Closed: one `Pressed` read per frame. Open: text is rebuilt only when something changed |
+| Logging | `menu` event `{state}` on open and close; `param.set` `{name, value, src: "menu"}` per change |
+| Cost | Closed: one action read at step 8b, one target and one transform moved at step 6. Open: text is rebuilt only when `Revision` moved; the status lines are read every 0.5 s |
 
 ## 5.8 The Spectator
 
-The same Unity project built for Windows with `ATLAS_SPECTATOR`, or the Editor playing `PC_Spectator`. It joins
-the Hub as role `spectator`, receives the active source's `State`, and redraws the walker's view with one mono
-camera. No video is sent (§7.3.1). It never integrates motion and never guesses a world.
+The same Unity project built for Windows with `ATLAS_SPECTATOR`, or the Editor playing `PC_Spectator` (or any
+scene with a root object named `AtlasSpectatorBoot`). It joins the Hub as role `spectator`, receives the
+phone's `State`, and redraws the walker's view with one mono camera. No video is sent (§7.3.1). It never
+integrates motion and never guesses a world. The Hub's address is `-atlasHub <ip>[:port]` on the command
+line, default `127.0.0.1:9050`.
 
 **What it consumes.**
 
 | From the link | Used for |
 |---|---|
-| `Welcome` | Session id, `forgeUrl`, the source's `roomId` and `worldHash` |
+| `Welcome` | `forgeUrl`, the phone's `roomId` and `worldHash` |
 | `State`, the newest only | Head pose, space, tile id, sheet, tile-local transform, `p[]`, flags, bump level, `worldVer` |
-| `ParamManifest`, `param.set` events | Its own registry: each value is set by id with `ParamSource.Link`; `active` sets the group state |
-| `world` event | The world hash to compare with its own |
-| `RoomOutline` | The outline panel beside the mirror |
-| `object.mesh` and `asset` events, `JobStatus`, `AssetReady` | The same furniture: the Spectator's `AssetClient` downloads the same GLBs and places the same built-in meshes. It uploads nothing and sends no `AssetAck` |
+| `ParamManifest`, `param` events | Its own registry: each value it knows by name is set with `ParamSource.Remote`; `active` sets the group state. Names that start with `link.` or `telemetry.` are the phone's own and are left alone |
+| `world` event | Room id, world hash and geometry hash to compare with its own |
+| `RoomOutline` | The floor plan while no RoomModel is held, and one of the three things the fetched room is checked against |
+| `asset` events, `JobStatus`, `AssetReady` | The same furniture (`SpectatorAssetsCore`): the generated meshes by their hash, the built-in ones where the phone placed them. It uploads nothing and sends no `AssetAck` |
 
-From the Forge: `GET /rooms/{roomId}` for the RoomModel, `GET /assets/{sha256}.glb`.
+From the Forge: `GET /rooms/{roomId}` for the RoomModel (a fixture room is loaded from `Resources` instead),
+`GET /jobs?room=` and `GET /assets/{sha256}.glb`.
 
-**How it is put together.** `AtlasBootstrap` runs with `AtlasBootContext.IsSpectator` (lane A §8.2). The steps
-it skips there, and what stands in their place:
+**How it is put together.** `Atlas.Spectator` may not be referenced by `Atlas.App`, and `Atlas.App` does not
+boot in a Station build, so the Spectator composes its own root
+(differs from lane A §8.2, which described the same bootstrap running with `IsSpectator`):
+`SpectatorBoot`, a `[RuntimeInitializeOnLoadMethod(AfterSceneLoad)]` method, calls
+`SpectatorApp.Create(options)`.
 
-| Skipped (lane A §8.2) | In the Spectator |
+| The phone has | The Spectator has |
 |---|---|
-| 5, 6: stereo rig, eye textures, lens blit | `Atlas.Spectator.SpectatorView`: one `Camera`, vertical field of view 60° (proposed), near 0.05 m, far 60 m, 4× MSAA, no lens blit. `LeftEyePosition` and `RightEyePosition` both equal the head position |
-| 10: input | Keyboard shortcuts of `SpectatorView` only |
-| 11: AR session, pose pipeline, scan | `SpectatorSense : ISenseStep` in `Atlas.Telemetry` (step 1): fills `RawHeadPosition`, `RawHeadRotation` and `Tracking` from the newest `State`. No pose filter: the geometry pose is the raw pose |
-| 12: Bump Guard | Nothing. A coloured bar shows `State.bumpLevel` |
-| 17: `CommandRouter` | Nothing. A spectator receives no command |
-| 19: menu, onboarding | `SpectatorView`'s panels |
+| Stereo rig, eye textures, lens blit | `Atlas.Spectator.SpectatorView`: a mirror `Camera` on the left 72 % of the window, vertical field of view 60° (proposed), near 0.05 m, far 60 m, MSAA allowed, no lens blit; and a second camera for the panels beside it, on layer `AtlasSpectator` (lane A §12.1). `LeftEyePosition` and `RightEyePosition` both equal the head position |
+| `AtlasFrameLoop` | `SpectatorLoop : IFrameLoop` (`Telemetry/Map/SpectatorLoop.cs`), run by `SpectatorView`: the same steps, with the `State` in place of the sensors and of the kernel's integration. Guard, pose-filter and state-sink hooks are accepted and unused |
+| AR session, pose pipeline, scan | `SpectatorSense : ISenseStep`: fills `RawHeadPosition`, `RawHeadRotation`, `Tracking`, `Tier` and the pose-jump flag from the newest `State`. No pose filter: the geometry pose is the raw pose |
+| SpaceLab | `SpectatorHost : ISpaceHost`: enters the space `SpectatorCore` names, with no fade and no scene load; modules come from `SpaceRegistry` |
+| Bump Guard | Nothing. A coloured bar shows `State.bumpLevel` |
+| `CommandRouter`, input, menu, onboarding | Nothing. A spectator receives no command |
+| `AssetClient` | `SpectatorFurniture` (`Atlas.Spectator`) round `SpectatorAssetsCore` |
+| `TelemetryInstaller.Install(boot)` | The same call, with `boot.IsSpectator`: link client of role `spectator`, event log with no files, probe, no mini-map of its own. Pairing is taken off the link driver; the link dials the address of the options |
 
-`Atlas.Spectator` may not be referenced by `Atlas.App`, so it installs itself: a
-`[RuntimeInitializeOnLoadMethod(AfterSceneLoad)]` method subscribes to `AtlasServices.Booted` and then creates
-`SpectatorView`. It adds no frame hook; the one hook the Spectator needs is added by lane D's installer.
+`SpectatorCore` (`Telemetry/Map/SpectatorCore.cs`, engine-free) maps what the link delivers to what is shown:
+`Attach(LinkClient)`, `OnWelcome`, `OnState`, `OnManifest`, `OnEvent`, `OnRoomOutline`, `Step(double now, bool
+linkUp)`, and `Banner`, `State`, `Room`, `Outline`, `Trail`, `WorldVerified`, `StateHz`.
 
 **Each frame.**
 
 1. `SpectatorSense` takes the newest `State`. With none yet, it leaves the frame at the origin.
-2. Room: when `roomId` is new, `GET /rooms/{roomId}` → `RoomModelJson.TryRead` → `ISpaceHost.SetRoom(room)`;
-   room content builds on `RoomChanged`, as on the phone (lane C §14.2).
-3. World check: its own `WorldHash.Compute(…)` against the hash of the last `world` event. **On a mismatch it
-   shows "world mismatch", enters no space, and fetches the room again every 2 s** (§7.3.1, test L8).
+2. Room: when the phone names a room the Spectator does not hold, `GET /rooms/{roomId}` →
+   `RoomModelJson.TryRead` → `ISpaceHost.SetRoom(room)`; room content builds on `RoomChanged`, as on the phone
+   (lane C §14.2).
+3. World check: the fetched room must agree with everything the phone has said about its world: the geometry
+   hash and the world hash (`WorldHash.Compute(…)` with its own kernel) of the last `world` event or
+   `Welcome`, and the floor of the `RoomOutline` to 2 mm. **On a mismatch it shows "world mismatch", enters
+   no space, and fetches the room again every 2 s** (§7.3.1, test L8).
 4. Space: when `State.spaceId` differs from `ISpaceHost.Current`, `RequestSwitch`. With `spaceId` 255 it shows
-   "no space" and the room outline only.
-5. Module: if the entered module implements `ISpaceStateReader`, `ReadState(in state)` (lane A §2). For a curved
-   space (lane B), `IFrameLoop.ResetWalker` with the pose built from `tileId` and `xform`, so that
-   `FrameContext.Walker` is the phone's pose and nothing is integrated. A flat space needs no walker reset.
-6. The frame loop then runs as on the phone: kernel step, `Tick`, upload, render. `SpectatorView` puts its
-   camera at the frame's raw head pose in `LateUpdate`.
+   "no space" and the room only; a space that is not in the build shows "space not in this build".
+5. Module: if the entered module implements `ISpaceStateReader`, `ReadState(in state)` (lane A §2). The walker
+   is placed from the `State` on every frame (`tileId` and `xform`) and the kernel is never stepped, so
+   nothing is integrated.
+6. The frame then runs as on the phone: `Tick`, upload, render. `SpectatorView` puts its camera at the
+   frame's raw head pose in `LateUpdate`, and polls the link after the frame is rendered.
 
 No interpolation and no prediction in Phase 1 **(decided here)**: the picture is the newest `State`. Target: the
 mirror lags the phone by at most 150 ms (test L5); tile ids equal on 100 % of samples (L7).
 
-**Beside the mirror** (§7.3.1): the flat-twin mini-map (§5.9); the room outline from `RoomOutline` with the
-walker's physical position and the object boxes; the Bump Guard level as a coloured bar (0 clear, 1 warn,
-2 strong, 3 tracking lost); link state, `State` rate and latency; the banners "world mismatch", "no phone" and
-"crops kept". The panels are drawn by cameras on layer `AtlasSpectator` (lane A §12.1).
+**Beside the mirror** (§7.3.1): the flat-twin map (§5.9), which draws the room from the RoomModel or, before
+one is held, from the `RoomOutline`, with the walker's physical position and the object boxes; the Bump Guard
+level as a coloured bar (0 clear, 1 warn, 2 strong, 3 tracking lost); link state, `State` rate and room; and
+one banner (`SpectatorBanner`): "no hub", "no phone" (no `State` for 2 s), "no room", "fetching room", "world
+mismatch", "no space", "space not in this build". While no room is held the phone's outline is also laid on
+the mirror's floor.
 
 ## 5.9 The flat-twin mini-map
 
 Rule 6 of §0.5: every curved or glued view has a flat twin. One renderer for the headset and the Station
-(`P1-D07`): an engine-free draw list in `Atlas.Telemetry`, shown by `FlatTwinPanel` on the phone (under
-`boot.Hud`, lower right, 0.25 m across at 1.0 m, while `hud.map` is on) and by `SpectatorView` on the Station.
+(`P1-D07`): an engine-free draw list in `Atlas.Telemetry`, meshed by `FlatTwinMesher` and shown by
+`FlatTwinPanel` (`Telemetry/Map/FlatTwinPanel.cs`): on the phone by `FlatTwinHud` (under `boot.Hud`, 15° right
+of and 13° below the view axis, 0.25 m across at 1.0 m, while `hud.map` is on) and on the Station by
+`SpectatorView`.
 
 ```csharp
-// Files: ATLAS/Assets/Atlas/Telemetry/Map/FlatTwin.cs, FlatTwinBuilder.cs
+// Files: ATLAS/Assets/Atlas/Telemetry/Map/FlatTwin.cs, FlatTwinBuilder.cs, FlatTwinHud.cs
 using System;
 
 namespace Atlas.Telemetry
 {
-    public enum FlatTwinInk : byte { Outline = 0, Grid = 1, Cell = 2, Highlight = 3, Object = 4, Walker = 5, Trail = 6, Portal = 7 }
+    public enum FlatTwinInk : byte
+    {
+        Outline = 0, Grid = 1, Cell = 2, Highlight = 3, Object = 4, Walker = 5, Trail = 6, Portal = 7,
+        Good = 8, Warn = 9, Alert = 10, Muted = 11,       // the Station's indicators
+    }
+    public enum FlatTwinShape : byte { Line = 0, Dot = 1, Arrow = 2, Bar = 3 }
+    public struct FlatTwinItem { public FlatTwinShape Shape; public FlatTwinInk Ink; public float A, B, C, D; }
 
-    /// <summary>A retained list of lines, polygons, dots and labels in map units. Engine-free.</summary>
+    /// <summary>A retained list of lines, dots, arrows, bars and labels in map units: +X to the right, +Z up the
+    /// page. Engine-free. Clearing and refilling it allocates nothing once it has grown.</summary>
     public sealed class FlatTwin
     {
+        public const int MaxLabels = 12;
+        public int Count { get; }
+        public int LabelCount { get; }
+        public float CentreX { get; }
+        public float CentreZ { get; }
+        public float HalfExtent { get; }
+        public bool ClipToDisc { get; }
+        public int Revision { get; }
         public void Clear();
         public void SetView(float centreX, float centreZ, float halfExtent, bool clipToDisc);
+        public void FitView(float margin = 0.08f, bool clipToDisc = false);
         public void Line(float ax, float az, float bx, float bz, FlatTwinInk ink);
         public void Polygon(ReadOnlySpan<float> xz, FlatTwinInk ink);       // closed outline: x0, z0, x1, z1, …
+        public void Rect(float minX, float minZ, float maxX, float maxZ, FlatTwinInk ink);
+        public void Box(float cx, float cz, float width, float depth, float yaw, FlatTwinInk ink);
         public void Dot(float x, float z, float radius, FlatTwinInk ink);
         public void Arrow(float x, float z, float headingRadians, FlatTwinInk ink);
+        public void Bar(float minX, float minZ, float maxX, float maxZ, FlatTwinInk ink);   // filled
         public void Label(float x, float z, string text);
+        public ref readonly FlatTwinItem this[int index] { get; }
+        public string GetLabel(int index, out float x, out float z);
     }
 
     /// <summary>Optional, on a space module: the space draws its own flat twin. Called at most 10 times per second.</summary>
@@ -2703,18 +3378,40 @@ namespace Atlas.Telemetry
         void WriteFlatTwin(FlatTwin twin);
     }
 
-    /// <summary>The built-in twins. Each needs only the RoomModel, the registry, the kernel and the newest State.</summary>
+    /// <summary>The built-in twins. Each needs only the RoomModel, the kernel and the newest State.</summary>
     public static class FlatTwinBuilder
     {
         public static void Build(FlatTwin twin, Atlas.World.RoomModel room, Atlas.Kernel.IWalkerKernel kernel,
                                  in Atlas.Link.StateMessage state, FlatTwinTrail trail);
+        /// <summary>As above; while no RoomModel is held the room is drawn from the phone's RoomOutline.</summary>
+        public static void Build(FlatTwin twin, Atlas.World.RoomModel room, Atlas.Link.RoomOutlineMessage outline,
+                                 Atlas.Kernel.IWalkerKernel kernel, in Atlas.Link.StateMessage state, FlatTwinTrail trail);
+        public static void Build(FlatTwin twin, IFlatTwinSource source);
+        public static float Heading(in Atlas.Link.StateMessage state);     // radians from +Z towards +X
     }
 
     /// <summary>The last 600 walker positions at 10 Hz, and the last 64 tile ids, without repeats.</summary>
     public sealed class FlatTwinTrail
     {
+        public const int MaxPositions = 600;
+        public const int MaxTiles = 64;
+        public int PositionCount { get; }
+        public int TileCount { get; }
+        public void GetPosition(int index, out float x, out float z);
+        public Atlas.Kernel.TileId GetTile(int index);
         public void Add(in Atlas.Link.StateMessage state);
         public void Clear();
+    }
+
+    /// <summary>The in-headset map. Declares hud.map (off) and adds itself to step 8b.</summary>
+    public sealed class FlatTwinHud : Atlas.World.IAfterFrameStep, IDisposable
+    {
+        public const string ParamMap = "hud.map";
+        public const float PanelSize = 0.25f, Distance = 1.0f;
+        public const float RebuildSeconds = 0.1f;
+        public const float BudgetMs = 0.3f;
+        public static FlatTwinHud Install(Atlas.World.AtlasBootContext boot, Atlas.World.IFrameLoop loop = null);
+        public bool Visible { get; set; }
     }
 }
 ```
@@ -2746,104 +3443,96 @@ the flat twin late).
 ## 6 · What lane D needs from the other lanes
 
 Names this page takes from the other pages. Where one of them is spelled differently there, that page wins and
-this one is corrected at the freeze.
+this one is corrected.
 
 | Name | Page | Used for |
 |---|---|---|
-| `AtlasBootContext` (`Params`, `Systems`, `Hud`, `Head`, `IsSpectator`, `IsDevice`), `AtlasServices` | A §6, §8 | The installers (§5.1, §5.7, §5.8) |
-| `IFrameLoop` (`SetStateSink`, `AddAfterFrame`, `AddSense`, `ResetWalker`, `Current`); `IStateSink`, `IAfterFrameStep`, `ISenseStep` | A §7.1 | Step 8 (§5.1); the Spectator's sense step |
-| `FrameContext` (`RawHeadPosition`, `RawHeadRotation`, `Tracking`, `DeltaTime`) | A §3 | Probe; Spectator |
-| `ISpaceHost` (`Current`, `HasSpace`, `Module`, `Room`, `WorldVersion`, `RequestSwitch`, `SetRoom`, `SpaceEntered`, `RoomChanged`), `ISpaceStateReader`, `SpaceId`, `SpaceIds` | A §1, §2, §4 | Events, `RoomOutline`, world hash, Spectator |
-| `IOperatorCommands` | A §7.1 | §2.9 |
+| `AtlasBootContext` (`Params`, `Root`, `Systems`, `Hud`, `Head`, `RoomRoot`, `SpaceRoot`, `IsSpectator`, `IsDevice`), `AtlasServices` (`Replace`, `TryGet`, `Booted`, `MarkBooted`) | A §6, §8 | The installers (§5.1, §5.7, §5.8) |
+| `AtlasApp` (`Registry`, `Spaces`, `Loop`, `Rig`, `Pool`, `InputService`, `Boot`, `Flow`), `AppHooks.Menu`, `IAppMenu` | A §8 | The menu (§5.7) |
+| `IFrameLoop` (`SetStateSink`, `AddAfterFrame`, `AddUpload`, `AddSense`, `ResetWalker`, `ResetWalkerToFloor`, `Current`); `IStateSink`, `IAfterFrameStep`, `IUploadStep`, `ISenseStep` | A §7.1 | Step 8 (§5.1); the menu; the Spectator's loop |
+| `FrameContext` (`RawHeadPosition`, `RawHeadRotation`, `Tracking`, `Tier`, `DeltaTime`, `Time`) | A §3 | Probe; HUD; asset client; Spectator |
+| `ISpaceHost` (`Current`, `HasSpace`, `Module`, `Room`, `WorldVersion`, `IsAvailable`, `RequestSwitch`, `ReturnHome`, `SetRoom`, `SpaceEntered`, `RoomChanged`), `ISpaceModule`, `ISpaceStateReader`, `SpaceRegistry`, `SpaceId`, `SpaceIds` (`Code`, `ParamGroup`, `SceneId`, `NoSpace`, `NoScene`, `Count`) | A §1, §2, §4 | Events, `RoomOutline`, world hash, menu, Spectator |
+| `IOperatorCommands` (`SwitchSpace`, `Home`, `Recentre`, `SetQuality`, `Cue`, `SetLock`) | A §7.1 | §2.9 |
 | `IQualityState`, `IPerfSource`, `QualityTier` | A §9.5 | §5.2 |
-| `AtlasVertex`, `AtlasShading`, `MeshData` | A §10.2 | Built-in meshes (§4.4); the Forge's shade (§4.1) |
-| Palette layout: the cell-centre formula, object colours 64 … 127, link colours 201 … 203 | A §10.7 | §4.1, §4.4, §5.4 |
+| `AtlasVertex`, `AtlasShading`, `MeshData` (`Atlas.Kernel`) | A §10.2 | Built-in and generated meshes (§4.3, §4.4); the Forge's shade (§4.1); the map's mesh |
+| Palette layout: the cell-centre formula, object colours 64 … 127 | A §10.7 | §4.1, §4.4 |
 | Layers `AtlasHud` (through `boot.Hud`) and `AtlasSpectator` | A §12.1 | §5.4, §5.7, §5.8 |
-| `IWalkerKernel`, `WalkerPose`, `TileId`, `Iso2`, `FlatTileGraph.TryGetCell` | B §2, §3, §4 | World hash, Spectator, mini-map |
-| `RoomModel` (`Id`, `Outline`, `MaxWallHeight`, `FreeRect`, `Objects`), `RoomObject`, `MeshState`, `ObjectCategory`, `ObjectCategories.Name`, `RoomModelJson` (`TryRead`, `Write`, `GeometryHash`) | C §2, §6 | `RoomOutline`, world hash, asset client, Spectator |
-| `IRoomContent` (`Built`, `ObjectChanged`, `SetObjectState`, `SetGeneratedMesh`, `SetBuiltInMesh`) | C §9.1 | §4.3, §4.4 |
+| `IWalkerKernel`, `WalkerPose`, `TileId`, `FlatWalkerKernel`, `FlatTileGraph.TryGetCell` | B §2, §3, §4 | World hash, Spectator, mini-map |
+| `RoomModel` (`Id`, `Outline`, `Walls`, `FreeRect`, `Objects`, `DefaultWallHeight`), `RoomObject`, `MeshState` (`StandIn` among them), `ObjectCategory`, `ObjectCategories.Name`, `ObjectMeshRules` (`MaxMeshedObjects`, `TriTarget`), `RoomModelJson` (`TryRead`, `GeometryHash`), `RoomFixtures` | C §2, §6 | `RoomOutline`, world hash, asset client, Spectator |
+| `IRoomContent` (`Built`, `IsBuilt`, `Room`, `SetObjectState`, `SetGeneratedMesh`, `SetBuiltInMesh`) | C §9.1 | §4.3, §4.4 |
 | `IObjectPhotoSink`, `ObjectPhotoSet`, `ObjectView` | C §11.4 | §4.3 |
-| `TrackingState`, `TrackingStates.ToWire` | C §7.1 | `Telemetry.tracking`. The wire coding (0 normal, 1 limited, 2 lost) is not the enum's numbering |
-| `IAtlasInput` (`Pressed`, `LastTag`, `PushContext`, `PopContext`, `RegisterGazeTarget`, `ActionFired`), `AtlasAction` (`ParamMenu`, `NavUp`, `NavDown`, `NavLeft`, `NavRight`, `Confirm`, `Back`), `InputContext.Menu`, `GazeTarget` | C §13 | §5.7 |
-| `IScanSession.StateChanged` | C §10.3 | `scan.state` events |
+| `TrackingState`, `TrackingStates.ToWire`, `FromWire` | C §7.1 | `Telemetry.tracking`, the Spectator. The wire coding (0 normal, 1 limited, 2 lost) is not the enum's numbering |
+| `IAtlasInput` (`Pressed`, `LastTag`, `PushContext`, `PopContext`, `RegisterGazeTarget`, `UnregisterGazeTarget`, `MoveGazeTarget`, `SetGazeTargetEnabled`, `Gaze`), `AtlasAction` (`ParamMenu`, `NavUp`, `NavDown`, `NavLeft`, `NavRight`, `Confirm`, `Back`), `InputContext.Menu`, `GazeTarget`, `GazeTargetId`, `GazeMode.Repeat` | C §13 | §5.7 |
 | `BumpCue.Fire(BumpLevel.Strong, float2.zero, CueSource.Operator)` | C §8.8 | The end of the `cue` command, called by lane A's `CommandRouter`. Lane D never calls it |
 
-Requests: changes in files lane D does not own.
-
-| # | To | Request | Why |
-|---:|---|---|---|
-| 1 | README F1 | `Atlas.Telemetry` may also reference `Atlas.Kernel` | `FrameContext`, the argument of `IAfterFrameStep`, carries `WalkerPose` and `KernelStep`; `MeshData` carries `AtlasVertex`; the mini-map reads `IWalkerKernel` |
-| 2 | README F1 | `Atlas.World` holds one lane D file, `World/Services/IEventLog.cs` | So that `Atlas.Rendering`, `Atlas.Scan` and the spaces can log (§2.6) |
-| 3 | A (asmdef) | `Atlas.Telemetry`: `Atlas.Link`, `Atlas.World`, `Atlas.Kernel`, `Unity.Mathematics`, `Unity.Collections`, `Unity.Profiling.Core`, `glTFast`, `Unity.TextMeshPro`, `UnityEngine.UI` | TextMeshPro needs both of the last two (U-net §9.1) |
-| 4 | A (asmdef) | `Atlas.World` and every `Atlas.Spaces.*` reference `Atlas.Link`; `Atlas.App` references `Atlas.Link`, `Atlas.Telemetry`, `Unity.TextMeshPro`, `UnityEngine.UI` | README F1; the menu |
-| 5 | A (asmdef) | `Atlas.Spectator` references `Atlas.Kernel`, `Atlas.Telemetry`, `Unity.Mathematics`, `Unity.TextMeshPro`, `UnityEngine.UI`, `Unity.InputSystem`; a test assembly `Atlas.Telemetry.Tests` exists | README F1; §7 |
-| 6 | A | `AtlasBootstrap` creates the registry with `new ParamRegistry()`, the constructor that declares the table of 1.4 | The indices of 1.4 |
-| 7 | A | Step 18 calls `Atlas.Telemetry.TelemetryInstaller.Install(boot)`; step 19 calls `Atlas.App.Menu.MenuInstaller.Install(boot)` | §5.1, §5.7 |
-| 8 | A | `AtlasBootstrap` also boots in `PC_Spectator` when built with `ATLAS_SPECTATOR` (lane A §8 names `Atlas_Boot` and `Sandbox_…` only) | §5.8 |
-| 9 | A | `FillState` starts from `StateMessage.Identity`, packs `flags` with `StateFlags.Pack`, and leaves `seq` and `t_us` to the sink | §2.3 |
-| 10 | A | `QualityBinding` writes with `ParamSource.Ladder`; `CommandRouter.SetLock` uses the line of 1.5; SpaceLab calls `registry.SetGroupActive(SpaceIds.ParamGroup(id), …)` | 1.3, 1.5 |
-| 11 | C | Lane C's onboarding installer (step 19) wires photo capture to the sink lane D publishes at step 18 as `IObjectPhotoSink` (lane C §14.1). Nothing more is asked | §4.3 |
-| 12 | A | Optional: `PortalSpace` implements `IFlatTwinSource` to draw its room graph | §5.9 |
-| 13 | C | Onboarding calls `PairingController.BeginPairing()` at its step 1, reads `Phase` at step 2, draws the link panel from `GetStatus`, and calls `AtlasTelemetry.BeginSession()` when a new walker starts | §5.5, §5.6 |
-| 14 | C | The rows 36 to 41 of 1.4 (`pose.*`, `replay.*`, `scan.route`) are consumed through plain properties that `Atlas.App` wires | README F6 |
-| 15 | Repository tools | `.meta` files for `Telemetry/Resources/AtlasFallback/*.glb.bytes` and `Telemetry/Resources/AtlasParams/defaults.json`; the scene `PC_Spectator.unity` (empty) | `.meta` files and scenes are generated, never written by hand |
+README F1 carries what lane D asked for: `Atlas.Telemetry` references `Atlas.Kernel`, `Atlas.Link` and
+`Atlas.World`; `IEventLog` lives in `Atlas.World`; `Atlas.App` and the spaces reference `Atlas.Link`.
 
 ---
 
 ## 7 · Tests
 
 Engine-free tests run in the Unity Test Runner and under `tools/headless/verify.py` (README F2). The first three
-are the rows of §11.1.
+are the rows of §11.1. Each row names the test class (the file of the same name).
 
 | Test | Assembly | Pass condition |
 |---|---|---|
-| `Link_RoundTrip` (§11.1) | `Atlas.Link.Tests` | For every message of §2.2 except the reserved `PeerState`: decode the golden file in `Tests/Link/Golden/`, encode again, get the same bytes. `State` is 202 B and equals the table of §2.3 (SHA-256 `c84417e5…bcd0`). The golden bytes followed by extra bytes decode to the same value. A message one byte short is rejected. Ids 0x11 and 0x60 are ignored with no exception |
-| `Link_ClockSync` (§11.1) | `Atlas.Link.Tests` | `ClockSync` on a simulated link with 10 % loss, 15 ms one-way delay and 0–5 ms jitter (proposed), injected offset 3,999,950 µs: error ≤ 2 ms at p95 over 600 simulated seconds |
-| `Link_Watchdog` (§11.1) | `Atlas.Link.Tests` | `LinkWatchdog`: `Degraded` at 500 ms of silence; `Connected` again only after 2,000 ms healthy; `Offline` at 3,000 ms; attempts after 0.5, 1, 2, 4, 4 s. With `LoopbackLink`: after a reconnect the host's snapshot `ParamSet` arrives and is applied |
-| `Link_Loopback` (`P1-D01`) | `Atlas.Link.Tests` | `LoopbackLink`: `Hello`, `Welcome`, eight pings, manifest; 600 `State` at 60 Hz with 2 % simulated loss arrive in order with gaps only; a `Hello` with `proto` `[2, 0]` gets a readable `Bye`; `ParamSet` is dropped under `demoLock` |
-| `Param_Registry` | `Atlas.Link.Tests` | `new ParamRegistry()` holds the 48 rows of 1.4 with their indices, kinds, ranges, defaults and flags. Declaring twice returns the same handle. Clamp, step and choice rules of 1.1. `NoRemote`, `ReadOnly`. Callback order. Snapshot and restore. Baked defaults. Group state. The manifest JSON equals its golden file |
-| `Json_RoundTrip` | `Atlas.Link.Tests` | Objects, arrays, escapes, surrogate pairs, exact `i64`, depth 32 accepted and 33 refused, bytes after the root ignored, the number rules of 1.8 |
+| `Link_RoundTrip` (§11.1) | `Atlas.Link.Tests` | Every binary message packs to the documented bytes and reads back (the test holds its golden bytes inline). `State` is 202 B, reads at an offset, ignores trailing bytes and rejects a short or foreign packet; its flags pack into the documented bits. JSON messages give fixed bytes and tolerate missing and unknown members. Every id of Appendix B is declared and `PeerState` has no codec. The six operator commands round-trip. Roles have fixed names |
+| `Link_ClockSync` (§11.1) | `Atlas.Link.Tests` | `ClockSync` on a simulated link with loss, delay and jitter (proposed): offset error ≤ 2 ms at p95. A clean link gives the exact offset. The schedule is eight pings 50 ms apart, then one per second. Stale, duplicate and impossible pongs are rejected |
+| `Link_Watchdog` (§11.1) | `Atlas.Link.Tests` | `LinkWatchdog`: `Degraded` at 500 ms of silence; `Connected` again only after 2,000 ms healthy; `Offline` at 3,000 ms; attempts after 0.5, 1, 2, 4, 4 s. With `LinkClient` and `LinkHost` on the loopback network: `ParamSet` is dropped while degraded; after a reconnect the snapshot `ParamSet` and the unacknowledged `AssetReady` arrive |
+| `Link_Exchange` (`P1-D01`) | `Atlas.Link.Tests` | On `LoopbackNetwork`: `Hello`, `Welcome`, eight pings, manifest; `State` at 60 Hz with 2 % loss reaches spectators in order with gaps only; `SendState` and `SendTelemetry` allocate nothing; `StateHz` thins the stream; a value is clamped on the phone and echoed; the six commands arrive in order; the demo lock drops `ParamSet` but not commands; a dropped `ParamSet` is reported and the snapshot goes back; a `Hello` with another major version gets a readable `Bye`; a second phone is refused; unknown ids and trailing bytes are ignored |
+| `Link_Spectator` | `Atlas.Link.Tests` | A spectator gets `Welcome`, the kept outline, the manifest with current values, the newest `world` event and `param` events; `ParamManifestMessage.ApplyTo` matches by name |
+| `Link_Udp` | `Atlas.Link.Tests` | The same exchange over real LiteNetLib sockets on `127.0.0.1` |
+| `ParamRegistryTests` | `Atlas.Link.Tests` | Declaration order is the wire id. Clamp rules of 1.1. Declaring twice returns the same entry and replaces range and callback; another kind throws. Callbacks and `Changed`. Snapshot and restore. Group state. The manifest JSON. More than 255 entries fill several `ParamSet`s |
+| `AtlasJsonTests` | `Atlas.Link.Tests` | Objects, arrays, escapes, surrogate pairs, exact `i64`, the depth limit, trailing text with and without `allowTrailing`, the number rules of 1.8 |
 | `Telemetry_Csv` | `Atlas.Link.Tests` | The header and the example row of §5.3, byte for byte |
 | `WorldHash_Vector` | `Atlas.Link.Tests` | The vector of §2.5 gives `141060c2fc138145` |
-| `Glb_Validator` | `Atlas.Telemetry.Tests` | A valid GLB built by the test passes; thirteen variants each fail with the code of its row in §4.2 |
-| `Perf_Ring` | `Atlas.Telemetry.Tests` | Nearest-rank percentiles on known data; the 600-frame window; no allocation after construction |
-| `Pairing_Parse` | `Atlas.Telemetry.Tests` | The three accepted forms; refusals: a host name, a port of 0 or 70000, an empty string, `atlas:192.168.0.10` |
-| `Fallback_Set` | `Atlas.Telemetry.Tests` | Each of the 21 files meets the template row of §4.4. Built for boxes from 0.3 m to 2.4 m: at most 1,500 triangles and no edge over 0.25 m, or the builder reports `too_large` |
-| `Menu_Model` | `Atlas.Telemetry.Tests` | The 21 switches in the order of 1.5; stepping per kind; an `OnRelease` row changes only on `Confirm`; every change raises `Changed` with `ParamSource.Menu` |
-| `FlatTwin_Grid` | `Atlas.Telemetry.Tests` | With a `FlatWalkerKernel` walked round a square, the trail's tile-id sequence equals the kernel's; the S0 plan contains every outline segment of `sample_3x3` |
-| Forge | `pytest station/forge/tests` | With the `test` generator: a crop becomes a GLB that passes `validate.py`; the same input gives the same hash; a corrupt JPEG ends as `failed` `bad_image`; a second identical upload is a cache hit with no job; a 21st object is 409; `backend` `cache` with a miss fails at once; with no hosted key no socket is opened to another host |
-| Hub | `dotnet test station/hub.tests` | Relay of `State` unchanged; `perf.csv` equal to `TelemetryCsv`; presets saved, loaded as one `ParamSet`, baked; `/internal/job` refused from a non-loopback address; snapshot replay and `AssetReady` replay at RESYNC |
+| `GlbValidatorTests` | `Atlas.Telemetry.Tests` | The Forge-made fixtures in `Tests/Telemetry/Assets/Fixtures/` pass; the damaged ones each fail with the code of their row in §4.2 |
+| `AssetClientCoreTests` | `Atlas.Telemetry.Tests` | The round trip of §4.3 against a scripted Forge: upload, job, download, hand-over, `AssetAck`; cache; unreachable Forge and its return; `off`; a loaded room; stand-in objects left alone |
+| `FallbackSetTests` | `Atlas.Telemetry.Tests` | Each of the 21 files meets the template row of §4.4. Built for boxes of many sizes: at most 1,500 triangles and no edge over 0.25 m, or the builder reports the box too large |
+| `PerfRingTests`, `PerfProbeCoreTests` | `Atlas.Telemetry.Tests` | Nearest-rank percentiles on known data; the 600-frame window; one row per second; no allocation after construction |
+| `TelemetryCsvTests`, `HudTextTests` | `Atlas.Telemetry.Tests` | The phone's CSV equals the link library's; the five HUD lines |
+| `PairingTests` | `Atlas.Telemetry.Tests` | The three accepted forms; refusals: a host name, a port of 0 or 70000, an empty string, `atlas:192.168.0.10`; the phases |
+| `ParamBinderTests` | `Atlas.Telemetry.Tests` | Field kinds, existing names followed, wrong forms refused, `Dispose` |
+| `LinkPumpTests`, `TelemetryWiringTests` | `Atlas.Telemetry.Tests` | Step 8: edge events, the `param` echo and its once-per-second rule, the world hash and `world` event, commands to `IOperatorCommands`, the row backlog, the manifest re-sent on a version change |
+| `FlatTwinTests` | `Atlas.Telemetry.Tests` | With a `FlatWalkerKernel` walked round a square, the trail's tile-id sequence equals the kernel's; the S0 plan contains every outline segment of `sample_3x3`; each space's twin |
+| `SpectatorCoreTests`, `SpectatorAssetsTests` | `Atlas.Telemetry.Tests` | Room fetch, world check and mismatch, space following, banners; furniture from events and job lists |
+| `MenuModelTests` | `Atlas.App.Tests` (`Tests/App/Menu/`) | The pages; the kill switches in the order of 1.5; stepping per kind; an `OnRelease` row changes only on `Confirm`; every change goes through the registry with `ParamSource.Local` and logs `param.set` |
+| Forge | `python -m pytest station/forge/tests` | With the `procedural` generator: a crop becomes a GLB that passes `validator.py`; the same input gives the same hash; a corrupt JPEG ends as `failed`; a second identical upload is a cache hit with no job; a 21st box is answered `placeholder`; `backend` `cache` with a miss fails at once; the hosted fallback is off by default and has no vendor; a restart keeps rooms, finished jobs and assets |
+| Hub | `dotnet test station/hub.tests` | Relay of `State` unchanged; `perf.csv` equal to `TelemetryCsv`; presets saved, loaded as one `ParamSet`, baked; `/internal/job` relayed; session adoption and continuation; watchdogs; ReplayPhone against the Hub |
+| Console | `node --test station/console-tests` | The Console's modules: controls, commands, formats, jobs, map maths, telemetry |
 
-Only a device or the Station can confirm: LiteNetLib under IL2CPP with stripping Low; the Local Network prompt on
-a clean install; `Application.deepLinkActivated` on a warm open; `FrameTimingManager` GPU times on Metal; the
-render counters in a release player; glTFast on the phone (mirroring, `Dispose` after the copy); TextMeshPro on
-the `AtlasHud` layer in both eyes; the tests L1 to L22 of §7.6.
+Only a device or the Station can confirm: LiteNetLib under IL2CPP with stripping Low, and `LiteNetTransport`
+surviving it through `link.xml`; the Local Network prompt on a clean install; `Application.deepLinkActivated`
+on a warm open; `FrameTimingManager` GPU times on Metal; the render counters in a release player; the
+generated meshes on the phone (mirroring, palette cell, shade); TextMeshPro on the `AtlasHud` layer in both
+eyes; TripoSG on the Station's GPU; the tests L1 to L22 of §7.6.
 
 ---
 
 ## Open for the lead
 
 1. **Hosted image-to-3D service** (open item 8 of §14; settle by G6): which one, what budget, what licence, what
-   data-retention terms. Until then the `hosted` adapter has no key and rule 1 of §3.10 holds: nothing leaves
+   data-retention terms. Until then the `hosted` adapter has no vendor and rule 1 of §3.10 holds: nothing leaves
    the Station. Also wanted with it: the measured time per object on the RTX 5070.
 2. **The Station's address.** `192.168.0.10` is this page's default; the third number is the router's
    (`P1-X04`). One constant, `PairingController.DefaultAddress`.
 3. **Where the phone's CSV lives.** README F8 says `persistentDataPath/logs/`, §7.3.3 says
-   `persistentDataPath/perf/`. This page follows F8 and keeps the file name `perf_<session>.csv`.
-4. **Who owns the session.** The phone makes the session id and the Hub adopts it, so the phone's files and
-   the Hub's folder match with no link at start. A new session starts when onboarding starts a new walker. Confirm
-   that this is the unit §13.5 deletes by.
-5. **A second phone.** Phone B may connect while phone A is active; it waits, and the Console can switch
-   (§2.11). Confirm, or have the Hub refuse a second phone.
-6. **Console access.** Anyone on the Station's router can open the Console and send commands. There is no
+   `persistentDataPath/perf/`. The code follows F8 and keeps the file name `perf_<session>.csv` (§5.5). Either
+   the plan or the code changes.
+4. **The unit §13.5 deletes by.** The phone makes the session id and the Hub adopts it (§3.2, §5.5); a new
+   session starts when onboarding starts a new walker. Confirm that this is the unit of deletion.
+5. **Console access.** Anyone on the Station's router can open the Console and send commands. There is no
    password in Phase 1. Acceptable on our own router; say so if the venue changes that.
-7. **TextMeshPro for the HUD and the menu.** §8.1 names TextMeshPro for every label; README F7 names one shader.
-   This page reads §8.1 as the exception. Lane A's page does the same for text.
-8. **`IEventLog` in `Atlas.World`, and `Atlas.Kernel` for `Atlas.Telemetry`.** Two small additions to README F1
-   (requests 1 and 2 of §6).
-9. **No interpolation in the Spectator.** The picture is the newest `State`. If the mirror stutters at 30 or
+6. **Text.** §8.1 names TextMeshPro for every label; README F7 names one shader. The HUD and the link dot use
+   TextMeshPro; the menu, the mini-map's labels and the Spectator's panels use legacy `TextMesh` with the
+   built-in font. Decide whether those move to TextMeshPro.
+7. **No interpolation in the Spectator.** The picture is the newest `State`. If the mirror stutters at 30 or
    10 Hz, a 50 ms interpolation buffer is the fix, at the cost of that latency.
-10. **Loss simulation on the Hub** needs LiteNetLib built from source (`SimNet`, §2.11). Otherwise run the loss
-    tests with the simulation on the Editor side.
-11. **Comfort stop value** (open item 6 of §14). The Console has the FMS entry; the score at which it alerts
-    waits for the lead's number.
+8. **Loss simulation on the real link.** The headless tests use `LoopbackNetwork`. The Hub has no loss or
+   latency option; L9 and L12 on real sockets need LiteNetLib built with `SIMULATE_NETWORK`, on the Hub or on
+   the Editor side. Decide which.
+9. **Comfort stop value** (open item 6 of §14). The Console has the FMS entry; the score at which it alerts
+   waits for the lead's number.
+10. **Uploading the phone's CSV.** The Hub has `PUT /logs/{session}/perf.csv`; the app has no button or
+    automatic upload for it. Decide whether the app sends it after a session or the operator does.
