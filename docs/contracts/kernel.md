@@ -227,6 +227,40 @@ step 6 (upload)   per drawn tile: _Anchor = (float) A[t] (cast last); globals _H
 
 The draw rule (§8.5, A.3): draw t when (a) d_t ≤ ρ + 0.8425 and (b) the disc of radius 0.8425·L round c = L·d_t along the bearing of A[t]·o is not wholly outside any side plane of the view frustum, widened by 12° to each side and 4° up and down. ρ is the registry parameter `curved.cullRho` (default 3). The test runs once per frame for both eyes. It is the only culling wherever the hyperbolic warp is on.
 
+### 4.8 `TileFrame` and `RuleS` [P2-B01; additive contract change, announce to all lanes (§6.4)]
+
+New public types in `Atlas.Kernel` (`Kernel/Tiling/TileFrame.cs`, `RuleS.cs`). They are pure tile-graph arithmetic in ℤ[φ], so they stay in the kernel (§6.2 "TileId, tile graph") and keep `XFrame` and `ZPhi` internal (§3 rule 7). Nothing existing changes.
+
+```csharp
+public readonly struct TileFrame : IEquatable<TileFrame> {          // oriented {4,5} tile frame = canonical frame of Tile · R^Spin
+    public static readonly TileFrame Zero;                          // tile zero, identity, Spin 0 (default(TileFrame) is invalid)
+    public TileId Tile { get; }
+    public int Spin { get; }                                        // 0..3: the unique j with F == F.Canon() · R^j
+    public TileFrame Step(int edge);                                // F · S_edge, edge in THIS frame's numbering; the result's edge 0 faces back
+    public TileFrame Rotate(int quarterTurns);                      // F · R^n, n mod 4
+    public int CanonicalEdge(int edge);                             // (edge + Spin) & 3: the same edge in TileGraph / WalkerPose numbering
+    public Iso2 ToIso2();                                           // absolute double frame, κ = -1: debug and tests only (§3 rule 6)
+}
+public static class RuleS {                                         // Master Plan §10.2.3, R3 §D3
+    public const int BackEdge = 0, RightEdge = 1, StraightEdge = 2, LeftEdge = 3;   // tree-frame edges
+    public const int MaxAddressLength = 23;                         // "23 generations is the addressable depth"
+    public const double ForkSpacing = 2.1225501;                    // acosh(1 + 2φ), units of L
+    public static TileFrame FrameOf(string address, in TileFrame trachea);          // fork tile
+    public static TileFrame BendFrameOf(string address, in TileFrame trachea);      // turn tile in front of a non-root fork
+    public static TileFrame ChildBend(in TileFrame fork, char branch);              // fork.Step(L ? 3 : 1)
+    public static TileFrame BendToFork(in TileFrame bend);                          // bend.Step(2)
+    public static TileFrame ForkToBend(in TileFrame fork);                          // fork.Step(0).Rotate(2)
+    public static TileFrame BendToParentFork(in TileFrame bend, char branch);       // bend.Step(0).Rotate(-(L ? 3 : 1))
+}
+```
+
+- **Tree-frame convention.** In a frame produced by `Step`, edge 0 faces back, 2 straight, 3 left, 1 right. Edge numbers given to `TileGraph` and `WalkerPose` are canonical: always convert with `CanonicalEdge`.
+- **`FrameOf(a, M)`** folds `M = BendToFork(ChildBend(M, c))` over the letters of `a`. A null address throws `ArgumentNullException`, a length over 23 `ArgumentOutOfRangeException`, a letter other than L and R `ArgumentException`. All arithmetic is checked (overflow throws).
+- **Identities.** S₂·S₀ = R² and S_k·S₀ = R^k, so `ForkToBend` and `BendToParentFork` invert the forward moves exactly. Verified to depth 23 (`RuleS_RoundTrip`).
+- **Golden values** (trachea = `TileFrame.Zero`; words Xu, Xv, Yu, Yv, Tu, Tv): FrameOf("L") = (0,0,0,−2,1,2); its bend (0,0,−1,0,0,1) is the tile across edge 3 of tile zero; FrameOf("R") = (0,0,0,2,1,2); FrameOf("LR") = (0,−2,−4,−6,5,8); FrameOf("RL") = (0,−2,4,6,5,8); FrameOf("LL") = (0,2,−4,−6,5,8); FrameOf("RRRLLR") = (372,602,1272,2058,1685,2728).
+- **Range.** The six words need at most 53 bits at 23 generations (path "LRLR…L"); 2,000 random 23-letter addresses reach 51 bits. 262,141 tiles to depth 16 are distinct.
+- Do not use `TileId.Step` in tree code: it descends from tile zero on every call. `TileFrame.Step` is O(1).
+
 ---
 
 ## 5. The {4,5} tiling and exact tile ids
@@ -445,6 +479,7 @@ The shader names `_HypL`, `_HeadPosWS` and `_Anchor` are [plan] (§4.6). `_WarpM
 | Stubs at G0: identity warp, fake tile provider | as above | `P1-X02` | shared |
 | Calls to `AtlasWarp` and `AtlasGatesClip`; the `UnityPerMaterial` block with `_Anchor`, `_WarpMode` and `_Gates`; fog and the spherical discard | `AtlasCore.hlsl` | `P1-A06` | A |
 | `Mesh4D` and the slicing job (in `Atlas.Kernel`, not part of this contract) | `Atlas.Kernel` | `P1-A12` | A |
+| `TileFrame`, `RuleS` (§4.8) | `Atlas.Kernel` (`Kernel/Tiling/`) | `P2-B01` | B |
 
 ## 8. Tests that hold this contract (§11.1, all lane B, EditMode, double)
 
