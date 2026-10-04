@@ -17,8 +17,8 @@ namespace Atlas.Rendering
         sealed class PassData
         {
             public Material material;
-            public TextureHandle left;
-            public TextureHandle right;
+            public RTHandle left;
+            public RTHandle right;
             public TextureHandle screen;
         }
 
@@ -45,26 +45,26 @@ namespace Atlas.Rendering
                 return;
 
             UniversalResourceData resources = frameData.Get<UniversalResourceData>();
-            TextureHandle left = renderGraph.ImportTexture(_left);
-            TextureHandle right = renderGraph.ImportTexture(_right);
             TextureHandle screen = resources.backBufferColor;
 
             using (var builder = renderGraph.AddRasterRenderPass<PassData>("Atlas Lens Blit", out var data))
             {
+                // The eye textures are not imported into this graph: each holds colour and depth in one texture
+                // (the eye cameras render into it), and the render graph refuses to import such a texture. They
+                // are finished before this camera renders (Screen depth 10 after the eyes), so the pass only
+                // binds them to the material.
                 data.material = _material;
-                data.left = left;
-                data.right = right;
+                data.left = _left;
+                data.right = _right;
                 data.screen = screen;
-                builder.UseTexture(left, AccessFlags.Read);
-                builder.UseTexture(right, AccessFlags.Read);
                 builder.SetRenderAttachment(screen, 0, AccessFlags.WriteAll);
                 builder.SetRenderFunc(static (PassData d, RasterGraphContext context) =>
                 {
-                    d.material.SetTexture(s_EyeL, d.left);
-                    d.material.SetTexture(s_EyeR, d.right);
-                    // Eye textures are imported with their origin at the bottom left; the back buffer reports
-                    // its own. URP's rule for a blit: flip V when the two differ.
-                    bool flip = context.GetTextureUVOrigin(in d.left) != context.GetTextureUVOrigin(in d.screen);
+                    d.material.SetTexture(s_EyeL, d.left.rt);
+                    d.material.SetTexture(s_EyeR, d.right.rt);
+                    // Eye textures have their origin at the bottom left; the back buffer reports its own. URP's
+                    // rule for a blit: flip V when the two differ.
+                    bool flip = context.GetTextureUVOrigin(in d.screen) != TextureUVOrigin.BottomLeft;
                     Vector4 scaleBias = flip ? new Vector4(1f, -1f, 0f, 1f) : new Vector4(1f, 1f, 0f, 0f);
                     Blitter.BlitTexture(context.cmd, scaleBias, d.material, 0);
                 });
