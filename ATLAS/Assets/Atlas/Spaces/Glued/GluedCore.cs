@@ -115,7 +115,9 @@ namespace Atlas.Spaces.Glued
     /// <remarks>
     /// The batching: every cell copy is one mesh and one draw call per eye, and so is every avatar; all cells
     /// share one pooled material and all avatars another, so the lattice costs two set-passes. No frustum
-    /// culling is assumed: the numbers are the worst case with every copy in view.
+    /// culling is assumed: the numbers are the worst case with every copy in view. The walker's hands ride in
+    /// the avatar's own mesh (<see cref="GluedAvatarRig"/>), so they add triangles and no draw call, and every
+    /// avatar is counted with both of them: the worst case.
     /// </remarks>
     public static class GluedBudget
     {
@@ -135,11 +137,27 @@ namespace Atlas.Spaces.Glued
             return scratch.TriangleCount;
         }
 
-        public static int AvatarTriangles()
+        /// <summary>Triangles of the avatar's body alone: head, torso, shoulders and arms. What a copy draws while no hand is tracked.</summary>
+        public static int AvatarBodyTriangles()
         {
             var scratch = new AtlasMeshBuilder(512, 2048);
             GluedAvatarMesh.Build(scratch);
             return scratch.TriangleCount;
+        }
+
+        /// <summary>Triangles of both hands with their forearms: what each copy gains while both are tracked.</summary>
+        public static int AvatarHandsTriangles()
+        {
+            return GluedAvatarHands.MaxTriangles;
+        }
+
+        /// <summary>
+        /// Triangles of one avatar, the figure every copy is counted at: the body and both hands, the most the shared
+        /// mesh can hold. It stays within <see cref="AtlasMeshBudget.SelfAvatar"/>.
+        /// </summary>
+        public static int AvatarTriangles()
+        {
+            return AvatarBodyTriangles() + AvatarHandsTriangles();
         }
 
         public static int PromptTriangles()

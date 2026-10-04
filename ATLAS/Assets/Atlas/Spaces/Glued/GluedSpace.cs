@@ -19,8 +19,13 @@ namespace Atlas.Spaces.Glued
     /// <see cref="GluedCellMesh"/> and <see cref="GluedAvatarMesh"/>, the accounting in <see cref="GluedBudget"/>.
     /// Every copy is a child with its own transform that shares one mesh and one pooled material; a mirrored
     /// Klein row is a child with a scale of -1 along X, for which Unity itself flips the winding.
+    ///
+    /// The walker's copies carry the walker's hands (documents/ATLAS_Hands_Design.md section 5.6): while
+    /// <see cref="IHands"/> reports a hand as tracked, the shared avatar mesh also holds it, rebuilt in the upload
+    /// step from <see cref="GluedAvatarRig"/>. No copy gains a draw call, and with no service or no tracked hand
+    /// the mesh is the body alone, as it always was, and nothing is uploaded.
     /// </remarks>
-    public sealed class GluedSpace : MonoBehaviour, ISpaceModule, ISpaceStateReader
+    public sealed class GluedSpace : MonoBehaviour, ISpaceModule, ISpaceStateReader, IUploadStep
     {
         public const string ParamMode = "glued.mode", ParamCopies = "glued.copies", ParamAvatar = "glued.avatar";
 
@@ -50,6 +55,12 @@ namespace Atlas.Spaces.Glued
         ISpaceHost _host;
         Material _cellMaterial, _plainMaterial;
         Mesh _cellMesh, _avatarMesh, _promptMesh;
+        GluedAvatarRig _avatarRig;
+        // The avatar mesh has been marked for frequent updates, which is done when a hand first appears and not before.
+        bool _avatarDynamic;
+        // The hands failed: the copies keep the plain body for the rest of the visit.
+        bool _handsOff;
+        int _avatarUploads;
         GameObject _content, _prompt;
         Transform _promptTransform;
         GameObject[] _cellObjects, _avatarObjects;
@@ -81,6 +92,8 @@ namespace Atlas.Spaces.Glued
         public int Crossings { get { return _crossings; } }
         /// <summary>The room is too small to walk: the space runs in place and never prompts.</summary>
         public bool Standing { get { return _standing; } }
+        /// <summary>Times the shared avatar mesh was rewritten since Configure: when a hand came, went or moved. Zero while no hand is tracked.</summary>
+        internal int AvatarUploads { get { return _avatarUploads; } }
 
         public void Configure(RoomModel room, ParamRegistry registry)
         {
@@ -157,6 +170,54 @@ namespace Atlas.Spaces.Glued
             PlacePrompt(frame.HeadPosition);
         }
 
+        /// <summary>
+        /// Step 6: puts the walker's hands into the shared avatar mesh, in the avatar's own frame (relative to the
+        /// head and turned back by the heading <see cref="Tick"/> posed the copies with), so every copy shows them
+        /// through its own transform and a mirrored copy shows the other hand with no extra work. Nothing happens
+        /// while no hand is tracked or none has moved since the last frame.
+        /// </summary>
+        public void Upload(in FrameContext frame)
+        {
+            if (!_entered || !_built || !_shownAvatars || _handsOff) return;
+            IHands hands;
+            AtlasServices.TryGet(out hands);
+            try
+            {
+                if (!_avatarRig.Update(hands, frame.HeadPosition, _heading)) return;
+                if (_avatarRig.ShowsHands && !_avatarDynamic)
+                {
+                    _avatarMesh.MarkDynamic();
+                    _avatarDynamic = true;
+                }
+                AtlasMesh.Apply(_avatarRig.Data, _avatarMesh);
+                _avatarUploads++;
+            }
+            catch (System.Exception e)
+            {
+                HandsFault(e);
+            }
+        }
+
+        // A fault in the hands must not cost the walker the room: SpaceLab sends a space that throws back to Home. The
+        // copies keep the plain body for the rest of the visit, and it is said once.
+        void HandsFault(System.Exception e)
+        {
+            _handsOff = true;
+            Debug.LogWarning("glued.hands: the copies' hands are off for this visit: " + e.GetType().Name + ": " + e.Message);
+            try
+            {
+                if (_avatarRig.ShowBodyOnly())
+                {
+                    AtlasMesh.Apply(_avatarRig.Data, _avatarMesh);
+                    _avatarUploads++;
+                }
+            }
+            catch (System.Exception)
+            {
+                // The plain body could not be put back either: there is nothing more to do from here.
+            }
+        }
+
         public void Exit()
         {
             _entered = false;
@@ -228,9 +289,12 @@ namespace Atlas.Spaces.Glued
             var data = new AtlasMeshBuilder(1024, 4096);
             GluedCellMesh.Build(sizeX, sizeZ, data);
             _cellMesh = AtlasMesh.Create(data, "Glued Cell");
-            data.Clear();
-            GluedAvatarMesh.Build(data);
-            _avatarMesh = AtlasMesh.Create(data, "Glued Avatar");
+            // The avatar is the body alone until a hand is tracked: the rig builds it with GluedAvatarMesh and keeps room for the hands.
+            _avatarRig = new GluedAvatarRig();
+            _avatarMesh = AtlasMesh.Create(_avatarRig.Data, "Glued Avatar");
+            _avatarDynamic = false;
+            _handsOff = false;
+            _avatarUploads = 0;
             data.Clear();
             GluedPromptMesh.Build(data);
             _promptMesh = AtlasMesh.Create(data, "Glued Prompt");

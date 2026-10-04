@@ -13,7 +13,7 @@ namespace Atlas.Spaces.Tests
     {
         static readonly string[] SampleRooms = { RoomFixtures.Sample3x3, RoomFixtures.SampleL3x4, RoomFixtures.Sample4x5Table };
 
-        static void AssertFacesAgreeWithNormals(AtlasMeshBuilder mesh)
+        internal static void AssertFacesAgreeWithNormals(AtlasMeshBuilder mesh)
         {
             Assert.That(mesh.IndexCount % 3, Is.EqualTo(0));
             for (int t = 0; t < mesh.IndexCount; t += 3)
@@ -104,12 +104,13 @@ namespace Atlas.Spaces.Tests
         [Test]
         public void AvatarMesh_IsAtMost600Triangles_WithALeftAndARightHand()
         {
+            // The body alone: what the copies draw while no hand is tracked. The hands come on top of it (below).
             var mesh = new AtlasMeshBuilder();
             GluedAvatarMesh.Build(mesh);
             Assert.That(mesh.TriangleCount, Is.GreaterThan(0));
             Assert.That(mesh.TriangleCount, Is.LessThanOrEqualTo(AtlasMeshBudget.SelfAvatar));
             Assert.That(AtlasMeshBudget.SelfAvatar, Is.EqualTo(600));
-            Assert.That(mesh.TriangleCount, Is.EqualTo(GluedBudget.AvatarTriangles()));
+            Assert.That(mesh.TriangleCount, Is.EqualTo(GluedBudget.AvatarBodyTriangles()));
             AssertFacesAgreeWithNormals(mesh);
 
             // The left shoulder (the walker's -X side) and the right one carry different colours.
@@ -134,6 +135,47 @@ namespace Atlas.Spaces.Tests
             // The body hangs from the head: nothing above the crown, nothing reaches the floor of a crouching walker.
             Assert.That(mesh.BoundsMax.y, Is.LessThanOrEqualTo(GluedAvatarMesh.HeadRadius + 1e-5f));
             Assert.That(mesh.BoundsMin.y, Is.GreaterThan(-0.9f));
+
+            // The elbow the forearms start from is the lower end of the upper arm, one on each side.
+            for (int side = 0; side < 2; side++)
+            {
+                float3 elbow = GluedAvatarMesh.Elbow(side == 0 ? HandSide.Left : HandSide.Right);
+                Assert.That(elbow.x, Is.EqualTo(side == 0 ? -0.235f : 0.235f));
+                Assert.That(elbow.y, Is.EqualTo(-0.68f));
+                Assert.That(elbow.z, Is.EqualTo(-GluedAvatarMesh.HeadBack));
+            }
+        }
+
+        [Test]
+        public void AvatarWithBothHands_IsAtMost600Triangles_AndTheDrawCallsAreUnchanged()
+        {
+            // The worst case an avatar can be: the body and both hands with their forearms, in the one shared mesh.
+            int body = GluedBudget.AvatarBodyTriangles(), hands = GluedBudget.AvatarHandsTriangles(), worst = GluedBudget.AvatarTriangles();
+            Assert.That(body, Is.EqualTo(182));
+            Assert.That(hands, Is.EqualTo(408), "two hands of 17 boxes, 12 triangles each");
+            Assert.That(worst, Is.EqualTo(body + hands));
+            Assert.That(worst, Is.EqualTo(590));
+            Assert.That(worst, Is.LessThanOrEqualTo(AtlasMeshBudget.SelfAvatar));
+
+            // The hands ride in the avatar's draw: one draw call per copy per eye with or without them, so the lattice's
+            // draw-call figures do not move, and its triangles grow by the hands of every copy but the walker's own.
+            int cell = GluedBudget.CellTriangles(2.25f, 2.25f), prompt = GluedBudget.PromptTriangles();
+            foreach (GluedLayout layout in new[] { GluedLayout.Torus, GluedLayout.Klein, GluedLayout.Torus3 })
+            {
+                foreach (int copies in new[] { 3, 5, 7 })
+                {
+                    GluedDrawCost plain = GluedBudget.Lattice(layout, copies, cell, body, true, prompt);
+                    GluedDrawCost handed = GluedBudget.Lattice(layout, copies, cell, worst, true, prompt);
+                    Assert.That(handed.DrawCallsPerEye, Is.EqualTo(plain.DrawCallsPerEye), layout + " " + copies);
+                    Assert.That(handed.DrawCallsPerFrame, Is.EqualTo(plain.DrawCallsPerFrame), layout + " " + copies);
+                    Assert.That(handed.TrianglesPerEye - plain.TrianglesPerEye, Is.EqualTo(hands * (GluedRules.CellCount(layout, copies) - 1)),
+                                layout + " " + copies);
+                    // The figures of task P1-A09 hold with the hands: 5 x 5 for the torus and the Klein bottle, the 3-torus at 3 x 3 x 3.
+                    if (copies == 5 || layout == GluedLayout.Torus3) Assert.That(GluedBudget.LatticeFits(layout, in handed), Is.True, layout + " " + copies);
+                }
+            }
+            Assert.That(GluedBudget.Lattice(GluedLayout.Torus, 5, cell, worst, true, prompt).DrawCallsPerFrame, Is.EqualTo(100));
+            Assert.That(GluedBudget.Lattice(GluedLayout.Torus3, 5, cell, worst, true, prompt).DrawCallsPerFrame, Is.EqualTo(108));
         }
 
         [Test]
@@ -249,14 +291,20 @@ namespace Atlas.Spaces.Tests
             Assert.That(high.DrawCallsPerFrame, Is.LessThanOrEqualTo(300));
             Assert.That(high.TrianglesPerFrame, Is.LessThanOrEqualTo(AtlasMeshBudget.FrameTriangles));
 
-            // The numbers reached, per frame, both eyes.
+            // The numbers reached, per frame, both eyes. The avatar is counted with both hands: the worst case.
             Assert.That(cell, Is.EqualTo(346));
-            Assert.That(avatar, Is.EqualTo(182));
+            Assert.That(avatar, Is.EqualTo(590), "the body, 182, and two hands with their forearms, 204 each");
             Assert.That(prompt, Is.EqualTo(12));
-            Assert.That(GluedBudget.Lattice(room, GluedLayout.Torus, 5).TrianglesPerFrame, Is.EqualTo(26060));
-            Assert.That(GluedBudget.Space(room, GluedLayout.Torus, 5).TrianglesPerFrame, Is.EqualTo(147560));
-            Assert.That(GluedBudget.Lattice(room, GluedLayout.Torus3, 5).TrianglesPerFrame, Is.EqualTo(28172));
-            Assert.That(solid.TrianglesPerFrame, Is.EqualTo(149672));
+            Assert.That(GluedBudget.Lattice(room, GluedLayout.Torus, 5).TrianglesPerFrame, Is.EqualTo(45644));
+            Assert.That(GluedBudget.Space(room, GluedLayout.Torus, 5).TrianglesPerFrame, Is.EqualTo(167144));
+            Assert.That(GluedBudget.Lattice(room, GluedLayout.Torus3, 5).TrianglesPerFrame, Is.EqualTo(49388));
+            Assert.That(solid.TrianglesPerFrame, Is.EqualTo(170888));
+
+            // With no hand tracked the avatar is the body alone and the figures are those of the space before hands.
+            int body = GluedBudget.AvatarBodyTriangles();
+            Assert.That(body, Is.EqualTo(182));
+            Assert.That(GluedBudget.Lattice(GluedLayout.Torus, 5, cell, body, true, prompt).TrianglesPerFrame, Is.EqualTo(26060));
+            Assert.That(GluedBudget.Lattice(GluedLayout.Torus3, 5, cell, body, true, prompt).TrianglesPerFrame, Is.EqualTo(28172));
 
             TestContext.Out.WriteLine("budget_room: cell " + cell + " triangles, avatar " + avatar + ", prompt " + prompt
                 + "; 5 x 5 with the room " + GluedBudget.Space(room, GluedLayout.Torus, 5).TrianglesPerFrame
