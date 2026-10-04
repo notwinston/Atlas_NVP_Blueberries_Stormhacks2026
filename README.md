@@ -258,20 +258,20 @@ M^{-1}=\begin{cases}\eta M^{\mathsf T}\eta&\kappa=-1\\ M^{\mathsf T}&\kappa=+1\\
 The exponential map at $o$ is given in Section 2.2. Its inverse, with $n=\lVert p_{xz}\rVert$, is
 
 ```math
-\mathrm{Log}_\kappa(p)=\begin{cases}\operatorname{asinh}(n)\,\dfrac{p_{xz}}{n}&\kappa=-1\\[4pt] p_{xz}/p_w&\kappa=0\\[4pt] \operatorname{atan2}(n,\,p_w)\,\dfrac{p_{xz}}{n}&\kappa=+1\end{cases}
+\mathrm{Log}_\kappa(p)=\begin{cases}\mathrm{asinh}(n)\,\dfrac{p_{xz}}{n}&\kappa=-1\\[4pt] p_{xz}/p_w&\kappa=0\\[4pt] \mathrm{atan2}(n,\,p_w)\,\dfrac{p_{xz}}{n}&\kappa=+1\end{cases}
 ```
 
 and the geodesic distance, in kernel units, is
 
 ```math
-d_\kappa(p,q)=\begin{cases}2\operatorname{asinh}\!\left(\tfrac12\sqrt{\max\!\big(0,\ \langle p-q,\,p-q\rangle_\eta\big)}\right)&\kappa=-1\\[4pt] \left\lVert p_{xz}/p_w-q_{xz}/q_w\right\rVert&\kappa=0\\[4pt] \operatorname{atan2}\!\big(\lVert p\times q\rVert,\ p\cdot q\big)&\kappa=+1\end{cases}
+d_\kappa(p,q)=\begin{cases}2\mathrm{asinh}\!\left(\tfrac12\sqrt{\max\!\big(0,\ \langle p-q,\,p-q\rangle_\eta\big)}\right)&\kappa=-1\\[4pt] \left\lVert p_{xz}/p_w-q_{xz}/q_w\right\rVert&\kappa=0\\[4pt] \mathrm{atan2}\!\big(\lVert p\times q\rVert,\ p\cdot q\big)&\kappa=+1\end{cases}
 ```
 
 These are the forms the code uses.
 The plan writes the spherical logarithm with $\arccos(p_w)$ and the distances as $\cosh d=-\langle p,q\rangle_\eta$ and $\cos d=p\cdot q$; the code's forms are mathematically equal and better conditioned near zero.
 At the spherical antipode the logarithm returns $(\pi, 0)$.
 
-*Implemented in:* `Kernel/Geometry2.cs`; single-precision versions in `AtlasWarp.hlsl`, where $\sinh$ and $\cosh$ come from one `exp` and $\operatorname{asinh}(s)$ is written $\ln(s+\sqrt{s^2+1})$.
+*Implemented in:* `Kernel/Geometry2.cs`; single-precision versions in `AtlasWarp.hlsl`, where $\sinh$ and $\cosh$ come from one `exp` and $\mathrm{asinh}(s)$ is written $\ln(s+\sqrt{s^2+1})$.
 
 ### 4.4 Parallel transport and holonomy
 
@@ -282,7 +282,7 @@ Transport is implicit in *right*-multiplying the frame by a boost: the step is t
 The holonomy is read out by decomposing a frame into a translation and a rotation:
 
 ```math
-U=\mathrm{Boost}_\kappa(t)\,\mathrm{Rot}(\theta),\qquad t=\mathrm{Log}_\kappa(Uo),\qquad \theta=\operatorname{atan2}\big((\mathrm{Boost}_\kappa(t)^{-1}U)_{10},\ (\mathrm{Boost}_\kappa(t)^{-1}U)_{00}\big)
+U=\mathrm{Boost}_\kappa(t)\,\mathrm{Rot}(\theta),\qquad t=\mathrm{Log}_\kappa(Uo),\qquad \theta=\mathrm{atan2}\big((\mathrm{Boost}_\kappa(t)^{-1}U)_{10},\ (\mathrm{Boost}_\kappa(t)^{-1}U)_{00}\big)
 ```
 
 For the lap walk (Section 5.3) the same decomposition is applied to $\mathrm{flag}^{-1}U$, the walker's frame relative to the starting flag; the angle shown on the head-up display is the rotation of the world after the loop.
@@ -296,7 +296,7 @@ The floor is tiled by the regular tiling with four-sided tiles and $q$ tiles at 
 For $q \ge 5$ the in-radius $r$ and circumradius $r_c$ of a tile, in kernel units, satisfy
 
 ```math
-\cosh r=\frac{\cos(\pi/q)}{\sin(\pi/4)},\qquad \cosh r_c=\cot\frac{\pi}{4}\cot\frac{\pi}{q},\qquad \sigma_q = 2r = 2\operatorname{asinh}\sqrt{\cos(2\pi/q)}
+\cosh r=\frac{\cos(\pi/q)}{\sin(\pi/4)},\qquad \cosh r_c=\cot\frac{\pi}{4}\cot\frac{\pi}{q},\qquad \sigma_q = 2r = 2\,\mathrm{asinh}\sqrt{\cos(2\pi/q)}
 ```
 
 so the spacing of neighbouring tile centres is $\sigma_5 = 1.0612750619$ (where $\cosh\sigma_5=\varphi$, the golden ratio) and $\sigma_6 = 1.3169578969$ (where $\cosh\sigma_6 = 2$). For the cube, $r=\pi/4$, $\sigma_3=\pi/2$ and $r_c=\arctan\sqrt2$.
@@ -363,7 +363,7 @@ One kernel, `HolonomyWalkerKernel`, serves every dial position by dispatching on
 The scan yields a free rectangle of width $W_f$ and depth $D_f$ (already 0.30 m inside walls and furniture). The *loop-fit rule* turns it into a lap square of side $s$ and into curvature radii:
 
 ```math
-s=\operatorname{clamp}\big(\min(W_f,D_f)-0.4,\ 1.0,\ 3.2\big)\ \text{m},\qquad L_5=\frac{s}{\sigma_5},\quad L_6=\frac{s}{\sigma_6},\quad R_3=\frac{s}{\pi/2}
+s=\mathrm{clamp}\big(\min(W_f,D_f)-0.4,\ 1.0,\ 3.2\big)\ \text{m},\qquad L_5=\frac{s}{\sigma_5},\quad L_6=\frac{s}{\sigma_6},\quad R_3=\frac{s}{\pi/2}
 ```
 
 The radii are chosen so that $s$ equals the centre spacing of the tiling: the scanned room then fits one tile, and "tiles per corner" equals "corners to close the walk". A 3 m by 3 m room gives $s = 2.0$ m and $L_5\approx1.885$ m.
@@ -455,7 +455,7 @@ By default the space runs a duck maze: a tree of 20 tiles grown through the tile
 Six cube-face tiles, authored in Blender, on a sphere of radius $R=\max(R_{\text{dial}},\ \texttt{planet.R})$ with `planet.R` = 2.0 m by default, all always drawn. Fragments beyond 2.6 rad of geodesic distance from the head are discarded, because the logarithm map smears near the antipode. With `planet.view3d` on, the shader treats space as the round 3-sphere whose floor is a great 2-sphere, so that the far ground rises overhead: with vertex and eye heights $h_r, e_r$ as angles and $p$ the vertex's floor point,
 
 ```math
-c=\cos h_r\cos e_r\,p_w+\sin h_r\sin e_r,\qquad v=\big(\cos h_r\,p_x,\ \cos e_r\sin h_r-\sin e_r\cos h_r\,p_w,\ \cos h_r\,p_z\big),\qquad \mathrm{Log}_E(q)=\operatorname{atan2}(\lVert v\rVert,c)\,\frac{v}{\lVert v\rVert}
+c=\cos h_r\cos e_r\,p_w+\sin h_r\sin e_r,\qquad v=\big(\cos h_r\,p_x,\ \cos e_r\sin h_r-\sin e_r\cos h_r\,p_w,\ \cos h_r\,p_z\big),\qquad \mathrm{Log}_E(q)=\mathrm{atan2}(\lVert v\rVert,c)\,\frac{v}{\lVert v\rVert}
 ```
 
 The three-corner lap closes only when $s=\pi R/2$, about 3.14 m at the default radius, so in most rooms it does not close unless `planet.R` is lowered. Scanned furniture is hidden here (Section 2.4).
@@ -517,7 +517,7 @@ Props (tower beacon, garden planters, door frame, half-beams) are built flat, su
 A tile floor is a regular grid of points $k$ in the Klein square of half-width $\tanh r$ (or $\tan r$ on the sphere), where tile edges are straight, so neighbouring tiles share edges exactly. Each point is stored at its chart position, which the warp's $\mathrm{Exp}$ undoes:
 
 ```math
-x_{\text{chart}}=L\,\operatorname{atanh}(\lVert k\rVert)\,\frac{k}{\lVert k\rVert}\ \ (\kappa=-1),\qquad x_{\text{chart}}=R\,\arctan(\lVert k\rVert)\,\frac{k}{\lVert k\rVert}\ \ (\kappa=+1)
+x_{\text{chart}}=L\,\mathrm{atanh}(\lVert k\rVert)\,\frac{k}{\lVert k\rVert}\ \ (\kappa=-1),\qquad x_{\text{chart}}=R\,\arctan(\lVert k\rVert)\,\frac{k}{\lVert k\rVert}\ \ (\kappa=+1)
 ```
 
 *Implemented in:* `Rendering/Tiles/TileChart.cs`, `TileMeshGenerator.cs`.
@@ -580,13 +580,13 @@ The solver takes the highest route that succeeds: (1) an outline from tapped cor
 The mesh is rotated into a frame aligned with the dominant wall direction, found by folding angles modulo a quarter turn (with $\alpha_k$ the direction and $w_k$ the weight of wall segment $k$):
 
 ```math
-\theta=\tfrac14\operatorname{atan2}\Big(\sum_k w_k\sin4\alpha_k,\ \sum_k w_k\cos4\alpha_k\Big)
+\theta=\tfrac14\mathrm{atan2}\Big(\sum_k w_k\sin4\alpha_k,\ \sum_k w_k\cos4\alpha_k\Big)
 ```
 
 and rasterised into a grid of cell size $c=0.05$ m. With $y_0$ the floor height, a triangle is floor if it is floor-classed and within 0.08 m of $y_0$, and an obstacle if any part of it lies between 0.10 m and 2.0 m above $y_0$. Then
 
 ```math
-\mathrm{FREE}=\mathrm{FLOOR}\setminus\operatorname{dilate}_{3\times3}\big(\mathrm{OBST}\cup\overline{\mathrm{INSIDE}}\big),\qquad \mathrm{WALK}=\text{the component of }\lbrace\mathrm{sdf}>0.25\ \text{m}\rbrace\text{ at the walker}
+\mathrm{FREE}=\mathrm{FLOOR}\setminus\mathrm{dilate}_{3\times3}\big(\mathrm{OBST}\cup\overline{\mathrm{INSIDE}}\big),\qquad \mathrm{WALK}=\text{the component of }\lbrace\mathrm{sdf}>0.25\ \text{m}\rbrace\text{ at the walker}
 ```
 
 where INSIDE is the confirmed outline and sdf is the exact Euclidean signed distance to the edge of FREE. Unseen cells are never free. The free rectangle is the axis-aligned rectangle in WALK with the largest short side (capped at 3.6 m), then the largest area; its centre becomes the room origin and carries the AR anchor. The same distance field is later the static layer of the safety system (Section 12).
@@ -602,7 +602,7 @@ where INSIDE is the confirmed outline and sdf is the exact Euclidean signed dist
 During the sweep a new key frame is kept when the camera has moved 0.25 m or turned 15 degrees and is turning slower than 30 degrees per second; at most 96 are held, in memory only. When the room is final each of the 32 largest objects is projected into every key frame and scored by projected area share $a$, centredness $C$ and sharpness $\sigma^2$ relative to the ring's median $\tilde\sigma^2$:
 
 ```math
-S=0.4\,\min\!\Big(\frac{a}{0.35},1\Big)+0.3\,C+0.3\,\operatorname{sat}\!\Big(\frac{\sigma^2}{\tilde\sigma^2}\Big)
+S=0.4\,\min\!\Big(\frac{a}{0.35},1\Big)+0.3\,C+0.3\,\mathrm{sat}\!\Big(\frac{\sigma^2}{\tilde\sigma^2}\Big)
 ```
 
 Up to three views at least 30 degrees apart in azimuth are cropped (12 % padding, at most 768 pixels, JPEG at most 200 kB). Each crop travels with its camera intrinsics and a camera-to-box matrix. Full frames never touch disk.
@@ -634,14 +634,14 @@ The raw mesh has about a million triangles in an arbitrary frame. Clean-up is de
 
 1. **Weld and decimate** to the object's triangle target by quadric edge collapse; drop fragments under 0.5 % of the surface.
 2. **Orient by fit.** Candidates are up-axis choices times four quarter-turns about the vertical. For each, the mesh's own 16 by 16 height profile $g$ is ray-cast and compared with the scanned profile $p$ over the set $S$ of cells the scan saw:
-   ```math
-   F=\frac{1}{255\,\lvert S\rvert}\sum_{c\in S}\lvert g_c-p_c\rvert
-   ```
+
+   $$F=\frac{1}{255\,\lvert S\rvert}\sum_{c\in S}\lvert g_c-p_c\rvert$$
+
    $F$ is a mean height error in fractions of the box height. Scores within 0.02 are a tie; a fit above 0.20 counts as poor.
 3. **Scale to the scanned box.** With $b_k$ the box side and $e_k$ the mesh extent on axis $k$, and $a=0.15$ the permitted non-uniform stretch:
-   ```math
-   \lambda_k=\ln\frac{b_k}{e_k},\qquad u=\exp\!\Big(\tfrac13\sum_k\lambda_k\Big),\qquad s_k=u\cdot\operatorname{clip}\!\Big(\frac{e^{\lambda_k}}{u},\ 1-a,\ 1+a\Big)
-   ```
+
+   $$\lambda_k=\ln\frac{b_k}{e_k},\qquad u=\exp\!\Big(\tfrac13\sum_k\lambda_k\Big),\qquad s_k=u\cdot\mathrm{clip}\!\Big(\frac{e^{\lambda_k}}{u},\ 1-a,\ 1+a\Big)$$
+
    The origin is then moved to the centre of the base.
 4. **Regrid.** Edges are bisected at shared midpoints until none exceeds 0.25 m. This is the step that makes a generated object fit for a curved space.
 5. **Colour.** Each face takes the cosine-weighted mean, in linear light, of the photographs that see it, mapped to the nearest of 64 object palette cells by squared distance in OKLab; at most six cells per object.
@@ -651,7 +651,7 @@ The raw mesh has about a million triangles in an arbitrary frame. Clean-up is de
 The triangle budget is shared by box surface area $a_i$ among the $n\le32$ largest objects, in whole-number arithmetic so that the phone, the Forge and the Python reference agree:
 
 ```math
-t_i=\operatorname{clamp}\!\Big(\Big\lfloor\frac{120000\,a_i}{\sum_j a_j}\Big\rfloor,\ 3000,\ 15000\Big)
+t_i=\mathrm{clamp}\!\Big(\Big\lfloor\frac{120000\,a_i}{\sum_j a_j}\Big\rfloor,\ 3000,\ 15000\Big)
 ```
 
 The Forge contains no watertightness or manifold check.
@@ -753,7 +753,7 @@ Five blade assemblies under `Blades/` place a dataset in one of the spaces. No n
 
 Greedy forwarding sends a packet to the neighbour nearest the destination. In the bundled seed-7 network, the study recorded in the data file delivers 100 % of packets under the hyperbolic metric and 74.1 % under the straight-line metric of the flat picture (seed 83: 99.5 % and 73.5 %). These are results for networks generated by this model, with seeds selected by a scan, not for the real Internet. A walk-through version is written but not registered.
 
-**Lung.** A binary airway tree addressed by strings over L and R is embedded on {4,5} by "Rule S": one turn tile and one straight tile per generation, giving a fork spacing of $\operatorname{arccosh}(1+2\varphi)=2.1226$ units, above the bound of 1.7627 that the project's research note attributes to Sarkar for a collision-free embedding. A needle-direction sky on $\mathbb{S}^2$ includes a spherical-triangle angle-sum check. The 4D breathing worldtube exists as plan and Station pipeline only. All lung data in the build is a synthetic placeholder; the airway is model-generated in every variant. Education and research visualisation only; no clinical claim is made.
+**Lung.** A binary airway tree addressed by strings over L and R is embedded on {4,5} by "Rule S": one turn tile and one straight tile per generation, giving a fork spacing of $\mathrm{arccosh}(1+2\varphi)=2.1226$ units, above the bound of 1.7627 that the project's research note attributes to Sarkar for a collision-free embedding. A needle-direction sky on $\mathbb{S}^2$ includes a spherical-triangle angle-sum check. The 4D breathing worldtube exists as plan and Station pipeline only. All lung data in the build is a synthetic placeholder; the airway is model-generated in every variant. Education and research visualisation only; no clinical claim is made.
 
 **FieldFit.** Visual-field remapping of the rendered Home on the sphere of view directions, in stereographic radius $s=2\tan(e/2)$ for eccentricity $e$, with a blind-spot finder and a text layout that flows round the blind spot by the Joukowski map $w=z+a^2/z$. The lens cannot turn on in the app as wired, because its parameters are declared only in tests. A teaching prototype, not a low-vision aid.
 
