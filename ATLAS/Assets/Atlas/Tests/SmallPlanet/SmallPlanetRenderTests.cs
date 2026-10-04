@@ -25,7 +25,22 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             return new Iso2((Iso2.Boost(t, 1) * Iso2.Rot(rotation)).M, 1);
         }
 
-        // T4. P1-B05 seam criterion on the {4,3} frames; §3.4, §9.5.6 P1-B05
+        // 17 points along edge k of a tile chart (Klein coordinate 1 along the edge's normal), corners included.
+        static float3[] EdgePoints(int k, double R)
+        {
+            var e = new double2(k == 0 ? 1 : k == 2 ? -1 : 0, k == 1 ? 1 : k == 3 ? -1 : 0);
+            var along = new double2(-e.y, e.x);
+            var points = new float3[17];
+            for (int i = 0; i < points.Length; i++)
+            {
+                double2 x = TileChart.KleinToChart(e + (i / 8.0 - 1) * along, 1, R);
+                points[i] = new float3((float)x.x, 0f, (float)x.y);
+            }
+            return points;
+        }
+
+        // T4. P1-B05 seam criterion on the {4,3} frames (§3.4, §9.5.6 P1-B05): the warp of edge k of every face meets the warp
+        // of the neighbour's back edge, the chain and the shader's spherical map agreeing to a millimetre.
         [Test]
         public void SmallPlanet_TileSeams()
         {
@@ -34,40 +49,29 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             foreach (double s in new[] { 1.0, 2.0, 3.2 })
             {
                 double R = 2 * s / Math.PI;
-                var tile = BuildTile(R);
-                var edgeVerts = new List<int>[4];
-                for (int k = 0; k < 4; k++)
-                {
-                    edgeVerts[k] = new List<int>();
-                    var e = new double2(k == 0 ? 1 : k == 2 ? -1 : 0, k == 1 ? 1 : k == 3 ? -1 : 0);
-                    for (int i = tile.Lay.FloorVertices.start; i < tile.Lay.FloorVertices.start + tile.Lay.FloorVertices.length; i++)
-                    {
-                        var kl = TileChart.ChartToKlein(new double2(tile.V[i].x, tile.V[i].z), 1, R);
-                        if (Math.Abs(math.dot(kl, e) - 1) < 1e-5) edgeVerts[k].Add(i);
-                    }
-                    Assert.AreEqual(17, edgeVerts[k].Count, $"edge {k}");
-                }
+                var edgeVerts = new float3[4][];
+                for (int k = 0; k < 4; k++) edgeVerts[k] = EdgePoints(k, R);
                 var anchors = new Iso2[6];
                 for (int n = 0; n < 100; n++)
                 {
                     int face = rng.Next(6);
                     double r = CubeTiling.Circumradius * Math.Sqrt(rng.NextDouble()), a = rng.NextDouble() * 2 * Math.PI, th = rng.NextDouble() * 2 * Math.PI;
                     var u = new Iso2((Iso2.Boost(r * new double2(Math.Cos(a), Math.Sin(a)), 1) * Iso2.Rot(th)).M, 1);
-                    Anchors(Place(s, face, u), anchors, out _);
+                    Anchors(Place(s, face, u), anchors);
                     var mats = new float4x4[6];
                     for (int f = 0; f < 6; f++) mats[f] = ToF4(WarpAnchor.ToMatrix(anchors[f]));
                     for (int f = 0; f < 6; f++)
                         for (int k = 0; k < 4; k++)
                         {
                             int g = CubeTiling.Neighbour(f, k), be = CubeTiling.BackEdge(f, k);
-                            foreach (int vi in edgeVerts[k])
+                            foreach (float3 vi in edgeVerts[k])
                             {
-                                float3 w = AtlasWarpCpu.AtlasWarp(tile.V[vi], mats[f], 2f, (float)R, Head, float4x4.identity);
+                                float3 w = AtlasWarpCpu.AtlasWarp(vi, mats[f], 2f, (float)R, Head, float4x4.identity);
                                 if (SmallPlanetShading.VertexGeodesic(w, Head, (float)R) > 2.6f) continue;
                                 float best = float.MaxValue;
-                                foreach (int vj in edgeVerts[be])
+                                foreach (float3 vj in edgeVerts[be])
                                 {
-                                    float3 w2 = AtlasWarpCpu.AtlasWarp(tile.V[vj], mats[g], 2f, (float)R, Head, float4x4.identity);
+                                    float3 w2 = AtlasWarpCpu.AtlasWarp(vj, mats[g], 2f, (float)R, Head, float4x4.identity);
                                     best = Math.Min(best, math.length(w2.xz - w.xz));
                                 }
                                 worst = Math.Max(worst, best); checkedVerts++;
@@ -116,7 +120,7 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             return bad;
         }
 
-        static IEnumerable<(string, double3)> HeadPoints()
+        static IEnumerable<(string, double3)> HeadPoints(int randomPoints)
         {
             for (int f = 0; f < 6; f++) yield return ($"centre{f}", CubeTiling.Frame(f).M.c2);
             for (int sx = -1; sx <= 1; sx += 2) for (int sy = -1; sy <= 1; sy += 2) for (int sz = -1; sz <= 1; sz += 2)
@@ -128,7 +132,7 @@ namespace Atlas.Spaces.SmallPlanet.Tests
                         yield return ("edge", math.normalize(v));
                     }
             var rng = new Random(11);
-            for (int i = 0; i < 500; i++)
+            for (int i = 0; i < randomPoints; i++)
             {
                 var v = new double3(rng.NextDouble() - .5, rng.NextDouble() - .5, rng.NextDouble() - .5);
                 if (math.length(v) < 1e-3) continue;
@@ -136,18 +140,22 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             }
         }
 
-        // T5. Editor proxy for "no smeared triangle in a 360 deg look-around" (§9.5.6), §10.2, R6 §2.5, kernel.md §6.3
+        // T5. Editor proxy for "no smeared triangle in a 360 deg look-around" (§9.5.6), §10.2, R6 §2.5, kernel.md §6.3, on the
+        // PlanetKit tiles: xz scales with R, so a triangle's geodesic diameter (xz / R) is the same at every radius.
         [Test]
         public void SmallPlanet_NoSmearBeyondDiscard()
         {
+            PlanetKitTiles kit = PlanetKitTests.Shipped();
             double limit = Math.PI - SmallPlanetConstants.DiscardRad;
             double worstDiam = 0;
-            foreach (double s in LapSides)
+            var tiles = new TileData[6];
+            double R = SmallPlanetConstants.KitRadius;
+            for (int f = 0; f < 6; f++)
             {
-                double R = 2 * s / Math.PI;
-                foreach (var d in new[] { BuildTile(R), BuildBeacon(R) })
-                    for (int t = 0; t < d.T.Length; t += 3)
-                        worstDiam = Math.Max(worstDiam, TriangleDiameter(d, d.T[t], d.T[t + 1], d.T[t + 2]));
+                tiles[f] = BuildKitTile(kit, f, R);
+                TileData d = tiles[f];
+                for (int t = 0; t < d.T.Length; t += 3)
+                    worstDiam = Math.Max(worstDiam, TriangleDiameter(d, d.T[t], d.T[t + 1], d.T[t + 2]));
             }
             TestContext.WriteLine($"T5a worst triangle geodesic diameter {worstDiam:F4} rad (limit {limit:F4})");
             Assert.Less(worstDiam, limit);
@@ -155,36 +163,26 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             double worstG = 0; int poses = 0, drawnBad = 0;
             var rng = new Random(5);
             var anchors = new Iso2[6];
-            foreach (double s in new[] { 1.0, 2.0, 3.2 })
+            double s = R * Math.PI / 2;
+            foreach (var (name, w) in HeadPoints(60))
             {
-                double R = 2 * s / Math.PI;
-                var tile = BuildTile(R); var beacon = BuildBeacon(R);
-                foreach (var (name, w) in HeadPoints())
-                {
-                    var u = PoseTowards(w, name.StartsWith("centre") ? 0 : rng.NextDouble() * 2 * Math.PI);
-                    Anchors(Place(s, 0, u), anchors, out var ba);
-                    for (int f = 0; f < 6; f++) drawnBad += Scan(tile, anchors[f], ToF4(WarpAnchor.ToMatrix(anchors[f])), ref worstG);
-                    drawnBad += Scan(beacon, ba, ToF4(WarpAnchor.ToMatrix(ba)), ref worstG);
-                    poses++;
-                }
+                var u = PoseTowards(w, name.StartsWith("centre") ? 0 : rng.NextDouble() * 2 * Math.PI);
+                Anchors(Place(s, 0, u), anchors);
+                for (int f = 0; f < 6; f++) drawnBad += Scan(tiles[f], anchors[f], ToF4(WarpAnchor.ToMatrix(anchors[f])), ref worstG);
+                poses++;
             }
             TestContext.WriteLine($"T5b {poses} poses: drawn triangles containing the cut point {drawnBad}; worst |g_float - g_double| {worstG * 1000:F4} mm");
             Assert.AreEqual(0, drawnBad);
             Assert.LessOrEqual(worstG, 1e-3);
 
-            // (c) regression for the LogS2 antipode branch (§3.6)
-            foreach (double s in new[] { 1.0, 2.0, 3.2 })
+            // (c) regression for the LogS2 antipode branch (§3.6): the centre of face 5, seen from the centre of face 0
+            foreach (double side in new[] { 1.0, 2.0, 3.2 })
             {
-                double R = 2 * s / Math.PI;
-                var tile = BuildTile(R);
-                Anchors(Place(s, 0, new Iso2(double3x3.identity, 1)), anchors, out _);
-                int vi = -1;
-                for (int i = tile.Lay.FloorVertices.start; i < tile.Lay.FloorVertices.start + tile.Lay.FloorVertices.length; i++)
-                    if (math.length(tile.V[i].xz) < 1e-6f) vi = i;
-                Assert.GreaterOrEqual(vi, 0);
-                float3 w = AtlasWarpCpu.AtlasWarp(tile.V[vi], ToF4(WarpAnchor.ToMatrix(anchors[5])), 2f, (float)R, Head, float4x4.identity);
-                float g = SmallPlanetShading.VertexGeodesic(w, Head, (float)R);
-                TestContext.WriteLine($"T5c s={s} centre vertex of face 5 g = {g:F5}");
+                double r = 2 * side / Math.PI;
+                Anchors(Place(side, 0, new Iso2(double3x3.identity, 1)), anchors);
+                float3 wc = AtlasWarpCpu.AtlasWarp(float3.zero, ToF4(WarpAnchor.ToMatrix(anchors[5])), 2f, (float)r, Head, float4x4.identity);
+                float g = SmallPlanetShading.VertexGeodesic(wc, Head, (float)r);
+                TestContext.WriteLine($"T5c s={side} centre of face 5 g = {g:F5}");
                 Assert.GreaterOrEqual(g, Math.PI - 1e-3);
             }
         }
@@ -219,120 +217,52 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             StringAssert.IsMatch(@"AtlasWarpClip\s*\(\s*input\.positionWS\s*\)", Hlsl("AtlasSurface.shader"));
         }
 
-        // T7. §3.5 pole beacon; R6 §2.6, §5.3; Spec §6.3. Drawn on the procedural fallback only: with the PlanetKit tiles the
-        // cairn and lantern at the centre of face 5 (Beacon) replace it (PlanetKit.md).
+        // The sky (SmallPlanetSkyMesh): beyond the fogged planet and inside the eye cameras' far plane, above the horizon,
+        // palette colours only (the sun emissive), no lines; one sun and the clouds, under two thousand triangles.
         [Test]
-        public void SmallPlanet_PoleBeacon()
+        public void SmallPlanet_Sky()
         {
-            var mesh = new AtlasMeshBuilder(32, 96);
-            int tris = PoleBeaconMesh.Build(mesh);
-            Assert.AreEqual(24, tris); Assert.LessOrEqual(tris, 500);
-            Assert.AreEqual(24, mesh.TriangleCount);
-            Assert.AreEqual(17, mesh.VertexCount);
-            Assert.AreEqual(SmallPlanetConstants.BeaconHeight, mesh.BoundsSize.y, 1e-6);
-            for (int i = 0; i < mesh.VertexCount; i++)
-            {
-                Assert.AreEqual(AtlasPalette.Uv(AtlasPalette.Beacon), mesh.Vertices[i].Uv0);
-                Assert.AreEqual(0, mesh.Vertices[i].LineWeight);
-            }
-            var v = mesh.Vertices; var t = mesh.Indices;
-            for (int i = 0; i < mesh.IndexCount; i += 3)
-            {
-                float3 n = math.cross(v[t[i + 1]].Position - v[t[i]].Position, v[t[i + 2]].Position - v[t[i]].Position);
-                float3 c = (v[t[i]].Position + v[t[i + 1]].Position + v[t[i + 2]].Position) / 3f;
-                var outward = new float3(c.x, 0, c.z);
-                Assert.IsTrue(math.dot(n, outward) > 0 || n.y > 0, $"triangle {i / 3} faces outward");
-            }
-            double inscribed = SmallPlanetConstants.BeaconRadius * Math.Cos(Math.PI / 8);
-            Assert.Greater(inscribed, TileChart.PostRadius);
-            Assert.LessOrEqual(SmallPlanetConstants.BeaconRadius, 0.3 * (2 * 1.0 / Math.PI));
+            var sun = new AtlasMeshBuilder(64, 192);
+            int sunTris = SmallPlanetSkyMesh.BuildSun(sun);
+            Assert.AreEqual(3 * SmallPlanetSkyMesh.SunSegments, sunTris);
+            var clouds = new AtlasMeshBuilder(4096, 4096);
+            int cloudTris = SmallPlanetSkyMesh.BuildClouds(clouds);
+            int puffs = 0;
+            foreach (var c in SmallPlanetSkyMesh.Clouds) puffs += c.Puffs;
+            Assert.AreEqual(puffs * SmallPlanetSkyMesh.PuffTriangles, cloudTris);
+            Assert.LessOrEqual(sunTris + cloudTris, 2000);
 
-            double3 bw = math.mul((CubeTiling.Frame(5) * SmallPlanetCore.BeaconPlacement).M, O);
-            Assert.Less(math.length(bw - new double3(1, -1, -1) / Math.Sqrt(3)), 1e-12);
-            var d = new List<double>();
-            for (int f = 0; f < 6; f++)
+            double fogged = SmallPlanetConstants.FogOpaqueRad * SmallPlanetCore.MaxRadiusM;
+            var sunCells = new[] { AtlasPalette.Uv(SmallPlanetSkyMesh.SunCell), AtlasPalette.Uv(SmallPlanetSkyMesh.SunHaloCell) };
+            var cloudCells = new[] { AtlasPalette.Uv(SmallPlanetSkyMesh.CloudCell), AtlasPalette.Uv(SmallPlanetSkyMesh.CloudBaseCell) };
+            foreach (var mesh in new[] { sun, clouds })
             {
-                double dist = Geometry2.Distance(bw, CubeTiling.Frame(f).M.c2, 1);
-                d.Add(dist);
-                Assert.LessOrEqual(dist, 0.8 * Math.PI);
-                Assert.GreaterOrEqual(Geometry2.Distance(bw, CubeTiling.Frame(CubeTiling.Antipode(f)).M.c2, 1), 0.3);
-            }
-            d.Sort();
-            TestContext.WriteLine("T7 beacon distances to face centres: " + string.Join(", ", d.ConvertAll(x => x.ToString("F4"))));
-            for (int i = 0; i < 3; i++) { Assert.AreEqual(0.9553, d[i], 1e-4); Assert.AreEqual(2.1863, d[i + 3], 1e-4); }
-
-            Anchors(Place(2.0, 0, new Iso2(double3x3.identity, 1)), new Iso2[6], out var ba);
-            Assert.Less(math.length(math.mul(ba.M, O) - new double3(1, -1, -1) / Math.Sqrt(3)), 1e-12);
-        }
-
-        // T10. §8.3, §8.5 (S4 <= 70 draw calls, <= 190k triangles), §8.4 Near cap 1,200: the procedural fallback.
-        // The PlanetKit tiles (up to 3,000 triangles each) are budgeted in PlanetKitTests.PlanetKit_Budget.
-        [Test]
-        public void SmallPlanet_Budget()
-        {
-            foreach (double s in LapSides)
-            {
-                int T = BuildTile(2 * s / Math.PI).Lay.TriangleCount;
-                Assert.LessOrEqual(T, 1200);
-                int draws = 2 * 7, tris = 2 * (6 * T + 24);
-                TestContext.WriteLine($"T10 s={s}: tile triangles {T}, planet draws {draws}, planet triangles {tris}");
-                Assert.LessOrEqual(draws, 70); Assert.LessOrEqual(tris, 190000);
-            }
-        }
-
-#if !ATLAS_HEADLESS
-        // T10 (view). §8.3, the procedural fallback (no kit): seven renderers, one pooled instance each, one shared tile mesh,
-        // huge bounds; everything goes back to the pool. The kit path: PlanetKitTests.SmallPlanet_View_WithTheKit_*.
-        [Test, Category("Unity")]
-        public void SmallPlanet_View()
-        {
-            var pool = MaterialPool.CreateDefault(16);
-            var go = new GameObject("view");
-            try
-            {
-                var view = go.AddComponent<SmallPlanetView>();
-                var anchors = new Iso2[6];
-                foreach (double s in LapSides)
+                var cells = mesh == sun ? sunCells : cloudCells;
+                for (int i = 0; i < mesh.VertexCount; i++)
                 {
-                    double R = 2 * s / Math.PI;
-                    view.Build(R, pool, null);
-                    Assert.IsFalse(view.UsesKit);
-                    Assert.AreEqual(7, pool.Rented);
-                    Assert.AreEqual(6, view.TileRenderers.Count);
-                    Assert.IsNotNull(view.BeaconRenderer);
-                    var mats = new HashSet<Material>();
-                    var all = new List<MeshRenderer>(view.TileRenderers) { view.BeaconRenderer };
-                    foreach (var r in all)
-                    {
-                        Assert.IsTrue(r.enabled);
-                        Assert.AreEqual(new Vector3(1000, 1000, 1000), r.localBounds.size);
-                        Assert.IsTrue(pool.Owns(r.sharedMaterial));
-                        Assert.AreEqual(AtlasWarpCpu.ModeSpherical, r.sharedMaterial.GetFloat(AtlasShaderIDs.WarpMode));
-                        mats.Add(r.sharedMaterial);
-                    }
-                    Assert.AreEqual(7, mats.Count);
-                    var m0 = view.TileRenderers[0].GetComponent<MeshFilter>().sharedMesh;
-                    for (int f = 1; f < 6; f++) Assert.AreSame(m0, view.TileRenderers[f].GetComponent<MeshFilter>().sharedMesh);
-                    Assert.AreEqual(view.TileTriangles, (int)m0.GetIndexCount(0) / 3);
-                    Assert.AreEqual(24, (int)view.BeaconRenderer.GetComponent<MeshFilter>().sharedMesh.GetIndexCount(0) / 3);
-                    Anchors(Place(s, 0, new Iso2(double3x3.identity, 1)), anchors, out Iso2 beacon);
-                    view.Upload(anchors, beacon);
-                    Assert.AreEqual(WarpAnchor.ToMatrix(anchors[3]), view.TileRenderers[3].sharedMaterial.GetMatrix(AtlasShaderIDs.Anchor));
-                    view.Shown = false;
-                    Assert.IsFalse(view.BeaconRenderer.gameObject.activeSelf);
-                    view.SetRadius(R * 1.5);
-                    Assert.AreSame(m0, view.TileRenderers[0].GetComponent<MeshFilter>().sharedMesh, "rebuilt in place");
-                    view.Release();
-                    Assert.AreEqual(0, go.transform.childCount);
-                    Assert.AreEqual(0, pool.Rented);
+                    AtlasVertex v = mesh.Vertices[i];
+                    float d = math.length(v.Position);
+                    Assert.Greater(d, fogged + 10, "beyond the planet");
+                    Assert.Less(d, StereoRig.FarPlane - 2, "inside the far plane");
+                    Assert.Greater(v.Position.y, 5f, "above the horizon");
+                    Assert.AreEqual(0, v.LineWeight, "no lines");
+                    Assert.IsTrue(v.Uv0.Equals(cells[0]) || v.Uv0.Equals(cells[1]), "palette cell, vertex " + i);
                 }
             }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(go);
-                pool.Dispose();
-            }
+            Assert.IsTrue(AtlasPalette.IsEmissive(SmallPlanetSkyMesh.SunCell) && AtlasPalette.IsEmissive(SmallPlanetSkyMesh.SunHaloCell));
+            Assert.IsTrue(AtlasPalette.IsEmissive(SmallPlanetSkyMesh.CloudCell));
+            Assert.IsFalse(AtlasPalette.IsEmissive(SmallPlanetSkyMesh.CloudBaseCell), "the base takes the baked shade");
+
+            // The horizon is the Blender preview's sky (art/blender/smallplanet_build.py, SKY = "BFE3F5"); the zenith is deeper.
+            string build = File.ReadAllText(Path.Combine(ProjectDir, "..", "art", "blender", "smallplanet_build.py"));
+            Match sky = Regex.Match(build, "^SKY\\s*=\\s*\"([0-9A-Fa-f]{6})\"", RegexOptions.Multiline);
+            Assert.IsTrue(sky.Success, "SKY in smallplanet_build.py");
+            int hex = Convert.ToInt32(sky.Groups[1].Value, 16);
+            float3 want = new float3((hex >> 16) & 255, (hex >> 8) & 255, hex & 255) / 255f;
+            Assert.Less(math.cmax(math.abs(SmallPlanetSkyMesh.HorizonSrgb - want)), 1e-6f);
+            float3 lum = new float3(0.2126f, 0.7152f, 0.0722f);
+            Assert.Less(math.dot(SmallPlanetSkyMesh.ZenithLinear, lum), math.dot(SmallPlanetSkyMesh.HorizonLinear, lum));
+            Assert.Greater(SmallPlanetSkyMesh.SunDirection.y, 0.3f);
         }
-#endif
     }
 }

@@ -19,7 +19,7 @@ namespace Atlas.Spaces.SmallPlanet.Tests
 {
     /// <summary>
     /// The Small Planet tiles modelled in Blender (PlanetKit.md): loaded through KitSet, scaled by R, refused as a
-    /// whole when a file is missing or altered, and drawn by the view in place of the procedural tiles and beacon.
+    /// whole when a file is missing or altered, and drawn by the view (nothing at all when the kit is refused).
     /// </summary>
     public class PlanetKitTests
     {
@@ -157,14 +157,15 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             TestContext.WriteLine(why + ": " + error);
         }
 
-        // T10 (kit). §8.5: S4 <= 70 draw calls and <= 190k triangles, both eyes; six tile draws an eye, no beacon.
+        // T10 (kit). §8.5: S4 <= 70 draw calls and <= 190k triangles, both eyes; six tile draws an eye and the sky's two (sun, clouds).
         [Test]
         public void PlanetKit_Budget()
         {
             PlanetKitTiles kit = Shipped();
             for (int f = 0; f < CubeTiling.FaceCount; f++) Assert.LessOrEqual(kit.Triangles(f), PlanetKitTiles.MaxTileTriangles);
-            int draws = 2 * CubeTiling.FaceCount, tris = 2 * kit.TotalTriangles;
-            TestContext.WriteLine($"T10 kit: planet draws {draws}, planet triangles {tris}");
+            int skyTris = SmallPlanetSkyMesh.BuildSun(new AtlasMeshBuilder(64, 192)) + SmallPlanetSkyMesh.BuildClouds(new AtlasMeshBuilder(4096, 4096));
+            int draws = 2 * (CubeTiling.FaceCount + 2), tris = 2 * (kit.TotalTriangles + skyTris);
+            TestContext.WriteLine($"T10 kit: planet and sky draws {draws}, triangles {tris} (sky {skyTris} an eye)");
             Assert.LessOrEqual(draws, 70);
             Assert.LessOrEqual(tris, 190000);
         }
@@ -181,9 +182,9 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             Assert.IsNotNull(SmallPlanetView.SharedKit(), "the view finds the kit in Resources");
         }
 
-        // §8.3 with the kit: six renderers, one pooled instance and one mesh each, no beacon; rescaled in place.
+        // §8.3 with the kit: six renderers, one pooled instance and one mesh each; rescaled in place.
         [Test, Category("Unity")]
-        public void SmallPlanet_View_WithTheKit_DrawsSixTiles_AndNoPoleBeacon()
+        public void SmallPlanet_View_WithTheKit_DrawsSixTiles()
         {
             PlanetKitTiles kit = Shipped();
             var pool = MaterialPool.CreateDefault(16);
@@ -193,8 +194,7 @@ namespace Atlas.Spaces.SmallPlanet.Tests
                 var view = go.AddComponent<SmallPlanetView>();
                 double radius = SmallPlanetConstants.KitRadius;
                 view.Build(radius, pool, kit);
-                Assert.IsTrue(view.UsesKit);
-                Assert.IsNull(view.BeaconRenderer, "the kit's cairn is the beacon");
+                Assert.IsTrue(view.Built);
                 Assert.AreEqual(6, pool.Rented);
                 Assert.AreEqual(6, view.TileRenderers.Count);
                 Assert.AreEqual(6, go.transform.childCount);
@@ -218,8 +218,8 @@ namespace Atlas.Spaces.SmallPlanet.Tests
                 Assert.AreEqual(6, mats.Count);
 
                 var anchors = new Iso2[6];
-                Anchors(Place(radius * Math.PI / 2, 0, new Iso2(double3x3.identity, 1)), anchors, out Iso2 beacon);
-                view.Upload(anchors, beacon);
+                Anchors(Place(radius * Math.PI / 2, 0, new Iso2(double3x3.identity, 1)), anchors);
+                view.Upload(anchors);
                 Assert.AreEqual(WarpAnchor.ToMatrix(anchors[5]), view.TileRenderers[5].sharedMaterial.GetMatrix(AtlasShaderIDs.Anchor));
 
                 view.SetRadius(radius * 1.5);
@@ -234,7 +234,7 @@ namespace Atlas.Spaces.SmallPlanet.Tests
                 view.Shown = false;
                 for (int f = 0; f < 6; f++) Assert.IsFalse(view.TileRenderers[f].gameObject.activeSelf);
                 view.Shown = true;
-                Assert.IsNull(view.BeaconRenderer, "showing the planet brings no beacon back");
+                for (int f = 0; f < 6; f++) Assert.IsTrue(view.TileRenderers[f].gameObject.activeSelf);
 
                 view.Release();
                 Assert.AreEqual(0, go.transform.childCount);
@@ -248,11 +248,11 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             }
         }
 
-        // A kit that is refused: one warning, then the procedural planet exactly as before (shared tile mesh and the pole beacon).
+        // A kit that is refused: one error, then nothing is drawn (no procedural fallback); the view survives every call.
         [Test, Category("Unity")]
-        public void SmallPlanet_View_FallsBackToProceduralTiles_WhenTheKitIsRefused()
+        public void SmallPlanet_View_DrawsNothing_WhenTheKitIsRefused()
         {
-            LogAssert.Expect(LogType.Warning, new Regex("Small Planet kit tiles are missing or invalid"));
+            LogAssert.Expect(LogType.Error, new Regex("Small Planet kit tiles are missing or invalid"));
             PlanetKitTiles kit = SmallPlanetView.LoadKit(DiskReader((name, bytes) => name == "tile2.glb" ? null : bytes));
             Assert.IsNull(kit);
 
@@ -262,12 +262,12 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             {
                 var view = go.AddComponent<SmallPlanetView>();
                 view.Build(1.5, pool, kit);
-                Assert.IsFalse(view.UsesKit);
-                Assert.AreEqual(7, pool.Rented);
-                Assert.IsNotNull(view.BeaconRenderer);
-                Mesh m0 = view.TileRenderers[0].GetComponent<MeshFilter>().sharedMesh;
-                for (int f = 1; f < 6; f++) Assert.AreSame(m0, view.TileRenderers[f].GetComponent<MeshFilter>().sharedMesh);
-                Assert.LessOrEqual(view.TileTriangles, TileChart.TriangleCap(TileLod.Near));
+                Assert.IsFalse(view.Built);
+                Assert.AreEqual(0, pool.Rented);
+                Assert.AreEqual(0, go.transform.childCount);
+                view.SetRadius(2.0);
+                view.Upload(new Iso2[6]);
+                view.Shown = false;
                 view.Release();
                 Assert.AreEqual(0, pool.Rented);
             }
