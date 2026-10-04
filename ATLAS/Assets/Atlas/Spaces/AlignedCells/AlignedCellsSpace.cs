@@ -29,6 +29,7 @@ namespace Atlas.Spaces.AlignedCells
         AlignedCellsRoomView _roomView;
         MazeHud _hud;                                          // made at the first Configure, kept across reconfigures
         DuckMaze _shownMaze;                                   // the maze of the last Apply: a new one (a new run, P7, a reconfigure) redraws
+        CellGrid _viewGrid;                                    // the grid the cells and the room driver were made for
 
         MaterialPool _pool;
         IRoomContent _room;
@@ -80,12 +81,32 @@ namespace Atlas.Spaces.AlignedCells
                 AtlasServices.TryGet(out IStereoRig rig);
                 _hud = new MazeHud(rig != null ? rig.Hud : null);
             }
-            if (!AtlasServices.TryGet(out _pool)) return;     // no look in this build: nothing to draw with
-            // The duck modelled in Blender (kit piece "duck"; one AtlasKit for the whole app, read as Glued reads it), once per
-            // Configure and only when a maze can be drawn. No kit, or a refused piece: the view draws the procedural duck.
+            AtlasServices.TryGet(out _pool);
+            MakeView();
+        }
+
+        // The cells for the core's grid; no pool (no look in this build): nothing to draw with.
+        void MakeView()
+        {
+            _viewGrid = _core.Grid;
+            _dirty = true;
+            if (_pool == null) return;
+            // The duck modelled in Blender (kit piece "duck"; one AtlasKit for the whole app, read as Glued reads it), only when
+            // a maze can be drawn. No kit, or a refused piece: the view draws the procedural duck.
             KitSet kit = _core.MazeMode ? KitSet.Load(ReadKitResource) : null;
             _view = new AlignedCellsView(transform, _pool, _core.Grid, kit);
-            _dirty = true;
+        }
+
+        // The core's grid changed under the views: a Station copy took the phone's grid (ReadState), or S3 was entered from
+        // Curved Walk with cells.maze on and runs classic S3 for that entry. The cells and the room driver are made again for it.
+        void FollowGrid()
+        {
+            if (!_core.Configured || ReferenceEquals(_core.Grid, _viewGrid)) return;
+            if (_roomView != null) _roomView.Exit();
+            _roomView = null;
+            ReleaseViews();
+            MakeView();
+            if (_entered) TakeRoom();
         }
 
         public void Enter(in WalkerPose start)
@@ -117,6 +138,7 @@ namespace Atlas.Spaces.AlignedCells
             var head = new double2(frame.HeadPosition.x, frame.HeadPosition.z);
             if (_pendingEnter) Place(frame.HeadPosition);
             if (_core.Tick(head, frame.Kernel.Rejected, frame.Time)) _dirty = true;   // also true when a new maze run began
+            FollowGrid();
             if (_core.NeedsReconfigure) Reconfigure(frame.HeadPosition);
             if (_hud != null) ShowRun(_hud, _core);
             if (_roomView == null) TakeRoom();                // the room content was built after Enter
@@ -130,6 +152,7 @@ namespace Atlas.Spaces.AlignedCells
         public void Upload(in FrameContext frame)
         {
             if (!_entered || !_core.Entered) return;
+            FollowGrid();                                      // a State read after this frame's Tick may have changed it
             DuckMaze maze = ShownMaze(_core);
             // The core's Tick reports a new run; this also catches a maze changed by any other path (a Station's P7, a reconfigure).
             if (!ReferenceEquals(maze, _shownMaze)) _dirty = true;
@@ -192,6 +215,7 @@ namespace Atlas.Spaces.AlignedCells
         {
             _pendingEnter = false;
             _core.Enter(in _start, new double2(head.x, head.z));
+            FollowGrid();
             _dirty = true;
             if (_events != null)
                 _events.Log("cells.enter", "cells", _core.Grid.CountX * _core.Grid.CountZ, "fromMode1", _core.EnteredFromCurvedWalk ? 1 : 0);

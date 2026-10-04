@@ -36,6 +36,11 @@ namespace Atlas.Spaces.AlignedCells
         bool runPending, unavailablePending, mazeUnavailable;
         int runCounter, remoteCode;
         CellFrame before;                                       // the walker's frame before this frame's Walk
+        // This room's two grids: the maze's (null when the floor is too small for it) and the classic one (made when first needed).
+        // A Station copy takes whichever of them the phone's State is on (ReadState); gridSwitched makes the next Tick redraw.
+        RoomModel room;
+        CellGrid mazeGrid, classicGrid;
+        bool mazeRequested, gridSwitched;                       // mazeRequested: cells.maze at Configure
 
         public TileGraph Graph => graph;
         public CellGrid Grid { get; private set; }
@@ -84,16 +89,39 @@ namespace Atlas.Spaces.AlignedCells
                 mazeSeedParam = registry.Find(ParamMazeSeed);
             }
             // The duck maze's 4 x 4 grid when cells.maze is on; a floor too small for it runs today's S3 (maze.unavailable).
-            MazeMode = mazeParam != null && mazeParam.Bool;
-            Grid = MazeMode ? CellGrid.Maze(room) : null;
-            mazeUnavailable = MazeMode && Grid == null;
-            if (Grid == null) { MazeMode = false; Grid = CellGrid.FromRoom(room); }
-            Walker = new CellWalker(Grid, graph);
-            Loops = new PostLoops(Grid);
+            this.room = room;
+            mazeRequested = mazeParam != null && mazeParam.Bool;
+            mazeGrid = CellGrid.Maze(room);
+            classicGrid = null;
+            mazeUnavailable = mazeRequested && mazeGrid == null;
+            Grid = null;
+            if (mazeRequested && mazeGrid != null) UseGrid(mazeGrid, true);
+            else UseGrid(ClassicGrid(), false);
             Instances.Clear();
             Entered = false; remote = false; modeTaken = false; modeArmed = false; shownDepth = -1;
             Maze = null; MazeFound = false; MazeFoundTime = 0; MazeElapsed = 0; MazeSteps = 0; MazeWallsCrossed = 0;
-            NeedsReconfigure = false; runPending = false; unavailablePending = false; remoteCode = 0;
+            NeedsReconfigure = false; runPending = false; unavailablePending = false; remoteCode = 0; gridSwitched = false;
+        }
+
+        // §4.7: the classic grid. FromRoom throws for a free rectangle whose cell side would be below 0.4 m.
+        CellGrid ClassicGrid() => classicGrid ?? (classicGrid = CellGrid.FromRoom(room));
+
+        CellGrid TryClassicGrid()
+        {
+            try { return ClassicGrid(); }
+            catch (ArgumentOutOfRangeException) { return null; }
+        }
+
+        // The grid the walker is on: a new one gets a new walker and post loops, and ends the maze run shown.
+        void UseGrid(CellGrid grid, bool maze)
+        {
+            MazeMode = maze;
+            if (ReferenceEquals(Grid, grid)) return;
+            Grid = grid;
+            Walker = new CellWalker(grid, graph);
+            Loops = new PostLoops(grid);
+            Instances.Clear();
+            Maze = null; MazeFound = false; MazeFoundTime = 0; MazeElapsed = 0; MazeSteps = 0; MazeWallsCrossed = 0;
         }
 
         public int ViewDepth => remote ? remoteDepth : viewDepth != null ? viewDepth.Int : SightLines.ViewRange;
@@ -138,7 +166,8 @@ namespace Atlas.Spaces.AlignedCells
             {
                 var frame = new CellFrame(remoteTile, remoteTurn);
                 var cell = new int2(remoteSheet % Grid.CountX, remoteSheet / Grid.CountX);
-                if (frame != Walker.Frame || !cell.Equals(Walker.Cell))
+                if (gridSwitched) { gridSwitched = false; changed = true; }
+                if (changed || frame != Walker.Frame || !cell.Equals(Walker.Cell))
                 {
                     Walker.Place(cell, frame); changed = true;
                     Loops.Reset(Walker.Cell, Walker.Frame);
@@ -165,8 +194,9 @@ namespace Atlas.Spaces.AlignedCells
                 }
                 if (MazeMode && Maze != null) changed |= TickMaze(IsFinite(headXZ) ? headXZ : Walker.LastHead);
             }
-            // cells.maze moved while entered. A floor too small for the maze keeps asking for it: no reconfigure until it is off.
-            if (mazeParam != null && mazeParam.Bool != (MazeMode || mazeUnavailable)) NeedsReconfigure = true;
+            // cells.maze moved while entered: compared with what Configure was asked for, not with the grid running (a floor too
+            // small for the maze, or a Station that took the phone's grid, runs classic S3 with cells.maze on).
+            if (mazeParam != null && mazeParam.Bool != mazeRequested) NeedsReconfigure = true;
             if (changed || ViewDepth != shownDepth) { Rebuild(); return true; }
             return false;
         }
@@ -231,14 +261,19 @@ namespace Atlas.Spaces.AlignedCells
         }
 
         // The Station's maze is the phone's, rebuilt from State.P7 (seed and start cell) and never from its own seed. The find
-        // follows from the walker's tile; no events, no restarts. True when the maze changed.
+        // follows from the walker's tile and is latched, as the phone's is, for the rest of the run: the walker stepping off the
+        // duck's tile during the celebration keeps it. The run ends with a new code, P7 = 0, or the walker on tile zero (a restart
+        // relabels the walker to tile zero, where no duck stands: this catches a fixed seed restarted in the same cell, whose code
+        // is the same). No events, no restarts. True when the maze changed.
         bool TickRemoteMaze()
         {
             bool wasFound = MazeFound;
             DuckMaze old = Maze;
             if (!MazeMode || !DuckMaze.TryDecode(remoteCode, out int seed, out int2 start)) Maze = null;
             else if (Maze == null || Maze.Code != remoteCode) Maze = DuckMaze.Generate(Grid, graph, start, seed);
-            MazeFound = Maze != null && Walker.Frame.Tile.Equals(Maze.DuckTile);
+            TileId tile = Walker.Frame.Tile;
+            bool kept = wasFound && Maze != null && ReferenceEquals(old, Maze) && !tile.Equals(TileId.Zero);
+            MazeFound = Maze != null && (tile.Equals(Maze.DuckTile) || kept);
             if (MazeFound && !wasFound) MazeFoundTime = now;
             return !ReferenceEquals(old, Maze);
         }
@@ -308,12 +343,22 @@ namespace Atlas.Spaces.AlignedCells
             state.P7 = MazeMode && Maze != null ? Maze.Code : 0f;     // duck maze: seed * 16 + start cell (< 2^24, exact); 0 = none
         }
 
-        // The Station's side of WriteState. A State of another space, with no tile or with a cell outside this grid is ignored.
+        // The Station's side of WriteState. A State of another space, with no tile, on a grid that is neither this room's maze grid
+        // nor its classic grid (P4 columns, P5 rows, P6 side), or with a cell outside its grid is ignored, so the Sheet is never read
+        // with the wrong column count. A State on this room's other grid (the Station's cells.maze lags the phone's, or the phone
+        // entered from Curved Walk and runs classic S3) switches this copy to that grid: the phone's grid is the one shown.
         public void ReadState(in StateMessage state)
         {
             if (!Configured || state.SpaceId != (byte)SpaceId.AlignedCells) return;
             var tile = new TileId(state.Tile0, state.Tile1, state.Tile2, state.Tile3, state.Tile4, state.Tile5);
-            if (tile.IsNone || state.Sheet < 0 || state.Sheet >= Grid.CountX * Grid.CountZ) return;
+            if (tile.IsNone) return;
+            CellGrid grid = SentGrid(in state);
+            if (grid == null || state.Sheet < 0 || state.Sheet >= grid.CountX * grid.CountZ) return;
+            if (!ReferenceEquals(grid, Grid))
+            {
+                UseGrid(grid, ReferenceEquals(grid, mazeGrid));
+                gridSwitched = true;
+            }
             remoteTile = tile;
             remoteTurn = CellWalker.TurnFromRotation(state.Xform0, state.Xform3);
             remoteSheet = state.Sheet;
@@ -321,6 +366,18 @@ namespace Atlas.Spaces.AlignedCells
             remoteCode = (int)Math.Round(state.P7);
             remote = true;
         }
+
+        // The grid a State is on: this copy's own, else this room's other one, when columns, rows and side match; else null.
+        CellGrid SentGrid(in StateMessage state)
+        {
+            if (SameGrid(Grid, in state)) return Grid;
+            CellGrid other = ReferenceEquals(Grid, mazeGrid) ? TryClassicGrid() : mazeGrid;
+            return SameGrid(other, in state) ? other : null;
+        }
+
+        static bool SameGrid(CellGrid g, in StateMessage state)
+            => g != null && (int)Math.Round(state.P4) == g.CountX && (int)Math.Round(state.P5) == g.CountZ
+               && Math.Abs(state.P6 - g.Side) <= 1e-4 * Math.Max(1.0, g.Side);
 
         // Crossing i of this frame's Walk: count it, turn the posts round, and log cells.cross and, when due, cells.postLoop.
         // Allocates only on a crossing (the event text), as the walk.* events of S2 do; a steady frame allocates nothing.

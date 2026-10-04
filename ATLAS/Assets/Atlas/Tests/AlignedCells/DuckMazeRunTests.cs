@@ -344,6 +344,146 @@ namespace Atlas.Spaces.AlignedCells.Tests
             StringAssert.Contains("\"steps\":" + run.Core.Maze.DuckDepth + ",", run.Log.Last(AlignedCellsCore.EventMazeFound));
         }
 
+        static StateMessage Send(Run phone)
+        {
+            var st = StateMessage.Identity;
+            st.SpaceId = (byte)SpaceId.AlignedCells;
+            phone.Core.WriteState(ref st);
+            return st;
+        }
+
+        static AlignedCellsCore Station(RoomModel room, ParamRegistry registry)
+        {
+            var station = new AlignedCellsCore();
+            station.Configure(room, registry);
+            station.Enter(WalkerPose.Start, double2.zero);
+            return station;
+        }
+
+        static bool Receive(AlignedCellsCore station, in StateMessage st, double time)
+        {
+            station.ReadState(in st);
+            return station.Tick(new double2(double.NaN, double.NaN), false, time);
+        }
+
+        // A State whose grid (P4 columns, P5 rows, P6 side) is neither this room's maze grid nor its classic grid is ignored, so its
+        // Sheet is never read with the wrong column count.
+        [Test]
+        public void Maze_StationIgnoresAStateOfAnotherGrid()
+        {
+            var phone = new Run(seed: 777, start: new int2(2, 1));
+            phone.Stay();
+            AlignedCellsCore station = Station(phone.Room, new ParamRegistry());
+            CellGrid classic = CellGrid.FromRoom(phone.Room);
+
+            StateMessage st = Send(phone);
+            st.P4 = 7; st.P5 = 9;
+            Receive(station, in st, phone.Time);
+            Assert.IsFalse(station.Remote, "7 x 9 is no grid of this room");
+
+            st = Send(phone);
+            st.P6 = 0.75f;
+            Receive(station, in st, phone.Time);
+            Assert.IsFalse(station.Remote, "4 x 4 of another side");
+
+            st = Send(phone);
+            st.P4 = classic.CountX; st.P5 = classic.CountZ; st.P6 = (float)classic.Side + 0.2f;
+            Receive(station, in st, phone.Time);
+            Assert.IsFalse(station.Remote, "the classic counts with another side");
+            Assert.IsTrue(station.MazeMode);
+            Assert.AreEqual(4, station.Grid.CountX);
+
+            st = Send(phone);
+            Receive(station, in st, phone.Time);
+            Assert.IsTrue(station.Remote);
+            Assert.AreEqual(phone.Core.Walker.Cell, station.Walker.Cell);
+        }
+
+        // A Station whose own grid lags (its cells.maze not yet changed, or the phone entered S3 from Curved Walk and runs classic
+        // S3 for that entry) takes the phone's grid when it is this room's other one, and reads the Sheet with that grid.
+        [Test]
+        public void Maze_StationFollowsThePhonesGrid()
+        {
+            var phone = new Run(seed: 777, start: new int2(2, 1));
+            phone.Stay();
+            AlignedCellsCore station = Station(phone.Room, Fixtures.ClassicRegistry());
+            Assert.IsFalse(station.MazeMode);
+            Assert.AreNotEqual(4, station.Grid.CountX, "the classic grid of this room is not 4 x 4");
+
+            Assert.IsTrue(Receive(station, Send(phone), phone.Time), "the grid changed: redraw");
+            Assert.IsTrue(station.Remote);
+            Assert.IsTrue(station.MazeMode);
+            AssertSameGrid(phone.Core.Grid, station.Grid);
+            Assert.AreEqual(phone.Core.Maze.Code, station.Maze.Code);
+            Assert.AreEqual(phone.Core.Walker.Cell, station.Walker.Cell);
+            Assert.AreEqual(phone.Core.Walker.Frame, station.Walker.Frame);
+            Assert.IsFalse(station.NeedsReconfigure, "its own cells.maze did not move");
+
+            // And back: a phone running classic S3 (P7 = 0, the room's own grid) on a Station in maze mode.
+            var classic = new Run(phone.Room, maze: false, start: new int2(1, 0));
+            classic.Stay();
+            AlignedCellsCore mazeStation = Station(phone.Room, new ParamRegistry());
+            Assert.IsTrue(mazeStation.MazeMode);
+            Receive(mazeStation, Send(classic), classic.Time);
+            Assert.IsTrue(mazeStation.Remote);
+            Assert.IsFalse(mazeStation.MazeMode);
+            Assert.IsNull(mazeStation.Maze);
+            AssertSameGrid(CellGrid.FromRoom(phone.Room), mazeStation.Grid);
+            Assert.AreEqual(classic.Core.Walker.Cell, mazeStation.Walker.Cell);
+            Assert.IsNull(AlignedCellsSpace.ShownMaze(mazeStation));
+            Assert.IsFalse(mazeStation.NeedsReconfigure);
+        }
+
+        // The Station's find is latched: the walker stepping off the duck's tile during the celebration does not take the pop and
+        // the spin back. It goes with the run: a new code, P7 = 0, or the walker relabelled to tile zero (a new run with the same
+        // code: a fixed seed restarted in the same cell).
+        [Test]
+        public void Maze_StationKeepsTheFindUntilTheNextRun()
+        {
+            var phone = new Run(seed: 0, start: new int2(2, 1));                // a fresh seed each run: the next run has a new code
+            phone.Stay();
+            AlignedCellsCore station = Station(phone.Room, new ParamRegistry());
+            Receive(station, Send(phone), phone.Time);
+            int2 c = phone.Core.Walker.Cell;
+            foreach (int d in phone.Core.Maze.SolutionDirections())
+            {
+                c += Step[d];
+                phone.GoCell(c);
+                Receive(station, Send(phone), phone.Time);
+            }
+            Assert.IsTrue(station.MazeFound);
+            double foundTime = station.MazeFoundTime;
+            TileId duck = phone.Core.Maze.DuckTile;
+
+            int2 off = c;
+            for (int d = 0; d < 4; d++) if (phone.Core.Grid.Contains(c + Step[d])) { off = c + Step[d]; break; }
+            phone.GoCell(off);
+            Assert.AreNotEqual(duck, phone.Core.Walker.Frame.Tile, "stepped off the duck's tile");
+            Assert.IsTrue(phone.Core.MazeFound, "the phone's find stands until the next run");
+            Receive(station, Send(phone), phone.Time);
+            Assert.AreNotEqual(duck, station.Walker.Frame.Tile);
+            Assert.IsTrue(station.MazeFound, "the Station's find stands too");
+            Assert.AreEqual(foundTime, station.MazeFoundTime);
+
+            // Same code, the walker relabelled to tile zero: a new run.
+            StateMessage st = Send(phone);
+            TileId z = TileId.Zero;
+            st.SetTile(z.Xu, z.Xv, z.Yu, z.Yv, z.Tu, z.Tv);
+            Receive(station, in st, phone.Time + 0.5);
+            Assert.IsFalse(station.MazeFound, "tile zero: the next run");
+
+            // Off the duck's tile again with nothing latched; then on it, and the next run proper: a new code.
+            Receive(station, Send(phone), phone.Time + 1.0);
+            Assert.IsFalse(station.MazeFound, "off the duck's tile, no latch to keep");
+            phone.GoCell(c);
+            Receive(station, Send(phone), phone.Time);
+            Assert.IsTrue(station.MazeFound);
+            phone.At(phone.Core.Grid.CellCentre(c), phone.Core.MazeFoundTime + AlignedCellsCore.RestartSeconds);
+            Assert.AreNotEqual(station.Maze.Code, phone.Core.Maze.Code);
+            Receive(station, Send(phone), phone.Time);
+            Assert.IsFalse(station.MazeFound, "a new code: the find goes");
+        }
+
         // The Station's maze is the phone's: a State with P7 = 0 (the phone has no maze) takes it away, and the find with it.
         [Test]
         public void Maze_StationDropsTheMazeWhenP7IsZero()
