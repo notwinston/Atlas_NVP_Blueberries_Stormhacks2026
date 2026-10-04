@@ -440,7 +440,8 @@ namespace Atlas.Spaces.CurvedWalk.Tests
             }
             Assert.AreEqual(8, slots.Count);
 
-            foreach (float scale in new[] { 0.5f, 0.75f, 1f })
+            // 0.75 is the usual scale; 0.625 and 0.9375 are what it becomes if it follows the reach from 0.40 to 0.60 m.
+            foreach (float scale in new[] { 0.5f, 0.625f, 0.75f, 0.9375f, 1f })
             {
                 int pairs = 0;
                 for (int a = 0; a < slots.Count; a++)
@@ -453,8 +454,8 @@ namespace Atlas.Spaces.CurvedWalk.Tests
                     for (int b = a + 1; b < slots.Count; b++)
                     {
                         float gap = math.distance(c, ReachSlots.Local(slots[b], scale)) - r - ReachSlots.TargetHalf(radii[b], scale);
-                        // At the usual scale and above, a fingertip's margin: the hover band of one target must not reach the next.
-                        Assert.Greater(gap, scale >= 0.75f ? 0.025f : 0f, names[a] + " and " + names[b] + " at scale " + scale);
+                        // Over the whole range of the reach, a fingertip's margin: the hover band of one target must not reach the next.
+                        Assert.Greater(gap, scale >= 0.625f ? 0.025f : 0f, names[a] + " and " + names[b] + " at scale " + scale);
                         pairs++;
                     }
                     if (scale != 0.75f) continue;

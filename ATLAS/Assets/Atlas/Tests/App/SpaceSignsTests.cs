@@ -521,6 +521,7 @@ namespace Atlas.App.Tests
             w.Step(Down, 2);
 
             Assert.That(w.View.Visible, Is.True);
+            Assert.That(w.Signs.Near, Is.True);
             Assert.That(w.View.Near, Is.True, "drawn on the world layer, depth-tested");
             Assert.That(w.View.Scale, Is.EqualTo(0.75f), "boards and text times the scale");
             Assert.That(w.View.Origin, Is.EqualTo(reach.Position), "the view stands in the anchor's frame");
@@ -667,6 +668,7 @@ namespace Atlas.App.Tests
             Rig far = Three();
             Walk(far, () => { });
             Assert.That(Snapshot(far), Is.EqualTo(expected), "Near false: positions, radii and flags to the last number");
+            Assert.That(far.Signs.Near, Is.False);
             Assert.That(far.View.Reaches, Is.EqualTo(0), "the view was never asked to change");
             for (int i = 0; i < SpaceSignLayout.Count; i++)
                 Assert.That(Data(far, i).Centre, Is.EqualTo(Head + math.mul(quaternion.RotateY(0f), SpaceSignLayout.Centre(i))), "sign " + i);
