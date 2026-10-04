@@ -5,6 +5,7 @@ using Atlas.Kernel;
 using Atlas.Link;
 using Atlas.Rendering;
 using Atlas.Spaces.Glued;
+using Atlas.Telemetry;
 using Atlas.World;
 using NUnit.Framework;
 using Unity.Mathematics;
@@ -17,7 +18,10 @@ namespace Atlas.Spaces.Tests
 {
     /// <summary>
     /// The copies' hands where they need the engine (documents/ATLAS_Hands_Design.md section 5.6): the module as
-    /// SpaceLab drives it, with the services AtlasApp publishes, and the one avatar mesh every copy draws.
+    /// SpaceLab drives it, with the services AtlasApp publishes, and the one avatar mesh every copy draws. The module
+    /// builds its avatar from the kit pieces in Resources when they are there, so what the mesh must hold is worked out
+    /// by an engine-free rig given the same piece (decision R15: the kit avatar carries the reduced hands, the
+    /// built-in body the full ones).
     /// </summary>
     [Category("Unity")]
     public class GluedHandsUnityTests
@@ -107,33 +111,57 @@ namespace Atlas.Spaces.Tests
             return shared;
         }
 
-        static void AssertIsTodaysBody(Mesh mesh)
+        // The avatar piece the module reads from Resources, read the way GluedSpace reads it: null when the build ships
+        // none or refuses it, and the module then draws the built-in body.
+        static MeshData ShippedAvatar()
         {
-            Assert.That(mesh.vertexCount, Is.EqualTo(241));
-            Assert.That(mesh.GetIndexCount(0), Is.EqualTo(546u));
-            Assert.That(mesh.bounds.min.x, Is.EqualTo(-0.29f).Within(1e-5f));
-            Assert.That(mesh.bounds.min.y, Is.EqualTo(-0.78f).Within(1e-5f));
-            Assert.That(mesh.bounds.min.z, Is.EqualTo(-0.185f).Within(1e-5f));
-            Assert.That(mesh.bounds.max.x, Is.EqualTo(0.29f).Within(1e-5f));
-            Assert.That(mesh.bounds.max.y, Is.EqualTo(0.105f).Within(1e-5f));
-            Assert.That(mesh.bounds.max.z, Is.EqualTo(0.055f).Within(1e-5f));
+            KitSet kit = KitSet.Load(name =>
+            {
+                var asset = Resources.Load<TextAsset>(KitSet.ResourceFolder + "/" + name);
+                if (asset == null) return null;
+                byte[] bytes = asset.bytes;
+                Resources.UnloadAsset(asset);
+                return bytes;
+            });
+            var mesh = new MeshData(512, 2048);
+            return kit.TryGet("avatar", mesh, out string _) ? mesh : null;
+        }
+
+        // The rig the module's own is expected to match: the same body, no hand yet.
+        static GluedAvatarRig ExpectedRig()
+        {
+            return new GluedAvatarRig(ShippedAvatar());
+        }
+
+        // The mesh holds exactly what the engine-free rig holds: the counts and the bounds of the vertices and indices.
+        static void AssertMeshIs(Mesh mesh, GluedAvatarRig expected)
+        {
+            Assert.That(mesh.vertexCount, Is.EqualTo(expected.Data.VertexCount));
+            Assert.That(mesh.GetIndexCount(0), Is.EqualTo((uint)expected.Data.IndexCount));
+            Assert.That(mesh.bounds.min.x, Is.EqualTo(expected.Data.BoundsMin.x).Within(1e-4f));
+            Assert.That(mesh.bounds.min.y, Is.EqualTo(expected.Data.BoundsMin.y).Within(1e-4f));
+            Assert.That(mesh.bounds.min.z, Is.EqualTo(expected.Data.BoundsMin.z).Within(1e-4f));
+            Assert.That(mesh.bounds.max.x, Is.EqualTo(expected.Data.BoundsMax.x).Within(1e-4f));
+            Assert.That(mesh.bounds.max.y, Is.EqualTo(expected.Data.BoundsMax.y).Within(1e-4f));
+            Assert.That(mesh.bounds.max.z, Is.EqualTo(expected.Data.BoundsMax.z).Within(1e-4f));
         }
 
         [Test]
-        public void WithNoHandsService_TheAvatarMeshIsTodaysAndNothingIsUploaded()
+        public void WithNoHandsService_TheAvatarMeshIsTheBodyAndNothingIsUploaded()
         {
             using (var stage = new Stage())
             {
+                GluedAvatarRig body = ExpectedRig();
                 for (int i = 0; i < 30; i++) stage.Run();
                 Mesh mesh = AvatarMesh(stage.Module, out int copies);
                 Assert.That(copies, Is.GreaterThan(0), "the copies are drawn");
-                AssertIsTodaysBody(mesh);
+                AssertMeshIs(mesh, body);
                 Assert.That(stage.Module.AvatarUploads, Is.EqualTo(0), "nothing is uploaded while no hand is tracked");
 
                 // A service whose hands are not tracked changes nothing either.
                 stage.Publish(new GluedFakeHands { Active = true });
                 for (int i = 0; i < 30; i++) stage.Run();
-                AssertIsTodaysBody(mesh);
+                AssertMeshIs(mesh, body);
                 Assert.That(stage.Module.AvatarUploads, Is.EqualTo(0));
             }
         }
@@ -144,19 +172,24 @@ namespace Atlas.Spaces.Tests
             using (var stage = new Stage())
             {
                 stage.Run();
+                GluedAvatarRig expected = ExpectedRig();
                 Mesh mesh = AvatarMesh(stage.Module, out int copies);
                 int renderers = stage.Module.GetComponentsInChildren<MeshRenderer>().Length;
                 Assert.That(copies, Is.GreaterThan(0));
-                AssertIsTodaysBody(mesh);
+                AssertMeshIs(mesh, expected);
 
+                // Whatever body the build ships, both hands appear: at the level it leaves room for.
                 GluedFakeHands hands = BothHands();
+                Assert.That(expected.CanShowHands, Is.True, "the body leaves room for the hands at some level");
+                Assert.That(expected.Update(hands, Head, Heading), Is.True);
+                Assert.That(expected.HandCount, Is.EqualTo(2));
                 stage.Publish(hands);
                 stage.Run();
                 Assert.That(AvatarMesh(stage.Module, out int copiesWithHands), Is.SameAs(mesh), "the same mesh object: nothing was swapped");
                 Assert.That(copiesWithHands, Is.EqualTo(copies));
                 Assert.That(stage.Module.GetComponentsInChildren<MeshRenderer>().Length, Is.EqualTo(renderers), "no renderer was added");
-                Assert.That(mesh.vertexCount, Is.EqualTo(241 + 2 * GluedAvatarHands.VerticesPerHand));
-                Assert.That(mesh.GetIndexCount(0), Is.EqualTo((uint)(3 * GluedBudget.AvatarTriangles())));
+                AssertMeshIs(mesh, expected);
+                Assert.That(mesh.GetIndexCount(0), Is.EqualTo((uint)(3 * GluedBudget.AvatarTriangles(ShippedAvatar()))), "the accounting counts what is drawn");
                 Assert.That(mesh.GetIndexCount(0) / 3, Is.LessThanOrEqualTo((uint)AtlasMeshBudget.SelfAvatar));
                 Assert.That(mesh.bounds.max.z, Is.GreaterThan(0.4f), "the bounds hold hands held out in front");
                 Assert.That(stage.Module.AvatarUploads, Is.EqualTo(1));
@@ -168,10 +201,12 @@ namespace Atlas.Spaces.Tests
                 // One hand lost: the other stays. Both lost: the body alone goes back, once.
                 hands.Lose(HandSide.Right);
                 stage.Run();
-                Assert.That(mesh.vertexCount, Is.EqualTo(241 + GluedAvatarHands.VerticesPerHand));
+                expected.Update(hands, Head, Heading);
+                Assert.That(expected.HandCount, Is.EqualTo(1));
+                AssertMeshIs(mesh, expected);
                 hands.Lose(HandSide.Left);
                 stage.Run();
-                AssertIsTodaysBody(mesh);
+                AssertMeshIs(mesh, ExpectedRig());
                 int uploads = stage.Module.AvatarUploads;
                 for (int i = 0; i < 20; i++) stage.Run();
                 Assert.That(stage.Module.AvatarUploads, Is.EqualTo(uploads), "the plain body is not uploaded again");
@@ -235,7 +270,10 @@ namespace Atlas.Spaces.Tests
                 stage.Publish(hands);
                 stage.Run();
                 Mesh mesh = AvatarMesh(stage.Module, out _);
-                Assert.That(mesh.vertexCount, Is.EqualTo(241 + 2 * GluedAvatarHands.VerticesPerHand));
+                GluedAvatarRig expected = ExpectedRig();
+                expected.Update(hands.Inner, Head, Heading);
+                Assert.That(expected.HandCount, Is.EqualTo(2));
+                AssertMeshIs(mesh, expected);
 
                 // A hands fault must not take the walker out of the room: the space catches it, says so once and shows
                 // the plain body for the rest of the visit.
@@ -243,12 +281,12 @@ namespace Atlas.Spaces.Tests
                 hands.Fail = true;
                 hands.Inner.Joints[0][(int)HandJoint.IndexTip] += new float3(0.01f, 0f, 0f);       // so that a rebuild is needed
                 Assert.DoesNotThrow(() => stage.Run());
-                AssertIsTodaysBody(mesh);
+                AssertMeshIs(mesh, ExpectedRig());
 
                 int calls = hands.JointCalls;
                 for (int i = 0; i < 10; i++) Assert.DoesNotThrow(() => stage.Run());
                 Assert.That(hands.JointCalls, Is.EqualTo(calls), "the hands stay off: the service is not asked again");
-                AssertIsTodaysBody(mesh);
+                AssertMeshIs(mesh, ExpectedRig());
             }
         }
 

@@ -117,7 +117,8 @@ namespace Atlas.Spaces.Glued
     /// share one pooled material and all avatars another, so the lattice costs two set-passes. No frustum
     /// culling is assumed: the numbers are the worst case with every copy in view. The walker's hands ride in
     /// the avatar's own mesh (<see cref="GluedAvatarRig"/>), so they add triangles and no draw call, and every
-    /// avatar is counted with both of them: the worst case.
+    /// avatar is counted with both of them at the level the rig draws for that body (the full hands on the
+    /// built-in body, the reduced ones on the kit avatar): the worst case.
     /// </remarks>
     public static class GluedBudget
     {
@@ -148,22 +149,26 @@ namespace Atlas.Spaces.Glued
             return scratch.TriangleCount;
         }
 
-        /// <summary>Triangles of both hands with their forearms: what each copy gains while both are tracked.</summary>
-        public static int AvatarHandsTriangles()
+        /// <summary>
+        /// Triangles of both hands with their forearms as the rig draws them on this body (the kit avatar when one is
+        /// given): what each copy gains while both are tracked. 408 on the built-in body (the full hands), 168 on a
+        /// body that leaves room only for the reduced ones, such as the shipped kit avatar, and none on one that
+        /// leaves room for neither (<see cref="GluedAvatarRig.LevelFor"/>).
+        /// </summary>
+        public static int AvatarHandsTriangles(MeshData kit = null)
         {
-            return GluedAvatarHands.MaxTriangles;
+            return GluedAvatarHands.TrianglesAt(GluedAvatarRig.LevelFor(AvatarBodyTriangles(kit)));
         }
 
         /// <summary>
         /// Triangles of one avatar, the figure every copy is counted at: the body (the kit avatar when one is given)
-        /// and both hands, the most the shared mesh can hold. It stays within <see cref="AtlasMeshBudget.SelfAvatar"/>:
-        /// a body that leaves no room for the hands is counted, and drawn, without them
-        /// (<see cref="GluedAvatarRig.HandsFit"/>).
+        /// and both hands at the level the rig draws for it, the most the shared mesh can hold. It stays within
+        /// <see cref="AtlasMeshBudget.SelfAvatar"/>: 590 on the built-in body, 524 on the shipped kit avatar.
         /// </summary>
         public static int AvatarTriangles(MeshData kit = null)
         {
             int body = AvatarBodyTriangles(kit);
-            return GluedAvatarRig.HandsFit(body) ? body + AvatarHandsTriangles() : body;
+            return body + GluedAvatarHands.TrianglesAt(GluedAvatarRig.LevelFor(body));
         }
 
         public static int PromptTriangles()
