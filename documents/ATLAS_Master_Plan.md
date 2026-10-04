@@ -967,7 +967,7 @@ On `OnApplicationPause(false)` with no peer, the app calls `Connect` again. (R4 
 
 #### 7.3.4 Scan and asset round-trip
 
-See §7.4. Acceptance: every box that takes part (at most 20 per room) ends as a generated mesh or as a built-in fallback mesh; ≤ 60 s from job start to `AssetAck` per object (L15–L21).
+See §7.4. Acceptance: every box that takes part (at most 32 per room) ends as a generated mesh or as a built-in fallback mesh; ≤ 60 s from job start to `AssetAck` per object (L15–L21).
 
 ### 7.4 Scan and asset round-trip
 
@@ -1052,7 +1052,7 @@ sequenceDiagram
 
 ### 7.6 Acceptance tests for gate G6
 
-Own router, Station wired, phone in the headset. Loss and latency simulation is enabled on the Hub side (R4 §5.10). In L15 to L21 "every box" means every box that takes part in the round-trip: all of them, or the 20 largest when the room has more (§7.4).
+Own router, Station wired, phone in the headset. Loss and latency simulation is enabled on the Hub side (R4 §5.10). In L15 to L21 "every box" means every box that takes part in the round-trip: all of them, or the 32 largest when the room has more (§7.4).
 
 | # | Test | Pass |
 |---|---|---|
@@ -1070,8 +1070,8 @@ Own router, Station wired, phone in the headset. Loss and latency simulation is 
 | L12 | Router off 10 s; Hub restarted; app backgrounded 10 s | OFFLINE ≤ 3.5 s; CONNECTED ≤ 5 s after return; parameters restored; no phone restart |
 | L13 | Link on against Hub unplugged, 5 min each | main-thread p95 differs ≤ 0.2 ms; 0 B per frame from `Atlas.Link` |
 | L14 | Station cable pulled while walking at an obstacle | Bump Guard cue identical; no frame over 33.8 ms (two vsync intervals + 0.5 ms, as in §11.2) |
-| L15 | Room with ≥ 4 object boxes, Station up | 100% placeholders at Home entry; every box ends as mesh or fallback; ≤ 60 s job start → `AssetAck` each |
-| L16 | Forge output check | every GLB has 1,500–5,000 triangles and no more than the target sent with its job; edges ≤ 0.25 m; longest side within 10% of the box (should: 5%); the room's furniture ≤ 60,000 triangles in total |
+| L15 | Room with ≥ 4 object boxes, Station up | 100% first shapes (placeholder boxes only where the scan gave too little) at Home entry; every box ends as mesh or fallback; ≤ 60 s job start → `AssetAck` each |
+| L16 | Forge output check | every full GLB has 1,500–15,000 triangles and every light GLB 1,500–5,000, each no more than the target sent with its job; edges ≤ 0.25 m; longest side within 10% of the box (should: 5%); the room's furniture ≤ 120,000 triangles in total at the full level and ≤ 60,000 at the light level |
 | L17 | Mesh swap | worst frame < 20 ms over 10 swaps |
 | L18 | Same crops uploaded twice with the same triangle target | second run: 100% cache hits, no GPU job |
 | L19 | Forge stopped before the scan | app enters Home; within 10 s of Home entry (proposed) every box holds its built-in fallback mesh (`P1-D12`: one CC0 mesh per RoomPlan category, ≤ 1.5k triangles, no edge over 0.25 m after scaling); after a Forge restart every box is replaced by its generated mesh |
@@ -1147,7 +1147,7 @@ A note on the reference code: HyperEngine's own shader passes its per-object mat
 |---|---|---|---|
 | Tile shell, three levels of detail | Lane B | Generated in C# at run time (§3.4). Levels by grid count: n = 16 per side on the walker's current tile and the 12 tiles that touch it; n = 8 on every other drawn tile; n = 4 only on the high tier, beyond ρ = 3. Every level keeps the same 16 boundary segments per edge, so neighbours of different levels share their edge vertices exactly | ≤ 1,200 · ≤ 500 · ≤ 250 for the three levels, at any L |
 | Home shell (floor, walls) | Lane C | Generated from the RoomModel on a 0.25 m grid | ≤ 3,000 |
-| Furniture | Lane D | Forge: photo to mesh, then clean-up to the triangle target sent with the job (§4.5). At most 20 objects receive generated meshes, largest boxes first; any further objects stay placeholder boxes | Target per object: clamp(60,000 ÷ n, 3,000, 5,000), n being the number of objects that receive meshes, so the room's generated furniture never exceeds 60,000. The asset validator accepts 1,500–5,000; longest edge ≤ 0.25 m |
+| Furniture | Lane D | Forge: photo to mesh, then clean-up to the triangle target sent with the job (§4.5). At most 32 objects receive generated meshes, largest boxes first; any further objects keep their first shape | Full target per object 3,000–15,000 by the area rule of §4.5, so the room's generated furniture never exceeds 120,000; light target clamp(60,000 ÷ n, 1,500, 5,000), 60,000 at most. The asset validator accepts 1,500–15,000 (full) and 1,500–5,000 (light); longest edge ≤ 0.25 m |
 | Built-in fallback furniture | Lane D | One CC0 mesh per RoomPlan category, shipped in the build; replaces the placeholder boxes when the Forge is unreachable (task `P1-D12`) | ≤ 1,500 each; no edge over 0.25 m after scaling to the box |
 | Glued cell | Lane A | An open frame cut from the free floor: corner posts, a floor grid drawn in the shader, one chiral landmark. Repeated 5 × 5 (T², Klein bottle) or 3 × 3 × 3 (T³); every copy except the walker's own carries a self-avatar. The room itself is not repeated: its walls sink to kerbs and its objects are drawn once, where they really are (§4.9) | ≤ 1,500 per cell |
 | Impossible Rooms | Lane A | Parametric from the free rectangle (ProBuilder or C#) | ≤ 2,000 per room |
@@ -1177,7 +1177,7 @@ Licence rules: Asset Store packs never enter the repository; CC-BY assets and an
 | S5 Impossible Rooms | ≤ 60 | ≤ 150k | Two rooms through one portal, plus the room's content (Home shell and furniture, 63,000 per eye) |
 | S6 Slicer | ≤ 70 | ≤ 160k | Home plus the dynamic cross-section |
 
-**What is held and what is planned.** Only Home's row is held by code: `RoomBudget.HomeDrawCallsPerFrame` is 80 and `HomeTrianglesPerFrame` 250,000, and the Home tests count the room's builders against them. That is a count of what the builders make, not a measurement on a phone. S2's row is the mesh design's proposal (it also shows the full copies) and no test holds it. S1, S3, S4, S5 and S6 show the light copies, so their triangles are as listed and each is expected to need 24 more draw calls (the twelve extra stand-in objects of `budget_room_120k`, both eyes); their rows above are the old figures, unchanged, until the phone measurement (mesh design check M3). If a space does not hold 60 frames per second with the full copies on the phone, its default level becomes light and this table is corrected. The must-limits of 300 draw calls and 500,000 triangles per frame do not change, and every row stays inside them.
+**What is held and what is planned.** Only Home's row is held by code: `RoomBudget.HomeDrawCallsPerFrame` is 80 and `HomeTrianglesPerFrame` 250,000, and the Home tests count the room's builders against them. That is a count of what the builders make, not a measurement on a phone. S2's row (it also shows the full copies) is held by the world lint, not by a phone: `WorldLintSettings` counts the room at Home's full load (80 draws, 250,000 triangles) and caps S2 at 240 draws and 370,000 triangles with the tiles' own share at 150 draws and 120,000 triangles, and `WorldLintTests` asserts them; the phone measurement is still open. S1, S3, S4, S5 and S6 show the light copies, so their triangles are as listed and each is expected to need 24 more draw calls (the twelve extra stand-in objects of `budget_room_120k`, both eyes); their rows above are the old figures, unchanged, until the phone measurement (mesh design check M3). If a space does not hold 60 frames per second with the full copies on the phone, its default level becomes light and this table is corrected. The must-limits of 300 draw calls and 500,000 triangles per frame do not change, and every row stays inside them.
 
 **Furniture level in the quality ladder.** The ladder's table (lane A contract §9.5) gains one column, the highest furniture level a tier allows: Nominal and High allow the full copies, so a space keeps the level it asks for (full in Home and Curved Walk, light in the rest); Fair, Serious and Critical force the light copies in every space. The first step below nominal therefore lowers the furniture before any step lowers the render scale. The parameter `render.furniture` (auto, light, full; default auto) overrides it: light forces the light copies, full forces the full ones whatever the ladder says.
 
@@ -1285,7 +1285,7 @@ In order of expected gain:
 8. Zero allocations per frame: pooled materials, preallocated slicer buffers, no string building in Update.
 9. Dark palette and brightness.
 10. The thermal ladder.
-11. Decimating every generated mesh to its triangle target in the Forge, so that the room's generated furniture never exceeds 60,000 triangles (§8.4).
+11. Decimating every generated mesh to its triangle target in the Forge, so that the room's generated furniture never exceeds 120,000 triangles at the full level and 60,000 at the light level (§8.4).
 
 Not worth effort: baked occlusion culling (broken by the warp), static batching, the GPU Resident Drawer, a compute-shader slicer, single-camera stereo. Stretch only: a hidden-area mask for the lens circle, instanced tile shells, 30 fps rendering with reprojection.
 
@@ -1990,7 +1990,7 @@ Colours: green lane A, purple lane B, orange lane C, blue lane D, grey shared. D
 | `P1-C04` | **Object boxes** | `P1-C01` | RoomPlan furniture boxes through `ARBoundingBoxManager` (category, size, pose), merged with the FloorScan obstacles in one coordinate frame | Boxes overlay the mesh to ≤ 10 cm; in three test rooms every piece of furniture wider than 0.4 m has a box (proposed) | phone in hand |
 | `P1-C05` | **Swift RoomPlan bridge for walls, doors and windows (Extended)** | `P1-C01` | Native plugin using `RoomCaptureSession(arSession:)`; walls, doors, windows and openings as JSON in session coordinates; AR configuration re-applied afterwards | Wall positions within 3 cm of the mesh-derived ones; scene depth is available again after capture | phone in hand |
 | `P1-C06` | **RoomModel and the loop-fit** | `P1-C02`, `P1-C03`, `P1-X02` | RoomModel JSON from either scan route: polygon, distance field, free rectangle, lap square s, L and R from the loop-fit rule, cell grids for S1 and S3, object list, anchor; outline confirmation in hand; save and load | Validates against the schema; a manual-outline scan and an automatic scan of the same room give free rectangles within 10 cm of each other; a room with less than 1.5 × 1.5 m of free floor selects standing mode; the log confirms meshing and planes are off after the scan | Editor, phone in hand |
-| `P1-C07` | **Home rebuild S0** | `P1-C06`, `P1-A06` | Floor, walls and door openings as 0.25 m-grid meshes in the palette, registered at the anchor; a placeholder box per object, tinted by category, on an object component that later takes a generated mesh | In the headset a virtual wall is within 5 cm of the real wall at three touch points (should: 3 cm); Home on `budget_room` costs ≤ 60 draw calls and ≤ 130k triangles per frame | phone in headset |
+| `P1-C07` | **Home rebuild S0** | `P1-C06`, `P1-A06` | Floor, walls and door openings as 0.25 m-grid meshes in the palette, registered at the anchor; a first shape per object (a placeholder box, tinted by category, only where the scan gave too little), on an object component that later takes a generated mesh | In the headset a virtual wall is within 5 cm of the real wall at three touch points (should: 3 cm); Home on `budget_room_120k` costs ≤ 80 draw calls and ≤ 250k triangles per frame (counted from the builders; the phone measurement, check M3, is open) | phone in headset |
 | `P1-C08` | **Object photo capture** | `P1-C04`, `P1-X02` | For each object box, one to three key frames chosen by projected area, centredness, sharpness and spread of view angle; cropped and JPEG-encoded off the main thread; handed to the asset client | Every box that has a candidate frame under the rule of §7.4 gets at least one crop; boxes with none are reported (they take the built-in fallback mesh in `P1-D12`); capture adds < 2 ms per frame; nothing is written to disk | phone in hand |
 | `P1-C09` | **Bump Guard** | `P1-C06`, `P1-C01`, `P1-C14` | The logic of §4.10: static clearance from the distance field; a persistent dynamic layer stamped from live LiDAR depth (Burst); straight-path prediction over 0.4 s and 0.8 s; live depth alone while tracking is not Normal; a check of the static map against live depth; a level and a direction passed to `BumpCue`. Thresholds and the depth rate are constants in code, not in the parameter registry | Scripted approaches at 0.5 and 1.0 m/s to a wall, to a chair and to a 0.45 m stool placed after the scan, with the walker looking level: warning ≥ 0.6 s before predicted contact in 20 of 20 trials; during a 5-minute lap of the lap square: at most 2 STRONG cues or straight-side WARNs (should: none), corner WARNs counted and reported; ≤ 0.3 ms per frame; identical with the Station unplugged | Editor, phone in headset |
 | `P1-C10` | **Input and twins** | `P1-A04`, `P1-A08` | Gamepad through the Input System, gaze reticle with 600–800 ms dwell, headset lever tap; one action map | Every SpaceLab action can be done with the gamepad alone and with gaze dwell alone | Editor, phone in headset |
@@ -3509,7 +3509,7 @@ Captured by `AtlasPerfProbe` (3,600-frame ring buffer, one CSV row per second, s
 | Main-thread p95, link on against off | Differs ≤ 0.2 ms; 0 B allocated by `Atlas.Link` | — | — | Two probe runs (R4) | G6 |
 | **Asset round trip** | | | | | |
 | Forge job start → placed mesh (`AssetAck`), per object | ≤ 60 s | ≤ 30 s (proposed) | ≤ 20 s | `Event` timestamps (test L15); the wait in the queue is reported separately | G6 |
-| Triangles after clean-up | 1,500–5,000 per object and no more than the target sent with the job; ≤ 60,000 for all generated meshes in the room; edges ≤ 0.25 m | — | — | Forge report (BP §5; target rule in §4.5) | G6 |
+| Triangles after clean-up | Full copy 1,500–15,000 and light copy 1,500–5,000 per object, each no more than the target sent with the job; ≤ 120,000 (full) and ≤ 60,000 (light) for all generated meshes in the room; edges ≤ 0.25 m | — | — | Forge report (BP §5; target rule in §4.5) | G6 |
 | Scale error against the scanned box | ≤ 10% of the longest side (proposed) | ≤ 5% | — | Forge report against RoomModel | G6 |
 | Worst frame while a GLB loads | < 20 ms | ≤ 17.2 ms (no frame over one vsync interval + 0.5 ms) | — | Frame log | G6 |
 | **Comfort and usability** (R5 §D2) | | | | | |
@@ -3883,7 +3883,7 @@ Phone swap rule: never start a session on a phone reporting Serious. Between jud
 |---|---|---|---|---|
 | Room, walls, object boxes | Scanned in the session, or team pre-scan (said aloud) | | | |
 | s, L, tiling size | | Loop-fit from the scan | | |
-| Furniture meshes | | Forge, per object, for at most 20 objects (largest first) | Built-in set, labelled "built-in", when the Forge is unreachable or an object has no usable photo; objects beyond the twentieth stay placeholder boxes| |
+| Furniture meshes | | Forge, per object, for at most 32 objects (largest first) | First shapes (built-in templates fitted to the scan, or cut from it), labelled "built-in", from the start and whenever the Forge is unreachable or an object has no usable photo; objects beyond the thirty-second keep their first shape| |
 | Curved world | | Tile graph and world generator, by seed | | |
 | Tumour, 10 phases | TCIA 4D-Lung patient 101 contours | Slices by Mesh4D | Tetrahedral worldtube | |
 | Mobile nodule (10 mm, 15 mm motion) | | | | "illustrative model" |
@@ -4021,7 +4021,7 @@ Crosswalk to the Spec's open questions (Spec §17; Brief §13 holds the same lis
 - Phase 3 starts after G11 although its packages depend technically only on Phase 1.
 - Tile ids use 64-bit integers. Their coefficients are exact for 42 straight tile steps from tile zero and overflow at step 43. The longest route in the plan, the walkable airway, is 32 tile steps (16 generations); addressing all 23 generations (46 steps) along the airway's own paths needs about 52 bits, so 64 bits are enough there too. A wider integer type is a later option.
 - Bump Guard's constants are starting values, held in code (§4.10): WARN when the clearance at the head is under 0.30 m, or when the straight path of the next 0.8 s comes within 0.05 m of a hazard; STRONG likewise at 0.20 m and 0.4 s; a cue relaxes only after 0.05 m and 0.3 s of margin; an obstacle seen by live depth is remembered until it is seen empty, or for 30 s without a new hit; live depth is processed at every frame the phone delivers and never below 15 Hz. `BumpGuard_Replay` on a recorded lap confirms or changes them before G5; open item 19 covers the lap corners.
-- At most 20 scanned objects receive generated meshes, largest boxes first; further objects stay placeholder boxes. The triangle target per object is clamp(60,000 ÷ n, 3,000, 5,000) for n meshed objects, so the furniture of a room never exceeds 60,000 triangles (§4.5, §8.5).
+- At most 32 scanned objects receive generated meshes, largest boxes first; further objects keep their first shape. The full triangle target per object is 3,000–15,000 by the area rule of §4.5, so the furniture of a room never exceeds 120,000 triangles (60,000 at the light level) (§4.5, §8.5).
 - The Glued space (S1) is a lattice of open-frame cells (corner posts, a floor grid, one chiral landmark; at most 1,500 triangles each), 5 × 5 for the torus and the Klein bottle and 3 × 3 × 3 for T³. The real room is not repeated: its walls sink to kerbs and every scanned object is drawn once, at its true position, among the copies (§4.9).
 - In Curved Walk a tile is drawn when its centre is within ρ + 0.8425 of the walker and its bounding disc on the floor is not outside the view frustum widened by 12° to each side and 4° up and down. At ρ = 3 at most 59 tiles are drawn with a level gaze and 71 at any pitch (§8.5). If the view test is not built, tile centres are culled at ρ = 3 and the fog is made fully opaque at ρ = 2.15.
 
@@ -4196,7 +4196,7 @@ Little-endian. Byte 0 is the message id. Poses: Unity convention (left-handed, Y
 | `RoomOutline` | 0x41 | 0 | binary | phone → Hub → spectators | `count u8`, `count × {x f32, z f32}`, `height f32`, `rect 5 × f32` (the free rectangle: centre x, z, Wf, Df, yaw), `boxCount u8`, `boxCount × {id u8, cat u8, cx, cz, w, d, h, yaw f32}` |
 | `Log` | 0x42 | 0 | JSON | phone → Hub | `{t_us, level, msg}` (warnings and errors) |
 | `JobStatus` | 0x50 | 0 | JSON | Hub → phone, spectators | `{jobId, roomId, boxId, state, source: local \| hosted \| cache, error}` |
-| `AssetReady` | 0x51 | 0 | JSON | Hub → phone, spectators | `{jobId, roomId, boxId, sha256, url, bytes, tris, maxEdge, bounds[3], palette}` |
+| `AssetReady` | 0x51 | 0 | JSON | Hub → phone, spectators | `{jobId, roomId, boxId, sha256, url, bytes, tris, maxEdge, bounds[3], palette}`, and, when a light copy exists, `lightSha256`, `lightUrl`, `lightBytes`, `lightTris` (a reader that ignores them shows the full copy) |
 | `AssetAck` | 0x52 | 0 | JSON | phone → Hub | `{jobId, boxId, sha256, ok, loadMs, worstFrameMs, reason}` |
 | `Bye` | 0x7F | 0 | JSON | both | `{reason}` |
 
@@ -4221,7 +4221,7 @@ Little-endian. Byte 0 is the message id. Poses: Unity convention (left-handed, Y
 | `PUT /rooms/{roomId}/mesh` | binary mesh, ≤ 2 MB | 204 |
 | `GET /rooms/{roomId}` | – | RoomModel JSON |
 | `DELETE /rooms/{roomId}` | – | 204; removes the room record, its mesh and the GLBs made for it (§13.5) |
-| `POST /rooms/{roomId}/objects` | multipart: `meta` = `{boxId, category, dims[3], yaw, triTarget, backend, views: [{score, azimuthDeg, intrinsics[4], camToBox[16]}]}`; files `view0`…`view2` (JPEG). `triTarget` is the triangle target of §7.4 (3,000–5,000); `backend` is the phone's `forge.backend` value (`local`, `hosted` or `cache`) | 202 `{jobId}` or 200 `{jobId, cached: true, sha256}` |
+| `POST /rooms/{roomId}/objects` | multipart: `meta` = `{boxId, category, dims[3], yaw, triTarget, backend, views: [{score, azimuthDeg, intrinsics[4], camToBox[16]}]}`; files `view0`…`view2` (JPEG). `triTarget` is the full triangle target of §7.4 (1,500–15,000; the RoomModel's value is 3,000–15,000); `meta` also carries the optional `triTargetLight` (1,500–5,000) and `profile` (the object's 256-byte profile, standard base64, 344 characters); `backend` is the phone's `forge.backend` value (`local`, `hosted` or `cache`) | 202 `{jobId}` or 200 `{jobId, cached: true, sha256}` |
 | `GET /jobs/{jobId}` · `GET /jobs?room={roomId}` | – | `JobStatus` (with the `AssetReady` fields when ready) · list |
 | `GET /assets/{sha256}.glb` | – | GLB; `ETag` = hash; 404 if unknown |
 
@@ -4493,7 +4493,7 @@ Order of authority: the team lead's decisions (§2 of this plan) > Build Pipelin
 | Taped, roped square with a spotter (§1.2, §4) | Free walk in the scanned room | D2 |
 | "Turn off … occlusion" after set-up (§5) | Environment depth stays on; meshing, planes, probes, light estimation off | Bump Guard needs live depth (D19) |
 | "Don't let the user cross a glued edge" (§4) | The walker crosses freely | The cover is fixed to the floor: nothing is re-centred, so no global inverted culling (D15) |
-| Glued Room: one combined mesh per copy, under 5k triangles each (§5) | Each copy is an open-frame cell of at most 1,500 triangles, with a self-avatar in every copy but the walker's own. The room's walls (as kerbs) and furniture are drawn once, where they really are | A copy of the room with its furniture cannot be held under 5k: the furniture alone may reach 60,000 triangles (§4.5), and 25 copies of that for two eyes would be 3 million triangles a frame against a budget of 500k (derived). Drawn once, everything that looks solid is where the real thing is |
+| Glued Room: one combined mesh per copy, under 5k triangles each (§5) | Each copy is an open-frame cell of at most 1,500 triangles, with a self-avatar in every copy but the walker's own. The room's walls (as kerbs) and furniture are drawn once, where they really are | A copy of the room with its furniture cannot be held under 5k: the furniture alone may reach 120,000 triangles (§4.5), and 25 copies of that for two eyes would be 6 million triangles a frame against a budget of 500k (derived). Drawn once, everything that looks solid is where the real thing is |
 | Fog at 5–8 units; cull at d > ~4 (§0.5, §4) | Fog opaque at ρ = 3; every tile that reaches inside that radius and can be in view is drawn (§8.5) | 5–8 is the float-precision horizon; 45 tile centres lie within ρ = 3 (at most 71 tiles drawn) but 129 within ρ = 4, over the draw budget (R3, R6) |
 | Thermal Player Setting "on 6.5+" (§1.3) | Pin Unity ≥ 6000.3.21f1 | The setting exists from that patch (R5) |
 | Accept Unity's 30 fps cap at Serious (§1.3, §5) | Cap switched off; the ladder keeps 60 fps at Serious and locks to 30 fps only on its last rung | A silent drop to 30 fps with no reprojection is the worst outcome in a headset; a controlled quality drop is better (R5) |

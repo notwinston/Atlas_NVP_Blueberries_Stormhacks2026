@@ -422,9 +422,8 @@ means at least.
 The rule that answered is written to \cd{objects[k].facing} (optional key; absent means \cd{box}). Check M1 counts it.
 
 Facing can be switched off by a scan option, \cd{ScanOptions.DecideFacing} (true in \cd{ScanOptions.Default}). With it off the
-profile is still computed, because the first shapes and the Forge read it, and only the turning and \cd{facing} are left out. In
-this tree \cd{ScanFlow} does not yet hand the option to \cd{ScanSolver.Solve}, so in the app facing is always on; only a direct
-call of \cd{ScanSolver.Solve} or \cd{RoomModelBuilder.Build} can switch it off.
+profile is still computed, because the first shapes and the Forge read it, and only the turning and \cd{facing} are left out. \cd{ScanFlow.Start} forwards the option to both \cd{ScanSolver.Solve} calls, so setting it false switches facing off in the app
+too (tests in \cd{ScanObjectShapeTests}).
 
 \subsubsection{First shapes}
 
@@ -603,8 +602,10 @@ objects\\
 \end{longtable}}
 
 The must-limits of the plan (300 draw calls and 500,000 triangles per frame) do not change, and every row stays inside them.
-Of these rows only Home's is held by code (\cd{RoomBudget}: 80 draw calls and 250,000 triangles per frame, counted from what the
-builders make); the others are planning figures until check M3. Three further controls:
+Of these rows Home's and S2's are held by code, as counts and not as phone measurements (\cd{RoomBudget}: Home 80 draw calls and
+250,000 triangles per frame; \cd{WorldLintSettings}: the room counted at that load, S2 capped at 240 draws and 370,000 triangles, the
+tiles' share at 150 and 120,000, asserted by \cd{WorldLintTests}); the others are planning figures, and the phone measurement,
+check M3, is open for all. Three further controls:
 \begin{itemize}
 \item \textbf{The quality ladder.} The quality table gains one column, furniture level. It is a table in
 \cd{Rendering/Quality/QualityFurniture.cs}, not a field of \cd{QualityRow}, which lives in \cd{Atlas.World}. Nominal and High

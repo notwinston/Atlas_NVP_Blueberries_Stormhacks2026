@@ -201,8 +201,7 @@ The rule that answered is written to `objects[k].facing` (optional key; absent m
 
 Facing can be switched off by a scan option, `ScanOptions.DecideFacing` (true in `ScanOptions.Default`). With it off the
 profile is still computed, because the first shapes and the Forge read it, and only the turning and `facing` are left out.
-In this tree `ScanFlow` does not yet hand the option to `ScanSolver.Solve`, so in the app facing is always on; only a direct
-call of `ScanSolver.Solve` or `RoomModelBuilder.Build` can switch it off.
+`ScanFlow.Start` forwards the option to both `ScanSolver.Solve` calls, so setting it false switches facing off in the app too (tests in `ScanObjectShapeTests`).
 
 #### First shapes
 
@@ -319,8 +318,7 @@ entered, never during a frame.
 | S1, S3, S4, S5, S6 | Light | 126,000, as today | Triangles as today; 24 more draw calls each, for the 12 more objects |
 
 The must-limits of the plan (300 draw calls and 500,000 triangles per frame) do not change, and every row stays
-inside them. Of these rows only Home's is held by code (`RoomBudget`: 80 draw calls and 250,000 triangles per frame,
-counted from what the builders make); the others are planning figures until check M3. Three further controls:
+inside them. Of these rows Home's and S2's are held by code, as counts and not as phone measurements (`RoomBudget`: Home 80 draw calls and 250,000 triangles per frame; `WorldLintSettings`: the room counted at that load, S2 capped at 240 draws and 370,000 triangles, the tiles' share at 150 and 120,000, asserted by `WorldLintTests`); the others are planning figures, and the phone measurement, check M3, is open for all. Three further controls:
 
 - **The quality ladder.** The quality table gains one column, furniture level. It is a table in `Rendering/Quality/QualityFurniture.cs`, not a field of `QualityRow`, which lives in `Atlas.World`. Nominal and High allow Full; Fair, Serious and Critical force Light in every space, so the first step below nominal drops the furniture to its light copies before any step lowers the render scale. `QualityApplier.FurnitureCap` and `QualityLadder.FurnitureCap` publish the column, and `FurnitureLevelPolicy` (`App/Spaces/FurnitureLevels.cs`) puts the resulting level on the room when a space is entered, when the tier changes, when the parameter changes and when the room is rebuilt.
 - **A parameter.** `render.furniture` = `auto`, `light` or `full`, so the Console can force a level: `light` forces Light in every space, `full` forces Full whatever the ladder says.
