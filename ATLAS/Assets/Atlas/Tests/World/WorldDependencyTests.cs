@@ -11,8 +11,9 @@ namespace Atlas.World.Tests
             CompilationPipeline.GetAssemblies().Single(a => a.name == assembly)
                 .assemblyReferences.Select(r => r.name).Where(n => n.StartsWith("Atlas.")).ToArray();
 
+        // Master Plan §6.2, §6.5: ISpaceModule uses ParamRegistry and StateMessage, which live in Atlas.Link (brief R1).
         [Test]
-        public void WorldReferencesOnlyKernel() =>
-            Assert.That(AtlasReferences("Atlas.World"), Is.SubsetOf(new[] { "Atlas.Kernel" }));
+        public void WorldReferencesOnlyKernelAndLink() =>
+            Assert.That(AtlasReferences("Atlas.World"), Is.SubsetOf(new[] { "Atlas.Kernel", "Atlas.Link" }));
     }
 }
