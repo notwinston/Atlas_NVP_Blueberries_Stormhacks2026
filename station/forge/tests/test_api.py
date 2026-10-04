@@ -316,8 +316,17 @@ def test_debug_keep_is_reported_and_keeps_crops(tmp_path):
         model = room_model("kept", [(0.6, 0.6, 0.6)])
         upload_room(client, model)
         job = post_object(client, "kept", meta_for(model["objects"][0], 5000), [jpeg()]).json()
-        wait_for(client, job["jobId"])
-        assert (settings.data_dir / "jobs" / job["jobId"] / "view0.jpg").is_file()
+        status = wait_for(client, job["jobId"])
+        folder = settings.data_dir / "jobs" / job["jobId"]
+        assert (folder / "view0.jpg").is_file()
+        # And the generator's output as it came, so clean-up can be run again without the generator.
+        import numpy as np
+
+        with np.load(folder / "raw_view0.npz") as raw:
+            assert raw["vertices"].shape[1] == 3 and raw["faces"].shape[1] == 3 and str(raw["decoder"]) == ""
+            assert np.abs(raw["vertices"]).max() <= 0.5 + 1e-6  # a unit cube about the origin: not yet the box
+        assert sorted(p.name for p in folder.iterdir()) == ["job.json", "raw_view0.npz", "view0.jpg"]
+        assert status["state"] == "ready"
 
 
 def test_service_starts_without_torch_and_fails_jobs_cleanly(tmp_path):

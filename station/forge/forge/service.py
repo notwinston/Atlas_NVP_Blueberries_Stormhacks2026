@@ -4,7 +4,7 @@ One worker thread owns the generator and takes one job at a time, the largest
 box first. Everything the service knows is kept under the data folder:
 
     rooms/<roomId>/room.json, room.meta.json, mesh.bin
-    jobs/<jobId>/job.json            (and view<i>.jpg only under FORGE_DEBUG_KEEP=1)
+    jobs/<jobId>/job.json            (and view<i>.jpg, raw_view<i>.npz only under FORGE_DEBUG_KEEP=1)
     assets/<sha256>.glb, <sha256>.json
     cache/<key>.json
 
@@ -17,6 +17,7 @@ stopped is marked failed and the phone sends it again.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import logging
 import os
@@ -31,6 +32,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
+
+import numpy as np
 
 from . import PIPELINE_VER, imaging
 from .budget import MAX_GENERATED_PER_ROOM, box_volume, plan_room
@@ -686,6 +689,18 @@ class Forge:
 
         return self._timed(f"generation ({generator.name})", seconds, run)
 
+    def _keep_raw(self, job: Job, index: int, raw) -> None:
+        """Under FORGE_DEBUG_KEEP=1: the generator's output as it came, before clean-up touches it.
+
+        With it clean-up can be run again without the GPU, and the generator's own frame can be
+        read (mesh design sections 5.1 and 5.6).
+        """
+        packed = io.BytesIO()
+        np.savez_compressed(packed, vertices=np.asarray(raw.vertices, dtype=np.float32),
+                            faces=np.asarray(raw.faces, dtype=np.int32),
+                            decoder=np.array(getattr(raw, "decoder", "")))
+        _write_atomic(self._job_dir(job.jobId) / f"raw_view{index}.npz", packed.getvalue())
+
     def _process(self, job: Job) -> None:
         settings = self.settings
         crops = self._crops.get(job.jobId) or []
@@ -712,7 +727,7 @@ class Forge:
         # generating ------------------------------------------------------------
         self._enter(job, "generating")
         mark = time.monotonic()
-        raw, errors, used = None, [], None
+        raw, errors, used, used_view = None, [], None, 0
         attempts: list[tuple[Generator, int, float]] = []  # the generator, the view it is given, the time-out
         if job.backend == "hosted":
             attempts.append((self.hosted, 0, settings.hosted_timeout_s))
@@ -725,7 +740,7 @@ class Forge:
         for generator, index, seconds in attempts:
             try:
                 raw = self._generate(generator, self._view(job, crops, index), index, job, seconds)
-                used = generator
+                used, used_view = generator, index
                 break
             except (GeneratorError, StageTimeout, ImageError) as exc:
                 errors.append(str(exc))
@@ -740,6 +755,10 @@ class Forge:
         job.generator, job.source = used.name, used.source
         job.decoder = getattr(raw, "decoder", "")
         job.timings["generating"] = round(time.monotonic() - mark, 3)
+        if settings.debug_keep:
+            with self._lock:
+                if job.jobId in self._jobs:
+                    self._keep_raw(job, used_view, raw)
 
         # cleaning --------------------------------------------------------------
         self._enter(job, "cleaning")
