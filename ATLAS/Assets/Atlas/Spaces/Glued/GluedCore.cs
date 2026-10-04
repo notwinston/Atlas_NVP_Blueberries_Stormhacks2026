@@ -129,19 +129,22 @@ namespace Atlas.Spaces.Glued
         public const int SpaceDrawCalls = 150, SpaceTriangles = 250000;
         public const int SpaceTorus3DrawCalls = 160, SpaceTorus3Triangles = 250000;
 
-        /// <summary>Triangles of the cell mesh for this cell size.</summary>
-        public static int CellTriangles(float sizeX, float sizeZ)
+        /// <summary>Triangles of the cell mesh for this cell size, with the kit landmark when one is given.</summary>
+        public static int CellTriangles(float sizeX, float sizeZ, MeshData landmark = null)
         {
             var scratch = new AtlasMeshBuilder(1024, 4096);
-            GluedCellMesh.Build(sizeX, sizeZ, scratch);
+            GluedCellMesh.Build(sizeX, sizeZ, scratch, landmark);
             return scratch.TriangleCount;
         }
 
-        /// <summary>Triangles of the avatar's body alone: head, torso, shoulders and arms. What a copy draws while no hand is tracked.</summary>
-        public static int AvatarBodyTriangles()
+        /// <summary>
+        /// Triangles of the avatar's body alone: head, torso, shoulders and arms, or the kit avatar when one is
+        /// given. What a copy draws while no hand is tracked.
+        /// </summary>
+        public static int AvatarBodyTriangles(MeshData kit = null)
         {
             var scratch = new AtlasMeshBuilder(512, 2048);
-            GluedAvatarMesh.Build(scratch);
+            GluedAvatarMesh.Build(scratch, kit);
             return scratch.TriangleCount;
         }
 
@@ -152,12 +155,15 @@ namespace Atlas.Spaces.Glued
         }
 
         /// <summary>
-        /// Triangles of one avatar, the figure every copy is counted at: the body and both hands, the most the shared
-        /// mesh can hold. It stays within <see cref="AtlasMeshBudget.SelfAvatar"/>.
+        /// Triangles of one avatar, the figure every copy is counted at: the body (the kit avatar when one is given)
+        /// and both hands, the most the shared mesh can hold. It stays within <see cref="AtlasMeshBudget.SelfAvatar"/>:
+        /// a body that leaves no room for the hands is counted, and drawn, without them
+        /// (<see cref="GluedAvatarRig.HandsFit"/>).
         /// </summary>
-        public static int AvatarTriangles()
+        public static int AvatarTriangles(MeshData kit = null)
         {
-            return AvatarBodyTriangles() + AvatarHandsTriangles();
+            int body = AvatarBodyTriangles(kit);
+            return GluedAvatarRig.HandsFit(body) ? body + AvatarHandsTriangles() : body;
         }
 
         public static int PromptTriangles()

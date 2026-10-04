@@ -410,9 +410,10 @@ namespace Atlas.Scan
         {
             string id = _roomId;
             float wallHeight = _options.WallHeight;
+            bool decideFacing = _options.DecideFacing;
             var job = new Job { Preview = preview, Snapshot = snapshot };
-            if (Background) job.Task = Task.Run(() => ScanSolver.Solve(snapshot, id, wallHeight, !preview));
-            else job.Ready = ScanSolver.Solve(snapshot, id, wallHeight, !preview);
+            if (Background) job.Task = Task.Run(() => ScanSolver.Solve(snapshot, id, wallHeight, !preview, decideFacing));
+            else job.Ready = ScanSolver.Solve(snapshot, id, wallHeight, !preview, decideFacing);
             _job = job;
         }
 

@@ -20,16 +20,20 @@ namespace Atlas.Scan
         // How far the floor of an outline-only room is laid beyond the outline's bounding box. The outline
         // cuts it back; the margin only has to cover the grid's own five cells.
         const float FloorMargin = 1.0f;
+        // The largest yaw written to a RoomModel, either way round: pi cut, not rounded, at six decimals.
+        const float MaxStoredYaw = 3.141592f;
 
         /// <summary>
         /// grid.Status must be Ok and the grid must carry an outline. Fills every field: the anchor from
         /// AnchorPosition and AnchorYaw (Id empty until the ARAnchor exists), outline, distance field,
         /// walkable polygon, free rectangle, loop-fit and cell grids, objects (the 64 largest boxes, ids by
         /// decreasing volume, state Placeholder, triangle targets) and quality. Walls: one per outline edge
-        /// at wallHeight with no opening, unless a list is given.
+        /// at wallHeight with no opening, unless a list is given. With a snapshot that holds a scanned mesh
+        /// (ScanSnapshot.HasScannedMesh; the frame the grid was made from) every object also gets its profile
+        /// and, unless decideFacing is false, its front (Objects).
         /// </summary>
         public static RoomModel Build(FloorGridResult grid, string id, string createdUtc, ScanRoute route,
-            float wallHeight = RoomModel.DefaultWallHeight, RoomWall[] walls = null)
+            float wallHeight = RoomModel.DefaultWallHeight, RoomWall[] walls = null, ScanSnapshot scan = null, bool decideFacing = true)
         {
             if (grid == null) throw new ArgumentNullException(nameof(grid));
             if (grid.Status != FloorGridStatus.Ok)
@@ -53,7 +57,7 @@ namespace Atlas.Scan
             room.Walkable.Holes = holes;
             room.ApplyLoopFit();
             room.Walls = walls ?? WallsFromOutline(room.Outline, wallHeight);
-            room.Objects = Objects(grid);
+            room.Objects = Objects(grid, room.Sdf, scan, decideFacing);
             return room;
         }
 
@@ -115,9 +119,26 @@ namespace Atlas.Scan
         /// <summary>
         /// The objects of a room from the grid's boxes (room frame): boxes that are not usable are dropped,
         /// the 64 largest by volume are kept and numbered 1, 2, ... by decreasing volume, each starts as a
-        /// placeholder, and the twenty largest share the 60,000 triangle budget (Master Plan section 4.5).
+        /// placeholder, and the thirty-two largest share the 120,000 triangle budget by surface area (mesh
+        /// design section 5.4). No profile, and every box keeps its own axis.
         /// </summary>
         public static RoomObject[] Objects(FloorGridResult grid)
+        {
+            return Objects(grid, null, null, false);
+        }
+
+        /// <summary>
+        /// The objects of a room, with what the scanned mesh says about them (mesh design section 5.2). When
+        /// the snapshot holds a scanned mesh, in the frame the grid was made from, every object gets its
+        /// profile (none when no ray hit anything) and, with decideFacing, its front: the box is turned by
+        /// whole quarter turns so that local +Z is the front, size.w and size.d swapped on an odd turn, the
+        /// profile turned with it, and the rule that answered is kept in Facing. sdf is the room's distance
+        /// field. With no scanned mesh: no profile, Facing stays Box, nothing is turned.
+        /// The boxes are turned before they are ordered, so the ids, the 64 that are kept and the triangle
+        /// targets all come from the final boxes. A turn keeps the footprint, so the grid, which was made
+        /// from the boxes as scanned, still has no free floor under any of them.
+        /// </summary>
+        public static RoomObject[] Objects(FloorGridResult grid, RoomSdf sdf, ScanSnapshot scan, bool decideFacing = true)
         {
             ObstacleBox[] boxes = grid.Boxes ?? Array.Empty<ObstacleBox>();
             var kept = new RoomObject[boxes.Length];
@@ -128,6 +149,11 @@ namespace Atlas.Scan
                 if (!TryObject(boxes[k], out obj)) continue;
                 if (grid.CellIndex(obj.Base.xz) < 0) continue;      // its base lies beyond the grid: not in this room
                 kept[count++] = obj;
+            }
+            if (count > 0 && scan != null && scan.HasScannedMesh)
+            {
+                ProfileObjects(kept, count, scan, grid.AnchorPosition, grid.AnchorYaw);
+                if (decideFacing) FaceObjects(kept, count, sdf);
             }
             // Largest first; equal volumes keep the order the scan gave them.
             var order = new int[count];
@@ -146,6 +172,32 @@ namespace Atlas.Scan
             }
             ObjectMeshRules.Assign(objects);
             return objects;
+        }
+
+        // The profile of each of the first count objects: the mesh is in the session frame, where the room
+        // frame sits at anchorPosition turned by anchorYaw. A box in which no ray hit anything has none.
+        static void ProfileObjects(RoomObject[] objects, int count, ScanSnapshot scan, float3 anchorPosition, float anchorYaw)
+        {
+            var boxes = new PhotoBox[count];
+            for (int k = 0; k < count; k++) boxes[k] = PhotoScore.ToCaptureFrame(objects[k], anchorPosition, anchorYaw);
+            byte[][] profiles = ObjectProfile.Compute(scan.Vertices, scan.Indices, scan.Classes, boxes);
+            for (int k = 0; k < count; k++)
+                if (ObjectProfile.Coverage(profiles[k]) > 0f) objects[k].Profile = profiles[k];
+        }
+
+        // The front of each of the first count objects. A table keeps its axis, so the order in which the
+        // objects are turned does not change which way a chair finds its table.
+        static void FaceObjects(RoomObject[] objects, int count, RoomSdf sdf)
+        {
+            for (int k = 0; k < count; k++)
+            {
+                RoomObject obj = objects[k];
+                ObjectFacingRule rule;
+                int turns = ObjectFacing.Decide(obj.Category, obj.Base, obj.Size, obj.Yaw, obj.Profile, sdf, objects, out rule);
+                ObjectFacing.Apply(turns, ref obj.Yaw, ref obj.Size, ref obj.Profile);
+                obj.Yaw = StoredYaw(obj.Yaw);
+                obj.Facing = rule;
+            }
         }
 
         static bool TryObject(in ObstacleBox box, out RoomObject obj)
@@ -169,7 +221,7 @@ namespace Atlas.Scan
                 Category = (ObjectCategory)category,
                 Base = new float3(Round6(bottom.x), Round6(bottom.y), Round6(bottom.z)),
                 Size = new float3(Round6(size.x), Round6(size.y), Round6(size.z)),
-                Yaw = Round6(WrapAngle(box.Yaw)),
+                Yaw = StoredYaw(box.Yaw),
                 Mesh = MeshState.Placeholder,
                 AssetHash = "",
             };
@@ -210,6 +262,16 @@ namespace Atlas.Scan
             var copy = new float2[ring.Length];
             for (int k = 0; k < copy.Length; k++) copy[k] = new float2(Round6(ring[k].x), Round6(ring[k].y));
             return copy;
+        }
+
+        /// <summary>
+        /// A yaw as a RoomModel holds it: wrapped into (-pi, pi], at six decimals, and never beyond 3.141592.
+        /// Pi itself rounds to 3.141593 at six decimals, which is past what a reader of the file accepts
+        /// (RoomModelJson stops at 3.1415928), so half a turn is stored as 3.141592: under a micro-radian off.
+        /// </summary>
+        internal static float StoredYaw(float yaw)
+        {
+            return math.clamp(Round6(WrapAngle(yaw)), -MaxStoredYaw, MaxStoredYaw);
         }
 
         // Into (-pi, pi].

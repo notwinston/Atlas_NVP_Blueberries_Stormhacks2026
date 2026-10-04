@@ -1,6 +1,7 @@
 using Atlas.Kernel;
 using Atlas.Link;
 using Atlas.Rendering;
+using Atlas.Telemetry;
 using Atlas.World;
 using Unity.Mathematics;
 using UnityEngine;
@@ -286,11 +287,15 @@ namespace Atlas.Spaces.Glued
         void BuildContent()
         {
             float sizeX = (float)_lattice.SizeX, sizeZ = (float)_lattice.SizeZ;
+            // The pieces modelled in Blender; a piece that is missing or refused keeps the built-in mesh.
+            KitSet kit = KitSet.Load(ReadKitResource);
+            MeshData landmark = KitPiece(kit, "landmark"), avatar = KitPiece(kit, "avatar");
             var data = new AtlasMeshBuilder(1024, 4096);
-            GluedCellMesh.Build(sizeX, sizeZ, data);
+            GluedCellMesh.Build(sizeX, sizeZ, data, landmark);
             _cellMesh = AtlasMesh.Create(data, "Glued Cell");
-            // The avatar is the body alone until a hand is tracked: the rig builds it with GluedAvatarMesh and keeps room for the hands.
-            _avatarRig = new GluedAvatarRig();
+            // The avatar is the body alone until a hand is tracked: the rig builds it with GluedAvatarMesh (the kit
+            // avatar when there is one) and keeps room for the hands.
+            _avatarRig = new GluedAvatarRig(avatar);
             _avatarMesh = AtlasMesh.Create(_avatarRig.Data, "Glued Avatar");
             _avatarDynamic = false;
             _handsOff = false;
@@ -320,6 +325,23 @@ namespace Atlas.Spaces.Glued
                 _avatarObjects[i] = NewRenderer("Avatar", _avatarMesh, _plainMaterial, out _avatarTransforms[i]);
             }
             _prompt = NewRenderer("Prompt", _promptMesh, _plainMaterial, out _promptTransform);
+        }
+
+        static MeshData KitPiece(KitSet kit, string name)
+        {
+            var mesh = new MeshData(512, 2048);
+            if (kit.TryGet(name, mesh, out string error)) return mesh;
+            Debug.LogWarning("Atlas: kit piece '" + name + "' missing or invalid; using the built-in one. (" + error + ")");
+            return null;
+        }
+
+        static byte[] ReadKitResource(string name)
+        {
+            var asset = Resources.Load<TextAsset>(KitSet.ResourceFolder + "/" + name);
+            if (asset == null) return null;
+            byte[] bytes = asset.bytes;
+            Resources.UnloadAsset(asset);
+            return bytes;
         }
 
         GameObject NewRenderer(string label, Mesh mesh, Material material, out Transform child)

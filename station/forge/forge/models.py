@@ -1,15 +1,39 @@
 """Request and response bodies of the Forge HTTP interface (Master Plan Appendix B.4)."""
 from __future__ import annotations
 
+import base64
+import binascii
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+import math
 
-from .budget import VALIDATOR_MAX_TRIANGLES, VALIDATOR_MIN_TRIANGLES
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from .budget import VALIDATOR_MAX_TRIANGLES, VALIDATOR_MAX_TRIANGLES_LIGHT, VALIDATOR_MIN_TRIANGLES
 
 Vec3 = tuple[float, float, float]
 
 ROOM_ID_PATTERN = r"^[A-Za-z0-9_]{1,40}$"
+# The object profile of lane C: 16 x 16 heights of the scanned surface inside the box, one byte each.
+PROFILE_BYTES = 256
+
+
+def decode_profile(text: str) -> bytes:
+    """The 256 bytes of a profile sent as standard base64 with padding; ValueError for anything else."""
+    try:
+        raw = base64.b64decode(text, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError(f"profile is not standard base64: {exc}") from None
+    if len(raw) != PROFILE_BYTES:
+        raise ValueError(f"profile decodes to {len(raw)} bytes; exactly {PROFILE_BYTES} are required")
+    return raw
+
+
+def _above_zero(value: Vec3) -> Vec3:
+    """A box has three sides above zero: the furniture budget shares triangles by its surface."""
+    if not all(math.isfinite(side) and side > 0.0 for side in value):
+        raise ValueError(f"the three sides of a box must be above zero, not {list(value)}")
+    return value
 
 
 class RoomObject(BaseModel):
@@ -20,6 +44,8 @@ class RoomObject(BaseModel):
     id: int = Field(ge=1, le=255)
     category: str = "unknown"
     size: Vec3
+
+    _size_is_a_box = field_validator("size")(_above_zero)
 
 
 class RoomModel(BaseModel):
@@ -51,8 +77,21 @@ class ObjectMeta(BaseModel):
     dims: Vec3
     yaw: float = 0.0
     triTarget: int = Field(ge=VALIDATOR_MIN_TRIANGLES, le=VALIDATOR_MAX_TRIANGLES)
+    # The target of the light copy. An older phone does not send it; the Forge then uses its own figure for the room.
+    triTargetLight: Optional[int] = Field(default=None, ge=VALIDATOR_MIN_TRIANGLES, le=VALIDATOR_MAX_TRIANGLES_LIGHT)
+    # The object profile as the RoomModel holds it (`objects[k].profile`). Absent when the scan gave none.
+    profile: Optional[str] = None
     backend: Literal["local", "hosted", "cache"] = "local"
     views: list[ViewMeta] = Field(default_factory=list, max_length=3)
+
+    _dims_are_a_box = field_validator("dims")(_above_zero)
+
+    @field_validator("profile")
+    @classmethod
+    def _profile_is_256_bytes(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None:
+            decode_profile(value)
+        return value
 
 
 class Health(BaseModel):
@@ -77,13 +116,22 @@ class RoomCreated(BaseModel):
     roomHash: str
     generated: list[int]
     placeholders: list[int]
+    # The largest full target of the room: what a reader that knows one figure per room may ask for.
     triTarget: int
+    # The full target of every box, 0 for a box that receives no mesh; and the room's light target.
+    triTargets: dict[int, int]
+    triTargetLight: int
 
 
 class JobCreated(BaseModel):
     jobId: str
     cached: Optional[bool] = None
     sha256: Optional[str] = None
+    # With `cached`: the light copy of the cached mesh, when it has one.
+    lightSha256: Optional[str] = None
+    lightUrl: Optional[str] = None
+    lightBytes: Optional[int] = None
+    lightTris: Optional[int] = None
     placeholder: Optional[bool] = None
 
 
@@ -97,8 +145,11 @@ class JobStatus(BaseModel):
     source: Literal["local", "hosted", "cache"]
     error: str = ""
     triTarget: int
+    triTargetLight: Optional[int] = None
     cached: bool = False
     generator: str = ""
+    # Which of TripoSG's decoders produced the mesh: "flash" or "hierarchical".
+    decoder: Optional[str] = None
     queuePosition: Optional[int] = None
     sha256: Optional[str] = None
     url: Optional[str] = None
@@ -107,6 +158,23 @@ class JobStatus(BaseModel):
     maxEdge: Optional[float] = None
     bounds: Optional[Vec3] = None
     palette: Optional[int] = None
+    # The light copy (mesh design section 5.3); absent when the job has none.
+    lightSha256: Optional[str] = None
+    lightUrl: Optional[str] = None
+    lightBytes: Optional[int] = None
+    lightTris: Optional[int] = None
+    # How clean-up turned the generated mesh. `fitUp`: the axis of the generator's own frame that was taken as
+    # up (Y, Z or X); clean-up first turns the mesh so that this axis is +Y. `fitYaw`: the turn it then gave
+    # the mesh about +Y, as a yaw in Unity's box frame, 0, 90, 180 or 270 degrees (positive turns +Z towards
+    # +X): the azimuth of the box at which the +Z side of the uprighted mesh stands. That side is the
+    # generator's own +Z for `fitUp` Y and X, and its -Y for `fitUp` Z.
+    # `fit`: how far the turned mesh is from the scanned profile, 0 a perfect match; absent for a job with no
+    # profile, or with one that saw under a tenth of the box. `attempts`: the generations made for the object,
+    # failed ones included; absent for a cached answer.
+    fit: Optional[float] = None
+    fitYaw: Optional[int] = None
+    fitUp: Optional[str] = None
+    attempts: Optional[int] = None
     report: Optional[dict[str, Any]] = None
 
 

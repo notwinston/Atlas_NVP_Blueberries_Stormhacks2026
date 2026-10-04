@@ -5,8 +5,8 @@ namespace Atlas.Spaces.Slicer
 {
     /// <summary>
     /// The still parts of the Slicer: the w lane on the floor, the w axis bar beside the body (the flat twin
-    /// of the cut, Master Plan section 0.5 rule 6), and a small box at every gaze handle so the walker can see
-    /// what to look at. Built once per room; never warped, so the 0.25 m edge rule does not apply.
+    /// of the cut, Master Plan section 0.5 rule 6). The gaze handles are drawn as buttons (SlicerButtons). Built
+    /// once per room; never warped, so the 0.25 m edge rule does not apply.
     /// </summary>
     public static class SlicerFixtures
     {
@@ -17,7 +17,7 @@ namespace Atlas.Spaces.Slicer
         // Nothing here is ever warped, so no face is split: a box is twelve triangles.
         const float NoSplit = 1000f;
 
-        /// <summary>The lane, the bar and the handle boxes, in room metres.</summary>
+        /// <summary>The lane and the bar, in room metres.</summary>
         public static void Build(in SlicerLayout layout, AtlasMeshBuilder into)
         {
             if (layout.HasLane) AddLane(layout, into);
@@ -33,17 +33,6 @@ namespace Atlas.Spaces.Slicer
                 into.AddBox(at - new float3(0f, 0.004f, 0f), new float3(0.035f, 0.008f, tick == 0 ? 0.14f : 0.09f),
                             0f, neutral, true, 0, NoSplit);
             }
-
-            // Handles. The two that push the cut carry the colours of the two ends of the w-depth strip.
-            AddHandle(into, layout.CutHandle(+1), SlicerMeshKernel.DepthUv(SlicerObjects.CutRange));
-            AddHandle(into, layout.CutHandle(-1), SlicerMeshKernel.DepthUv(-SlicerObjects.CutRange));
-            for (int plane = 0; plane < 3; plane++)
-            {
-                AddHandle(into, layout.TurnHandle(plane, -1), AtlasPalette.Uv(AtlasPalette.PortalFrame));
-                AddHandle(into, layout.TurnHandle(plane, +1), AtlasPalette.Uv(AtlasPalette.Beacon));
-            }
-            AddHandle(into, layout.NextObjectChip, AtlasPalette.Uv(AtlasPalette.LapMarker));
-            AddHandle(into, layout.ViewChip, AtlasPalette.Uv(AtlasPalette.Flag));
         }
 
         /// <summary>The marker that slides along the bar and along the lane: a flat box about the origin.</summary>
@@ -68,12 +57,6 @@ namespace Atlas.Spaces.Slicer
             int d = into.AddVertex(new float3(x1, LaneLift, z0), up, near, float2.zero, 1f, 0);
             into.AddTriangle(a, b, c);
             into.AddTriangle(a, c, d);
-        }
-
-        static void AddHandle(AtlasMeshBuilder into, float3 centre, float2 uv)
-        {
-            float edge = SlicerLayout.HandleBox;
-            into.AddBox(centre - new float3(0f, 0.5f * edge, 0f), new float3(edge, edge, edge), 0f, uv, true, 0, NoSplit);
         }
     }
 }

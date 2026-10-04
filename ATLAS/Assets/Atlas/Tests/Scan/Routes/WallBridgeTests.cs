@@ -377,10 +377,11 @@ namespace Atlas.Scan.Tests.Routes
         {
             public readonly List<string> Calls = new List<string>();
             public bool CanStart = true, IsAvailable = true;
+            public int AvailableAsked;
             public string Json = RoomFile;
 
             public string Name { get { return "fake"; } }
-            public bool Available { get { return IsAvailable; } }
+            public bool Available { get { AvailableAsked++; return IsAvailable; } }
             public bool Start(IntPtr nativeSession) { Calls.Add("start"); return CanStart; }
             public string TakeJson() { Calls.Add("take"); return Json; }
             public void Stop() { Calls.Add("stop"); }
@@ -501,6 +502,78 @@ namespace Atlas.Scan.Tests.Routes
             RoomWall[] before = room.Walls;
             Assert.That(capture.Apply(room).Tried, Is.False);
             Assert.That(room.Walls, Is.SameAs(before));
+        }
+
+        // ---- the switch: scan.wallBridge -----------------------------------------------------------------------
+
+        [Test]
+        public void Switch_Off_NeverAsksTheBridge_AndTheWallsAreAsToday()
+        {
+            var bridge = new FakeBridge();
+            WallBridge.Register(bridge);
+            WallBridge.Apply(false);
+            Assert.That(WallBridge.Enabled, Is.False);
+            Assert.That(bridge.AvailableAsked, Is.EqualTo(0));
+
+            var capture = new WallBridgeCapture();
+            Assert.That(capture.Begin(Session), Is.False);
+            capture.End();
+            RoomModel room = Room();
+            RoomWall[] before = room.Walls;
+            Assert.That(capture.Apply(room).Tried, Is.False);
+            Assert.That(room.Walls, Is.SameAs(before));
+            Assert.That(room.Quality.Route, Is.EqualTo(ScanRoute.ManualOutline));
+            Assert.That(bridge.Calls, Is.Empty);
+        }
+
+        [Test]
+        public void Switch_On_WithAnAvailableBridge_BeginsEndsAndMerges()
+        {
+            var bridge = new FakeBridge();
+            WallBridge.Register(bridge);
+            WallBridge.Apply(true);
+            Assert.That(WallBridge.Enabled, Is.True);
+
+            var capture = new WallBridgeCapture();
+            Assert.That(capture.Begin(Session), Is.True);
+            capture.End();
+            Assert.That(bridge.Calls, Is.EqualTo(new[] { "start", "take", "stop" }));
+            RoomModel room = Room();
+            WallBridgeReport report = capture.Apply(room);
+            Assert.That(report.Merged, Is.EqualTo(3));
+            Assert.That(room.Quality.Route, Is.EqualTo(ScanRoute.WallBridge));
+        }
+
+        [Test]
+        public void Switch_On_WithABridgeThatIsNotAvailable_ChangesNothing()
+        {
+            var bridge = new FakeBridge { IsAvailable = false };
+            WallBridge.Register(bridge);
+            WallBridge.Apply(true);
+            Assert.That(WallBridge.Enabled, Is.False);
+
+            var capture = new WallBridgeCapture();
+            Assert.That(capture.Begin(Session), Is.False);
+            RoomModel room = Room();
+            RoomWall[] before = room.Walls;
+            Assert.That(capture.Apply(room).Tried, Is.False);
+            Assert.That(room.Walls, Is.SameAs(before));
+            Assert.That(room.Quality.Route, Is.EqualTo(ScanRoute.ManualOutline));
+            Assert.That(bridge.Calls, Is.Empty);
+        }
+
+        [Test]
+        public void Switch_On_WithNoBridgeRegistered_StaysOff_AndTurningItOffAgainWorks()
+        {
+            WallBridge.Apply(true);
+            Assert.That(WallBridge.Enabled, Is.False);
+
+            var bridge = new FakeBridge();
+            WallBridge.Register(bridge);
+            WallBridge.Apply(true);
+            Assert.That(WallBridge.Enabled, Is.True);
+            WallBridge.Apply(false);
+            Assert.That(WallBridge.Enabled, Is.False);
         }
     }
 }

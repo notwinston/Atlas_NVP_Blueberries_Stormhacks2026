@@ -254,18 +254,36 @@ namespace Atlas.Spaces.Glued
         readonly float[] _builtScale = new float[GluedAvatarHands.MaxHands];
         // Bit 0: the left hand is in the data. Bit 1: the right hand is.
         int _shown;
+        // The body leaves room for both hands inside the avatar's triangle budget.
+        readonly bool _handsFit;
 
-        /// <summary>Builds the body and makes room for both hands after it. Holds the body alone until <see cref="Update"/> brings a hand.</summary>
-        public GluedAvatarRig()
+        /// <summary>
+        /// A body of this many triangles leaves room for both hands inside <see cref="AtlasMeshBudget.SelfAvatar"/>.
+        /// A body that does not is drawn without hands: the budget holds whatever the kit ships.
+        /// </summary>
+        public static bool HandsFit(int bodyTriangles)
+        {
+            return bodyTriangles + GluedAvatarHands.MaxTriangles <= AtlasMeshBudget.SelfAvatar;
+        }
+
+        /// <summary>
+        /// Builds the body (the kit avatar when one is given) and makes room for both hands after it. Holds the body
+        /// alone until <see cref="Update"/> brings a hand.
+        /// </summary>
+        public GluedAvatarRig(MeshData kit = null)
         {
             _data = new AtlasMeshBuilder(512, 1024);
-            GluedAvatarMesh.Build(_data);
+            GluedAvatarMesh.Build(_data, kit);
             _bodyVertices = _data.VertexCount;
             _bodyIndices = _data.IndexCount;
             _bodyMin = _data.BoundsMin;
             _bodyMax = _data.BoundsMax;
-            _data.Reserve(GluedAvatarHands.MaxVertices, GluedAvatarHands.MaxIndices);
+            _handsFit = HandsFit(_data.TriangleCount);
+            if (_handsFit) _data.Reserve(GluedAvatarHands.MaxVertices, GluedAvatarHands.MaxIndices);
         }
+
+        /// <summary>The body leaves room for the hands; when false <see cref="Update"/> never brings one.</summary>
+        public bool CanShowHands { get { return _handsFit; } }
 
         /// <summary>The vertices, indices and bounds to upload. The body first, then the hands. Do not change them.</summary>
         public AtlasMeshBuilder Data { get { return _data; } }
@@ -294,7 +312,7 @@ namespace Atlas.Spaces.Glued
         public bool Update(IHands hands, float3 head, float heading)
         {
             int mask = 0;
-            if (hands != null)
+            if (hands != null && _handsFit)
             {
                 quaternion turnBack = quaternion.RotateY(-heading);
                 for (int side = 0; side < GluedAvatarHands.MaxHands; side++)

@@ -24,14 +24,34 @@ namespace Atlas.App
     {
         /// <summary>The world fade: 1 shows the world, 0 is black. The head-locked layer ignores it.</summary>
         void SetFade(float fade);
-        /// <summary>Between two spaces: default fog and background, room content back to its default mode.</summary>
-        void ResetForSpace();
+        /// <summary>Between two spaces: default fog and background, room content back to its default mode, then
+        /// the furniture level of the space about to be entered (null when none is).</summary>
+        void ResetForSpace(SpaceId? next);
+    }
+
+    /// <summary>
+    /// What a switch shows instead of the fade through black: a still of the space on show covers the view
+    /// while the next one loads, then turns away tile by tile onto it (<see cref="HexTransition"/>).
+    /// </summary>
+    public interface ISpaceTransition
+    {
+        /// <summary>Takes a still of the space on show and covers the view with it, now. False when it cannot
+        /// (the phone is in the hand, a bump cue is up): the switch then fades through black.</summary>
+        bool Cover();
+        /// <summary>The next space is in and has drawn once: takes its still and starts the reveal. Returns the
+        /// seconds the reveal takes.</summary>
+        float Reveal();
+        /// <summary>Every frame of a covered switch: seconds since <see cref="Reveal"/>, negative while the next
+        /// space is loading. False when the cover went down by itself: the switch goes on with the fade.</summary>
+        bool Show(float revealSeconds);
+        /// <summary>Takes the cover down at once.</summary>
+        void Uncover();
     }
 
     /// <summary>
     /// Hosts exactly one space at a time (Master Plan task P1-A08): loads it by the scene-or-factory rule,
     /// configures it from the active RoomModel and the registry, enters it, ticks it and leaves it, with a
-    /// fade through black between two spaces. Engine-free: the loader and the stage bring the engine.
+    /// fade through black between two spaces, or the hexagon reveal when a <see cref="Transition"/> is set. Engine-free: the loader and the stage bring the engine.
     /// A switch advances at step 8b of the frame, so Bump Guard runs in every frame of it.
     /// <para>
     /// The walker's kernel is shared. Between two spaces it is the flat kernel of the room; a curved space
@@ -69,6 +89,9 @@ namespace Atlas.App
         float _timer;
         bool _keepPose;         // Mode 1 to Mode 2: the new space enters with the pose the old one left
         WalkerPose _keptPose;
+        bool _covered;          // the transition's still covers the view: this switch does not fade
+        bool _revealing;
+        float _revealSeconds;
 
         // The newest request made while a switch was under way.
         bool _hasPending;
@@ -99,6 +122,9 @@ namespace Atlas.App
 
         /// <summary>The session's event log. Set by the composition root once telemetry exists. May be null.</summary>
         public IEventLog Events { get; set; }
+
+        /// <summary>What a switch between two spaces shows. Null fades through black.</summary>
+        public ISpaceTransition Transition { get; set; }
 
         /// <summary>Completed switches since boot.</summary>
         public int SwitchCount { get { return _switchCount; } }
@@ -217,15 +243,20 @@ namespace Atlas.App
 
             if (_state == SpaceHostState.FadingOut)
             {
-                _timer += deltaTime;
-                SetFade(1f - _timer / FadeOutSeconds);
-                if (_timer < FadeOutSeconds) return;
-                _state = SpaceHostState.Loading;
+                // Under the still the old space can go at once: nothing to fade.
+                if (_covered && ShowCover(-1f)) _state = SpaceHostState.Loading;
+                else
+                {
+                    _timer += deltaTime;
+                    SetFade(1f - _timer / FadeOutSeconds);
+                    if (_timer < FadeOutSeconds) return;
+                    _state = SpaceHostState.Loading;
+                }
             }
 
             if (_state == SpaceHostState.Loading)
             {
-                SetFade(0f);
+                if (!_covered || !ShowCover(-1f)) SetFade(0f);
                 if (!AdvanceLoad()) return;
                 if (_state != SpaceHostState.FadingIn) return;      // ended in Empty
                 _timer = 0f;
@@ -234,9 +265,26 @@ namespace Atlas.App
 
             if (_state == SpaceHostState.FadingIn)
             {
-                _timer += deltaTime;
-                SetFade(_timer / FadeInSeconds);
-                if (_timer < FadeInSeconds) return;
+                if (_covered && !_revealing)
+                {
+                    // The new space has ticked and uploaded once: its still is taken now.
+                    _revealing = true;
+                    _timer = 0f;
+                    _revealSeconds = RevealView();
+                    if (_covered && ShowCover(0f)) return;
+                }
+                if (_covered)
+                {
+                    _timer += deltaTime;
+                    if (ShowCover(_timer) && _timer < _revealSeconds) return;
+                    Uncover();
+                }
+                else
+                {
+                    _timer += deltaTime;
+                    SetFade(_timer / FadeInSeconds);
+                    if (_timer < FadeInSeconds) return;
+                }
                 SetFade(1f);
                 _state = SpaceHostState.Running;
                 _switchCount++;
@@ -255,6 +303,7 @@ namespace Atlas.App
         public void Shutdown()
         {
             if (_shutDown) return;
+            Uncover();
             ExitCurrent();
             _shutDown = true;
             _state = SpaceHostState.Empty;
@@ -290,7 +339,10 @@ namespace Atlas.App
             _loadBegun = false;
             _fallbackTried = false;
             _timer = 0f;
-            // With nothing entered there is nothing to fade out.
+            // A broken space can be left in the middle of a reveal: that one goes down first.
+            Uncover();
+            // With nothing entered there is nothing to fade out, and nothing to take a still of.
+            _covered = _hasSpace && CoverView();
             _state = _hasSpace ? SpaceHostState.FadingOut : SpaceHostState.Loading;
         }
 
@@ -319,8 +371,9 @@ namespace Atlas.App
                 _exited = true;
                 if (_stage != null)
                 {
-                    _stage.ResetForSpace();
-                    _stage.SetFade(0f);
+                    _stage.ResetForSpace(_toEmpty ? (SpaceId?)null : _target);
+                    // Under the still the world stays lit: the new space is revealed, not faded in.
+                    _stage.SetFade(_covered ? 1f : 0f);
                 }
             }
 
@@ -354,8 +407,11 @@ namespace Atlas.App
                     _fallbackTried = true;
                     _target = SpaceId.Home;
                     _loadBegun = false;
+                    // The stage was told the failed space; Home gets its own level (and a clean presentation).
+                    if (_stage != null) _stage.ResetForSpace(_target);
                     continue;
                 }
+                if (_stage != null) _stage.ResetForSpace(null);
                 EndEmpty();
                 return true;
             }
@@ -457,7 +513,51 @@ namespace Atlas.App
         {
             _toEmpty = false;
             _state = SpaceHostState.Empty;
+            Uncover();
             SetFade(1f);
+        }
+
+        // ---- the transition: any throw drops the cover, and the switch goes on with the fade --------------
+
+        bool CoverView()
+        {
+            ISpaceTransition transition = Transition;
+            if (transition == null) return false;
+            _revealing = false;
+            try { return transition.Cover(); }
+            catch (Exception e) { DropCover(e); return false; }
+        }
+
+        float RevealView()
+        {
+            try { return Transition.Reveal(); }
+            catch (Exception e) { DropCover(e); return 0f; }
+        }
+
+        // False when the cover is down: the caller fades instead.
+        bool ShowCover(float revealSeconds)
+        {
+            try
+            {
+                if (Transition.Show(revealSeconds)) return true;
+                _covered = false;
+                return false;
+            }
+            catch (Exception e) { DropCover(e); return false; }
+        }
+
+        void Uncover()
+        {
+            if (!_covered) return;
+            _covered = false;
+            try { Transition.Uncover(); }
+            catch (Exception e) { Log("space.error", "transition", e.Message); }
+        }
+
+        void DropCover(Exception e)
+        {
+            Log("space.error", "transition", e.Message);
+            Uncover();
         }
 
         void SetFade(float fade)

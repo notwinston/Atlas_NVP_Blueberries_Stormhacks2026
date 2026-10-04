@@ -125,7 +125,10 @@ namespace Atlas.App
         public bool GuardInstalled { get; private set; }
         public RoomContent RoomContent { get; private set; }
         public QualityLadder Ladder { get; private set; }
+        public FurnitureLevelPolicy Furniture { get; private set; }
         public SpaceLab Spaces { get; private set; }
+        /// <summary>The hexagon reveal between two spaces; null when its shader is missing (spaces fade).</summary>
+        public HexTransition Transition { get; private set; }
         public CommandRouter Commands { get; private set; }
         /// <summary>The walk input of the Station's Map page: the router writes it, the input step feeds it to the walker.</summary>
         public RemoteWalkInput RemoteWalk { get; private set; }
@@ -294,15 +297,18 @@ namespace Atlas.App
             Ladder = new QualityLadder(new QualityApplier(Eyes));
             LoopCore.Quality = Ladder;
             AtlasServices.Register<IQualityState>(Ladder);
+            Furniture = new FurnitureLevelPolicy(RoomContent, Ladder);
 
             // 16  SpaceLab. While no Home space is in the build, the built-in grid space stands in for it.
             if (!SpaceRegistry.IsRegistered(SpaceId.Home) &&
                 !Application.CanStreamedLevelBeLoaded(SpaceIds.SceneName(SpaceId.Home)))
                 SpaceRegistry.Register(SpaceId.Home, GridSpace.Create);
             Spaces = new SpaceLab(Registry, WalkerKernel, LoopCore, new SceneSpaceLoader(boot.SpaceRoot),
-                new SpaceStage(RoomContent));
+                new SpaceStage(RoomContent, Furniture));
             LoopCore.Space = Spaces;
             LoopCore.Host = Spaces;
+            Transition = HexTransition.Create(Display);
+            Spaces.Transition = Transition;
             AtlasServices.Register<ISpaceHost>(Spaces);
 
             // The parameters of the assemblies that may not name the registry, in the order of lane D's table.
@@ -341,6 +347,7 @@ namespace Atlas.App
             IPerfSource perf;
             if (AtlasServices.TryGet(out perf)) Ladder.Perf = perf;
             Spaces.Events = events;
+            if (Transition != null) Transition.Events = events;
 
             // The room hand-over and the Editor-first path.
             PosePipeline pipeline = Pose.Pipeline;
@@ -417,7 +424,7 @@ namespace Atlas.App
             _spaceParam = AppParams.DeclareSpace(Registry, Spaces);
             LensBlit blit = Blit;
             AppParams.DeclareRender(Registry, Ladder, WalkerKernel, Eyes, Rig, Lens, blit.Distortion,
-                on => blit.Distortion = on, AtlasLook.SetLineWidth);
+                on => blit.Distortion = on, AtlasLook.SetLineWidth, Furniture);
             AppParams.DeclareUnownedKillSwitches(Registry);
 
             // Recorded walks: the phone's own logs, and the repository's recordings folder next to the project.
@@ -515,6 +522,7 @@ namespace Atlas.App
             Safely(() => { if (Signs != null) Signs.Shutdown(); });
             Safely(() => { if (Flow != null) Flow.LeaveHeadset(); });
             Safely(() => { if (Spaces != null) Spaces.Shutdown(); });
+            Safely(() => { if (Transition != null) Transition.Dispose(); });
             Safely(() => { if (TelemetrySystems != null) TelemetrySystems.Shutdown(); });
             // Key frames of a scan in progress and crops not yet handed over are let go.
             Safely(() => { if (ScanSystems != null && ScanSystems.Photos != null) ScanSystems.Photos.Cancel(); });

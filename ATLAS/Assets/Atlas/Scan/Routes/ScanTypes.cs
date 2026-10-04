@@ -24,10 +24,19 @@ namespace Atlas.Scan
         public float WallHeight;
         /// <summary>Null: yyyyMMdd_HHmmss from the clock, UTC.</summary>
         public string RoomId;
+        /// <summary>The front of every object is decided from the scan and its box turned so that local +Z is the
+        /// front (mesh design section 5.2). Off, every box keeps the axis it was scanned with. Needs the LiDAR mesh.</summary>
+        public bool DecideFacing;
 
         public static ScanOptions Default
         {
-            get { return new ScanOptions { UseMesh = true, UseBoxes = true, WallHeight = RoomModel.DefaultWallHeight, RoomId = null }; }
+            get
+            {
+                return new ScanOptions
+                {
+                    UseMesh = true, UseBoxes = true, WallHeight = RoomModel.DefaultWallHeight, RoomId = null, DecideFacing = true
+                };
+            }
         }
     }
 

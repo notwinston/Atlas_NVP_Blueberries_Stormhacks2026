@@ -37,6 +37,8 @@ namespace Atlas.Scan
         public float2[] Outline;
 
         public int TriangleCount { get { return Indices != null ? Indices.Length / 3 : 0; } }
+        /// <summary>True when the triangles are a scanned LiDAR mesh: there are some, and they were not laid over planes.</summary>
+        public bool HasScannedMesh { get { return TriangleCount > 0 && Vertices != null && !MeshFromPlanes; } }
     }
 
     /// <summary>What a snapshot gives: a room, or the reason there is none.</summary>
@@ -63,6 +65,7 @@ namespace Atlas.Scan
     /// The scan routes as one calculation (Master Plan section 4.2): from a snapshot to a RoomModel by the
     /// highest route that succeeds. Route 2 (and 3) run FloorScan on the classified mesh; when that gives no
     /// walkable floor the outline alone is used (route 1), first with the furniture boxes and then without.
+    /// A scanned mesh also gives every object its profile and its front (mesh design section 5.2).
     /// Engine-free: the scan session calls it on a worker thread, tests call it directly.
     /// </summary>
     public static class ScanSolver
@@ -74,10 +77,11 @@ namespace Atlas.Scan
 
         /// <summary>
         /// Solves a snapshot. With buildRoom false only the outline and the progress numbers are produced
-        /// (the preview during the sweep).
+        /// (the preview during the sweep). With decideFacing false every object keeps the axis of its box
+        /// (ScanOptions.DecideFacing).
         /// </summary>
         public static ScanSolution Solve(ScanSnapshot scan, string roomId, float defaultWallHeight = RoomModel.DefaultWallHeight,
-            bool buildRoom = true)
+            bool buildRoom = true, bool decideFacing = true)
         {
             if (scan == null) throw new ArgumentNullException(nameof(scan));
             var solution = new ScanSolution { Route = ScanRoute.ManualOutline, FloorY = scan.FloorHeight };
@@ -149,9 +153,9 @@ namespace Atlas.Scan
             if (hasBoxes) solution.Route = ScanRoute.ObjectBoxes;
             if (!buildRoom) return solution;
 
-            // 3. The room.
+            // 3. The room. The builder reads the scanned mesh for the objects' profiles and fronts.
             solution.Room = RoomModelBuilder.Build(grid, roomId, "", solution.Route,
-                WallHeight(scan.WallTop, solution.FloorY, defaultWallHeight));
+                WallHeight(scan.WallTop, solution.FloorY, defaultWallHeight), null, scan, decideFacing);
             return solution;
         }
 

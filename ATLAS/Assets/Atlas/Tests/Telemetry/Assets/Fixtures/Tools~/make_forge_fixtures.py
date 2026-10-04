@@ -59,16 +59,16 @@ def edit(data: bytes, change) -> bytes:
 
 
 def too_many_triangles(doc, blob):
-    # The index buffer four times over: the same surface, 4 x the triangles.
+    # The index buffer twelve times over: the same surface, 12 x the triangles, past the 15,000 of the full copy.
     view = doc["bufferViews"][doc["accessors"][0]["bufferView"]]
     start, length = view["byteOffset"], view["byteLength"]
     indices = bytes(blob[start:start + length])
     while len(blob) % 4:
         blob.append(0)
-    doc["bufferViews"].append({"buffer": 0, "byteOffset": len(blob), "byteLength": 4 * length, "target": 34963})
+    doc["bufferViews"].append({"buffer": 0, "byteOffset": len(blob), "byteLength": 12 * length, "target": 34963})
     doc["accessors"][0]["bufferView"] = len(doc["bufferViews"]) - 1
-    doc["accessors"][0]["count"] *= 4
-    blob.extend(indices * 4)
+    doc["accessors"][0]["count"] *= 12
+    blob.extend(indices * 12)
     return blob
 
 

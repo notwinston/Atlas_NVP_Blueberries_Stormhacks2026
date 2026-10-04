@@ -55,6 +55,7 @@ namespace Atlas.App
         public const string HeadOffsetX = "render.headOffsetX";
         public const string HeadOffsetY = "render.headOffsetY";
         public const string HeadOffsetZ = "render.headOffsetZ";
+        public const string Furniture = "render.furniture";
         public const string CullRho = "curved.cullRho";
         public const string CurvedMode = "curved.mode";
         public const string GluedCopies = "glued.copies";
@@ -83,6 +84,7 @@ namespace Atlas.App
         static readonly string[] s_slicerSources = { "live", "stepped", "tesseract" };
         static readonly string[] s_forgeBackends = { "local", "hosted", "cache", "off" };
         static readonly string[] s_poseSources = { "tracked", "replay", "walker" };
+        static readonly string[] s_furnitureModes = { "auto", "light", "full" };
 
         // ---- space.id -------------------------------------------------------------------------------------
 
@@ -125,9 +127,11 @@ namespace Atlas.App
         /// The quality and render parameters of lane A's section 9.6, bound to the ladder, the eye textures,
         /// the rig, the lens model and the look. eyes, rig and the two setters may be null where there is no
         /// stereo rig. lensOn is the start value of render.lens (off in the Editor, where there are no lenses).
+        /// furniture is the policy that puts render.furniture on the room content; null where there is no room.
         /// </summary>
         public static void DeclareRender(ParamRegistry registry, QualityLadder ladder, IWalkerKernel kernel,
-            IEyeTextures eyes, IStereoRig rig, LensModel lens, bool lensOn, Action<bool> setLens, Action<float> setLineWidth)
+            IEyeTextures eyes, IStereoRig rig, LensModel lens, bool lensOn, Action<bool> setLens, Action<float> setLineWidth,
+            FurnitureLevelPolicy furniture = null)
         {
             QualityApplier applier = ladder.Applier;
             bool writing = false;
@@ -164,6 +168,12 @@ namespace Atlas.App
                 y = registry.DeclareFloat(HeadOffsetY, "render", -0.10f, 0.10f, 0f, offset);
                 z = registry.DeclareFloat(HeadOffsetZ, "render", -0.10f, 0.10f, 0f, offset);
             }
+
+            // render.furniture: auto (the space's level, then the ladder), light, or full (overrides the ladder).
+            registry.DeclareEnum(Furniture, "render", s_furnitureModes, (int)FurnitureMode.Auto, value =>
+            {
+                if (furniture != null) furniture.Mode = (FurnitureMode)value;
+            });
 
             ParamEntry rho = registry.DeclareFloat(CullRho, "curved", 2f, 3.5f, 3f, v =>
             {
@@ -210,10 +220,14 @@ namespace Atlas.App
 
         // ---- scan, input ----------------------------------------------------------------------------------
 
+        /// <summary>scan.wallBridge, a kill switch: the RoomPlan wall bridge (route 4) may run. Off is the outline's walls as they were.</summary>
+        public const string ScanWallBridge = "scan.wallBridge";
+
         public static void DeclareScan(ParamRegistry registry, ScanSettings settings)
         {
             registry.DeclareInt(ScanRoute, "scan", 1, 4, 3, v => settings.Route = v);
             registry.DeclareBool(TeamPrescan, "scan", false, v => settings.TeamPrescan = v);
+            registry.DeclareBool(ScanWallBridge, "scan", true, Atlas.Scan.WallBridge.Apply);
         }
 
         public static void DeclareInput(ParamRegistry registry, IAtlasInput input)

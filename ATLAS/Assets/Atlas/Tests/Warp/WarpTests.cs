@@ -131,7 +131,8 @@ namespace Atlas.Warp.Tests
         {
             string s = StrippedHlsl();
             Assert.AreEqual(1, Count(s, @"\bexp\s*\("));
-            Assert.AreEqual(1, Count(s, @"\bsincos\s*\("));
+            Assert.AreEqual(2, Count(s, @"\bsincos\s*\("));   // ExpS2's, and LogS3's one vector sincos of both heights (mode 3)
+            Assert.AreEqual(2, Count(s, @"\bLogS3\s*\("));
             Assert.AreEqual(0, Count(s, @"\b(sinh|cosh|tanh|exp2|pow|sin|cos)\s*\("));
             Assert.AreEqual(2, Count(s, @"\bExpH2\s*\("));
             Assert.AreEqual(2, Count(s, @"\bLogH2\s*\("));

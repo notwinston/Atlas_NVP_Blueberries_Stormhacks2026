@@ -65,6 +65,18 @@ namespace Atlas.App.Tests
         }
 
         [Test]
+        public void Stage_IsToldWhichSpaceComesNext()
+        {
+            var rig = new Rig(SpaceId.Home, SpaceId.Glued);
+            rig.GiveRoom();
+            rig.Lab.RequestSwitch(SpaceId.Home);
+            rig.RunUntilRunning();
+            rig.Lab.RequestSwitch(SpaceId.Glued);
+            rig.RunUntilRunning();
+            Assert.That(rig.Stage.Nexts, Is.EqualTo(new SpaceId?[] { SpaceId.Home, SpaceId.Glued }));
+        }
+
+        [Test]
         public void NoRoom_IsRefused()
         {
             var rig = new Rig(SpaceId.Home);
@@ -217,6 +229,131 @@ namespace Atlas.App.Tests
             Assert.That(rig.Lab.RequestSwitch(SpaceId.Glued), Is.False, "already there");
         }
 
+        sealed class FakeTransition : ISpaceTransition
+        {
+            public readonly List<string> Calls = new List<string>();
+            public readonly List<float> Shown = new List<float>();
+            public bool Accept = true, Covered, DropAtLoad, Throw;
+
+            public bool Cover()
+            {
+                Calls.Add("cover");
+                if (Throw) throw new System.InvalidOperationException("no still");
+                Covered = Accept;
+                return Accept;
+            }
+
+            public float Reveal() { Calls.Add("reveal"); return 1f; }
+
+            public bool Show(float revealSeconds)
+            {
+                if (DropAtLoad && revealSeconds < 0f) Covered = false;
+                if (Covered) Shown.Add(revealSeconds);
+                return Covered;
+            }
+
+            public void Uncover() { Calls.Add("uncover"); Covered = false; }
+        }
+
+        static Rig InHome(FakeTransition transition, params SpaceId[] available)
+        {
+            var rig = new Rig(available);
+            rig.Lab.Transition = transition;
+            rig.GiveRoom();
+            rig.Lab.RequestSwitch(SpaceId.Home);
+            rig.RunUntilRunning();
+            rig.Stage.Fades.Clear();
+            return rig;
+        }
+
+        [Test]
+        public void Transition_FirstSpace_FromEmpty_FadesIn_ThereIsNoStillToTake()
+        {
+            var transition = new FakeTransition();
+            InHome(transition, SpaceId.Home);
+            Assert.That(transition.Calls, Is.Empty);
+        }
+
+        [Test]
+        public void Transition_CoversTheSwitch_TheWorldNeverFades_AndTheOldSpaceGoesAtOnce()
+        {
+            var transition = new FakeTransition();
+            var rig = InHome(transition, SpaceId.Home, SpaceId.Glued);
+            rig.Loader.LoadFrames = 3;
+            FakeModule home = rig.Module;
+
+            Assert.That(rig.Lab.RequestSwitch(SpaceId.Glued), Is.True);
+            Assert.That(transition.Calls, Is.EqualTo(new[] { "cover" }), "the still is taken in the frame of the request");
+            rig.Frame();
+            Assert.That(home.Exits, Is.EqualTo(1), "under the still the old space is left in the first frame");
+            Assert.That(rig.Lab.State, Is.EqualTo(SpaceHostState.Loading));
+
+            rig.RunUntilRunning();
+            Assert.That(rig.Lab.Current, Is.EqualTo(SpaceId.Glued));
+            Assert.That(rig.Stage.Fades, Is.All.EqualTo(1f), "the world is revealed, never faded");
+            Assert.That(transition.Calls, Is.EqualTo(new[] { "cover", "reveal", "uncover" }));
+            Assert.That(rig.Module.Ticks, Is.GreaterThan(0), "the new space ticked before its still was taken");
+
+            // Negative while loading, then the reveal's clock from 0 up to its length.
+            int first = transition.Shown.IndexOf(0f);
+            Assert.That(first, Is.GreaterThan(0));
+            for (int i = 0; i < first; i++) Assert.That(transition.Shown[i], Is.LessThan(0f));
+            for (int i = first + 1; i < transition.Shown.Count; i++)
+                Assert.That(transition.Shown[i], Is.GreaterThan(transition.Shown[i - 1]));
+            Assert.That(transition.Shown[transition.Shown.Count - 1], Is.LessThan(1f + Dt));
+            Assert.That(rig.Lab.SwitchCount, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void Transition_ThatCannotCover_FadesThroughBlack()
+        {
+            var transition = new FakeTransition { Accept = false };
+            var rig = InHome(transition, SpaceId.Home, SpaceId.Glued);
+            rig.Lab.RequestSwitch(SpaceId.Glued);
+            rig.RunUntilRunning();
+            Assert.That(rig.Stage.Fades, Has.Member(0f));
+            Assert.That(transition.Calls, Is.EqualTo(new[] { "cover" }));
+        }
+
+        [Test]
+        public void Transition_ThatDropsWhileLoading_GoesOnWithTheFade()
+        {
+            var transition = new FakeTransition { DropAtLoad = true };
+            var rig = InHome(transition, SpaceId.Home, SpaceId.Glued);
+            rig.Lab.RequestSwitch(SpaceId.Glued);
+            rig.RunUntilRunning();
+            Assert.That(rig.Lab.Current, Is.EqualTo(SpaceId.Glued));
+            Assert.That(rig.Stage.Fades[rig.Stage.Fades.Count - 1], Is.EqualTo(1f));
+            Assert.That(transition.Calls, Has.No.Member("reveal"));
+        }
+
+        [Test]
+        public void Transition_ThatThrows_IsLogged_AndTheSwitchFades()
+        {
+            var transition = new FakeTransition { Throw = true };
+            var rig = InHome(transition, SpaceId.Home, SpaceId.Glued);
+            Assert.That(rig.Lab.RequestSwitch(SpaceId.Glued), Is.True);
+            rig.RunUntilRunning();
+            Assert.That(rig.Lab.Current, Is.EqualTo(SpaceId.Glued));
+            Assert.That(rig.Stage.Fades, Has.Member(0f));
+            Assert.That(rig.Events.Has("space.error transition=no still"), Is.True);
+        }
+
+        [Test]
+        public void Transition_RoomCleared_UnderTheStill_TakesItDown()
+        {
+            var transition = new FakeTransition();
+            var rig = InHome(transition, SpaceId.Home, SpaceId.Glued);
+            rig.Loader.LoadFrames = 10;
+            rig.Lab.RequestSwitch(SpaceId.Glued);
+            rig.Frames(2);
+            rig.Lab.SetRoom(null);
+            rig.Frames(3);
+            Assert.That(rig.Lab.State, Is.EqualTo(SpaceHostState.Empty));
+            Assert.That(transition.Covered, Is.False);
+            Assert.That(rig.Stage.Fade, Is.EqualTo(1f));
+        }
+
         [Test]
         public void RequestDuringASwitch_TheNewestWins()
         {
@@ -255,6 +392,26 @@ namespace Atlas.App.Tests
             Assert.That(rig.Lab.State, Is.EqualTo(SpaceHostState.FadingOut));
             rig.RunUntilRunning();
             Assert.That(rig.Lab.Current, Is.EqualTo(SpaceId.Home));
+        }
+
+        // The stage is told again where the walker ends up: a failed Light space must not leave Home at Light.
+        [Test]
+        public void LoadFailure_TellsTheStageTheFallbackSpace_AndNoSpaceWhenNothingLoads()
+        {
+            var rig = new Rig(SpaceId.Home, SpaceId.Glued);
+            rig.GiveRoom();
+            rig.Loader.Broken.Add(SpaceId.Glued);
+            rig.Lab.RequestSwitch(SpaceId.Glued);
+            rig.RunUntilRunning();
+            Assert.That(rig.Lab.Current, Is.EqualTo(SpaceId.Home));
+            Assert.That(rig.Stage.Nexts, Is.EqualTo(new SpaceId?[] { SpaceId.Glued, SpaceId.Home }));
+
+            rig.Loader.Broken.Add(SpaceId.Home);
+            rig.Stage.Nexts.Clear();
+            rig.Lab.RequestSwitch(SpaceId.Glued);
+            rig.Frames(60);
+            Assert.That(rig.Lab.State, Is.EqualTo(SpaceHostState.Empty));
+            Assert.That(rig.Stage.Nexts[rig.Stage.Nexts.Count - 1], Is.Null, "no space");
         }
 
         [Test]

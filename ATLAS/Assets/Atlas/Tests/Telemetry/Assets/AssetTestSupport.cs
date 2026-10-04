@@ -40,6 +40,28 @@ namespace Atlas.Telemetry.Tests
 
         public static FallbackSet LoadFallback() { return FallbackSet.Load(ReadFallback); }
 
+        /// <summary>The kit fixture tools/kit/make_test_fixture.py writes.</summary>
+        public static string KitFixtureDirectory()
+        {
+            return Path.Combine(FixtureDirectory(), "Kit");
+        }
+
+        /// <summary>The kit pieces the build ships, which tools/kit/export_kit.py writes from the Blender file.</summary>
+        public static string ShippedKitDirectory()
+        {
+            return Path.Combine(Project(), "Assets", "Atlas", "Spaces", "Glued", "Resources", KitSet.ResourceFolder);
+        }
+
+        /// <summary>The reader GluedSpace uses, with a folder on disk in place of Resources.</summary>
+        public static Func<string, byte[]> KitReader(string directory)
+        {
+            return name =>
+            {
+                string path = Path.Combine(directory, name == KitSet.ManifestName ? "manifest.json" : name + ".bytes");
+                return File.Exists(path) ? File.ReadAllBytes(path) : null;
+            };
+        }
+
         public static float3 Dims(JsonValue entry)
         {
             JsonValue d = entry["dims"];
@@ -59,6 +81,11 @@ namespace Atlas.Telemetry.Tests
         public readonly HashSet<int> Requested = new HashSet<int>();
         public readonly Dictionary<int, string> Generated = new Dictionary<int, string>();
         public readonly Dictionary<int, int> GeneratedTriangles = new Dictionary<int, int>();
+        /// <summary>The light copy each object holds: sha and triangles.</summary>
+        public readonly Dictionary<int, string> GeneratedLight = new Dictionary<int, string>();
+        public readonly Dictionary<int, int> GeneratedLightTriangles = new Dictionary<int, int>();
+        /// <summary>Set to refuse every light mesh, as a room content without a generated mesh does.</summary>
+        public bool RefuseLight;
         public readonly Dictionary<int, int> BuiltInTriangles = new Dictionary<int, int>();
         /// <summary>What each object shows now: "box", "builtin" or "generated".</summary>
         public readonly Dictionary<int, string> Shown = new Dictionary<int, string>();
@@ -76,6 +103,19 @@ namespace Atlas.Telemetry.Tests
             GeneratedTriangles[objectId] = mesh.TriangleCount;
             Shown[objectId] = "generated";
             Calls.Add("generated:" + objectId);
+            return true;
+        }
+
+        public bool PlaceGeneratedLight(int objectId, MeshData mesh, string sha256)
+        {
+            if (RefuseLight || ShownFor(objectId) != "generated")
+            {
+                Calls.Add("lightrefused:" + objectId);
+                return false;
+            }
+            GeneratedLight[objectId] = sha256;
+            GeneratedLightTriangles[objectId] = mesh.TriangleCount;
+            Calls.Add("light:" + objectId);
             return true;
         }
 
@@ -133,7 +173,7 @@ namespace Atlas.Telemetry.Tests
     {
         public sealed class Job
         {
-            public string JobId, RoomId, State = "queued", Error = "", Sha;
+            public string JobId, RoomId, State = "queued", Error = "", Sha, LightSha;
             public int BoxId, TriTarget;
             public JsonValue Meta;
             public int Views;
@@ -155,6 +195,8 @@ namespace Atlas.Telemetry.Tests
         public readonly Dictionary<string, byte[]> Assets = new Dictionary<string, byte[]>();
         /// <summary>Boxes the Forge answers with a cached asset at once: boxId -> hash.</summary>
         public readonly Dictionary<int, string> Cached = new Dictionary<int, string>();
+        /// <summary>Boxes whose cached answer also names a light copy: boxId -> its hash.</summary>
+        public readonly Dictionary<int, string> CachedLight = new Dictionary<int, string>();
         public int Cancelled;
 
         readonly Dictionary<int, Pending> _pending = new Dictionary<int, Pending>();
@@ -217,6 +259,16 @@ namespace Atlas.Telemetry.Tests
             return sha;
         }
 
+        /// <summary>The job becomes ready with a full and a light GLB.</summary>
+        public string FinishWithLight(int boxId, byte[] full, byte[] light, string claimedLightSha = null)
+        {
+            string sha = Finish(boxId, full);
+            string lightSha = claimedLightSha ?? GlbValidator.Sha256Hex(light, light.Length);
+            Assets[lightSha] = light;
+            JobOf(boxId).LightSha = lightSha;
+            return sha;
+        }
+
         public void Fail(int boxId, string error)
         {
             Job job = JobOf(boxId);
@@ -254,7 +306,14 @@ namespace Atlas.Telemetry.Tests
                 {
                     job.State = "ready";
                     job.Sha = cached;
-                    Reply(pending, 200, JsonValue.Object().Set("jobId", job.JobId).Set("cached", true).Set("sha256", cached));
+                    JsonValue answer = JsonValue.Object().Set("jobId", job.JobId).Set("cached", true).Set("sha256", cached);
+                    string cachedLight;
+                    if (CachedLight.TryGetValue(job.BoxId, out cachedLight))
+                    {
+                        job.LightSha = cachedLight;
+                        answer.Set("lightSha256", cachedLight).Set("lightUrl", "/assets/" + cachedLight + ".glb");
+                    }
+                    Reply(pending, 200, answer);
                 }
                 else Reply(pending, 202, JsonValue.Object().Set("jobId", job.JobId));
             }
@@ -268,6 +327,8 @@ namespace Atlas.Telemetry.Tests
                     JsonValue j = JsonValue.Object().Set("jobId", job.JobId).Set("roomId", job.RoomId).Set("boxId", job.BoxId)
                         .Set("state", job.State).Set("source", "local").Set("error", job.Error).Set("triTarget", job.TriTarget);
                     if (job.State == "ready") j.Set("sha256", job.Sha).Set("url", "/assets/" + job.Sha + ".glb");
+                    if (job.State == "ready" && job.LightSha != null)
+                        j.Set("lightSha256", job.LightSha).Set("lightUrl", "/assets/" + job.LightSha + ".glb");
                     list.Add(j);
                 }
                 Reply(pending, 200, list);

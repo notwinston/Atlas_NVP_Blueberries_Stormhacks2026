@@ -586,7 +586,9 @@ namespace Atlas.Link
 
     /// <summary>
     /// <c>AssetReady</c> (0x51, Hub to phone and spectators):
-    /// <c>{jobId, roomId, boxId, sha256, url, bytes, tris, maxEdge, bounds[3], palette}</c>.
+    /// <c>{jobId, roomId, boxId, sha256, url, bytes, tris, maxEdge, bounds[3], palette}</c>, and, when the Forge made
+    /// a light copy as well, <c>lightSha256, lightUrl, lightBytes, lightTris</c>. A reader that ignores the four
+    /// shows the full copy everywhere.
     /// </summary>
     public sealed class AssetReadyMessage : JsonMessage
     {
@@ -603,12 +605,17 @@ namespace Atlas.Link
         public float BoundsX, BoundsY, BoundsZ;
         /// <summary>Palette cell assigned by the Forge.</summary>
         public int Palette;
+        /// <summary>The light copy: SHA-256, path or URL, size in bytes and triangles. "" and 0 when there is none.</summary>
+        public string LightSha256 = string.Empty;
+        public string LightUrl = string.Empty;
+        public long LightBytes;
+        public int LightTris;
 
         public override byte Id { get { return MessageId.AssetReady; } }
 
         public override JsonValue ToJson()
         {
-            return JsonValue.Object()
+            JsonValue json = JsonValue.Object()
                 .Set("jobId", TextOrEmpty(JobId))
                 .Set("roomId", TextOrEmpty(RoomId))
                 .Set("boxId", BoxId)
@@ -619,6 +626,11 @@ namespace Atlas.Link
                 .Set("maxEdge", MaxEdge)
                 .Set("bounds", JsonValue.Array(BoundsX, BoundsY, BoundsZ))
                 .Set("palette", Palette);
+            // The four light fields travel together, and only when there is a light copy.
+            if (!string.IsNullOrEmpty(LightSha256))
+                json.Set("lightSha256", LightSha256).Set("lightUrl", TextOrEmpty(LightUrl))
+                    .Set("lightBytes", LightBytes).Set("lightTris", LightTris);
+            return json;
         }
 
         public override void FromJson(JsonValue json)
@@ -635,6 +647,10 @@ namespace Atlas.Link
             BoundsY = json["bounds"][1].AsFloat();
             BoundsZ = json["bounds"][2].AsFloat();
             Palette = json.GetInt("palette");
+            LightSha256 = Text(json, "lightSha256");
+            LightUrl = Text(json, "lightUrl");
+            LightBytes = json.GetLong("lightBytes");
+            LightTris = json.GetInt("lightTris");
         }
     }
 

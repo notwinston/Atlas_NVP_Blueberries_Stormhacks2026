@@ -4,13 +4,18 @@ using Atlas.Link;
 
 namespace Atlas.Telemetry
 {
+    /// <summary>Which copy of an object's mesh a file is: the limits differ (brief S6, design section 5.4).</summary>
+    public enum GlbLevel : byte { Full = 0, Light = 1 }
+
     /// <summary>What a downloaded asset is checked against: the object's box, its triangle target and its hash.</summary>
     public struct GlbExpectation
     {
         /// <summary>RoomModel size [w, h, d], metres.</summary>
         public float DimX, DimY, DimZ;
-        /// <summary>3000..5000; 0 skips the check.</summary>
+        /// <summary>The job's target for this copy (3000..15000 full, 1500..5000 light); 0 skips the check.</summary>
         public int TriTarget;
+        /// <summary>The copy: full (the default) or light.</summary>
+        public GlbLevel Level;
         /// <summary>64 lower-case hexadecimal digits; null or empty skips the check.</summary>
         public string Sha256;
     }
@@ -34,7 +39,10 @@ namespace Atlas.Telemetry
     /// </summary>
     public static class GlbValidator
     {
-        public const int MaxBytes = 1048576, MinTriangles = 1500, MaxTriangles = 5000;
+        /// <summary>The full copy: 1,500..15,000 triangles, at most 2 MiB. <see cref="MaxBytes"/> is the larger of the two files.</summary>
+        public const int MaxBytes = 2097152, MinTriangles = 1500, MaxTriangles = 15000;
+        /// <summary>The light copy: 1,500..5,000 triangles, at most 1 MiB.</summary>
+        public const int MaxBytesLight = 1048576, MaxTrianglesLight = 5000;
         public const float MaxEdgeMetres = 0.25f, EdgeSlack = 0.0005f;
         public const float BoundsTolerance = 0.10f, CentreTolerance = 0.05f, BaseTolerance = 0.02f;
         /// <summary>A triangle smaller than this has no area. Square metres.</summary>
@@ -57,6 +65,12 @@ namespace Atlas.Telemetry
             return Validate(glb, glb != null ? glb.Length : 0, in expect);
         }
 
+        /// <summary>The largest file of a copy, bytes.</summary>
+        public static int MaxBytesOf(GlbLevel level) { return level == GlbLevel.Light ? MaxBytesLight : MaxBytes; }
+
+        /// <summary>The most triangles a copy may have, before the job's own target.</summary>
+        public static int MaxTrianglesOf(GlbLevel level) { return level == GlbLevel.Light ? MaxTrianglesLight : MaxTriangles; }
+
         /// <summary>Checks 1 to 13 on the first <paramref name="length"/> bytes of the array.</summary>
         public static GlbReport Validate(byte[] glb, int length, in GlbExpectation expect)
         {
@@ -64,7 +78,7 @@ namespace Atlas.Telemetry
             GlbFile file;
             string error;
             if (!GlbFile.TryParse(glb, length, out file, out error)) return Fail(ref report, CodeContainer);
-            if (length > MaxBytes) return Fail(ref report, CodeSize);
+            if (length > MaxBytesOf(expect.Level)) return Fail(ref report, CodeSize);
             if (!string.IsNullOrEmpty(expect.Sha256) && !string.Equals(Sha256Hex(glb, length), expect.Sha256, StringComparison.OrdinalIgnoreCase))
                 return Fail(ref report, CodeHash);
 
@@ -79,7 +93,7 @@ namespace Atlas.Telemetry
                 out float maxX, out float maxY, out float maxZ);
 
             if (report.Triangles < MinTriangles) return Fail(ref report, CodeTrisMin);
-            if (report.Triangles > MaxTriangles) return Fail(ref report, CodeTrisMax);
+            if (report.Triangles > MaxTrianglesOf(expect.Level)) return Fail(ref report, CodeTrisMax);
             if (expect.TriTarget > 0 && report.Triangles > expect.TriTarget) return Fail(ref report, CodeTrisTarget);
             // A position that is not a number has no edge, bounds or origin to speak of.
             if (!finite) return Fail(ref report, CodeFinite);

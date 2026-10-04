@@ -3,6 +3,7 @@ using System.IO;
 using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEditor.iOS.Xcode;
+using UnityEngine;
 
 namespace Atlas.EditorTools
 {
@@ -44,6 +45,9 @@ namespace Atlas.EditorTools
             project.ReadFromFile(projectPath);
             foreach (var guid in new[] { project.ProjectGuid(), project.GetUnityMainTargetGuid(), project.GetUnityFrameworkTargetGuid() })
                 project.SetBuildProperty(guid, "ENABLE_BITCODE", "NO");
+            // Scan route 4: the RoomPlan wall bridge, in Swift, built into UnityFramework.
+            AtlasRoomPlanProject.CopySource(Application.dataPath, path);
+            AtlasRoomPlanProject.Apply(project, project.GetUnityFrameworkTargetGuid(), project.GetUnityMainTargetGuid());
             project.WriteToFile(projectPath);
         }
     }

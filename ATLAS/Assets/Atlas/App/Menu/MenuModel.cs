@@ -194,6 +194,18 @@ namespace Atlas.App.Menu
         /// <summary>True while the focused row holds a value that Confirm will apply (a parameter flagged onRelease).</summary>
         public bool HasPending { get { return _hasPending; } }
         public float PendingValue { get { return _pendingValue; } }
+        /// <summary>True when Apply does something on the focused row: a pending value, or a space other than
+        /// the one the walker stands in. The view lights the Apply chip with it.</summary>
+        public bool ApplyReady
+        {
+            get
+            {
+                if (_hasPending) return true;
+                if (_selected >= _rows.Count) return false;
+                MenuRow row = _rows[_selected];
+                return row.Kind == MenuRowKind.Space && !IsCurrent(row.Space);
+            }
+        }
         public ref readonly MenuStatus Status { get { return ref _status; } }
 
         /// <summary>Raised when a Spaces row is confirmed, before SpaceLab is asked.</summary>
@@ -455,7 +467,8 @@ namespace Atlas.App.Menu
         /// <summary>
         /// One step on the focused row, -1 or +1: the dwell on "-" or "+", or left and right on the gamepad. A
         /// parameter flagged onRelease only shows the new value until <see cref="Confirm"/>, because applying it
-        /// rebuilds geometry. A space or a command row runs on +1.
+        /// rebuilds geometry. A command row runs on +1. A space row does not: it is selected, and Apply takes the
+        /// walker there.
         /// </summary>
         public void Step(int direction)
         {
@@ -483,7 +496,6 @@ namespace Atlas.App.Menu
                     Revision++;
                     break;
                 }
-                case MenuRowKind.Space:
                 case MenuRowKind.Command:
                     if (direction > 0) Run(in row);
                     break;
