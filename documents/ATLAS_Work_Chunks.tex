@@ -1,0 +1,353 @@
+% ATLAS: who builds what, and when -- the work-chunks handout for the four lanes.
+% Written by hand; compile with pdflatex. All data comes from the chunk boards of the plan.
+\documentclass[10pt]{article}
+\usepackage[a4paper,landscape,nohead,top=9mm,bottom=15mm,left=12mm,right=12mm,footskip=8mm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage[table]{xcolor}
+\usepackage{array,tabularx,booktabs,ragged2e}
+
+\pdfinfo{/Title (ATLAS: who builds what, and when)}
+
+% ---------- colours ----------
+\definecolor{ink}{HTML}{1F2933}
+\definecolor{mute}{HTML}{56616B}
+\definecolor{laneA}{HTML}{E3F4EC}
+\definecolor{laneB}{HTML}{EEE7FB}
+\definecolor{laneC}{HTML}{FDEEDE}
+\definecolor{laneD}{HTML}{E3EDFC}
+\definecolor{headA}{HTML}{C6E8D7}
+\definecolor{headB}{HTML}{DACCF6}
+\definecolor{headC}{HTML}{F9D6B2}
+\definecolor{headD}{HTML}{C5D9F8}
+\definecolor{accA}{HTML}{17694A}
+\definecolor{accB}{HTML}{5B36B0}
+\definecolor{accC}{HTML}{9A4A00}
+\definecolor{accD}{HTML}{1B55B0}
+\definecolor{stepbg}{HTML}{EBEEF1}
+\definecolor{startbg}{HTML}{F3F4F6}
+
+% ---------- footer ----------
+\makeatletter
+\def\ps@atlas{%
+  \def\@oddhead{}\def\@evenhead{}%
+  \def\@oddfoot{\parbox{\textwidth}{\footnotesize\color{mute}ATLAS: who builds what, and when\hfill 3 October 2026\hspace{6mm}Page \thepage}}%
+  \let\@evenfoot\@oddfoot}
+\makeatother
+\pagestyle{atlas}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+
+% ---------- board layout ----------
+\newlength{\stepW}\setlength{\stepW}{10mm}
+\newlength{\laneW}
+\newlength{\startW}
+\newcommand{\setupboard}{%
+  \arrayrulecolor{white}\setlength{\arrayrulewidth}{1.6pt}%
+  \setlength{\tabcolsep}{4pt}\setlength{\extrarowheight}{2pt}%
+  \renewcommand{\arraystretch}{1.08}%
+  \setlength{\laneW}{\dimexpr(\linewidth-\stepW-10\tabcolsep-6\arrayrulewidth-0.4pt)/4\relax}%
+  \setlength{\startW}{\dimexpr4\laneW+6\tabcolsep+3\arrayrulewidth\relax}}
+\newcolumntype{S}{>{\centering\arraybackslash}p{\stepW}}
+\newcolumntype{L}{>{\raggedright\arraybackslash}p{\laneW}}
+\newcolumntype{G}[1]{>{\raggedright\arraybackslash\footnotesize\color{ink}\everypar{}}p{#1}}
+
+% gate ids in bold; a need that sits in the same row or a later one gets a star
+\newcommand{\gid}[1]{\textbf{#1}}
+\newcommand{\late}[1]{#1\textsuperscript{*}}
+
+% step cell, lane header, chunk cells
+\newcommand{\stp}[1]{\cellcolor{stepbg}{\bfseries\color{ink}#1}}
+\newcommand{\hdr}[2]{{\large\bfseries\color{acc#1}#1}\enskip{\small\bfseries\color{ink}#2}}
+% Cell macros leave the last paragraph of a cell unfinished on purpose: array adds its own
+% final strut there, and a closing \par would give every cell an empty line at the bottom.
+% \everypar{} after the first word stops array putting a full-height strut on every later
+% paragraph of the same cell, which would open up the lines.
+% \chunk{lane}{id}{name}{needs}{gate}
+\newcommand{\chunk}[5]{%
+  \small\bfseries\color{ink}{\color{acc#1}#2}\everypar{}\enskip#3\par
+  \vspace{0.5mm}\footnotesize\mdseries\color{mute}needs: #4\quad{\color{ink}gate: #5}}
+% \chunkb{lane}{id}{name}{first clause of what it delivers}{needs}{gate}
+\newcommand{\chunkb}[6]{%
+  \small\bfseries\color{ink}{\color{acc#1}#2}\everypar{}\enskip#3\par
+  \footnotesize\mdseries\slshape\color{mute}#4\par
+  \vspace{0.5mm}\upshape\color{mute}needs: #5\quad{\color{ink}gate: #6}}
+\newcommand{\chunksep}{\par\vspace{1.3mm}{\color{white}\hrule height 1.6pt}\vspace{1.3mm}}
+
+% the shared start of phase 1 (full-width first row)
+\newcommand{\startrow}{%
+  \small\bfseries\color{ink}All lanes\everypar{}\enskip The start: set-up and contracts\hfill
+  {\footnotesize\mdseries\color{mute}needs: nothing\quad{\color{ink}gate: \gid{G0}}}\par
+  \vspace{0.5mm}\footnotesize\mdseries\color{mute}Build seat, signing and Unity on every machine (A leads); Station ready: .NET 8, Python, CUDA (D); phones in Developer Mode and the team's own Wi-Fi router (C); four sets of contract pages, one per lane. Then the Unity project and repository skeleton (A), then the gate.}
+
+% ---------- page furniture ----------
+\newcommand{\phasehead}[2]{%
+  {\fontsize{20}{22}\selectfont\bfseries\color{ink}Phase #1}\hfill{\small\color{mute}#2}\par\vspace{0.5mm}%
+  {\small\color{ink}Everything in one row can be worked on at the same time. A chunk can start once the chunks it needs have delivered what it waits for.}\par\vspace{2mm}}
+\newcommand{\starnote}{\par\vspace{1.8mm}{\footnotesize\color{mute}\textsuperscript{*}\,The chunk it needs starts in the same row or a later one, so it has not delivered when this chunk starts; agree the hand-over with the lane that owns it.}\par}
+\newcommand{\gatehead}{\par\vspace{2mm}{\small\bfseries\color{ink}Gates in this phase, and what must be true to pass them}\par\vspace{0.8mm}}
+\newcommand{\gate}[3]{{\bfseries #1 #2:} #3}
+\newcommand{\gsep}{\par\vspace{1.4mm}}
+
+% ---------- page 1 furniture ----------
+\newlength{\tileW}
+\newcommand{\lanetile}[3]{%
+  {\setlength{\fboxsep}{4mm}\colorbox{lane#1}{\parbox[c]{\tileW}{%
+    \parbox[c]{14mm}{\fontsize{40}{42}\selectfont\bfseries\color{acc#1}#1}%
+    \parbox[c]{\dimexpr\tileW-14mm\relax}{\raggedright\fontsize{13}{15.5}\selectfont\bfseries\color{ink}#2\par\vspace{1.2mm}{\small\mdseries\color{mute}#3}}}}}}
+\newcommand{\ltag}[1]{{\setlength{\fboxsep}{1.4pt}\colorbox{head#1}{\small\bfseries\color{acc#1}\,#1\,}}}
+
+\begin{document}
+\raggedright
+
+% =====================================================================
+% PAGE 1
+% =====================================================================
+{\fontsize{34}{38}\selectfont\bfseries\color{ink}ATLAS: who builds what, and when\par}
+\vspace{8mm}
+
+{\Large\bfseries\color{ink}How to read it}\par\vspace{2.5mm}
+{\fontsize{12}{15.5}\selectfont\color{ink}
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}c@{\hspace{4mm}}>{\raggedright\arraybackslash}X@{}}
+1 & One page per phase, one board per page: a column per lane, a row per step. Work down your own column; each cell is one chunk of work, the size of ``Implement hyperbolic terrain generation''.\\[2mm]
+2 & Everything in one row can be worked on at the same time. A chunk sits in the first row where it can start.\\[2mm]
+3 & A1 means lane A, first chunk of that phase (the numbers start again in every phase). ``needs'' lists the chunks it waits for, your own lane's previous chunk included; ``gate'' names the gate that checks it.\\
+\end{tabularx}}
+
+\vspace{9mm}
+{\Large\bfseries\color{ink}Four lanes, one person each}\par\vspace{2.5mm}
+\setlength{\tileW}{\dimexpr(\linewidth-12mm)/4-8mm\relax}
+\noindent\hbox to\linewidth{%
+  \lanetile{A}{Platform, Look and Flat Spaces}{Chunks per phase: 4, 5, 2, 2}\hfill
+  \lanetile{B}{Kernel and Curved Worlds}{Chunks per phase: 4, 4, 2, 1}\hfill
+  \lanetile{C}{Scan, Room and Safety}{Chunks per phase: 4, 4, 2, 3}\hfill
+  \lanetile{D}{Link, Station and Forge}{Chunks per phase: 4, 3, 3, 2}}
+
+\vspace{10mm}
+\noindent\begin{minipage}[t]{0.52\linewidth}
+{\Large\bfseries\color{ink}The shared start of Phase 1}\par\vspace{0.8mm}
+{\color{mute}Before the lanes split. These have no dependency, so they are done in parallel.}\par\vspace{3mm}
+{\fontsize{10}{13}\selectfont\color{ink}\begin{tabular}{@{}l@{\hspace{4mm}}>{\raggedright\arraybackslash}p{112mm}@{}}
+\ltag{A} & Build seat, signing and Unity on every machine (lane A leads)\\[2mm]
+\ltag{D} & Station ready: .NET 8, Python, CUDA\\[2mm]
+\ltag{C} & Phones in Developer Mode and the team's own Wi-Fi router\\[2mm]
+\ltag{A}\ltag{B}\ltag{C}\ltag{D} & Four sets of contract pages, one per lane, written from the plan\\
+\end{tabular}}\par\vspace{3.5mm}
+{\fontsize{10}{13}\selectfont\color{ink}\ltag{A}\enskip\textbf{Then:} the Unity project and repository skeleton (lane A), then gate \gid{G0}: contracts frozen, stubs compile.}\par
+\end{minipage}\hfill
+\begin{minipage}[t]{0.44\linewidth}
+{\Large\bfseries\color{ink}The four phases}\par\vspace{3mm}
+{\fontsize{10}{13}\selectfont\color{ink}\renewcommand{\arraystretch}{1.35}\arrayrulecolor{mute}
+\begin{tabular}{@{}ccc>{\raggedright\arraybackslash}p{58mm}@{}}
+\toprule
+\textbf{Phase} & \textbf{Chunks} & \textbf{Gates} & \textbf{Ends at}\\
+\midrule
+1 & 17 & G0 to G7 & G7 Phase-1 exit\\
+2 & 16 & G8 to G11 & G11 Phase-2 exit\\
+3 & 9 & G12, G13 & G13 FieldFit\\
+4 & 8 & G14, G15 & G15 Golden build and submission\\
+\bottomrule
+\end{tabular}}\par
+\end{minipage}
+
+% =====================================================================
+% PHASE 1
+% =====================================================================
+\newpage
+\phasehead{1}{17 chunks, 6 steps, ends at gate G7 (Phase-1 exit)}
+{\setupboard
+\begin{tabular}{|S|L|L|L|L|}
+\hline
+\cellcolor{stepbg}{\scriptsize\bfseries\color{ink}Step} &
+\cellcolor{headA}\hdr{A}{Platform, Look and Flat Spaces} &
+\cellcolor{headB}\hdr{B}{Kernel and Curved Worlds} &
+\cellcolor{headC}\hdr{C}{Scan, Room and Safety} &
+\cellcolor{headD}\hdr{D}{Link, Station and Forge} \\
+\hline
+\stp{1} & \multicolumn{4}{>{\raggedright\arraybackslash}p{\startW}|}{\cellcolor{startbg}\startrow} \\
+\hline
+\stp{2} &
+\cellcolor{laneA}\chunk{A}{A1}{Get the app running in stereo on both phones}{nothing}{\gid{G1}} &
+\cellcolor{laneB}\chunk{B}{B1}{Implement the geometry kernel and the curved-walk rig}{nothing}{\gid{G2}} &
+\cellcolor{laneC}\chunk{C}{C2}{Implement room scanning and the RoomModel}{nothing}{none directly} &
+\cellcolor{laneD}\chunk{D}{D1}{Build the phone-to-Station link}{\late{A1}}{\gid{G1}}\chunksep
+  \chunk{D}{D4}{Build the Forge: object photos to furniture meshes}{\late{C3}}{\gid{G6}} \\
+\hline
+\stp{3} &
+\cellcolor{laneA}\chunk{A}{A2}{Build the shared look shader and the SpaceLab host}{A1}{none directly} &
+\cellcolor{laneB}\chunk{B}{B2}{Implement hyperbolic terrain generation}{\late{A2}, B1}{\gid{G3}, \gid{G6}} &
+\cellcolor{laneC}\chunk{C}{C1}{Bring up AR tracking, input and the pose pipeline}{A1, \late{A2}}{\gid{G1}, \gid{G2}, \gid{G5}} &
+\cellcolor{laneD}\chunk{D}{D2}{Build live tuning, the operator Console and telemetry}{A1, \late{C1}, \late{C3}, D1}{\gid{G1}, \gid{G5}, \gid{G6}} \\
+\hline
+\stp{4} &
+\cellcolor{laneA}\chunk{A}{A3}{Implement the flat and 4D spaces}{A2, \late{C3}}{\gid{G3}, \gid{G7}} &
+ &
+\cellcolor{laneC}\chunk{C}{C3}{Rebuild the room as Home and add Bump Guard}{A1, A2, C2}{\gid{G5}, \gid{G6}} &
+\cellcolor{laneD}\chunk{D}{D3}{Build the Spectator mirror and the flat-twin map}{A2, B2, D2}{\gid{G6}} \\
+\hline
+\stp{5} &
+ &
+\cellcolor{laneB}\chunk{B}{B3}{Implement Small Planet and Aligned Cells}{B2, C3}{\gid{G3}, \gid{G7}} &
+\cellcolor{laneC}\chunk{C}{C4}{Build onboarding and the pre-scan path}{C3, D1}{\gid{G5}} &
+ \\
+\hline
+\stp{6} &
+\cellcolor{laneA}\chunk{A}{A4}{Hold the frame rate: thermal ladder, performance runs and soak}{A3, B3, \late{B4}, C3, D2}{\gid{G4}} &
+\cellcolor{laneB}\chunk{B}{B4}{Put the scanned room into the curved world}{B3, C2, C3}{\gid{G7}} &
+ &
+ \\
+\hline
+\end{tabular}}
+\starnote
+\gatehead
+{\begin{tabular}{@{}G{88mm}@{\hspace{4.5mm}}G{88mm}@{\hspace{4.5mm}}G{88mm}@{}}
+\gate{G0}{Contracts frozen}{every contract of \S6.4 is written and stubbed; each lane's sandbox runs against the stubs}\gsep
+\gate{G1}{First light}{empty stereo scene at 60 fps on the phone; telemetry visible on the Station; anyone can install a build}\gsep
+\gate{G2}{Curved-walk spike}{five-corner loop closes within 0.25 m and three walkers from the team are comfortable at the loop-fit curvature (with a spotter: Bump Guard does not exist yet). Decides the default mode and the comfort floor} &
+\gate{G3}{Spaces in the Editor}{S1--S6 run in SpaceLab on the three sample rooms; all mathematics tests green}\gsep
+\gate{G4}{Spaces on the phone at budget}{every space S0--S6 meets the Must column cold, with the room's content, on the budget\_room fixture; the 15-minute soak passes}\gsep
+\gate{G5}{Scan, Home and Bump Guard}{both scan paths end in a registered Home; Bump Guard passes its scripted test in the headset} &
+\gate{G6}{Station link, four functions}{mirror, tuning and Console, telemetry, and the scan and asset round-trip all pass \S7.6}\gsep
+\gate{G7}{Phase-1 exit}{a first-time walker goes from self-scan to every space, watched and tuned from the Station}
+\end{tabular}}
+
+% =====================================================================
+% PHASE 2
+% =====================================================================
+\newpage
+\phasehead{2}{16 chunks, 4 steps, ends at gate G11 (Phase-2 exit)}
+{\setupboard
+\begin{tabular}{|S|L|L|L|L|}
+\hline
+\cellcolor{stepbg}{\scriptsize\bfseries\color{ink}Step} &
+\cellcolor{headA}\hdr{A}{Platform, Look and Flat Spaces} &
+\cellcolor{headB}\hdr{B}{Kernel and Curved Worlds} &
+\cellcolor{headC}\hdr{C}{Scan, Room and Safety} &
+\cellcolor{headD}\hdr{D}{Link, Station and Forge} \\
+\hline
+\stp{1} &
+\cellcolor{laneA}\chunk{A}{A1}{Build the Slicer toybox exhibit}{nothing}{none directly} &
+\cellcolor{laneB}\chunk{B}{B1}{Generate the airway wing in hyperbolic space}{\late{D2}}{none directly} &
+\cellcolor{laneC}\chunk{C}{C1}{Build the Geometry Playground shell and guided walk}{nothing}{none directly}\chunksep
+  \chunk{C}{C3}{Build the Glued and Impossible Rooms exhibits}{nothing}{none directly} &
+\cellcolor{laneD}\chunk{D}{D1}{Define the case contract and the illustrative case}{nothing}{none directly}\chunksep
+  \chunk{D}{D3}{Build the Lung panels, plan card and event logging}{nothing}{\gid{G10}} \\
+\hline
+\stp{2} &
+\cellcolor{laneA}\chunk{A}{A2}{Wire the equation sources and finish the Playground look}{A1, \late{C2}, C3}{none directly}\chunksep
+  \chunk{A}{A3}{Implement the breathing-tumour 4D views}{A1, D1, \late{D2}}{none directly} &
+ &
+\cellcolor{laneC}\chunk{C}{C2}{Build captions, equation cards, action twins and the exhibit menu}{A1, C1}{none directly} &
+\cellcolor{laneD}\chunk{D}{D2}{Build the real-case pipeline}{D1}{none directly} \\
+\hline
+\stp{3} &
+\cellcolor{laneA}\chunk{A}{A4}{Build the breath lane, gating and scanner tilt}{A3}{none directly} &
+\cellcolor{laneB}\chunk{B}{B3}{Build airway navigation: beacon, endoluminal window and Two Compasses}{B1, D2}{\gid{G10}}\chunksep
+  \chunk{B}{B4}{Build the needle sky}{B1, D2}{\gid{G10}} &
+\cellcolor{laneC}\chunk{C}{C4}{Check Bump Guard in every space and run the Playground}{A2, C3}{\gid{G8}} &
+ \\
+\hline
+\stp{4} &
+\cellcolor{laneA}\chunk{A}{A5}{Build the Lung tasks and director, and pass the 4D soak}{A4, D2}{\gid{G9}, \gid{G10}} &
+\cellcolor{laneB}\chunk{B}{B2}{Implement walking the airway: valve chambers and mode switch}{A4, B1}{\gid{G10}} &
+ &
+ \\
+\hline
+\end{tabular}}
+\starnote
+\gatehead
+{\begin{tabular}{@{}G{134mm}@{\hspace{5mm}}G{134mm}@{}}
+\gate{G8}{Playground run}{a first-time walker completes the guided run in two different rooms}\gsep
+\gate{G9}{Lung 4D}{the four 4D pieces run on both case packages at budget} &
+\gate{G10}{Lung airway and sky}{four forks walked without rescue; sky and plan card correct}\gsep
+\gate{G11}{Phase-2 exit}{Playground and Lung Mission in one session by an outsider, hot, at budget}
+\end{tabular}}
+
+% =====================================================================
+% PHASE 3
+% =====================================================================
+\newpage
+\phasehead{3}{9 chunks, 3 steps, ends at gate G13 (FieldFit)}
+{\setupboard
+\begin{tabular}{|S|L|L|L|L|}
+\hline
+\cellcolor{stepbg}{\scriptsize\bfseries\color{ink}Step} &
+\cellcolor{headA}\hdr{A}{Platform, Look and Flat Spaces} &
+\cellcolor{headB}\hdr{B}{Kernel and Curved Worlds} &
+\cellcolor{headC}\hdr{C}{Scan, Room and Safety} &
+\cellcolor{headD}\hdr{D}{Link, Station and Forge} \\
+\hline
+\stp{1} &
+\cellcolor{laneA}\chunkb{A}{A1}{Implement the two-sheet house: sheets, door and flat-twin data}{The sheet state machine}{nothing}{none directly} &
+\cellcolor{laneB}\chunkb{B}{B1}{Implement the FieldFit lens}{The lens mathematics}{\late{D2}}{none directly}\chunksep
+  \chunkb{B}{B2}{Build the Blind-Spot Finder}{The Blind-Spot Finder, and Scotoma River (Extended)}{nothing}{none directly} &
+\cellcolor{laneC}\chunkb{C}{C1}{Scan the second room and fit the door}{The second scan path}{nothing}{none directly} &
+\cellcolor{laneD}\chunkb{D}{D1}{Relay the peer and show the two-plan flat twin}{The peer relay (Extended)}{\late{A1}}{none directly}\chunksep
+  \chunkb{D}{D2}{Build the FieldFit presets and lens panel}{The field presets}{nothing}{none directly} \\
+\hline
+\stp{2} &
+\cellcolor{laneA}\chunkb{A}{A2}{Load the second home and the visitor}{The second home loader}{A1}{none directly} &
+ &
+ &
+\cellcolor{laneD}\chunkb{D}{D3}{Build the heatmap and the search task, and run the FieldFit measurement}{The Spectator heatmap and bound}{B1, B2, D2}{\gid{G13}} \\
+\hline
+\stp{3} &
+ &
+ &
+\cellcolor{laneC}\chunkb{C}{C2}{Make the Shared House safe and shared, and walk it}{Bump Guard on the second sheet}{A2, C1, D1}{\gid{G12}} &
+ \\
+\hline
+\end{tabular}}
+\starnote
+\gatehead
+{\begin{tabular}{@{}G{134mm}@{\hspace{5mm}}G{134mm}@{}}
+\gate{G12}{Shared House}{Post Circling walked by three people with no contact} &
+\gate{G13}{FieldFit}{blind spot found; search is faster with the lens than without}
+\end{tabular}}
+
+% =====================================================================
+% PHASE 4
+% =====================================================================
+\newpage
+\phasehead{4}{8 chunks, 3 steps, ends at gate G15 (Golden build and submission)}
+{\setupboard
+\begin{tabular}{|S|L|L|L|L|}
+\hline
+\cellcolor{stepbg}{\scriptsize\bfseries\color{ink}Step} &
+\cellcolor{headA}\hdr{A}{Platform, Look and Flat Spaces} &
+\cellcolor{headB}\hdr{B}{Kernel and Curved Worlds} &
+\cellcolor{headC}\hdr{C}{Scan, Room and Safety} &
+\cellcolor{headD}\hdr{D}{Link, Station and Forge} \\
+\hline
+\stp{1} &
+\cellcolor{laneA}\chunkb{A}{A1}{Finish the look of every space and harden performance}{The look pass for every space and the soak on both phones}{nothing}{\gid{G14}} &
+\cellcolor{laneB}\chunkb{B}{B1}{Prove and document the mathematics}{The maths notes}{nothing}{\gid{G15}} &
+\cellcolor{laneC}\chunkb{C}{C1}{Polish onboarding and the pre-scan fast path}{Onboarding polished with outside walkers}{nothing}{\gid{G15}} &
+\cellcolor{laneD}\chunkb{D}{D1}{Build the judges' dashboard and the session logs}{The judges' dashboard, and the session log with the pilot data}{nothing}{none directly}\chunksep
+  \chunkb{D}{D2}{Produce the metrics report, the video, the deck and the offline pack}{The metrics report}{\late{A1}}{\gid{G15}} \\
+\hline
+\stp{2} &
+ &
+ &
+\cellcolor{laneC}\chunkb{C}{C2}{Run the failure drills and the rehearsals}{The failure drills and the rehearsals with outside walkers}{C1, D1}{\gid{G14}, \gid{G15}}\chunksep
+  \chunkb{C}{C3}{Write the comfort protocol, the sign and the briefings}{The comfort protocol}{C1, D1}{\gid{G15}} &
+ \\
+\hline
+\stp{3} &
+\cellcolor{laneA}\chunkb{A}{A2}{Add audio, audit the comments and ship the golden build}{The audio loops and cues}{A1, C2}{\gid{G15}} &
+ &
+ &
+ \\
+\hline
+\end{tabular}}
+\starnote
+\gatehead
+{\begin{tabular}{@{}G{134mm}@{\hspace{5mm}}G{134mm}@{}}
+\gate{G14}{Feature freeze}{full path twice in a row on one phone without cooling; only fixes after this} &
+\gate{G15}{Golden build and submission}{golden build runs with the Station unplugged; documents, video and metrics delivered}
+\end{tabular}}
+
+\end{document}
