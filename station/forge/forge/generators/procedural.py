@@ -225,9 +225,13 @@ class ProceduralGenerator:
 
     name = "procedural"
     source = "local"
+    needs_matting = False
 
     def availability(self) -> tuple[bool, str]:
         return True, ""
+
+    def warm_up(self) -> None:
+        return None
 
     def gpu(self) -> Optional[str]:
         return None

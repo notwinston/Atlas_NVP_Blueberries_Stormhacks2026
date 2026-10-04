@@ -23,6 +23,7 @@ log = logging.getLogger("forge.hosted")
 class HostedGenerator:
     name = "hosted"
     source = "hosted"
+    needs_matting = False
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
@@ -35,6 +36,9 @@ class HostedGenerator:
         return True, ""
 
     def gpu(self) -> Optional[str]:
+        return None
+
+    def warm_up(self) -> None:
         return None
 
     def generate(self, request: GenerationRequest) -> RawMesh:

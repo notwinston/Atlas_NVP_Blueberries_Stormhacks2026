@@ -14,7 +14,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-from . import PIPELINE_VER
+from . import PIPELINE_VER, imaging
 from .config import Settings
 from .generators import Generator
 from .models import Health, JobCreated, JobStatus, ObjectMeta, QueueEntry, QueueView, RoomCreated, RoomModel
@@ -23,12 +23,6 @@ from .service import Forge, Job, NotFound
 _ASSET_NAME = re.compile(r"^([0-9a-f]{64})\.glb$")
 _ROOM_ID = re.compile(r"^[A-Za-z0-9_]{1,40}$")
 _JOB_ID = re.compile(r"^[0-9a-f]{16}$")
-
-
-def _matting_method() -> str:
-    import importlib.util
-
-    return "rembg" if importlib.util.find_spec("rembg") is not None else "none"
 
 
 def _entry(job: Job) -> QueueEntry:
@@ -62,7 +56,7 @@ def create_app(settings: Optional[Settings] = None, generator: Optional[Generato
 
     @app.get("/health", response_model=Health)
     def health() -> Health:
-        ready, note = forge.generator.availability()
+        ready, note = forge.generator_status()
         name = forge.generator.gpu()
         hosted = forge.hosted.availability()[0]
         return Health(
@@ -77,7 +71,7 @@ def create_app(settings: Optional[Settings] = None, generator: Optional[Generato
             generatorNote=note,
             hosted=hosted,
             hostedEnabled=hosted,
-            matting=_matting_method(),
+            matting=imaging.matting_method(),
         )
 
     @app.post("/rooms", status_code=201, response_model=RoomCreated)

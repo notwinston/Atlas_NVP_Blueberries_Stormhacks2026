@@ -1,12 +1,17 @@
-"""The asset validator: the asset contract of Master Plan section 6.4.
+"""The asset validator: the asset contract of Master Plan section 6.4 and mesh design section 5.4.
 
 A generated GLB must hold exactly one mesh with no textures and no materials
 (the phone assigns the shared one), in metres, +Y up, with its origin at the
-centre of the box's base; no edge may be longer than 0.25 m; it must have 1,500
-to 5,000 triangles and never more than the triangle target sent with its job.
+centre of the box's base; no edge may be longer than 0.25 m; every vertex must
+point at an object cell of the palette, and the three vertices of a face at the
+same one. Every mesh comes in two copies, and each is held to its own level:
 
-Library:  ``validate_glb(data, tri_target=..., box=(w, h, d))``
-CLI:      ``python -m forge.validator asset.glb --target 5000 --box 1.0 0.75 0.6``
+    level    triangles          and at most            file
+    full     1,500 to 15,000    the job's triTarget         2 MB
+    light    1,500 to 5,000     the job's triTargetLight    1 MB
+
+Library:  ``validate_glb(data, tri_target=..., box=(w, h, d), level="full")``
+CLI:      ``python -m forge.validator asset.glb --target 15000 --box 1.0 0.75 0.6 --level full``
 
 Units, the up axis and the origin cannot be read from a file on their own, so
 they are checked against the scanned box when it is given: every side of the
@@ -26,11 +31,19 @@ from typing import Optional, Sequence
 
 import numpy as np
 
-from .budget import MAX_EDGE_METRES, VALIDATOR_MAX_TRIANGLES, VALIDATOR_MIN_TRIANGLES
+from .budget import (
+    MAX_EDGE_METRES,
+    VALIDATOR_MAX_TRIANGLES,
+    VALIDATOR_MAX_TRIANGLES_LIGHT,
+    VALIDATOR_MIN_TRIANGLES,
+)
 from .glb import GlbError, read_glb
+from .palette import OBJECT_BASE, PALETTE, PALETTE_GRID
 
 REQUIRED_ATTRIBUTES = ("POSITION", "NORMAL", "TEXCOORD_0", "COLOR_0")
-MAX_BYTES = 1024 * 1024  # GLB budget, section 7.4
+LEVELS = ("full", "light")
+MAX_BYTES = 2 * 1024 * 1024  # the full copy (mesh design section 5.4)
+MAX_BYTES_LIGHT = 1024 * 1024  # the light copy: the budget every GLB had before (section 7.4)
 EDGE_EPSILON = 1e-5  # float32 round-off on a 0.25 m edge
 ORIGIN_TOLERANCE = 0.01  # metres
 BOUNDS_TOLERANCE = 0.10  # share of the box side
@@ -53,6 +66,8 @@ class ValidationResult:
     bounds_min: tuple[float, float, float] = (0.0, 0.0, 0.0)
     bounds_max: tuple[float, float, float] = (0.0, 0.0, 0.0)
     bytes: int = 0
+    level: str = "full"
+    palette_cells: list[int] = field(default_factory=list)  # the object cells the mesh uses, ascending
 
     @property
     def ok(self) -> bool:
@@ -79,6 +94,8 @@ class ValidationResult:
             "boundsMax": [round(v, 6) for v in self.bounds_max],
             "size": [round(v, 6) for v in self.size],
             "bytes": self.bytes,
+            "level": self.level,
+            "paletteCells": list(self.palette_cells),
             "violations": [{"code": v.code, "message": v.message} for v in self.violations],
         }
 
@@ -105,13 +122,34 @@ def _has_transform(node: dict) -> bool:
     )
 
 
+def _palette_cells(uv: np.ndarray) -> np.ndarray:
+    """The palette cell each vertex points at; -1 for a coordinate outside the texture.
+
+    `TEXCOORD_0` is stored as glTF has it, (u, 1 - v), so the row is read from 1 - v.
+    """
+    uv = np.asarray(uv, dtype=np.float64)
+    column = np.floor(uv[:, 0] * PALETTE_GRID).astype(np.int64)
+    row = np.floor((1.0 - uv[:, 1]) * PALETTE_GRID).astype(np.int64)
+    inside = np.isfinite(uv).all(axis=1) & (column >= 0) & (column < PALETTE_GRID) & (row >= 0) & (row < PALETTE_GRID)
+    return np.where(inside, row * PALETTE_GRID + column, -1)
+
+
 def validate_glb(
     data: bytes,
     tri_target: Optional[int] = None,
     box: Optional[Sequence[float]] = None,
+    level: str = "full",
 ) -> ValidationResult:
-    """Check ``data`` against the asset contract and return every violation found."""
-    result = ValidationResult(bytes=len(data))
+    """Check ``data`` against the asset contract and return every violation found.
+
+    ``level`` is ``"full"`` or ``"light"``: which of the two copies of a mesh this
+    file is. ``tri_target`` is the job's target for that copy.
+    """
+    if level not in LEVELS:
+        raise ValueError(f"level must be one of {LEVELS}, not {level!r}")
+    max_bytes = MAX_BYTES if level == "full" else MAX_BYTES_LIGHT
+    max_triangles = VALIDATOR_MAX_TRIANGLES if level == "full" else VALIDATOR_MAX_TRIANGLES_LIGHT
+    result = ValidationResult(bytes=len(data), level=level)
     try:
         glb = read_glb(data)
     except GlbError as exc:
@@ -119,8 +157,8 @@ def validate_glb(
         return result
     doc = glb.doc
 
-    if len(data) > MAX_BYTES:
-        result.add("glb.size", f"{len(data)} bytes; the budget is {MAX_BYTES}")
+    if len(data) > max_bytes:
+        result.add("glb.size", f"{len(data)} bytes; the budget of the {level} copy is {max_bytes}")
     if doc.get("extensionsRequired"):
         result.add("glb.extension", f"required extensions are not allowed: {doc['extensionsRequired']}")
 
@@ -172,6 +210,11 @@ def validate_glb(
         for name in REQUIRED_ATTRIBUTES[1:]:
             if name in attributes and len(glb.accessor(attributes[name])) != len(positions):
                 raise GlbError(f"{name} and POSITION differ in length")
+        uv = None
+        if "TEXCOORD_0" in attributes:
+            uv = np.asarray(glb.accessor(attributes["TEXCOORD_0"]), dtype=np.float64)
+            if uv.ndim != 2 or uv.shape[1] != 2:
+                raise GlbError("TEXCOORD_0 is not VEC2")
     except GlbError as exc:
         result.add("glb.malformed", str(exc))
         return result
@@ -190,15 +233,33 @@ def validate_glb(
     result.bounds_min = tuple(float(v) for v in lo)  # type: ignore[assignment]
     result.bounds_max = tuple(float(v) for v in hi)  # type: ignore[assignment]
 
-    if not VALIDATOR_MIN_TRIANGLES <= result.triangles <= VALIDATOR_MAX_TRIANGLES:
+    if not VALIDATOR_MIN_TRIANGLES <= result.triangles <= max_triangles:
         result.add(
             "triangles.range",
-            f"{result.triangles} triangles; the contract allows {VALIDATOR_MIN_TRIANGLES} to {VALIDATOR_MAX_TRIANGLES}",
+            f"{result.triangles} triangles; the contract allows {VALIDATOR_MIN_TRIANGLES} to {max_triangles} "
+            f"for the {level} copy",
         )
     if tri_target is not None and result.triangles > tri_target:
-        result.add("triangles.target", f"{result.triangles} triangles; the job's target is {tri_target}")
+        result.add("triangles.target", f"{result.triangles} triangles; the job's target for the {level} copy is {tri_target}")
     if result.longest_edge > MAX_EDGE_METRES + EDGE_EPSILON:
         result.add("edge.long", f"longest edge {result.longest_edge:.4f} m; the limit is {MAX_EDGE_METRES} m")
+
+    # One or more object colours, and never two on one face: a face is drawn in one flat cell.
+    if uv is not None:
+        cells = _palette_cells(uv)
+        first, last = OBJECT_BASE, OBJECT_BASE + len(PALETTE) - 1
+        used = np.unique(cells[faces])
+        result.palette_cells = [int(c) for c in used if first <= c <= last]
+        outside = [int(c) for c in used if not first <= c <= last]
+        if outside:
+            result.add(
+                "palette.cell",
+                f"{int(np.isin(cells, outside).sum())} vertices point outside the object colours "
+                f"(cells {first} to {last}); found {outside[:8]} (-1 is off the palette)",
+            )
+        mixed = int(((cells[faces] != cells[faces[:, :1]]).any(axis=1)).sum())
+        if mixed:
+            result.add("palette.face", f"{mixed} faces have vertices in more than one palette cell")
 
     # Origin at the centre of the box's base, +Y up.
     centre_x, centre_z = (lo[0] + hi[0]) * 0.5, (lo[2] + hi[2]) * 0.5
@@ -226,17 +287,22 @@ def validate_glb(
     return result
 
 
-def validate_file(path, tri_target: Optional[int] = None, box: Optional[Sequence[float]] = None) -> ValidationResult:
-    return validate_glb(Path(path).read_bytes(), tri_target=tri_target, box=box)
+def validate_file(
+    path, tri_target: Optional[int] = None, box: Optional[Sequence[float]] = None, level: str = "full"
+) -> ValidationResult:
+    return validate_glb(Path(path).read_bytes(), tri_target=tri_target, box=box, level=level)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m forge.validator",
-        description="Check GLB files against the ATLAS asset contract (Master Plan section 6.4).",
+        description="Check GLB files against the ATLAS asset contract (Master Plan section 6.4, mesh design 5.4).",
     )
     parser.add_argument("files", nargs="+", help="GLB files to check")
-    parser.add_argument("--target", type=int, default=None, help="triangle target sent with the job")
+    parser.add_argument("--target", type=int, default=None,
+                        help="triangle target of the job for this copy (triTarget, or triTargetLight with --level light)")
+    parser.add_argument("--level", choices=LEVELS, default="full",
+                        help="which copy the files are: full (to 15,000 triangles, 2 MB) or light (to 5,000, 1 MB)")
     parser.add_argument("--box", type=float, nargs=3, metavar=("W", "H", "D"), default=None,
                         help="scanned box size in metres")
     parser.add_argument("--json", action="store_true", help="print one JSON object per file")
@@ -245,7 +311,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     failed = 0
     for name in args.files:
         try:
-            result = validate_file(name, tri_target=args.target, box=args.box)
+            result = validate_file(name, tri_target=args.target, box=args.box, level=args.level)
         except OSError as exc:
             print(f"FAIL {name}: {exc}")
             failed += 1
@@ -256,9 +322,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             continue
         size = result.size
         print(
-            f"{'PASS' if result.ok else 'FAIL'} {name}: {result.triangles} triangles, "
+            f"{'PASS' if result.ok else 'FAIL'} {name} ({result.level}): {result.triangles} triangles, "
             f"longest edge {result.longest_edge:.4f} m, size {size[0]:.3f} x {size[1]:.3f} x {size[2]:.3f} m, "
-            f"{result.bytes} bytes"
+            f"{len(result.palette_cells)} palette cell(s), {result.bytes} bytes"
         )
         for violation in result.violations:
             print(f"  [{violation.code}] {violation.message}")
