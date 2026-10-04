@@ -13,5 +13,12 @@ namespace Atlas.Rendering
 
         // lane B: AtlasGates.hlsl
         public static readonly int Gates = Shader.PropertyToID("_Gates");         // per material float4x4, rows = gates
+
+        // lane A (placeholder P1-A06, PH-7)
+        public static readonly int PaletteTex = Shader.PropertyToID("_PaletteTex");
+        public static readonly int FogColor   = Shader.PropertyToID("_FogColor");
+        public static readonly int FogStart   = Shader.PropertyToID("_FogStart");   // m
+        public static readonly int FogEnd     = Shader.PropertyToID("_FogEnd");     // m
+        public static readonly int Tint       = Shader.PropertyToID("_Tint");
     }
 }
