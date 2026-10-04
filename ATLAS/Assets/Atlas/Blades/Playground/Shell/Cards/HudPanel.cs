@@ -1,4 +1,6 @@
+using Atlas.Input;
 using Atlas.Rendering;
+using Atlas.World;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -25,12 +27,20 @@ namespace Atlas.Blades.Playground
         readonly TextMesh _text;
         readonly float _halfWidth;
         readonly float _halfHeight;
+        readonly IAtlasInput _input;
+        readonly Font _font;
+        readonly MeshRenderer _textRenderer;
+        readonly int _hudLayer;
         float _alpha = -1f;
+        float _wanted;
+        bool _near, _menuOpen;
         float3 _tint = new float3(1f, 1f, 1f);
 
         public HudPanel(string name, Transform hud, MaterialPool pool, float3 centre, float halfWidth, float halfHeight,
-                        float lineHeight, TextAnchor anchor, float textX, bool headLocked = true)
+                        float lineHeight, TextAnchor anchor, float textX, bool headLocked = true, IAtlasInput input = null)
         {
+            _input = input;
+            _hudLayer = hud.gameObject.layer;
             _pool = pool;
             _halfWidth = halfWidth;
             _halfHeight = halfHeight;
@@ -66,6 +76,8 @@ namespace Atlas.Blades.Playground
                 MeshRenderer renderer = textObject.GetComponent<MeshRenderer>();
                 if (renderer == null) renderer = textObject.AddComponent<MeshRenderer>();
                 Configure(renderer, font.material);
+                _font = font;
+                _textRenderer = renderer;
                 _text.font = font;
                 _text.fontSize = FontPixels;
                 // A line of legacy 3D text is characterSize * fontSize / 10 units tall.
@@ -92,7 +104,8 @@ namespace Atlas.Blades.Playground
         public void SetAlpha(float alpha)
         {
             if (_root == null) return;
-            alpha = Mathf.Clamp01(alpha);
+            _wanted = Mathf.Clamp01(alpha);
+            alpha = _menuOpen ? 0f : _wanted;
             if (Mathf.Approximately(alpha, _alpha)) return;
             _alpha = alpha;
             bool on = alpha > 0.001f;
@@ -112,6 +125,56 @@ namespace Atlas.Blades.Playground
         {
             _tint = linearRgb;
             if (_material != null && _alpha > 0.001f) MaterialPool.SetTint(_material, _tint, _alpha * 0.85f);
+        }
+
+        /// <summary>
+        /// Within reach of the hands (documents/ATLAS_Hands_Design.md section 6.1): asked once a frame after the panel
+        /// has its usual place. On true the panel stands at its slot about the near anchor, its size times the scale;
+        /// on false it goes back to <paramref name="centre"/> under the HUD parent.
+        /// </summary>
+        public void PlaceWithin(ReachSlot slot, float3 centre)
+        {
+            if (_root == null) return;
+            float3 anchor;
+            quaternion facing;
+            float scale;
+            bool near = ReachSlots.TryGetNear(out anchor, out facing, out scale);
+            // The open menu panel stands on every other slot: while a menu holds the input the chip hides.
+            bool menuOpen = near && _input != null && _input.Context == InputContext.Menu && ReachSlots.HidesWhileMenuOpen(slot);
+            if (menuOpen != _menuOpen)
+            {
+                _menuOpen = menuOpen;
+                _alpha = -1f;
+                SetAlpha(_wanted);
+            }
+            if (near)
+            {
+                if (!_near) SetReach(true);
+                _near = true;
+                _root.transform.SetPositionAndRotation((Vector3)ReachSlots.World(anchor, facing, scale, slot), (Quaternion)facing);
+                _root.transform.localScale = new Vector3(scale, scale, scale);
+            }
+            else if (_near)
+            {
+                _near = false;
+                SetReach(false);
+                _root.transform.localPosition = new Vector3(centre.x, centre.y, centre.z);
+                _root.transform.localRotation = Quaternion.identity;
+                _root.transform.localScale = Vector3.one;
+            }
+        }
+
+        // Near, the chip is on the world layer and its text takes the depth-tested material (section 6.1); a child does
+        // not take its parent's layer, so both are set. Far, the HUD layer and the font's own material come back.
+        void SetReach(bool near)
+        {
+            int layer = near ? PortalStencilTable.WorldLayer : _hudLayer;
+            _root.layer = layer;
+            if (_text == null) return;
+            _text.gameObject.layer = layer;
+            Material text = near ? NearText.For(_font) : null;
+            if (text == null) text = _font.material;
+            _textRenderer.sharedMaterial = text;
         }
 
         public void Dispose()

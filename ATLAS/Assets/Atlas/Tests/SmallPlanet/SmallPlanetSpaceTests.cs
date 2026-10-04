@@ -494,6 +494,247 @@ namespace Atlas.Spaces.SmallPlanet.Tests
             Assert.Throws<ArgumentException>(() => rig.Core.ComputeAnchors(new Iso2[5]));
         }
 
+        // ---- The dial within reach of the hands (documents/ATLAS_Hands_Design.md section 6.1) ----------------
+
+        static readonly float3 Eyes = new float3(0.3f, 1.6f, -0.4f);
+
+        /// <summary>The near layout as Atlas.Hands publishes it, with every number in the test's hands.</summary>
+        sealed class Reach : IReachLayout
+        {
+            public bool Near { get; set; }
+            public float3 Position { get; set; }
+            public quaternion Rotation { get; set; }
+            public float Scale { get; set; }
+        }
+
+        Reach reach;
+        IReachLayout layoutBefore;
+
+        [SetUp]
+        public void StartWithNoLayout()
+        {
+            // A layout another test left published would move the dial of this one.
+            if (AtlasServices.TryGet(out layoutBefore)) AtlasServices.Unregister(layoutBefore);
+            reach = null;
+        }
+
+        [TearDown]
+        public void PutTheLayoutBack()
+        {
+            if (reach != null) AtlasServices.Unregister<IReachLayout>(reach);
+            if (layoutBefore != null) AtlasServices.Register(layoutBefore);
+        }
+
+        /// <summary>
+        /// Publishes the near anchor of a hands session: 0.48 m from the eyes on a line 25 degrees below the
+        /// horizontal, tilted to face the head (+Z away from the walker, +Y up along the panel).
+        /// </summary>
+        Reach Publish(float3 eyes, bool near = true, float scale = 0.75f)
+        {
+            if (reach != null) AtlasServices.Unregister<IReachLayout>(reach);
+            quaternion rotation = math.mul(quaternion.RotateY(math.radians(15f)), quaternion.RotateX(math.radians(25f)));
+            reach = new Reach { Near = near, Scale = scale, Rotation = rotation, Position = eyes + math.mul(rotation, new float3(0f, 0f, 0.48f)) };
+            AtlasServices.Register<IReachLayout>(reach);
+            return reach;
+        }
+
+        static GazeTargetData Data(CoreInput input, GazeTargetId id)
+        {
+            Assert.IsTrue(input.Core.Targets.TryGet(id, out GazeTargetData data), "the target is registered");
+            return data;
+        }
+
+        /// <summary>Everything the dial holds about where it stands, for comparing two runs number by number.</summary>
+        static string Snapshot(CoreInput input, SmallPlanetDial dial)
+        {
+            GazeTargetData d = Data(input, dial.Target);
+            return "near " + dial.Near + " scale " + dial.Scale.ToString("R") + " " + d.Action + " " + d.Shape + " " + d.Context + " at " + d.Centre
+                + " centre " + dial.Centre + " r " + d.Radius.ToString("R") + " on " + input.Core.Targets.IsEnabled(dial.Target) + " live " + dial.Live;
+        }
+
+        // Within reach the detent stands where S2's right detent stands, as it does a metre away: its slot in the
+        // anchor's frame times the scale, with its radius times the scale.
+        [Test]
+        public void Dial_Near_StandsAtItsSlot_InTheAnchorsFrame_TimesTheScale()
+        {
+            Assert.AreEqual(ReachSlot.DialRight, SmallPlanetDial.Slot);
+            Assert.IsTrue(ReachSlots.HidesWhileMenuOpen(SmallPlanetDial.Slot));
+            Assert.AreEqual(0.5f * ReachSlots.MinTargetMetres, SmallPlanetDial.NearRadius(0.1f), "never under 3 cm across");
+
+            Reach r = Publish(Eyes);
+            var input = new CoreInput();
+            input.PushContext(InputContext.Space);
+            var dial = new SmallPlanetDial(input);
+            dial.Place(Eyes, quaternion.identity);
+            Assert.IsTrue(dial.SetLive(true));
+
+            Assert.IsTrue(dial.Near);
+            Assert.AreEqual(0.75f, dial.Scale);
+            float3 slot = ReachSlots.Centre(ReachSlot.DialRight);
+            float3 centre = r.Position + math.mul(r.Rotation, 0.75f * new float3(slot.x, slot.y, -slot.z));
+            GazeTargetData d = Data(input, dial.Target);
+            Assert.Less(math.distance(d.Centre, centre), 1e-6f, d.Centre + " against " + centre);
+            Assert.AreEqual(ReachSlots.World(r.Position, r.Rotation, 0.75f, ReachSlot.DialRight), d.Centre);
+            Assert.AreEqual(d.Centre, dial.Centre, "the plate stands on its target");
+            Assert.AreEqual(0.75f * SmallPlanetDial.Radius, d.Radius, 1e-7f, "its radius times the scale");
+            Assert.GreaterOrEqual(2f * d.Radius, ReachSlots.MinTargetMetres, "no target under 3 cm");
+            Assert.AreEqual(AtlasAction.DialRight, d.Action);
+            Assert.AreEqual(InputContext.Space, d.Context);
+            Assert.IsTrue(input.Core.Targets.IsEnabled(dial.Target), "a target made again takes its flag again");
+
+            // The anchor moves: the detent moves with it, and the head's turning moves nothing.
+            GazeTargetId id = dial.Target;
+            r.Position += new float3(0.1f, -0.05f, 0.2f);
+            dial.Place(Eyes + new float3(1f, 0f, 1f), quaternion.RotateY(math.radians(120f)));
+            Assert.AreEqual(id, dial.Target, "moved, not made again");
+            Assert.AreEqual(ReachSlots.World(r.Position, r.Rotation, 0.75f, ReachSlot.DialRight), dial.Centre);
+
+            // The scale moves while the dial is dead: the target is made again, and stays dead.
+            dial.SetLive(false);
+            r.Scale = 0.9f;
+            dial.Place(Eyes, quaternion.identity);
+            Assert.AreNotEqual(id, dial.Target, "a sphere's radius cannot be changed in place");
+            Assert.AreEqual(0.9f * SmallPlanetDial.Radius, Data(input, dial.Target).Radius, 1e-7f);
+            Assert.AreEqual(0.9f, dial.Scale);
+            Assert.IsFalse(input.Core.Targets.IsEnabled(dial.Target));
+            dial.Dispose();
+            Assert.AreEqual(0, input.Core.Targets.Count, "nothing is left behind");
+        }
+
+        [Test]
+        public void Dial_Near_ByGazeAlone_FiresDialRight_AfterTheDwell()
+        {
+            Reach r = Publish(Eyes);
+            var input = new CoreInput();
+            input.PushContext(InputContext.Space);
+            var dial = new SmallPlanetDial(input);
+            int presses = 0, pressedFrame = -1;
+            quaternion look = quaternion.identity;
+            for (int i = 0; i < 90; i++)
+            {
+                // Steps 1 and 6 of the frame, in the loop's order.
+                input.Tick((Vector3)Eyes, (Quaternion)look, (float)Dt);
+                if (input.Pressed(AtlasAction.DialRight)) { presses++; if (pressedFrame < 0) pressedFrame = i; }
+                dial.Place(Eyes, look);
+                dial.SetLive(true);
+                look = quaternion.LookRotation(math.normalize(dial.Centre - Eyes), new float3(0f, 1f, 0f));
+            }
+            Assert.AreEqual(ReachSlots.World(r.Position, r.Rotation, 0.75f, ReachSlot.DialRight), dial.Centre);
+            Assert.AreEqual(1, presses, "one dwell, one step");
+            Assert.GreaterOrEqual(pressedFrame * Dt, 0.69, "not before the dwell");
+            Assert.AreEqual(InputSource.Gaze, input.LastSource(AtlasAction.DialRight));
+        }
+
+        [Test]
+        public void Dial_Near_HidesWhileAMenuIsOpen_AndAMetreAwayItDoesNot()
+        {
+            var input = new CoreInput();
+            input.PushContext(InputContext.Space);
+            var dial = new SmallPlanetDial(input);
+
+            // A metre away, as always: a menu takes the input, and the detent stays as it is.
+            dial.Place(Eyes, quaternion.identity);
+            Assert.IsTrue(dial.SetLive(true));
+            input.PushContext(InputContext.Menu);
+            dial.Place(Eyes, quaternion.identity);
+            Assert.IsFalse(dial.SetLive(true), "nothing changed");
+            Assert.IsTrue(dial.Live, "far, menu open");
+            input.PopContext(InputContext.Menu);
+
+            // Within reach the open menu panel stands on the detent's place: it is neither drawn nor live.
+            Publish(Eyes);
+            dial.Place(Eyes, quaternion.identity);
+            Assert.IsFalse(dial.SetLive(true), "within reach, no menu: still live");
+            input.PushContext(InputContext.Menu);
+            dial.Place(Eyes, quaternion.identity);
+            Assert.IsTrue(dial.SetLive(true), "the caller redraws: the plate goes");
+            Assert.IsFalse(dial.Live, "near, menu open");
+            Assert.IsFalse(input.Core.Targets.IsEnabled(dial.Target));
+            input.PopContext(InputContext.Menu);
+            dial.Place(Eyes, quaternion.identity);
+            Assert.IsTrue(dial.SetLive(true), "and comes back when the menu closes");
+            Assert.IsTrue(dial.Live, "near, menu closed");
+        }
+
+        /// <summary>A walker who stands, turns past the detent's follow angle and steps aside.</summary>
+        static void DialWalk(SmallPlanetDial dial, Action<float3, quaternion> between)
+        {
+            quaternion ahead = quaternion.identity, turned = quaternion.RotateY(math.radians(70f));
+            dial.Place(Eyes, ahead);
+            dial.SetLive(true);
+            between(Eyes, ahead);
+            dial.Place(Eyes, turned);
+            dial.SetLive(false);
+            between(Eyes, turned);
+            dial.Place(Eyes + new float3(0.4f, 0f, 0.2f), quaternion.RotateY(math.radians(80f)));
+            dial.SetLive(true);
+        }
+
+        [Test]
+        public void Dial_WithNearFalse_IsExactlyWhereItIsWithNoLayoutAtAll()
+        {
+            var plain = new CoreInput();
+            plain.PushContext(InputContext.Space);
+            var none = new SmallPlanetDial(plain);
+            DialWalk(none, (head, look) => { });
+            string expected = Snapshot(plain, none);
+
+            Publish(Eyes, near: false);
+            var input = new CoreInput();
+            input.PushContext(InputContext.Space);
+            var far = new SmallPlanetDial(input);
+            DialWalk(far, (head, look) => { });
+            Assert.AreEqual(expected, Snapshot(input, far), "Near false: position, radius and flag to the last number");
+            Assert.AreEqual(1f, far.Scale);
+            Assert.IsFalse(far.Near);
+        }
+
+        [Test]
+        public void Dial_SwitchingNearOnAndOff_ReturnsItToItsPlace()
+        {
+            var plain = new CoreInput();
+            plain.PushContext(InputContext.Space);
+            var control = new SmallPlanetDial(plain);
+            DialWalk(control, (head, look) => control.Place(head, look));
+            string expected = Snapshot(plain, control);
+
+            Reach r = Publish(Eyes, near: false);
+            var input = new CoreInput();
+            input.PushContext(InputContext.Space);
+            var dial = new SmallPlanetDial(input);
+            bool everNear = false;
+            DialWalk(dial, (head, look) =>
+            {
+                // The same frame as the control's, within reach.
+                r.Near = true;
+                dial.Place(head, look);
+                everNear |= dial.Near && Data(input, dial.Target).Radius < SmallPlanetDial.Radius;
+                r.Near = false;
+            });
+            Assert.IsTrue(everNear, "the detent was within reach in between");
+            Assert.AreEqual(expected, Snapshot(input, dial), "back to the last number: centre, radius, flag");
+        }
+
+        [Test]
+        public void Dial_Near_PlacingAllocatesNothing()
+        {
+            Reach r = Publish(Eyes);
+            var input = new CoreInput();
+            input.PushContext(InputContext.Space);
+            var dial = new SmallPlanetDial(input);
+            for (int i = 0; i < 20; i++) { dial.Place(Eyes, quaternion.identity); dial.SetLive(i % 2 == 0); }   // warm up
+
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < 100; i++)
+            {
+                r.Position += new float3(0.001f, 0f, 0f);
+                dial.Place(Eyes, quaternion.identity);
+                dial.SetLive(i % 2 == 0);
+            }
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;   // read before the assertion boxes anything
+            Assert.AreEqual(0L, allocated, "bytes allocated by 100 frames within reach");
+        }
+
 #if !ATLAS_HEADLESS
         // ---- The component (engine) ------------------------------------------------------------------------
 
@@ -619,6 +860,92 @@ namespace Atlas.Spaces.SmallPlanet.Tests
                 module.Exit();
                 Assert.IsNull(space.Dial);
                 Assert.IsFalse(input.Core.Targets.HasEnabled(AtlasAction.DialRight, InputContext.Space), "unregistered at Exit");
+                Assert.AreEqual(0, pool.Rented);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(space.gameObject);
+                if (oldPool != null) AtlasServices.Register(oldPool); else AtlasServices.Unregister(pool);
+                if (oldKernel != null) AtlasServices.Register(oldKernel); else AtlasServices.Unregister<IDialKernel>(kernel);
+                if (oldInput != null) AtlasServices.Register(oldInput); else AtlasServices.Unregister<IAtlasInput>(input);
+                pool.Dispose();
+                Atlas.Rendering.AtlasLook.ResetForSpace();
+            }
+        }
+
+        // The component in a hands session: the plate stands on the dial's slot at the near anchor, its size times the
+        // scale, on the world layer where the eye cameras test it against depth; with Near off it is back where it was.
+        [Test, Category("Unity")]
+        public void Module_Near_ThePlateStandsAtTheDialsSlot_TimesTheScale_OnTheWorldLayer()
+        {
+            var pool = Atlas.Rendering.MaterialPool.CreateDefault(16);
+            var kernel = new HolonomyWalkerKernel();
+            var input = new CoreInput();
+            input.PushContext(InputContext.Space);
+            RoomModel room = Room(RoomFixtures.Sample3x3);
+            kernel.Configure(KernelConfig.Flat(room.LapSide));
+            Atlas.Rendering.MaterialPool oldPool = AtlasServices.Replace(pool);
+            IDialKernel oldKernel = AtlasServices.Replace<IDialKernel>(kernel);
+            IAtlasInput oldInput = AtlasServices.Replace<IAtlasInput>(input);
+            var eyes = new float3(0f, 1.6f, 0f);
+            Reach r = Publish(eyes);
+            ISpaceModule module = SmallPlanetSpace.Create();
+            var space = (SmallPlanetSpace)module;
+            try
+            {
+                module.Configure(room, new ParamRegistry());
+                module.Enter(kernel.Pose);
+
+                void Frames(int count)
+                {
+                    for (int i = 0; i < count; i++)
+                    {
+                        input.Tick((Vector3)eyes, Quaternion.identity, 1f / 60f);
+                        var frame = new FrameContext
+                        {
+                            FrameIndex = i, Time = (i + 1) / 60.0, DeltaTime = 1f / 60f, Tracking = TrackingState.Normal,
+                            HeadPosition = eyes, HeadRotation = quaternion.identity
+                        };
+                        frame.Kernel = kernel.Step(double2.zero, true, frame.Time);
+                        frame.Walker = kernel.Pose;
+                        module.Tick(in frame);
+                        ((IUploadStep)module).Upload(in frame);
+                    }
+                }
+
+                Frames(120);
+                Assert.IsTrue(space.Dial.Live, "the walker stood still");
+                Assert.IsTrue(space.Dial.Near);
+                Assert.IsTrue(space.DialChip.activeSelf);
+                Vector3 slot = (Vector3)ReachSlots.World(r.Position, r.Rotation, 0.75f, ReachSlot.DialRight);
+                Assert.Less(Vector3.Distance(slot, space.DialChip.transform.position), 1e-5f, "the plate stands at the slot");
+                Assert.AreEqual(0.75f, space.DialChip.transform.localScale.x, 1e-6f, "the plate's 12 cm times the scale");
+                Assert.AreEqual(0.75f, space.DialChip.transform.localScale.y, 1e-6f);
+                Assert.AreEqual(Atlas.Rendering.PortalStencilTable.WorldLayer, space.DialChip.layer, "depth-tested: the world layer");
+                Assert.IsTrue(input.Core.Targets.TryGet(space.Dial.Target, out GazeTargetData target));
+                Assert.Less(math.distance(target.Centre, (float3)slot), 1e-5f, "the gaze target stands where the plate is drawn");
+                Assert.AreEqual(0.75f * SmallPlanetDial.Radius, target.Radius, 1e-7f);
+
+                // A menu opens: the open panel stands on the dial's place, so the plate goes.
+                input.PushContext(InputContext.Menu);
+                Frames(2);
+                Assert.IsFalse(space.DialChip.activeSelf, "hidden while the menu panel is open");
+                input.PopContext(InputContext.Menu);
+                Frames(2);
+                Assert.IsTrue(space.DialChip.activeSelf);
+
+                // A gamepad is connected: everything is exactly where it was.
+                r.Near = false;
+                Frames(2);
+                Vector3 centre = space.DialChip.transform.position;
+                Assert.AreEqual(SmallPlanetDial.Chip.x, centre.x, 1e-5f);
+                Assert.AreEqual(1.6f + SmallPlanetDial.Chip.y, centre.y, 1e-5f);
+                Assert.AreEqual(SmallPlanetDial.Chip.z, centre.z, 1e-5f);
+                Assert.AreEqual(Vector3.one, space.DialChip.transform.localScale);
+                Assert.IsTrue(input.Core.Targets.TryGet(space.Dial.Target, out target));
+                Assert.AreEqual(SmallPlanetDial.Radius, target.Radius);
+
+                module.Exit();
                 Assert.AreEqual(0, pool.Rented);
             }
             finally

@@ -1,3 +1,4 @@
+using Atlas.World;
 using Unity.Mathematics;
 
 namespace Atlas.Spaces.CurvedWalk
@@ -5,6 +6,8 @@ namespace Atlas.Spaces.CurvedWalk
     // P1-B09: where the gaze twins of the dial sit (Master Plan §0.5 rule 5, §10.1.3). Three chips in a frame that keeps
     // the head's floor position and follows its heading lazily: it stays put while the walker looks from chip to chip and
     // turns to face the walker again once the head has turned further than FollowAngle. Pure.
+    // In a hands session the chips come within reach instead (documents/ATLAS_Hands_Design.md §6.1): each has its slot
+    // about the near anchor, level with each other as they are a metre away, and its radius is multiplied by the scale.
     public struct CurvedWalkChips
     {
         /// <summary>Chip centres in the frame: x right, y up from the eyes, z ahead. Metres.</summary>
@@ -15,6 +18,8 @@ namespace Atlas.Spaces.CurvedWalk
         /// a chip at their elevation ends on one ray with a sign.</summary>
         public static readonly float3 Mode = new float3(0.55f, 0.30f, 1.0f);
         public const float Radius = 0.06f;
+        /// <summary>The chips' places within reach of the hands, about the near anchor (ReachSlots).</summary>
+        public const ReachSlot DialLeftSlot = ReachSlot.DialLeft, DialRightSlot = ReachSlot.DialRight, ModeSlot = ReachSlot.Mode;
         /// <summary>The frame turns to the head's heading once they differ by more than this. Radians. Wider than the
         /// 29 degrees at which the dial chips sit, so looking at a chip never moves it.</summary>
         public const float FollowAngle = 0.8727f;   // 50 degrees
@@ -42,6 +47,12 @@ namespace Atlas.Spaces.CurvedWalk
         public float3 Centre(float3 head, float3 chip)
         {
             return head + math.mul(quaternion.RotateY(yaw), chip);
+        }
+
+        /// <summary>A chip's radius within reach: the usual one times the scale, and never under 3 cm across.</summary>
+        public static float NearRadius(float scale)
+        {
+            return ReachSlots.TargetHalf(Radius, scale);
         }
     }
 }

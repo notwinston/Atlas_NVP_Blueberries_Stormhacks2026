@@ -21,6 +21,8 @@ namespace Atlas.Safety
         [NativeDisableUnsafePtrRestriction] public float* StaticField;
         [NativeDisableUnsafePtrRestriction] public float* DynamicTopHeight;
         [NativeDisableUnsafePtrRestriction] public double* DynamicLastHit;
+        [NativeDisableUnsafePtrRestriction] public double* DynamicFirstHit;
+        [NativeDisableUnsafePtrRestriction] public byte* DynamicPending;
         [NativeDisableUnsafePtrRestriction] public int* DynamicEmptyState;
         [NativeDisableUnsafePtrRestriction] public int* DynamicBlockCount;
         [NativeDisableUnsafePtrRestriction] public int* DynamicActiveCount;
@@ -29,7 +31,7 @@ namespace Atlas.Safety
         /// <summary>One element: the result, to pass to <see cref="BumpGuardCore.SubmitDepthResult"/>.</summary>
         public NativeArray<DepthFrameResult> Result;
 
-        /// <summary>Builds the job for one depth frame against the core's room.</summary>
+        /// <summary>Builds the job for one depth frame against the core's room. The frame's depth mask travels inside input.</summary>
         public static BumpDepthJob Create(BumpGuardCore core, NativeArray<float> depth, in DepthKernelInput input,
             NativeArray<DepthFrameResult> result)
         {
@@ -42,6 +44,8 @@ namespace Atlas.Safety
                 StaticField = core.StaticField,
                 DynamicTopHeight = dynamic.TopHeight,
                 DynamicLastHit = dynamic.LastHit,
+                DynamicFirstHit = dynamic.FirstHit,
+                DynamicPending = dynamic.Pending,
                 DynamicEmptyState = dynamic.EmptyState,
                 DynamicBlockCount = dynamic.BlockCount,
                 DynamicActiveCount = dynamic.ActiveCount,
@@ -57,6 +61,8 @@ namespace Atlas.Safety
             {
                 TopHeight = DynamicTopHeight,
                 LastHit = DynamicLastHit,
+                FirstHit = DynamicFirstHit,
+                Pending = DynamicPending,
                 EmptyState = DynamicEmptyState,
                 BlockCount = DynamicBlockCount,
                 ActiveCount = DynamicActiveCount,

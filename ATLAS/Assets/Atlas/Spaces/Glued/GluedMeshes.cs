@@ -174,7 +174,10 @@ namespace Atlas.Spaces.Glued
     /// </summary>
     /// <remarks>
     /// The origin is the tracked head (the midpoint between the eyes), +Z is where the walker faces, +X is the
-    /// walker's right. The controllers hang from the head, so the copy crouches when the walker does.
+    /// walker's right. The controllers hang from the head, so the copy crouches when the walker does. This is the
+    /// body alone, built once; the walker's hands, when they are tracked, are added after it by
+    /// <see cref="GluedAvatarRig"/> in the same frame (<see cref="GluedAvatarHands"/>), each with its forearm from
+    /// <see cref="Elbow"/>.
     /// </remarks>
     public static class GluedAvatarMesh
     {
@@ -189,6 +192,19 @@ namespace Atlas.Spaces.Glued
                          LeftHand = AtlasPalette.HomeBeacon, RightHand = AtlasPalette.CueRescan, Tip = AtlasPalette.SliceEdge;
         /// <summary>Where the controllers are held, from the eyes: out to each side, down, and forward, metres.</summary>
         public static readonly float3 Grip = new float3(0.24f, -0.6f, 0.06f);
+        /// <summary>How far each tracked hand's elbow stands from the middle of the body, metres.</summary>
+        public const float ArmX = 0.235f;
+        /// <summary>Height of each tracked hand's elbow relative to the head, metres.</summary>
+        public const float ElbowY = -0.68f;
+
+        /// <summary>
+        /// The elbow of the arm on one side in the avatar's own frame, where a tracked hand's forearm starts. The
+        /// walker's left is -X.
+        /// </summary>
+        public static float3 Elbow(HandSide side)
+        {
+            return new float3(side == HandSide.Left ? -ArmX : ArmX, ElbowY, -HeadBack);
+        }
 
         /// <summary>Appends the avatar; a kit avatar (a piece modelled in Blender, same frame) is copied instead.</summary>
         public static void Build(AtlasMeshBuilder data, MeshData kit = null)

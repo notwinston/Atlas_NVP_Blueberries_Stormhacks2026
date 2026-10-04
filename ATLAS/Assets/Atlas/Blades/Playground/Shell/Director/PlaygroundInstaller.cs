@@ -75,9 +75,9 @@ namespace Atlas.Blades.Playground.Shell
             }
             if (hud != null)
             {
-                m_CaptionView = CaptionChipView.Create(m_Shell.Caption, hud, pool);
+                m_CaptionView = CaptionChipView.Create(m_Shell.Caption, hud, pool, parts.Input);
                 m_CardView = EquationCardView.Create(m_Shell.Card, hud, pool);
-                m_PromptView = PromptChipView.Create(m_Shell.Chip, hud, pool);
+                m_PromptView = PromptChipView.Create(m_Shell.Chip, hud, pool, parts.Input);
             }
 
             m_Host.SpaceEntered += OnSpaceEntered;

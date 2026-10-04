@@ -83,8 +83,11 @@ ALLOWED = {
     "Atlas.Safety": ["Atlas.World"],
     "Atlas.Input": [],
     "Atlas.Telemetry": ["Atlas.Kernel", "Atlas.Link", "Atlas.World"],
+    # Tracked hands (documents/ATLAS_Hands_Design.md 3.2). Link for parameter types only, as a space.
+    "Atlas.Hands": ["Atlas.Kernel", "Atlas.Link", "Atlas.World", "Atlas.Rendering", "Atlas.Input"],
+    "Atlas.Hands.ARKit": ["Atlas.Kernel", "Atlas.World", "Atlas.Hands"],
     "Atlas.App": ["Atlas.Kernel", "Atlas.Link", "Atlas.World", "Atlas.Rendering", "Atlas.Scan", "Atlas.Safety",
-                  "Atlas.Input", "Atlas.Telemetry"],
+                  "Atlas.Input", "Atlas.Telemetry", "Atlas.Hands"],
     SPACES: ["Atlas.Kernel", "Atlas.Link", "Atlas.World", "Atlas.Rendering", "Atlas.Input", "Atlas.Telemetry"],
     "Atlas.Spectator": ["Atlas.Kernel", "Atlas.Link", "Atlas.World", "Atlas.Rendering", "Atlas.Telemetry", SPACES],
     # World lint (lane B): the generator and the real tile meshes, in the Editor only.
@@ -494,8 +497,8 @@ def cmd_rules(asms):
             rel = os.path.relpath(src, REPO)
             if not a.is_test and a.name != "Atlas.Editor" and "MaterialPropertyBlock" in text:
                 problems.append("F7: MaterialPropertyBlock used in %s" % rel)
-            if a.name == "Atlas.Safety" and re.search(r"\bAtlas\.(Link|Telemetry)\b", text):
-                problems.append("Rule 1: Atlas.Safety source uses Atlas.Link or Atlas.Telemetry: %s" % rel)
+            if a.name == "Atlas.Safety" and re.search(r"\bAtlas\.(Link|Telemetry|Hands)\b", text):
+                problems.append("Rule 1: Atlas.Safety source uses Atlas.Link, Atlas.Telemetry or Atlas.Hands: %s" % rel)
             if a.name == "Atlas.Link" and re.search(r"\bUnity(Engine|Editor)?\b\s*[.;]", text):
                 problems.append("F1: Atlas.Link must stay engine-free: %s" % rel)
             if not a.is_test and re.search(r"\bNotImplementedException\b", text):
@@ -506,7 +509,7 @@ def cmd_rules(asms):
     safety = asms.get("Atlas.Safety")
     if safety:
         for r in safety.references:
-            if r in ("Atlas.Link", "Atlas.Telemetry"):
+            if r in ("Atlas.Link", "Atlas.Telemetry", "Atlas.Hands"):
                 problems.append("Rule 1: Atlas.Safety references %s" % r)
     link = asms.get("Atlas.Link")
     if link and not link.no_engine:

@@ -16,5 +16,10 @@ namespace Atlas.World
         /// <summary>Depth holds a new image this frame.</summary>
         public bool HasDepth;
         public DepthFrame Depth;
+        /// <summary>
+        /// Where the walker's own hands are in Depth, or the empty mask (the default). The pose pipeline leaves it
+        /// empty; the App's guard step fills it in for Bump Guard, which ignores a mask built for another image.
+        /// </summary>
+        public DepthMask Mask;
     }
 }

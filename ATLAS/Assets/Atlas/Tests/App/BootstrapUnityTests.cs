@@ -70,6 +70,13 @@ namespace Atlas.App.Tests
             Assert.That(AtlasServices.Has<ISpaceHost>(), Is.True);
             Assert.That(AtlasServices.Has<IOperatorCommands>(), Is.True);
             Assert.That(AtlasServices.Has<IEventLog>(), Is.True);
+            // The walker's tracked hands (documents/ATLAS_Hands_Design.md section 3.7): published for the spaces
+            // and the panels, and off until hands.enabled is set.
+            Assert.That(AtlasServices.Has<IHands>(), Is.True);
+            Assert.That(AtlasServices.Has<IReachLayout>(), Is.True);
+            Assert.That(AtlasServices.Get<IHands>().Active, Is.False);
+            Assert.That(AtlasServices.Get<IReachLayout>().Near, Is.False);
+            AssertTheHandsParametersFollowTheRootsOwn(app.Registry);
             Assert.That(app.GuardInstalled, Is.True);
             Assert.That(app.LoopCore.HasGuard, Is.True);
             Assert.That(app.Boot.Head, Is.Not.Null);
@@ -136,12 +143,53 @@ namespace Atlas.App.Tests
             Assert.That(AtlasBootstrap.App, Is.Null);
             Assert.That(AtlasServices.BootCompleted, Is.False);
             Assert.That(AtlasServices.Has<ISpaceHost>(), Is.False);
+            Assert.That(AtlasServices.Has<IHands>(), Is.False);
+            Assert.That(AtlasServices.Has<IReachLayout>(), Is.False);
             // Destroy takes effect at the end of a play-mode frame.
             deadline = Deadline();
             while (app.Boot.Root != null && Before(deadline)) yield return null;
             Assert.That(app.Boot.Root == null, Is.True, "the Atlas objects are gone");
 
             yield return new ExitPlayMode();
+        }
+
+        /// <summary>
+        /// The hands' eight parameters stand together, in the order HandsSystem.DeclareParams gives them, straight
+        /// after the last parameter the composition root declares itself (dev.overlay). Every parameter declared
+        /// before them therefore has the wire id it had before the hands existed. The names are spelt out here:
+        /// this assembly does not reference Atlas.Hands.
+        /// </summary>
+        static void AssertTheHandsParametersFollowTheRootsOwn(ParamRegistry registry)
+        {
+            string[] hands =
+            {
+                "hands.enabled", "hands.rate", "hands.reach", "hands.sound", "hands.draw", "hands.editor", "hands.bench", "hands.record"
+            };
+            ParamEntry first = registry.Find(hands[0]);
+            Assert.That(first, Is.Not.Null, "hands.enabled is not declared");
+            Assert.That(first.Kind, Is.EqualTo(ParamKind.Bool));
+            Assert.That(first.Bool, Is.False, "hands.enabled defaults to off (decision R8)");
+            Assert.That(registry.Count, Is.GreaterThanOrEqualTo(first.Id + hands.Length));
+            for (int k = 0; k < hands.Length; k++)
+            {
+                Assert.That(registry[first.Id + k].Name, Is.EqualTo(hands[k]), "wire id " + (first.Id + k));
+                Assert.That(registry[first.Id + k].Group, Is.EqualTo("hands"), hands[k]);
+            }
+
+            // Nothing of the hands among the earlier ones, and the first of those is still the first.
+            Assert.That(registry[0].Name, Is.EqualTo(AppParams.Space));
+            for (int i = 0; i < first.Id; i++) Assert.That(registry[i].Name, Does.Not.StartWith("hands."), "wire id " + i);
+            ParamEntry lastOfTheRoot = registry.Find(AppParams.DevOverlay);
+            Assert.That(lastOfTheRoot, Is.Not.Null);
+            Assert.That(first.Id, Is.EqualTo(lastOfTheRoot.Id + 1), "the hands' parameters follow the root's last");
+
+            // DIFFERS FROM "after every other declaration" (reported; AtlasApp.cs is not this package's). The
+            // perf tour is installed at row 19, after the hands' parameters were declared, and declares its five
+            // then: those five moved up by eight wire ids when the hands came. Nothing reads a wire id from
+            // source (lane D contract, section 1.1), so nothing is lost; what holds today is pinned here.
+            ParamEntry perf = registry.Find(PerfTour.ParamRun);
+            if (perf != null)
+                Assert.That(perf.Id, Is.GreaterThanOrEqualTo(first.Id + hands.Length), "the perf tour's parameters are declared after the hands'");
         }
 
         [Test]

@@ -132,15 +132,17 @@ namespace Atlas.App.Menu
         public const string EventParamSet = "param.set";
 
         /// <summary>
-        /// The kill switches of Master Plan section 12.4 in the order of lane D's contract, section 1.5. The
-        /// Quality page lists the ones that are declared.
+        /// The kill switches of Master Plan section 12.4 in the order of lane D's contract, section 1.5, and
+        /// after them the switch of the tracked hands (documents/ATLAS_Hands_Design.md section 3.7, E11), so
+        /// that hands can be turned off in the headset with the Station off. The Quality page lists the ones
+        /// that are declared.
         /// </summary>
         public static readonly string[] KillSwitchIds =
         {
             "space.id", "demoLock", "thermal.pinTier", "render.scale", "render.msaa", "curved.cullRho", "curved.mode",
             "cells.viewDepth", "planet.R", "planet.fogRho", "glued.mode", "glued.copies", "rooms.count", "portal.depth",
             "slicer.source", "pose.gyroPredict", "scan.route", "link.enabled", "link.stateHz", "telemetry.mode",
-            "forge.backend"
+            "forge.backend", "hands.enabled"
         };
 
         // Resetting space.id would walk the wearer out of the space they are standing in.

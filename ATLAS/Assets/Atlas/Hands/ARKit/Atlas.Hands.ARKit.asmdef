@@ -1,0 +1,15 @@
+{
+    "name": "Atlas.Hands.ARKit",
+    "rootNamespace": "Atlas.Hands.ARKit",
+    "references": [
+        "Atlas.Kernel",
+        "Atlas.World",
+        "Atlas.Hands",
+        "Unity.Mathematics"
+    ],
+    "allowUnsafeCode": true,
+    "includePlatforms": [
+        "Editor",
+        "iOS"
+    ]
+}
