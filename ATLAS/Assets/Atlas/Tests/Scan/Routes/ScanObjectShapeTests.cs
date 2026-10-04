@@ -100,11 +100,35 @@ namespace Atlas.Scan.Tests.Routes
                     Assert.That(profile[ObjectProfile.Index(i, j)], Is.EqualTo(j <= 2 ? 255 : SeatByte), what + ", cell (" + i + ", " + j + ")");
         }
 
-        static void AssertValid(RoomModel room)
+        /// <summary>The room passes every rule, and its file reads back to the same room: a valid room that cannot be loaded is no use.</summary>
+        static void AssertValidAndReadable(RoomModel room)
         {
             var errors = new List<string>();
             Assert.That(RoomModelValidator.Validate(room, errors), Is.True, string.Join("; ", errors));
             Assert.That(errors, Is.Empty);
+            string text = RoomModelJson.Write(room);
+            RoomModel back;
+            string error;
+            Assert.That(RoomModelJson.TryRead(text, out back, out error), Is.True, error);
+            Assert.That(RoomModelJson.Write(back), Is.EqualTo(text));
+            Assert.That(RoomModelJson.GeometryHash(back), Is.EqualTo(RoomModelJson.GeometryHash(room)));
+        }
+
+        /// <summary>Metres from a floor point along a direction to the room's outline: the wall it runs into.</summary>
+        static float ToTheWall(RoomModel room, float2 from, float2 direction)
+        {
+            float nearest = float.MaxValue;
+            float2[] ring = room.Outline;
+            for (int k = 0; k < ring.Length; k++)
+            {
+                float2 a = ring[k], edge = ring[(k + 1) % ring.Length] - a;
+                float across = direction.x * edge.y - direction.y * edge.x;
+                if (math.abs(across) < 1e-9f) continue;
+                float2 to = a - from;
+                float along = (to.x * edge.y - to.y * edge.x) / across, on = (to.x * direction.y - to.y * direction.x) / across;
+                if (along >= -1e-3f && on >= 0f && on <= 1f) nearest = math.min(nearest, math.max(along, 0f));
+            }
+            return nearest;
         }
 
         [Test]
@@ -160,8 +184,8 @@ namespace Atlas.Scan.Tests.Routes
             Assert.That(under.SetEquals(CellsUnder(asScanned, before)), Is.True);
             foreach (int c in under) Assert.That(room.Sdf.Metres[c], Is.LessThanOrEqualTo(0f), "cell " + c);
 
-            AssertValid(room);
-            AssertValid(asScanned);
+            AssertValidAndReadable(room);
+            AssertValidAndReadable(asScanned);
 
             // The file carries both, and reads back to the same room.
             string text = RoomModelJson.Write(room);
@@ -187,7 +211,7 @@ namespace Atlas.Scan.Tests.Routes
             Assert.That(math.dot(Front(chair.Yaw + room.Anchor.Yaw), Front(ChairYaw)), Is.GreaterThan(0.99999f));
             Assert.That(chair.Size.x, Is.EqualTo(s_chair.x).Within(1e-5f));
             Assert.That(chair.Size.z, Is.EqualTo(s_chair.z).Within(1e-5f));
-            AssertValid(room);
+            AssertValidAndReadable(room);
         }
 
         [Test]
@@ -205,7 +229,7 @@ namespace Atlas.Scan.Tests.Routes
             AssertChairProfile(chair.Profile, "moved");
             // The session's turn runs from +X to +Z, a yaw the other way.
             Assert.That(math.dot(Front(chair.Yaw + room.Anchor.Yaw), Front(ChairYaw - turn)), Is.GreaterThan(0.99999f));
-            AssertValid(room);
+            AssertValidAndReadable(room);
         }
 
         [Test]
@@ -259,7 +283,7 @@ namespace Atlas.Scan.Tests.Routes
 
             Assert.That(chair.Facing, Is.EqualTo(ObjectFacingRule.Profile));
             AssertChairProfile(chair.Profile, "beside the others");
-            AssertValid(room);
+            AssertValidAndReadable(room);
             Assert.That(RoomModelJson.Write(RoomModelJson.Read(RoomModelJson.Write(room))), Is.EqualTo(RoomModelJson.Write(room)));
         }
 
@@ -298,7 +322,7 @@ namespace Atlas.Scan.Tests.Routes
                 Assert.That(math.dot(Front(chair.Yaw + room.Anchor.Yaw), Front(ChairYaw - 3f * Quarter)), Is.GreaterThan(0.99999f));
                 Assert.That(RoomModelJson.Write(room), Does.Not.Contain("\"profile\""));
                 Assert.That(RoomModelJson.Write(room), Does.Not.Contain("\"facing\""));
-                AssertValid(room);
+                AssertValidAndReadable(room);
             }
         }
 
@@ -346,7 +370,7 @@ namespace Atlas.Scan.Tests.Routes
             Assert.That(math.dot(Front(chair.Yaw + room.Anchor.Yaw), Front(ChairYaw)), Is.GreaterThan(0.99999f));
             Assert.That(chair.Size.x, Is.EqualTo(s_chair.x).Within(1e-5f));
             Assert.That(chair.Size.z, Is.EqualTo(s_chair.z).Within(1e-5f));
-            AssertValid(room);
+            AssertValidAndReadable(room);
         }
 
         [TestCase(false)]
@@ -372,7 +396,7 @@ namespace Atlas.Scan.Tests.Routes
                     for (int i = 0; i < N; i++)
                         Assert.That(chair.Profile[ObjectProfile.Index(i, j)], Is.EqualTo(i >= 13 ? 255 : SeatByte), "cell (" + i + ", " + j + ")");
                 Assert.That(RoomModelJson.Write(built), Does.Not.Contain("\"facing\""));
-                AssertValid(built);
+                AssertValidAndReadable(built);
             }
         }
 
@@ -457,15 +481,16 @@ namespace Atlas.Scan.Tests.Routes
             Assert.That(room.Sdf.Height, Is.EqualTo(fixture.Sdf.Height));
             for (int c = 0; c < room.Sdf.Metres.Length; c++)
                 Assert.That(room.Sdf.Metres[c] > 0f, Is.EqualTo(fixture.Sdf.Metres[c] > 0f), "free or not, cell " + c);
-            AssertValid(room);
+            AssertValidAndReadable(room);
         }
 
         [Test]
-        public void TheBudgetRoom_ScannedWithFacingOn_TurnsTheFurnitureThatLooksAtAWall()
+        public void TheBudgetRoom_ScannedWithFacingOn_TurnsThreeBoxesHalfATurn_AndReadsBack()
         {
             // The reference room has a couch on the north wall and a cupboard and a chair on the east wall whose
-            // boxes look at the wall behind them. Scanned for real, those three are turned half a turn and
-            // nothing else in the room changes.
+            // boxes look at the wall they stand against. Scanned for real, those three are turned half a turn
+            // and nothing else in the room changes. The screen above the cupboard looks at the wall too and
+            // stays as it is: the floor in front of every side of it is taken by the furniture below.
             RoomModel fixture = RoomFixtures.LoadFromProject(RoomFixtures.BudgetRoom);
             ScanSnapshot scan = ScanOf(fixture);
             RoomModel room = ScanSolver.Solve(scan, "on").Room, asScanned = ScanSolver.Solve(scan, "off", RoomModel.DefaultWallHeight, true, false).Room;
@@ -473,7 +498,9 @@ namespace Atlas.Scan.Tests.Routes
             Assert.That(room.Sdf.Metres, Is.EqualTo(asScanned.Sdf.Metres));
 
             var turned = new[] { new float3(-0.6f, 0f, 2.25f), new float3(1.75f, 0f, 0f), new float3(1.75f, 0f, 1.4f) };
-            int halfTurns = 0;
+            // The other pieces that stand with their back on a wall and nothing against their sides.
+            var facedAlready = new[] { new float3(-1f, 0f, -2.25f), new float3(-1.8f, 0f, -1.1f), new float3(-1.75f, 0f, 0f), new float3(-1.75f, 0f, 1.1f) };
+            int halfTurns = 0, byTheFloor = 0;
             for (int k = 0; k < room.Objects.Length; k++)
             {
                 RoomObject o = room.Objects[k], before = asScanned.Objects[k];
@@ -483,36 +510,42 @@ namespace Atlas.Scan.Tests.Routes
                 Assert.That(o.TriTarget, Is.EqualTo(before.TriTarget), what);
                 Assert.That(o.Profile, Is.Null, what);       // the scan saw the floor only
                 Assert.That(CellsUnder(room, o).SetEquals(CellsUnder(asScanned, before)), Is.True, what);
+                Assert.That(o.Size, Is.EqualTo(before.Size), what);
 
-                bool wasTurned = false;
+                bool wasTurned = false, wasRight = false;
                 foreach (float3 at in turned) wasTurned |= math.distance(at, o.Base) < 1e-4f;
+                foreach (float3 at in facedAlready) wasRight |= math.distance(at, o.Base) < 1e-4f;
                 if (wasTurned)
                 {
                     halfTurns++;
-                    Assert.That(o.Facing, Is.EqualTo(ObjectFacingRule.Clearance), what);
                     Assert.That(math.dot(Front(o.Yaw), Front(before.Yaw)), Is.LessThan(-0.99999f), what);
-                    Assert.That(o.Size, Is.EqualTo(before.Size), what);
+                    // Half a turn from yaw 0 is stored as 3.141592, which a file can hold.
+                    Assert.That(math.abs(o.Yaw), Is.LessThanOrEqualTo(3.141592f), what);
                 }
-                else
-                {
-                    Assert.That(o.Yaw, Is.EqualTo(before.Yaw), what);
-                    Assert.That(o.Size, Is.EqualTo(before.Size), what);
-                }
+                else Assert.That(o.Yaw, Is.EqualTo(before.Yaw), what);
 
-                bool keepsItsAxis = o.Category == ObjectCategory.Table || o.Category == ObjectCategory.Plant ||
-                                    o.Category == ObjectCategory.Lamp || o.Category == ObjectCategory.Other;
-                if (keepsItsAxis) Assert.That(o.Facing, Is.EqualTo(ObjectFacingRule.Box), what);
-                if (o.Facing == ObjectFacingRule.Clearance)
-                {
-                    // In front of it the floor is free, behind it is the wall.
-                    float2 reach = Front(o.Yaw) * (0.5f * o.Size.z + ObjectFacing.ClearanceProbe);
-                    Assert.That(room.Sdf.Sample(o.Base.xz + reach) - room.Sdf.Sample(o.Base.xz - reach),
-                        Is.GreaterThanOrEqualTo(ObjectFacing.ClearanceMargin), what);
-                }
+                Assert.That(o.Facing, Is.EqualTo(wasTurned || wasRight ? ObjectFacingRule.Clearance : ObjectFacingRule.Box), what);
+                if (o.Facing != ObjectFacingRule.Clearance) continue;
+                byTheFloor++;
+                // By the walls themselves, not by the distance field the rule read: the back of the box is on a
+                // wall, and in front of it the room runs on for more than a metre. The outline and the objects
+                // are both in the room frame.
+                float2 front = Front(o.Yaw);
+                Assert.That(ToTheWall(room, o.Base.xz - front * (0.5f * o.Size.z), -front), Is.LessThan(0.01f), what + ": its back");
+                Assert.That(ToTheWall(room, o.Base.xz + front * (0.5f * o.Size.z), front), Is.GreaterThan(1f), what + ": its front");
             }
             Assert.That(halfTurns, Is.EqualTo(3));
+            Assert.That(byTheFloor, Is.EqualTo(7));
+
+            // The screen: it looks at the east wall before and after, and no rule answered.
+            RoomObject screen = At(room, new float3(1.95f, 1f, 0f));
+            Assert.That(screen.Category, Is.EqualTo(ObjectCategory.Screen));
+            Assert.That(screen.Facing, Is.EqualTo(ObjectFacingRule.Box));
+            Assert.That(math.dot(Front(screen.Yaw), new float2(1f, 0f)), Is.GreaterThan(0.99999f));
+
             Assert.That(RoomModelJson.GeometryHash(room), Is.Not.EqualTo(RoomModelJson.GeometryHash(asScanned)));
-            AssertValid(room);
+            AssertValidAndReadable(room);
+            AssertValidAndReadable(asScanned);
         }
     }
 }

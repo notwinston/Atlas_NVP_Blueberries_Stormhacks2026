@@ -305,6 +305,65 @@ namespace Atlas.Scan.Tests.Routes
         }
 
         [Test]
+        public void StoredYaw_IsWrappedRoundedAndAlwaysReadable()
+        {
+            Assert.That(RoomModelBuilder.StoredYaw(0f), Is.EqualTo(0f));
+            Assert.That(RoomModelBuilder.StoredYaw(1.2345678f), Is.EqualTo(1.234568f));
+            Assert.That(RoomModelBuilder.StoredYaw(4f), Is.EqualTo(-2.283185f));          // 4 - 2 pi
+            Assert.That(RoomModelBuilder.StoredYaw(-4f), Is.EqualTo(2.283185f));
+            Assert.That(RoomModelBuilder.StoredYaw(1.5707964f), Is.EqualTo(1.570796f));
+
+            // Half a turn, from either side, and the floats next to it: pi rounds to 3.141593 at six decimals,
+            // which a reader refuses, so it is stored as 3.141592.
+            foreach (float half in new[] { math.PI, -math.PI, 3.1415925f, -3.1415925f, 3f * math.PI, 3.141593f, -3.141593f })
+                Assert.That(math.abs(RoomModelBuilder.StoredYaw(half)), Is.EqualTo(3.141592f), "yaw " + half.ToString("R"));
+
+            // Whatever comes in, the stored yaw points the same way and a RoomModel file with it reads back.
+            RoomModel room = RoomModelBuilder.FromOutline("yaw", ScanTestRooms.Rectangle(4f, 5f),
+                new[] { new ObstacleBox { Base = new float3(2f, 0f, 1f), Size = new float3(1f, 0.75f, 0.6f), Category = (int)ObjectCategory.Table } },
+                new float2(2f, 3f));
+            for (int step = -7000; step <= 7000; step += 7)
+            {
+                float yaw = step * 0.001f;
+                float stored = RoomModelBuilder.StoredYaw(yaw);
+                Assert.That(math.abs(stored), Is.LessThanOrEqualTo(3.141592f), "yaw " + yaw);
+                Assert.That(math.sin(stored) * math.sin(yaw) + math.cos(stored) * math.cos(yaw), Is.GreaterThan(0.999999f), "yaw " + yaw);
+            }
+            foreach (float yaw in new[] { math.PI, -math.PI, 3.1415925f, -3.1415925f, 0f, 2.5f })
+            {
+                room.Objects[0].Yaw = RoomModelBuilder.StoredYaw(yaw);
+                RoomModel back;
+                string error;
+                Assert.That(RoomModelJson.TryRead(RoomModelJson.Write(room), out back, out error), Is.True, "yaw " + yaw.ToString("R") + ": " + error);
+                Assert.That(back.Objects[0].Yaw, Is.EqualTo(room.Objects[0].Yaw));
+            }
+
+            // The bound this guards: pi as six decimals round it is refused by the reader.
+            room.Objects[0].Yaw = 3.141593f;
+            RoomModel refused;
+            string why;
+            Assert.That(RoomModelJson.TryRead(RoomModelJson.Write(room), out refused, out why), Is.False);
+            Assert.That(why, Does.Contain("yaw"));
+        }
+
+        [TestCase(3.1415927f)]
+        [TestCase(-3.1415927f)]
+        [TestCase(3.1415925f)]
+        public void ABoxScannedHalfATurnRound_GivesARoomThatReadsBack(float yaw)
+        {
+            // A table by the south wall of a 3 m x 4 m room: the room frame keeps the direction the outline was given in.
+            var boxes = new[] { new ObstacleBox { Base = new float3(1.5f, 0f, 0.3f), Size = new float3(1f, 0.75f, 0.6f), Yaw = yaw, Category = (int)ObjectCategory.Table } };
+            RoomModel room = RoomModelBuilder.FromOutline("half", ScanTestRooms.Rectangle(3f, 4f), boxes, new float2(1.5f, 2.5f));
+            Assert.That(room.Anchor.Yaw, Is.EqualTo(0f));
+            Assert.That(math.abs(room.Objects[0].Yaw), Is.EqualTo(3.141592f));
+            Assert.That(RoomModelValidator.Errors(room), Is.Empty);
+            RoomModel back;
+            string error;
+            Assert.That(RoomModelJson.TryRead(RoomModelJson.Write(room), out back, out error), Is.True, error);
+            Assert.That(RoomModelJson.GeometryHash(back), Is.EqualTo(RoomModelJson.GeometryHash(room)));
+        }
+
+        [Test]
         public void RoomWithFurniture_ValidatesAndSurvivesItsFile()
         {
             var boxes = new[]
