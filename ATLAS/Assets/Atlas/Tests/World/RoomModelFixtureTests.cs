@@ -6,7 +6,7 @@ using Unity.Mathematics;
 namespace Atlas.World.Tests
 {
     /// <summary>
-    /// The five RoomModel fixtures of gate G0: each parses, validates against every consistency rule, writes
+    /// The RoomModel fixtures (the five of gate G0 and budget_room_120k): each parses, validates against every consistency rule, writes
     /// back to the same text, and stores exactly what the loop-fit and the cell rules compute.
     /// </summary>
     public class RoomModelFixtureTests
@@ -22,16 +22,18 @@ namespace Atlas.World.Tests
             new object[] { "sample_4x5_table", 1.6, 3.4, 1.2, 1.130715, 0.911191, 0.763944, 1, 2, 1.6, 1.7, 2, 2, 0.8, false, 1, 110, 90, "61de428db392e65b" },
             new object[] { "budget_room", 2.4, 3.4, 2.0, 1.884526, 1.518651, 1.273240, 2, 2, 1.2, 1.7, 3, 4, 0.8, false, 12, 90, 110, "d7ee2b85f3310cf1" },
             new object[] { "tiny_standing", 1.4, 1.4, 1.0, 0.942263, 0.759326, 0.636620, 1, 1, 1.4, 1.4, 2, 2, 0.7, true, 0, 50, 50, "c11478f2305ddd47" },
+            new object[] { "budget_room_120k", 2.4, 3.4, 2.0, 1.884526, 1.518651, 1.273240, 2, 2, 1.2, 1.7, 3, 4, 0.8, false, 24, 90, 110, "e8c30d74ba68dede" },
         };
 
         [Test]
-        public void All_NamesTheFiveFixturesInOrder()
+        public void All_NamesTheSixFixturesInOrder()
         {
             Assert.That(RoomFixtures.All, Is.EqualTo(new[]
             {
-                "sample_3x3", "sample_L_3x4", "sample_4x5_table", "budget_room", "tiny_standing"
+                "sample_3x3", "sample_L_3x4", "sample_4x5_table", "budget_room", "tiny_standing", "budget_room_120k"
             }));
             Assert.That(RoomFixtures.IsFixture(RoomFixtures.BudgetRoom), Is.True);
+            Assert.That(RoomFixtures.IsFixture(RoomFixtures.BudgetRoom120k), Is.True);
             Assert.That(RoomFixtures.IsFixture("kitchen"), Is.False);
             Assert.Throws<ArgumentException>(() => RoomFixtures.LoadFromProject("no_such_room"));
             Assert.Throws<ArgumentException>(() => RoomFixtures.LoadFromProject(null));
@@ -144,6 +146,7 @@ namespace Atlas.World.Tests
         [TestCase("sample_4x5_table", 1.0250, 0.2500, 0.2500, -0.0747, -0.0500, -48.9500)]
         [TestCase("budget_room", 1.4250, 0.2500, 0.2500, -0.0747, -0.0500, -48.5500)]
         [TestCase("tiny_standing", 0.9250, 0.2500, 0.2500, -0.0747, -0.0500, -49.0500)]
+        [TestCase("budget_room_120k", 1.4250, 0.2500, 0.2500, -0.6520, -0.0500, -48.5500)]
         public void Sdf_SampleMatchesTheProbes(string name, double centre, double halfW, double halfD, double corner,
             double beyond, double far)
         {
@@ -180,7 +183,7 @@ namespace Atlas.World.Tests
                 Assert.That(o.AssetHash, Is.Empty);
                 total += o.TriTarget;
             }
-            Assert.That(total, Is.EqualTo(ObjectMeshRules.FurnitureTriangles));
+            Assert.That(total, Is.EqualTo(ObjectMeshRules.FurnitureTriangles / 2));
             Assert.That(room.MeshedObjectCount, Is.EqualTo(12));
             Assert.That(room.TryGetObject(8, out RoomObject screen), Is.True);
             Assert.That(screen.Category, Is.EqualTo(ObjectCategory.Screen));
@@ -189,6 +192,35 @@ namespace Atlas.World.Tests
             Assert.That(room.TryGetObject(99, out RoomObject none), Is.False);
             Assert.That(none, Is.Null);
             Assert.That(room.MaxWallHeight, Is.EqualTo(2.4f));
+        }
+
+        [Test]
+        public void BudgetRoom120k_HoldsTwentyFourStandInsOfFiveThousandTriangles()
+        {
+            RoomModel room = RoomFixtures.LoadFromProject(RoomFixtures.BudgetRoom120k);
+            RoomModel twelve = RoomFixtures.LoadFromProject(RoomFixtures.BudgetRoom);
+            Assert.That(room.Objects.Length, Is.EqualTo(24));
+            int total = 0;
+            foreach (RoomObject o in room.Objects)
+            {
+                Assert.That(o.Mesh, Is.EqualTo(MeshState.StandIn));
+                Assert.That(o.TriTarget, Is.EqualTo(5000));
+                total += o.TriTarget;
+            }
+            Assert.That(total, Is.EqualTo(ObjectMeshRules.FurnitureTriangles));
+            Assert.That(room.MeshedObjectCount, Is.EqualTo(24));
+            // The first twelve are the objects of budget_room, unchanged.
+            for (int k = 0; k < 12; k++)
+            {
+                Assert.That(room.Objects[k].Id, Is.EqualTo(twelve.Objects[k].Id));
+                Assert.That(room.Objects[k].Base, Is.EqualTo(twelve.Objects[k].Base));
+                Assert.That(room.Objects[k].Size, Is.EqualTo(twelve.Objects[k].Size));
+            }
+            // Stand-ins do not follow the surface-area rule; a room of placeholders with these boxes would.
+            var errors = new List<string>();
+            Assert.That(RoomModelValidator.Validate(room, errors), Is.True, string.Join("\n", errors));
+            foreach (RoomObject o in room.Objects) o.Mesh = MeshState.Placeholder;
+            Assert.That(string.Join("|", RoomModelValidator.Errors(room)), Does.Contain("R17"));
         }
 
         [Test]
@@ -201,7 +233,7 @@ namespace Atlas.World.Tests
             RoomObject table = room.Objects[0];
             Assert.That(table.Category, Is.EqualTo(ObjectCategory.Table));
             Assert.That(table.Mesh, Is.EqualTo(MeshState.Placeholder));
-            Assert.That(table.TriTarget, Is.EqualTo(5000));
+            Assert.That(table.TriTarget, Is.EqualTo(15000));
             Assert.That(table.Volume, Is.EqualTo(0.45f).Within(1e-6f));
             Assert.That(room.Walkable.Contains(table.Base.xz), Is.False);
             Assert.That(room.Sdf.IsFree(table.Base.xz), Is.False);

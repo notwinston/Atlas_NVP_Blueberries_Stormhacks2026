@@ -110,7 +110,8 @@ namespace Atlas.Scan
             FramesUsed = _ring.Count;
             _delivered = 0;
             _activeSink = Sink ?? _nullSink;
-            _job = new Job(_ring.TakeAll(), objects, boxes, _encoder);
+            // Every object of the room has the same light target: the room's (mesh design section 5.4).
+            _job = new Job(_ring.TakeAll(), objects, boxes, _encoder, ObjectMeshRules.LightTarget(objects.Length));
 
             _activeSink.BeginRoom(room, RoomModelJson.Write(room));
             // The sink may have cancelled from inside its call.
@@ -201,6 +202,7 @@ namespace Atlas.Scan
 
             readonly PhotoBox[] _boxes;
             readonly IPhotoEncoder _encoder;
+            readonly int _lightTarget;
             KeyFrame[] _frames;
             volatile int _completed;
 
@@ -209,12 +211,13 @@ namespace Atlas.Scan
             readonly int[] _picked = new int[PhotoScore.MaxViews];
             readonly ObjectView[] _views = new ObjectView[PhotoScore.MaxViews];
 
-            public Job(KeyFrame[] frames, RoomObject[] objects, PhotoBox[] boxes, IPhotoEncoder encoder)
+            public Job(KeyFrame[] frames, RoomObject[] objects, PhotoBox[] boxes, IPhotoEncoder encoder, int lightTarget)
             {
                 _frames = frames;
                 Objects = objects;
                 _boxes = boxes;
                 _encoder = encoder;
+                _lightTarget = lightTarget;
                 Results = new ObjectPhotoSet[objects.Length];
             }
 
@@ -310,6 +313,8 @@ namespace Atlas.Scan
                     Size = obj.Size,
                     Yaw = obj.Yaw,
                     TriTarget = obj.TriTarget,
+                    TriTargetLight = _lightTarget,
+                    Profile = obj.Profile,
                     Views = result
                 };
             }

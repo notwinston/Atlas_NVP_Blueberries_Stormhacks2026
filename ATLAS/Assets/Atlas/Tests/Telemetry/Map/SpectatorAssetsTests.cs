@@ -142,12 +142,12 @@ namespace Atlas.Telemetry.Tests
             rig.PhoneScans(RoomOf());
             Assert.That(rig.Station.ObjectCount, Is.EqualTo(4));
 
-            // The jobs are on their way: boxes on both sides, except the plant, which had no photo.
+            // The jobs are on their way: the first shapes on both sides, the plant's as well.
             rig.Run(3.0);
             Assert.That(rig.Forge.Jobs.Count, Is.EqualTo(3));
             AssertSameAsThePhone(rig);
             Assert.That(rig.Room.ShownFor(Plant), Is.EqualTo("builtin"));
-            Assert.That(rig.Room.ShownFor(Table), Is.EqualTo("box"));
+            Assert.That(rig.Room.ShownFor(Table), Is.EqualTo("builtin"));
 
             // Two meshes arrive and one job fails: generated, generated, built-in.
             rig.Forge.Finish(Table, AssetFixtures.Glb("forge_table"));
@@ -179,9 +179,9 @@ namespace Atlas.Telemetry.Tests
             rig.Station.OnJobStatus(new JobStatusMessage { JobId = "j2", RoomId = "room_a", BoxId = Chair, State = "failed", Error = "x" });
             rig.Station.OnAssetReady(new AssetReadyMessage { JobId = "j9", RoomId = "another_room", BoxId = Couch, Sha256 = sha });
             rig.Run(1.0);
-            Assert.That(rig.Room.ShownFor(Table), Is.EqualTo("box"), "a job on its way keeps the box");
+            Assert.That(rig.Room.ShownFor(Table), Is.EqualTo("builtin"), "a job on its way keeps the first shape");
             Assert.That(rig.Room.ShownFor(Chair), Is.EqualTo("builtin"));
-            Assert.That(rig.Room.ShownFor(Couch), Is.EqualTo("box"), "news of another room is not this room's");
+            Assert.That(rig.Room.ShownFor(Couch), Is.EqualTo("builtin"), "news of another room is not this room's");
 
             rig.Station.OnAssetReady(new AssetReadyMessage { JobId = "j1", RoomId = "room_a", BoxId = Table, Sha256 = sha, Url = "/assets/" + sha + ".glb" });
             rig.Run(1.0);
@@ -208,12 +208,12 @@ namespace Atlas.Telemetry.Tests
             Assert.That(rig.Mirror.CountOf("GET /jobs?room=room_a"), Is.EqualTo(1));
             Assert.That(rig.Room.ShownFor(Table), Is.EqualTo("generated"));
             Assert.That(rig.Room.ShownFor(Chair), Is.EqualTo("builtin"), "a failed job");
-            Assert.That(rig.Room.ShownFor(Couch), Is.EqualTo("box"), "a job still on its way");
-            Assert.That(rig.Room.ShownFor(Plant), Is.EqualTo("box"), "not decided before the room has been quiet");
+            Assert.That(rig.Room.ShownFor(Couch), Is.EqualTo("builtin"), "a job still on its way shows the first shape");
+            Assert.That(rig.Room.ShownFor(Plant), Is.EqualTo("builtin"), "every object has its first shape at once");
 
             rig.Run(SpectatorAssetsCore.QuietSeconds);
             Assert.That(rig.Room.ShownFor(Plant), Is.EqualTo("builtin"), "no job: the phone shows its built-in mesh");
-            Assert.That(rig.Room.ShownFor(Couch), Is.EqualTo("box"));
+            Assert.That(rig.Room.ShownFor(Couch), Is.EqualTo("builtin"));
 
             // The last job ends while the Station's link is silent: the list is asked again.
             rig.Forge.Finish(Couch, AssetFixtures.Glb("forge_couch"));
@@ -239,7 +239,7 @@ namespace Atlas.Telemetry.Tests
             rig.Station.RoomBuilt(room);
             rig.Run(1.0);
             Assert.That(rig.Room.ShownFor(Couch), Is.EqualTo("generated"));
-            Assert.That(rig.Room.ShownFor(Table), Is.EqualTo("box"));
+            Assert.That(rig.Room.ShownFor(Table), Is.EqualTo("builtin"), "the first shape, with no Forge to ask");
             rig.Run(SpectatorAssetsCore.QuietSeconds);
             foreach (int id in new[] { Table, Chair, Plant }) Assert.That(rig.Room.ShownFor(id), Is.EqualTo("builtin"), "object " + id);
             Assert.That(rig.Room.ShownFor(Couch), Is.EqualTo("generated"));
@@ -255,6 +255,31 @@ namespace Atlas.Telemetry.Tests
         }
 
         [Test]
+        public void Spectator_shows_a_first_shape_for_every_object_including_those_without_a_mesh()
+        {
+            // The profile reaches the Station with the RoomModel, so it cuts the same shapes as the phone.
+            RoomObject odd = Box(10, ObjectCategory.Unknown, 0.6f, 0.5f, 0.6f);
+            odd.Profile = new byte[256];
+            for (int i = 0; i < 256; i++) odd.Profile[i] = 180;
+            RoomObject bare = Box(11, ObjectCategory.Other, 0.6f, 0.5f, 0.6f);
+            RoomObject extra = Box(12, ObjectCategory.Lamp, 0.3f, 1.5f, 0.3f);
+            var objects = new[] { Box(Table, ObjectCategory.Table, 1.2f, 0.75f, 0.8f), odd, bare, extra };
+            ObjectMeshRules.Assign(objects);
+            extra.TriTarget = 0;                                    // beyond the objects that receive meshes
+
+            var rig = new Rig(relay: false);
+            rig.Station.RoomBuilt(new RoomModel { Id = "room_a", Objects = objects });
+            rig.Run(1.0);
+            Assert.That(rig.Station.ObjectCount, Is.EqualTo(3));
+            Assert.That(rig.Room.ShownFor(Table), Is.EqualTo("builtin"));
+            Assert.That(rig.Room.ShownFor(10), Is.EqualTo("builtin"), "cut from the scan");
+            Assert.That(rig.Room.ShownFor(11), Is.EqualTo("box"), "no template and no profile: the only box left");
+            Assert.That(rig.Room.ShownFor(12), Is.EqualTo("builtin"), "no mesh is coming, and it still has a shape");
+            Assert.That(rig.Station.Shows(12), Is.EqualTo(SpectatorObjectShows.BuiltIn));
+            Assert.That(rig.Station.BuiltInCount, Is.EqualTo(3));
+        }
+
+        [Test]
         public void Spectator_rejects_a_file_that_is_not_the_named_asset_and_follows_the_phone_to_the_built_in_mesh()
         {
             var rig = new Rig(relay: false);
@@ -265,7 +290,7 @@ namespace Atlas.Telemetry.Tests
 
             rig.Station.OnAssetReady(new AssetReadyMessage { JobId = "j1", RoomId = "room_a", BoxId = Table, Sha256 = claimed });
             rig.Run(SpectatorAssetsCore.RetryLaterSeconds + 5.0);
-            Assert.That(rig.Room.ShownFor(Table), Is.EqualTo("box"));
+            Assert.That(rig.Room.ShownFor(Table), Is.EqualTo("builtin"), "the first shape stays");
             Assert.That(rig.Mirror.CountOf("GET /assets/"), Is.EqualTo(1), "a rejected file is not fetched again");
             Assert.That(rig.Cache.Count, Is.EqualTo(0));
 

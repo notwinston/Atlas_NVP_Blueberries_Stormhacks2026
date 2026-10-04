@@ -51,6 +51,14 @@ namespace Atlas.World
         /// two spaces.</summary>
         void ResetPresentation();
 
+        /// <summary>
+        /// Which copy of a generated mesh is drawn. Light: the light copy when the object has one, its full copy
+        /// otherwise. Full: the full copy. Set between frames, on entering a space: the drawn mesh changes at
+        /// once, with no cross-fade, and nothing is allocated. A built-in or placeholder mesh is unaffected.
+        /// ResetPresentation (and so Build) returns it to Full.
+        /// </summary>
+        FurnitureLevel FurnitureLevel { get; set; }
+
         Renderer FloorRenderer { get; }
         /// <summary>The full walls or the kerbs, whichever is shown.</summary>
         Renderer WallRenderer { get; }
@@ -72,14 +80,32 @@ namespace Atlas.World
         /// The asset client's call when a generated mesh is ready (state Ready). The mesh is in the box's local
         /// frame, metres, origin at the centre of the base (GLB contract). The room content takes ownership of
         /// it and destroys it when it is replaced or on Clear. Cross-fades from what is shown over fadeSeconds,
-        /// then sets Data.Mesh = Ready and Data.AssetHash. False when the id is unknown or the mesh is null.
+        /// then sets Data.Mesh = Ready and Data.AssetHash (and clears Data.AssetHashLight: the light copy follows). False when the id is unknown or the mesh is null.
         /// </summary>
         bool SetGeneratedMesh(int objectId, Mesh mesh, string assetHash, float fadeSeconds = 0.3f);
 
         /// <summary>
-        /// The asset client's call when a built-in fallback mesh takes the object's place (state BuiltIn). The
-        /// mesh is shared between objects and is never destroyed here; `scale` fits it to the box and is put on
-        /// the mesh's own transform. Sets Data.Mesh = BuiltIn and clears Data.AssetHash.
+        /// The light copy of the generated mesh of an object, in the same frame as the full one. Call it after
+        /// SetGeneratedMesh for the same object (also while that mesh is still waiting its turn). The room
+        /// content takes ownership and destroys it when it is replaced, when a new full mesh or a built-in
+        /// mesh takes the object's place, or on Clear. Drawn at once when the level is Light. Sets
+        /// Data.AssetHashLight. False when the id is unknown, the mesh is null or the object has no generated mesh.
+        /// </summary>
+        bool SetGeneratedLightMesh(int objectId, Mesh mesh, string assetHashLight);
+
+        /// <summary>
+        /// True while the mesh is on a renderer of the room or is about to be: the mesh an object shows, its light
+        /// copy, the mesh that is fading out and a mesh waiting for its swap. A client that owns a mesh the room
+        /// content never destroys (a first shape) asks this before destroying it once it has been replaced.
+        /// False after Clear.
+        /// </summary>
+        bool IsMeshDrawn(Mesh mesh);
+
+        /// <summary>
+        /// The asset client's call when a first shape or a built-in fallback mesh takes the object's place (state
+        /// BuiltIn). The mesh belongs to the caller, which builds one per object and destroys it, and is never
+        /// destroyed here; `scale` fits it to the box and is put on the mesh's own transform. Sets
+        /// Data.Mesh = BuiltIn and clears Data.AssetHash.
         /// </summary>
         bool SetBuiltInMesh(int objectId, Mesh sharedMesh, Vector3 scale, float fadeSeconds = 0.3f);
 

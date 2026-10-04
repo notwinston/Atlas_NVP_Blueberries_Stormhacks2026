@@ -46,7 +46,8 @@ namespace Atlas.World.Tests
             AssertRefused(text.Replace("\"kind\": \"door\"", "\"kind\": \"hatch\""), "walls[0].openings[0].kind");
             AssertRefused(text.Replace("\"mesh\": \"placeholder\"", "\"mesh\": \"melted\""), "objects[0].mesh");
             AssertRefused(text.Replace("\"id\": \"sample_4x5_table\"", "\"id\": \"no spaces allowed\""), "id");
-            AssertRefused(text.Replace("\"triTarget\": 5000", "\"triTarget\": 5000.5"), "objects[0].triTarget");
+            AssertRefused(text.Replace("\"triTarget\": 15000", "\"triTarget\": 15000.5"), "objects[0].triTarget");
+            AssertRefused(text.Replace("\"triTarget\": 15000", "\"triTarget\": 15001"), "objects[0].triTarget");
         }
 
         [Test]
@@ -175,23 +176,230 @@ namespace Atlas.World.Tests
         }
 
         [Test]
-        public void TriTargets_FollowTheBudgetRule()
+        public void TriTarget_IsTheEqualAreaCase()
         {
             Assert.That(ObjectMeshRules.TriTarget(0), Is.EqualTo(0));
-            Assert.That(ObjectMeshRules.TriTarget(1), Is.EqualTo(5000));
-            Assert.That(ObjectMeshRules.TriTarget(12), Is.EqualTo(5000));
-            Assert.That(ObjectMeshRules.TriTarget(13), Is.EqualTo(4615));
-            Assert.That(ObjectMeshRules.TriTarget(20), Is.EqualTo(3000));
-            Assert.That(ObjectMeshRules.TriTarget(40), Is.EqualTo(3000));
+            Assert.That(ObjectMeshRules.TriTarget(1), Is.EqualTo(15000));
+            Assert.That(ObjectMeshRules.TriTarget(8), Is.EqualTo(15000));
+            Assert.That(ObjectMeshRules.TriTarget(12), Is.EqualTo(10000));
+            Assert.That(ObjectMeshRules.TriTarget(20), Is.EqualTo(6000));
+            Assert.That(ObjectMeshRules.TriTarget(32), Is.EqualTo(3750));
+            Assert.That(ObjectMeshRules.TriTarget(60), Is.EqualTo(3000));
+            Assert.That(ObjectMeshRules.LightTarget(0), Is.EqualTo(0));
+            Assert.That(ObjectMeshRules.LightTarget(5), Is.EqualTo(5000));
+            Assert.That(ObjectMeshRules.LightTarget(12), Is.EqualTo(5000));
+            Assert.That(ObjectMeshRules.LightTarget(20), Is.EqualTo(3000));
+            Assert.That(ObjectMeshRules.LightTarget(32), Is.EqualTo(1875));
+            Assert.That(ObjectMeshRules.LightTarget(60), Is.EqualTo(1500));
+        }
 
-            var objects = new RoomObject[22];
+        // The test vectors of the brief (section S5); tools/rooms/roommath.py reproduces the same six.
+        [Test]
+        public void Targets_ReproduceEveryVectorOfTheRule()
+        {
+            var five = new RoomObject[5];
+            for (int k = 0; k < five.Length; k++) five[k] = Box(k + 1, 1.0f, 1.0f, 1.0f);
+            AssertVector(five, Repeat(15000, 5), 5000);
+
+            AssertVector(new[] { Box(1, 2.0f, 0.8f, 0.9f), Box(2, 0.5f, 0.9f, 0.5f), Box(3, 1.2f, 0.75f, 0.6f) },
+                new[] { 15000, 15000, 15000 }, 5000);
+
+            var mixed = new RoomObject[32];
+            var mixedWant = new int[32];
+            for (int k = 0; k < 32; k++)
+            {
+                mixed[k] = k < 8 ? Box(k + 1, 1.5f, 1.0f, 1.0f) : Box(k + 1, 0.2f, 0.2f, 0.2f);
+                mixedWant[k] = k < 8 ? 6000 : 3000;
+            }
+            AssertVector(mixed, mixedWant, 1875);
+
+            var ramp = new RoomObject[40];
+            for (int k = 0; k < 40; k++) ramp[k] = Box(k + 1, 0.3f + 0.05f * (k + 1), 0.5f, 0.4f);
+            var rampWant = new List<int>();
+            for (int k = 0; k < 8; k++) rampWant.Add(0);
+            for (int k = 0; k < 9; k++) rampWant.Add(3000);
+            rampWant.AddRange(new[] { 3044, 3134, 3226, 3316, 3407, 3498, 3589, 3679, 3770, 3861, 3952, 4043, 4134, 4225,
+                4315, 4407, 4497, 4588, 4679, 4770, 4861, 4952, 5043 });
+            AssertVector(ramp, rampWant.ToArray(), 1875);
+            int total = 0;
+            foreach (int t in rampWant) total += t;
+            Assert.That(total, Is.EqualTo(119990));
+
+            AssertVector(new[] { Box(7, 0.6f, 0.45f, 0.6f) }, new[] { 15000 }, 5000);
+
+            var twelve = new RoomObject[12];
+            for (int k = 0; k < twelve.Length; k++) twelve[k] = Box(k + 1, 1.8f, 0.8f, 0.9f);
+            AssertVector(twelve, Repeat(10000, 12), 5000);
+        }
+
+        [Test]
+        public void Targets_RankByVolumeAndBreakTiesToTheLowerId()
+        {
+            // Forty equal boxes: the thirty-two with the lowest ids are meshed, however the array is ordered.
+            var objects = new RoomObject[40];
+            for (int k = 0; k < objects.Length; k++) objects[k] = Box(40 - k, 1f, 1f, 1f);
+            int[] targets = ObjectMeshRules.Targets(objects);
             for (int k = 0; k < objects.Length; k++)
-                objects[k] = new RoomObject { Id = k + 1, Size = new float3(1f, 1f, k < 2 ? 0.1f : 1f) };
+                Assert.That(targets[k], Is.EqualTo(objects[k].Id <= 32 ? 3750 : 0), "id " + objects[k].Id);
+
             ObjectMeshRules.Assign(objects);
-            // The two thin boxes are the smallest: they stay placeholders, the other twenty share the budget.
-            Assert.That(objects[0].TriTarget, Is.EqualTo(0));
-            Assert.That(objects[1].TriTarget, Is.EqualTo(0));
-            for (int k = 2; k < objects.Length; k++) Assert.That(objects[k].TriTarget, Is.EqualTo(3000));
+            for (int k = 0; k < objects.Length; k++) Assert.That(objects[k].TriTarget, Is.EqualTo(targets[k]));
+            Assert.That(ObjectMeshRules.Targets(new RoomObject[0]), Is.Empty);
+        }
+
+        [Test]
+        public void OptionalKeys_RoundTrip()
+        {
+            RoomModel room = RoomModelJson.Read(Sample());
+            string plain = RoomModelJson.Write(room);
+            Assert.That(plain, Does.Not.Contain("assetHashLight"));
+            Assert.That(plain, Does.Not.Contain("\"facing\""));
+            Assert.That(plain, Does.Not.Contain("\"profile\""));
+            string hash = RoomModelJson.GeometryHash(room);
+
+            var profile = new byte[256];
+            for (int k = 0; k < profile.Length; k++) profile[k] = (byte)k;
+            room.Objects[0].AssetHashLight = new string('c', 64);
+            room.Objects[0].Facing = ObjectFacingRule.Clearance;
+            room.Objects[0].Profile = profile;
+            string text = RoomModelJson.Write(room);
+            Assert.That(text, Does.Contain("\"triTarget\": 15000, \"assetHashLight\": \"" + new string('c', 64) +
+                "\", \"facing\": \"clearance\", \"profile\": \""));
+            Assert.That(RoomModelJson.GeometryHash(room), Is.EqualTo(hash));
+
+            RoomModel again = RoomModelJson.Read(text);
+            Assert.That(again.Objects[0].AssetHashLight, Is.EqualTo(new string('c', 64)));
+            Assert.That(again.Objects[0].Facing, Is.EqualTo(ObjectFacingRule.Clearance));
+            Assert.That(again.Objects[0].Profile, Is.EqualTo(profile));
+            Assert.That(RoomModelJson.Write(again), Is.EqualTo(text));
+            Assert.That(RoomModelJson.Check(again), Is.Null);
+            Assert.That(RoomModelValidator.Errors(again), Is.Empty);
+            Assert.That(RoomModelJson.GeometryHash(again), Is.EqualTo(hash));
+
+            foreach (ObjectFacingRule rule in new[] { ObjectFacingRule.Profile, ObjectFacingRule.Table })
+            {
+                room.Objects[0].Facing = rule;
+                Assert.That(RoomModelJson.Read(RoomModelJson.Write(room)).Objects[0].Facing, Is.EqualTo(rule));
+            }
+
+            // A reader accepts "box", and writes nothing for it.
+            RoomModel boxed = RoomModelJson.Read(text.Replace("\"clearance\"", "\"box\""));
+            Assert.That(boxed.Objects[0].Facing, Is.EqualTo(ObjectFacingRule.Box));
+            Assert.That(RoomModelJson.Write(boxed), Does.Not.Contain("\"facing\""));
+
+            // A file without the keys reads and writes byte for byte as before.
+            room.Objects[0].AssetHashLight = "";
+            room.Objects[0].Facing = ObjectFacingRule.Box;
+            room.Objects[0].Profile = null;
+            Assert.That(RoomModelJson.Write(room), Is.EqualTo(plain));
+            Assert.That(RoomModelJson.Write(RoomModelJson.Read(plain)), Is.EqualTo(plain));
+        }
+
+        [Test]
+        public void OptionalKeys_AreRefusedWhenMalformed()
+        {
+            RoomModel room = RoomModelJson.Read(Sample());
+            room.Objects[0].Facing = ObjectFacingRule.Table;
+            string text = RoomModelJson.Write(room);
+            AssertRefused(text.Replace("\"facing\": \"table\"", "\"facing\": \"sideways\""), "facing");
+            room.Objects[0].Facing = ObjectFacingRule.Box;
+            room.Objects[0].AssetHashLight = new string('a', 64);
+            AssertRefused(RoomModelJson.Write(room).Replace(new string('a', 64), "ABC"), "assetHashLight");
+            room.Objects[0].AssetHashLight = "";
+            room.Objects[0].Profile = new byte[256];
+            AssertRefused(RoomModelJson.Write(room).Replace("AAAA", "A*AA"), "profile");
+        }
+
+        [Test]
+        public void R21_ARoomProfileIsExactly256Bytes()
+        {
+            Assert.That(RuleOf(r => r.Objects[0].Profile = new byte[256]), Is.Empty);
+            Assert.That(RuleOf(r => r.Objects[0].Profile = new byte[255]), Does.Contain("R21"));
+            Assert.That(RuleOf(r => r.Objects[0].Profile = new byte[257]), Does.Contain("R21"));
+            Assert.That(RuleOf(r => r.Objects[0].Profile = new byte[0]), Does.Contain("R21"));
+
+            // The same refusal from a file: the reader keeps the length, the validator names the rule.
+            RoomModel room = RoomModelJson.Read(Sample());
+            room.Objects[0].Profile = new byte[255];
+            RoomModel again = RoomModelJson.Read(RoomModelJson.Write(room));
+            Assert.That(again.Objects[0].Profile.Length, Is.EqualTo(255));
+            Assert.That(string.Join("|", RoomModelValidator.Errors(again)), Does.Contain("R21"));
+        }
+
+        [Test]
+        public void R17_FollowsTheSurfaceAreaRule()
+        {
+            Assert.That(RuleOf(r => r.Objects[0].TriTarget = 5000), Does.Contain("R17 object 1: triTarget = 5000, expected 15000"));
+            Assert.That(RuleOf(r => r.Objects[0].TriTarget = 15000), Is.Empty);
+        }
+
+        [Test]
+        public void Profile_RefusesWhiteSpace()
+        {
+            RoomModel room = RoomModelJson.Read(Sample());
+            room.Objects[0].Profile = new byte[256];
+            string text = RoomModelJson.Write(room);
+            AssertRefused(text.Replace("\"profile\": \"AAAA", "\"profile\": \"AA AA"), "profile");
+            AssertRefused(text.Replace("\"profile\": \"AAAA", "\"profile\": \"AAAA\\n"), "profile");
+        }
+
+        [Test]
+        public void YawOutsideTheReadableRange_IsRefusedByR16()
+        {
+            Assert.That(YawErrors(3.141593f), Does.Contain("R16 object 1: yaw"));
+            Assert.That(YawErrors((float)Math.PI), Does.Contain("R16 object 1: yaw"));
+            Assert.That(YawErrors(-3.1415928f), Does.Contain("R16 object 1: yaw"));
+            Assert.That(YawErrors(float.NaN), Does.Contain("R16 object 1: yaw"));
+            Assert.That(YawErrors(3.141592f), Is.Empty);
+            Assert.That(YawErrors(-3.141592f), Is.Empty);
+        }
+
+        [Test]
+        public void EveryRoomThatValidates_SurvivesWriteThenRead()
+        {
+            var rooms = new List<RoomModel>();
+            foreach (string name in RoomFixtures.All) rooms.Add(RoomFixtures.LoadFromProject(name));
+            foreach (float yaw in new[] { 3.141592f, -3.141592f, 0f })
+            {
+                RoomModel room = RoomModelJson.Read(Sample());
+                room.Objects[0].Base.y = 2.5f;      // above the reach of R18, so turning it cannot trip the footprint rule
+                room.Objects[0].Yaw = yaw;
+                rooms.Add(room);
+            }
+            foreach (float yaw in new[] { 3.141593f, 3.1415925f, (float)Math.PI, -3.1415928f, -3.141593f, 3.2f })
+            {
+                RoomModel room = RoomModelJson.Read(Sample());
+                room.Objects[0].Base.y = 2.5f;      // above the reach of R18, so turning it cannot trip the footprint rule
+                room.Objects[0].Yaw = yaw;
+                Assert.That(RoomModelValidator.Errors(room), Is.Not.Empty, "yaw " + yaw);
+            }
+            foreach (RoomModel room in rooms)
+            {
+                Assert.That(RoomModelValidator.Errors(room), Is.Empty, room.Id);
+                string text = RoomModelJson.Write(room);
+                Assert.That(RoomModelJson.TryRead(text, out RoomModel again, out string error), Is.True, room.Id + ": " + error);
+                Assert.That(RoomModelJson.Write(again), Is.EqualTo(text));
+            }
+        }
+
+        static RoomObject Box(int id, float w, float h, float d)
+        {
+            return new RoomObject { Id = id, Size = new float3(w, h, d) };
+        }
+
+        static int[] Repeat(int value, int count)
+        {
+            var list = new int[count];
+            for (int k = 0; k < count; k++) list[k] = value;
+            return list;
+        }
+
+        static void AssertVector(RoomObject[] objects, int[] want, int light)
+        {
+            Assert.That(ObjectMeshRules.Targets(objects), Is.EqualTo(want));
+            int meshed = 0;
+            foreach (int t in want) if (t > 0) meshed++;
+            Assert.That(ObjectMeshRules.LightTarget(meshed), Is.EqualTo(light));
         }
 
         [Test]
@@ -248,6 +456,11 @@ namespace Atlas.World.Tests
         {
             var e = Assert.Throws<RoomModelFormatException>(() => RoomModelJson.Read(json));
             Assert.That(e.Message, Does.Contain(named));
+        }
+
+        static string YawErrors(float yaw)
+        {
+            return RuleOf(r => { r.Objects[0].Base.y = 2.5f; r.Objects[0].Yaw = yaw; });
         }
 
         static string RuleOf(Action<RoomModel> damage)

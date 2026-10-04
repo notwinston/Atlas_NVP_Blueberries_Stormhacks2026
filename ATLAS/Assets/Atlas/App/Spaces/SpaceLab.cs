@@ -24,8 +24,9 @@ namespace Atlas.App
     {
         /// <summary>The world fade: 1 shows the world, 0 is black. The head-locked layer ignores it.</summary>
         void SetFade(float fade);
-        /// <summary>Between two spaces: default fog and background, room content back to its default mode.</summary>
-        void ResetForSpace();
+        /// <summary>Between two spaces: default fog and background, room content back to its default mode, then
+        /// the furniture level of the space about to be entered (null when none is).</summary>
+        void ResetForSpace(SpaceId? next);
     }
 
     /// <summary>
@@ -370,7 +371,7 @@ namespace Atlas.App
                 _exited = true;
                 if (_stage != null)
                 {
-                    _stage.ResetForSpace();
+                    _stage.ResetForSpace(_toEmpty ? (SpaceId?)null : _target);
                     // Under the still the world stays lit: the new space is revealed, not faded in.
                     _stage.SetFade(_covered ? 1f : 0f);
                 }
@@ -406,8 +407,11 @@ namespace Atlas.App
                     _fallbackTried = true;
                     _target = SpaceId.Home;
                     _loadBegun = false;
+                    // The stage was told the failed space; Home gets its own level (and a clean presentation).
+                    if (_stage != null) _stage.ResetForSpace(_target);
                     continue;
                 }
+                if (_stage != null) _stage.ResetForSpace(null);
                 EndEmpty();
                 return true;
             }

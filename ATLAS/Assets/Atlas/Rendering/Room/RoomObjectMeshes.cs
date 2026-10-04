@@ -69,6 +69,47 @@ namespace Atlas.Rendering.Room
             }
         }
 
+        /// <summary>The room's light total, and the bounds of the light target of one object (design section 5.4).</summary>
+        public const int LightTotal = ObjectMeshRules.LightTriangles, LightMin = ObjectMeshRules.LightTargetMin,
+            LightMax = ObjectMeshRules.LightTargetMax;
+
+        /// <summary>
+        /// The light target of every object in a room whose n objects have a triTarget above 0:
+        /// clamp(60000 / n, 1500, 5000), whole-number division. 5000 for n = 0.
+        /// </summary>
+        public static int LightTarget(int n)
+        {
+            return n <= 0 ? LightMax : ObjectMeshRules.LightTarget(n);
+        }
+
+        /// <summary>The light target of a room's objects: LightTarget of the number whose TriTarget is above 0.</summary>
+        public static int LightTarget(RoomObject[] objects)
+        {
+            if (objects == null) throw new ArgumentNullException(nameof(objects));
+            int n = 0;
+            for (int k = 0; k < objects.Length; k++)
+                if (objects[k].TriTarget > 0) n++;
+            return LightTarget(n);
+        }
+
+        /// <summary>True when the light copy is the one drawn: the level is Light and the object has one. An object
+        /// with no light copy draws its full copy at either level.</summary>
+        public static bool DrawsLight(FurnitureLevel level, bool hasLightMesh)
+        {
+            return level == FurnitureLevel.Light && hasLightMesh;
+        }
+
+        /// <summary>
+        /// As <see cref="Triangles(RoomObject)"/> at a furniture level. A generated object (state Ready) costs its
+        /// full target at Full and lightTarget at Light; a placeholder, a stand-in and a built-in mesh cost the same at both.
+        /// </summary>
+        public static int Triangles(RoomObject obj, FurnitureLevel level, int lightTarget)
+        {
+            if (obj == null) throw new ArgumentNullException(nameof(obj));
+            if (level == FurnitureLevel.Light && obj.Mesh == MeshState.Ready) return lightTarget;
+            return Triangles(obj);
+        }
+
         /// <summary>A point of the object's local frame in the room frame: turned by yaw about +Y (Unity's
         /// sense), then moved to the base.</summary>
         public static float3 ToRoom(RoomObject obj, float3 local)

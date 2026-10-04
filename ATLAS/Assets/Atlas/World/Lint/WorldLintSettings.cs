@@ -12,10 +12,12 @@ namespace Atlas.World.Lint
         public double HalfFovHDeg = 50, HalfFovVDeg = 48, MarginHDeg = 12, MarginVDeg = 4;
         public double TowerRadius = 2.5;
         public double SpanReach = 2.0;
-        public int TileDrawCap = 150, DrawCap = 210, MustDrawCap = 300;
-        public long TriCap = 250000, MustTriCap = 500000;
-        public int RoomDraws = 60;
-        public long RoomTris = 130000;
+        // The room is Home's row: in Curved Walk it is drawn with the full furniture copies (mesh design section 5.4),
+        // so S2's row is the tiles' 150 draws and 120,000 triangles on top of it.
+        public int TileDrawCap = 150, DrawCap = 240, MustDrawCap = 300;
+        public long TriCap = 370000, MustTriCap = 500000;
+        public int RoomDraws = 80;
+        public long RoomTris = 250000;
         public int MaxDrawnTilesPerEye = 71;
         public double FaceTolM = 0.001;
         public double FaceBandM = 0.10;

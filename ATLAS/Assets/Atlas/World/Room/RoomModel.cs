@@ -9,6 +9,12 @@ namespace Atlas.World
     /// <summary>What is drawn for an object. JSON names: placeholder, requested, ready, builtIn, standIn.</summary>
     public enum MeshState : byte { Placeholder = 0, Requested = 1, Ready = 2, BuiltIn = 3, StandIn = 4 }
 
+    /// <summary>Which rule decided an object's front (mesh design section 5.2). JSON names: box, profile, table, clearance.</summary>
+    public enum ObjectFacingRule : byte { Box = 0, Profile = 1, Table = 2, Clearance = 3 }
+
+    /// <summary>Which copy of the furniture meshes is drawn (mesh design section 5.4).</summary>
+    public enum FurnitureLevel : byte { Full = 0, Light = 1 }
+
     /// <summary>JSON names: door, window, opening.</summary>
     public enum OpeningKind : byte { Door = 0, Window = 1, Opening = 2 }
 
@@ -123,8 +129,16 @@ namespace Atlas.World
         public MeshState Mesh;
         /// <summary>"" unless Mesh == Ready.</summary>
         public string AssetHash = "";
-        /// <summary>0, or 3000..5000.</summary>
+        /// <summary>0, or 3000..15000: the triangle target of the full copy.</summary>
         public int TriTarget;
+        /// <summary>The object profile: null, or exactly 256 bytes, index = j * 16 + i over the box's footprint
+        /// (i along local X, j along local Z, row 0 at the lowest z). 0 is unseen; otherwise the height of the
+        /// scanned surface as clamp(floor(255 * height / h + 0.5), 1, 255). Not part of the geometry hash.</summary>
+        public byte[] Profile;
+        /// <summary>The rule that decided the front. Local +Z is the front of every object.</summary>
+        public ObjectFacingRule Facing;
+        /// <summary>SHA-256 of the light copy of the generated GLB, or "".</summary>
+        public string AssetHashLight = "";
 
         public float Volume { get { return Size.x * Size.y * Size.z; } }
         public quaternion Rotation { get { return quaternion.RotateY(Yaw); } }

@@ -351,6 +351,9 @@ namespace Atlas.Blades.Playground.Glued.Tests
         {
             foreach (string name in s_AllRooms)
             {
+                // budget_room_120k is the full furniture load, which only Home and Curved Walk draw (mesh design
+                // section 5.4). S1 shows the light copies, and stand-ins have none, so that room is no measure of S1.
+                if (name == RoomFixtures.BudgetRoom120k) continue;
                 RoomModel room = RoomFixtures.LoadFromProject(name);
                 foreach (GluedLayout layout in s_Layouts)
                 {

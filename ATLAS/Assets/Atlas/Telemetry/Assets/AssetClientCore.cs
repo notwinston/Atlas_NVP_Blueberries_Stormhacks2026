@@ -25,6 +25,8 @@ namespace Atlas.Telemetry
         /// <summary>A room for which no scan announces itself this long after it was built came from a file.</summary>
         public const float LoadedRoomGraceSeconds = 2f;
         public const float HealthTimeout = 2f, RoomTimeout = 10f, ObjectTimeout = 15f, PollTimeout = 5f, DownloadTimeout = 20f;
+        /// <summary>A light copy that could not be fetched is asked for again after this long, doubling each time up to the cap.</summary>
+        public const float LightRetrySeconds = 15f, LightRetryCapSeconds = 120f;
         public const float PollInterval = 2f, ProbeInterval = 4f, JobSilenceSeconds = 30f, WorkTimeout = 10f;
         /// <summary>The worst frame is watched this long after a mesh was handed over (test L17).</summary>
         public const float AckWindowSeconds = 0.5f;
@@ -33,6 +35,8 @@ namespace Atlas.Telemetry
 
         public const string BackendLocal = "local", BackendHosted = "hosted", BackendCache = "cache", BackendOff = "off";
         public const string EventName = "asset";
+        /// <summary>The reason logged with the built-in mesh an object gets as soon as the room content is built.</summary>
+        public const string FirstShapeReason = "first_shape";
 
         static readonly float[] s_retryWaits = { 1f, 2f };
 
@@ -47,6 +51,10 @@ namespace Atlas.Telemetry
             public ObjectCategory Category;
             public float3 Size;
             public float Yaw;
+            /// <summary>The object's profile (RoomObject.Profile), or null: it shapes the first shape.</summary>
+            public byte[] Profile;
+            /// <summary>The full target of the object's job; 0 for an object that receives no mesh.</summary>
+            public int TriTarget;
             public ObjectAssetState State;
             /// <summary>Built-in for good: no photo, a failed job or a rejected asset is never retried.</summary>
             public bool Sticky;
@@ -54,6 +62,17 @@ namespace Atlas.Telemetry
             public string BuiltInReason;
             public ObjectPhotoSet Photos;
             public string JobId = string.Empty, Sha = string.Empty, Url = string.Empty;
+            /// <summary>The light copy the Forge announced (or a saved room names); "" for none.</summary>
+            public string LightSha = string.Empty, LightUrl = string.Empty;
+            /// <summary>A light copy is known and not yet handed over, dropped or on its way.</summary>
+            public bool LightPending;
+            /// <summary>The light file is wrong for good (hash, validation, load, refusal): it is not asked for again.</summary>
+            public bool LightCondemned;
+            /// <summary>The light copy is the full file itself (same hash): there is nothing separate to fetch or place.</summary>
+            public bool LightShared;
+            /// <summary>A light download that could not be had is tried again from this time on, and how often it failed.</summary>
+            public double LightRetryAt;
+            public int LightFails;
             public bool AckPending;
             public double AckAt;
             public float LoadMs, WorstFrameMs;
@@ -82,6 +101,8 @@ namespace Atlas.Telemetry
         readonly Action<object> _runWork = RunWork;
 
         Entry[] _entries = new Entry[0];
+        // Objects that receive no mesh (no triangle target, or beyond the largest): they keep their first shape.
+        Entry[] _extras = new Entry[0];
         RoomModel _room;
         string _roomId = string.Empty, _roomJson;
         bool _built, _beginSeen, _graceDone, _roomPosted;
@@ -99,6 +120,8 @@ namespace Atlas.Telemetry
 
         DownloadPhase _downloadPhase;
         Entry _download;
+        // The download in flight is the light copy of _download (the full copy of the object is in place).
+        bool _downloadLight;
         int _downloadHandle, _downloadAttempts;
         double _downloadNextAt, _downloadDoneAt, _workStartedAt;
         Work _work = new Work();
@@ -164,13 +187,14 @@ namespace Atlas.Telemetry
         public int PlacedCount { get { return Count(ObjectAssetState.Ready, ObjectAssetState.Ready); } }
         /// <summary>Objects on their way: uploading, requested, downloading or loading.</summary>
         public int PendingCount { get { return Count(ObjectAssetState.Uploading, ObjectAssetState.Loading); } }
-        /// <summary>Objects showing their built-in mesh.</summary>
+        /// <summary>Objects showing their built-in mesh: their first shape or the one they fell back to.</summary>
         public int BuiltInCount
         {
             get
             {
                 int n = 0;
                 for (int i = 0; i < _entries.Length; i++) if (_entries[i].ShowsBuiltIn) n++;
+                for (int i = 0; i < _extras.Length; i++) if (_extras[i].ShowsBuiltIn) n++;
                 return n;
             }
         }
@@ -191,7 +215,8 @@ namespace Atlas.Telemetry
         /// <summary>The triangle target sent with the object's job; 0 when it receives no mesh.</summary>
         public int TriTarget(int objectId)
         {
-            return Find(objectId) != null ? ObjectMeshRules.TriTarget(_entries.Length) : 0;
+            Entry e = Find(objectId);
+            return e != null ? e.TriTarget : 0;
         }
 
         /// <summary>The id of the k-th object in the order the client serves them: largest box first.</summary>
@@ -211,13 +236,17 @@ namespace Atlas.Telemetry
             _built = true;
             _builtAt = _now;
             _graceDone = false;
+            // A light mesh on its way was meant for the views that are gone.
+            if (_downloadLight) EndDownload();
+            for (int i = 0; i < _extras.Length; i++) FirstShapeDue(_extras[i]);
             for (int i = 0; i < _entries.Length; i++)
             {
                 Entry e = _entries[i];
-                // The views are new: whatever was shown is a placeholder box again.
-                e.ShowsBuiltIn = false;
-                e.BuiltInTried = false;
-                e.NeedsBuiltIn = e.State == ObjectAssetState.BuiltIn;
+                // The views are new: whatever was shown is a placeholder box again, and the first shape is due.
+                FirstShapeDue(e);
+                // The views are new, so the light mesh is gone with them; it follows the full one again.
+                e.LightPending = e.LightSha.Length > 0 && !e.LightCondemned && !e.LightShared;
+                e.LightRetryAt = 0.0;
                 if (e.State == ObjectAssetState.Ready || (e.State == ObjectAssetState.Placeholder && e.Sha.Length > 0))
                 {
                     // From the cache: the pre-scan path needs no Station, and no job waits for an answer.
@@ -230,6 +259,16 @@ namespace Atlas.Telemetry
             else if (_reach == Reach.Unreachable) AllToBuiltIn("unreachable", false);
         }
 
+        // The views are new: whatever was shown is a box again. Every object gets its first shape, whatever the
+        // Forge's state; the generated mesh replaces it when it arrives.
+        static void FirstShapeDue(Entry e)
+        {
+            e.ShowsBuiltIn = false;
+            e.BuiltInTried = false;
+            e.NeedsBuiltIn = true;
+            if (e.State != ObjectAssetState.BuiltIn || string.IsNullOrEmpty(e.BuiltInReason)) e.BuiltInReason = FirstShapeReason;
+        }
+
         /// <summary>The room is gone: requests are cancelled and late answers dropped.</summary>
         public void RoomCleared()
         {
@@ -238,6 +277,7 @@ namespace Atlas.Telemetry
             _roomId = string.Empty;
             _roomJson = null;
             _entries = new Entry[0];
+            _extras = new Entry[0];
             _built = false;
         }
 
@@ -290,14 +330,14 @@ namespace Atlas.Telemetry
         {
             if (status == null || status.RoomId != _roomId) return;
             _lastJobNews = _now;
-            if (status.State == "failed") ApplyJob(status.JobId, status.BoxId, status.State, status.Error, null, null);
+            if (status.State == "failed") ApplyJob(status.JobId, status.BoxId, status.State, status.Error, null, null, null, null);
         }
 
         public void OnAssetReady(AssetReadyMessage ready)
         {
             if (ready == null || ready.RoomId != _roomId) return;
             _lastJobNews = _now;
-            ApplyJob(ready.JobId, ready.BoxId, "ready", string.Empty, ready.Sha256, ready.Url);
+            ApplyJob(ready.JobId, ready.BoxId, "ready", string.Empty, ready.Sha256, ready.Url, ready.LightSha256, ready.LightUrl);
         }
 
         /// <summary>DELETE /rooms/{roomId} and removal of this room's cached GLBs (Master Plan section 13.5).</summary>
@@ -308,7 +348,10 @@ namespace Atlas.Telemetry
                 _deleteHandle = _transport.Begin("DELETE", _forgeUrl + "/rooms/" + roomId, null, null, RoomTimeout);
             if (roomId != _roomId) return;
             for (int i = 0; i < _entries.Length; i++)
+            {
                 if (_entries[i].Sha.Length > 0) _cache.Delete(_entries[i].Sha);
+                if (_entries[i].LightSha.Length > 0) _cache.Delete(_entries[i].LightSha);
+            }
             RoomCleared();
         }
 
@@ -363,21 +406,44 @@ namespace Atlas.Telemetry
 
             // The objects that take part: those lane C gave a triangle target, largest box first, twenty at most.
             RoomObject[] objects = room.Objects ?? new RoomObject[0];
-            int n = 0;
+            int n = 0, rest = 0;
             var picked = new RoomObject[objects.Length];
+            var others = new RoomObject[objects.Length];
             for (int i = 0; i < objects.Length; i++)
-                if (objects[i] != null && objects[i].TriTarget > 0 && objects[i].Mesh != MeshState.StandIn) picked[n++] = objects[i];
+            {
+                if (objects[i] == null || objects[i].Mesh == MeshState.StandIn) continue;
+                if (objects[i].TriTarget > 0) picked[n++] = objects[i];
+                else others[rest++] = objects[i];
+            }
             Array.Sort(picked, 0, n, s_largestFirst);
+            // An object beyond the largest keeps its first shape, like one the room gave no target.
+            for (int i = MaxObjects; i < n; i++) others[rest++] = picked[i];
             if (n > MaxObjects) n = MaxObjects;
 
             _entries = new Entry[n];
             for (int i = 0; i < n; i++)
             {
                 RoomObject o = picked[i];
-                var e = new Entry { Id = o.Id, Category = o.Category, Size = o.Size, Yaw = o.Yaw };
+                var e = new Entry { Id = o.Id, Category = o.Category, Size = o.Size, Yaw = o.Yaw, Profile = o.Profile, TriTarget = o.TriTarget };
                 // A saved room names the mesh it had; it comes back from the cache.
                 if (ForgeProtocol.IsSha256(o.AssetHash)) e.Sha = o.AssetHash;
+                if (e.Sha.Length > 0 && ForgeProtocol.IsSha256(o.AssetHashLight))
+                {
+                    e.LightSha = o.AssetHashLight;
+                    e.LightShared = e.LightSha == e.Sha;
+                    e.LightPending = !e.LightShared;
+                }
                 _entries[i] = e;
+            }
+            _extras = new Entry[rest];
+            for (int i = 0; i < rest; i++)
+            {
+                RoomObject o = others[i];
+                _extras[i] = new Entry
+                {
+                    Id = o.Id, Category = o.Category, Size = o.Size, Yaw = o.Yaw, Profile = o.Profile,
+                    State = ObjectAssetState.BuiltIn, Sticky = true
+                };
             }
         }
 
@@ -406,6 +472,7 @@ namespace Atlas.Telemetry
         Entry Find(int objectId)
         {
             for (int i = 0; i < _entries.Length; i++) if (_entries[i].Id == objectId) return _entries[i];
+            for (int i = 0; i < _extras.Length; i++) if (_extras[i].Id == objectId) return _extras[i];
             return null;
         }
 
@@ -438,6 +505,7 @@ namespace Atlas.Telemetry
         {
             if (_download == e) EndDownload();
             if (_uploadEntry == e && sticky) _uploadEntry = null;
+            bool changed = e.State != ObjectAssetState.BuiltIn;
             e.State = ObjectAssetState.BuiltIn;
             if (sticky)
             {
@@ -449,30 +517,51 @@ namespace Atlas.Telemetry
                 e.NeedsBuiltIn = true;
                 e.BuiltInReason = reason;
             }
+            else if (changed && e.ShowsBuiltIn)
+            {
+                // The first shape is already there and stays: say why the object will have nothing else.
+                LogStep("builtin", e, JsonValue.Object().Set("reason", reason ?? string.Empty).Set("placed", true)
+                    .Set("kept", string.Empty).Set("shape", "kept").Set("tris", 0));
+            }
         }
 
         void TickBuiltIn()
         {
             if (!_built) return;
             int placed = 0;
-            for (int i = 0; i < _entries.Length && placed < BuiltInPerTick; i++)
-            {
-                Entry e = _entries[i];
-                if (!e.NeedsBuiltIn) continue;
-                e.NeedsBuiltIn = false;
-                e.BuiltInTried = true;
-                if (e.State != ObjectAssetState.BuiltIn) continue;
-                placed++;
+            for (int i = 0; i < _entries.Length && placed < BuiltInPerTick; i++) PlaceFirstShape(_entries[i], ref placed);
+            for (int i = 0; i < _extras.Length && placed < BuiltInPerTick; i++) PlaceFirstShape(_extras[i], ref placed);
+        }
 
-                FallbackTemplate template = _fallback != null ? _fallback.Get(e.Category) : null;
-                string kept = null;
-                if (template == null) kept = "no_template";               // Unknown and Other keep their box
-                else if (!_builder.Build(template, e.Size, e.Yaw, _builtInMesh)) kept = "too_large";
-                else if (!_roomView.PlaceBuiltIn(e.Id, _builtInMesh)) kept = "no_view";
-                if (kept == null) e.ShowsBuiltIn = true;
-                LogStep("builtin", e, JsonValue.Object().Set("reason", e.BuiltInReason ?? string.Empty)
-                    .Set("placed", kept == null).Set("kept", kept ?? string.Empty)
-                    .Set("tris", kept == null ? _builtInMesh.TriangleCount : 0));
+        // The built-in mesh of one object: the fitted template, the template, or the shape cut from the scan.
+        void PlaceFirstShape(Entry e, ref int placed)
+        {
+            if (!e.NeedsBuiltIn) return;
+            e.NeedsBuiltIn = false;
+            e.BuiltInTried = true;
+            if (e.State == ObjectAssetState.Ready) return;              // the generated mesh got there first
+            placed++;
+
+            FirstShapeKind kind = FittedShapes.Build(_builder, _fallback, e.Category, e.Size, e.Yaw, e.Profile, _builtInMesh);
+            string kept = null;
+            if (kind == FirstShapeKind.None)
+                kept = _fallback != null && _fallback.Get(e.Category) != null ? "too_large" : "no_template";    // the box stays
+            else if (!_roomView.PlaceBuiltIn(e.Id, _builtInMesh)) kept = "no_view";
+            if (kept == null) e.ShowsBuiltIn = true;
+            LogStep("builtin", e, JsonValue.Object().Set("reason", e.BuiltInReason ?? string.Empty)
+                .Set("placed", kept == null).Set("kept", kept ?? string.Empty)
+                .Set("shape", kept == null ? ShapeName(kind) : string.Empty)
+                .Set("tris", kept == null ? _builtInMesh.TriangleCount : 0));
+        }
+
+        static string ShapeName(FirstShapeKind kind)
+        {
+            switch (kind)
+            {
+                case FirstShapeKind.Template: return "template";
+                case FirstShapeKind.Fitted: return "fitted";
+                case FirstShapeKind.ScanCut: return "scancut";
+                default: return string.Empty;
             }
         }
 
@@ -547,9 +636,9 @@ namespace Atlas.Telemetry
                     if (next == null) break;
                     _uploadEntry = next;
                     _uploadStep = UploadStep.Object;
-                    int target = ObjectMeshRules.TriTarget(_entries.Length);
+                    int target = next.TriTarget;
                     _uploadHandle = _transport.Begin("POST", _forgeUrl + "/rooms/" + _roomId + "/objects",
-                        ForgeProtocol.ObjectBody(next.Photos, target, _backend), ForgeProtocol.MultipartContentType, ObjectTimeout);
+                        ForgeProtocol.ObjectBody(next.Photos, target, _backend, ObjectMeshRules.LightTarget(_entries.Length)), ForgeProtocol.MultipartContentType, ObjectTimeout);
                     LogStep("upload", next, JsonValue.Object().Set("attempt", _attempts + 1).Set("triTarget", target)
                         .Set("views", ForgeProtocol.ViewCount(next.Photos)));
                     break;
@@ -608,6 +697,7 @@ namespace Atlas.Telemetry
             {
                 LogStep("cached", e, JsonValue.Object().Set("jobId", e.JobId).Set("sha256", sha));
                 BeginDownload(e, sha, ForgeProtocol.AssetPath(sha));
+                NoteLight(e, answer.GetString("lightSha256", null), answer.GetString("lightUrl", null));
                 return;
             }
             if (e.JobId.Length == 0)
@@ -653,6 +743,7 @@ namespace Atlas.Telemetry
             _lastJobNews = _now;
             _nextPollAt = _now;
             LogStep("reachable", null, JsonValue.Object().Set("roomId", _roomId));
+            for (int i = 0; i < _entries.Length; i++) _entries[i].LightRetryAt = 0.0;     // a light copy that waited for it
             for (int i = 0; i < _entries.Length; i++)
             {
                 Entry e = _entries[i];
@@ -701,7 +792,8 @@ namespace Atlas.Telemetry
                 JsonValue job = jobs[i];
                 if (!job.IsObject || job.GetString("roomId", _roomId) != _roomId) continue;
                 ApplyJob(job.GetString("jobId", string.Empty), job.GetInt("boxId"), job.GetString("state", string.Empty),
-                    job.GetString("error", string.Empty), job.GetString("sha256", null), job.GetString("url", null));
+                    job.GetString("error", string.Empty), job.GetString("sha256", null), job.GetString("url", null),
+                    job.GetString("lightSha256", null), job.GetString("lightUrl", null));
             }
             // A job the Forge no longer lists will never finish.
             for (int i = 0; i < _entries.Length; i++)
@@ -716,7 +808,7 @@ namespace Atlas.Telemetry
             }
         }
 
-        void ApplyJob(string jobId, int boxId, string state, string error, string sha, string url)
+        void ApplyJob(string jobId, int boxId, string state, string error, string sha, string url, string lightSha, string lightUrl)
         {
             Entry e = Find(boxId);
             if (e == null || e.State != ObjectAssetState.Requested) return;
@@ -731,6 +823,7 @@ namespace Atlas.Telemetry
                 }
                 LogStep("ready", e, JsonValue.Object().Set("jobId", e.JobId).Set("sha256", sha));
                 BeginDownload(e, sha, string.IsNullOrEmpty(url) ? ForgeProtocol.AssetPath(sha) : url);
+                NoteLight(e, lightSha, lightUrl);
             }
             else if (state == "failed")
             {
@@ -746,6 +839,34 @@ namespace Atlas.Telemetry
 
         // ---- Download, validate, load, place -------------------------------------------------------------------
 
+        // The Forge announced a light copy: it is fetched after the full one is in place. Anything else is no light copy.
+        void NoteLight(Entry e, string lightSha, string lightUrl)
+        {
+            if (!ForgeProtocol.IsSha256(lightSha)) return;
+            if (e.LightSha != lightSha) { e.LightCondemned = false; e.LightFails = 0; e.LightRetryAt = 0.0; }
+            e.LightSha = lightSha;
+            e.LightUrl = string.IsNullOrEmpty(lightUrl) ? ForgeProtocol.AssetPath(lightSha) : lightUrl;
+            e.LightShared = lightSha == e.Sha;
+            if (e.LightShared)
+            {
+                // The full copy already meets the light target and was published as both: the room content draws it at
+                // the Light level when it has no light mesh. Only the record of the hash is kept.
+                e.LightPending = false;
+                SetRecordedLightHash(e, lightSha);
+                LogStep("light_same", e, JsonValue.Object().Set("sha256", lightSha).Set("reason", "same_as_full"));
+                return;
+            }
+            e.LightPending = !e.LightCondemned;
+        }
+
+        void SetRecordedLightHash(Entry e, string sha)
+        {
+            RoomObject[] objects = _room != null ? _room.Objects : null;
+            if (objects == null) return;
+            for (int i = 0; i < objects.Length; i++)
+                if (objects[i] != null && objects[i].Id == e.Id) { objects[i].AssetHashLight = sha; return; }
+        }
+
         void BeginDownload(Entry e, string sha, string url)
         {
             e.Sha = sha;
@@ -759,6 +880,7 @@ namespace Atlas.Telemetry
             // A worker that is still busy keeps its buffers; the next download gets fresh ones.
             if (_downloadPhase == DownloadPhase.Work && !_work.Done) _work = new Work();
             _download = null;
+            _downloadLight = false;
             _downloadPhase = DownloadPhase.Idle;
         }
 
@@ -768,6 +890,15 @@ namespace Atlas.Telemetry
             {
                 for (int i = 0; i < _entries.Length && _download == null; i++)
                     if (_entries[i].State == ObjectAssetState.Downloading) _download = _entries[i];
+                _downloadLight = false;
+                // Only when no full copy waits: the walker is in Home, which shows the full ones.
+                for (int i = 0; _download == null && _built && i < _entries.Length; i++)
+                {
+                    Entry candidate = _entries[i];
+                    if (candidate.State != ObjectAssetState.Ready || !candidate.LightPending || _now < candidate.LightRetryAt) continue;
+                    _download = candidate;
+                    _downloadLight = true;
+                }
                 if (_download == null) return;
                 _downloadAttempts = 0;
                 _downloadDoneAt = _now;
@@ -779,22 +910,23 @@ namespace Atlas.Telemetry
                 case DownloadPhase.Work:
                     if (!_work.Done)
                     {
-                        if (_now - _workStartedAt > WorkTimeout) Reject(e, "load_failed");
+                        if (_now - _workStartedAt > WorkTimeout) Fail(e, "work_timeout");
                         return;
                     }
-                    if (_work.Outcome == WorkOutcome.Rejected) { Reject(e, _work.Reason); return; }
+                    if (_work.Outcome == WorkOutcome.Rejected) { Fail(e, _work.Reason); return; }
                     if (_work.Outcome == WorkOutcome.NeedDownload)
                     {
                         if (_reach == Reach.Unreachable || _backend == BackendOff || _forgeUrl.Length == 0)
                         {
                             // A saved room whose mesh is not in the cache, and no Forge to ask.
-                            ToBuiltIn(e, "no_cache", false);
+                            if (_downloadLight) DeferLight(e, "no_cache");
+                            else ToBuiltIn(e, "no_cache", false);
                             return;
                         }
                         StartHttp(e);
                         return;
                     }
-                    e.State = ObjectAssetState.Loading;
+                    if (!_downloadLight) e.State = ObjectAssetState.Loading;
                     _downloadPhase = DownloadPhase.Place;
                     goto case DownloadPhase.Place;
 
@@ -810,7 +942,7 @@ namespace Atlas.Telemetry
                         return;
                     }
                     _downloadAttempts++;
-                    if (_downloadAttempts >= MaxAttempts) { Reject(e, "download_failed"); return; }
+                    if (_downloadAttempts >= MaxAttempts) { Fail(e, "download_failed"); return; }
                     _downloadNextAt = _now + s_retryWaits[_downloadAttempts - 1];
                     _downloadPhase = DownloadPhase.HttpWait;
                     return;
@@ -821,6 +953,11 @@ namespace Atlas.Telemetry
 
                 case DownloadPhase.Place:
                     if (!_built) return;            // the boxes are not there yet
+                    if (_downloadLight)
+                    {
+                        PlaceLight(e);
+                        return;
+                    }
                     if (!_roomView.PlaceGenerated(e.Id, _work.Mesh, e.Sha)) { Reject(e, "load_failed"); return; }
                     e.State = ObjectAssetState.Ready;
                     e.ShowsBuiltIn = false;
@@ -840,8 +977,9 @@ namespace Atlas.Telemetry
 
         void StartHttp(Entry e)
         {
-            string url = e.Url.StartsWith("http://", StringComparison.Ordinal) || e.Url.StartsWith("https://", StringComparison.Ordinal)
-                ? e.Url : _forgeUrl + (e.Url.Length > 0 ? e.Url : ForgeProtocol.AssetPath(e.Sha));
+            string sha = _downloadLight ? e.LightSha : e.Sha, path = _downloadLight ? e.LightUrl : e.Url;
+            string url = path.StartsWith("http://", StringComparison.Ordinal) || path.StartsWith("https://", StringComparison.Ordinal)
+                ? path : _forgeUrl + (path.Length > 0 ? path : ForgeProtocol.AssetPath(sha));
             _downloadPhase = DownloadPhase.Http;
             _downloadHandle = _transport.Begin("GET", url, null, null, DownloadTimeout);
         }
@@ -850,14 +988,17 @@ namespace Atlas.Telemetry
         {
             Entry e = _download;
             Work work = _work;
+            string sha = _downloadLight ? e.LightSha : e.Sha;
             work.Cache = _cache;
-            work.Sha = e.Sha;
+            work.Sha = sha;
             work.Bytes = downloaded;
             work.Expect = new GlbExpectation
             {
                 DimX = e.Size.x, DimY = e.Size.y, DimZ = e.Size.z,
-                TriTarget = ObjectMeshRules.TriTarget(_entries.Length),
-                Sha256 = e.Sha
+                // The full copy meets the object's own target; the light copy the room's light target.
+                TriTarget = _downloadLight ? ObjectMeshRules.LightTarget(_entries.Length) : e.TriTarget,
+                Level = _downloadLight ? GlbLevel.Light : GlbLevel.Full,
+                Sha256 = sha
             };
             work.Done = false;
             _workStartedAt = _now;
@@ -878,7 +1019,7 @@ namespace Atlas.Telemetry
                     bytes = work.Cache.TryRead(work.Sha);
                     if (bytes == null) { work.Outcome = WorkOutcome.NeedDownload; return; }
                 }
-                GlbReport report = bytes.Length > GlbValidator.MaxBytes
+                GlbReport report = bytes.Length > GlbValidator.MaxBytesOf(work.Expect.Level)
                     ? new GlbReport { FailedCheck = GlbValidator.CodeSize }
                     : GlbValidator.Validate(bytes, in work.Expect);
                 if (!report.Ok)
@@ -916,11 +1057,55 @@ namespace Atlas.Telemetry
             }
         }
 
+        // A copy that fails ends the object's full copy (Reject) or, for a light copy, only itself.
+        void Fail(Entry e, string reason)
+        {
+            if (!_downloadLight) Reject(e, reason == "work_timeout" ? "load_failed" : reason);
+            // The Forge could not be reached or answered too slowly: the file may be fine, so it is asked for again.
+            else if (reason == "download_failed" || reason == "work_timeout") DeferLight(e, reason);
+            else DropLight(e, reason);
+        }
+
+        // The light copy is wrong for good: logged, never counted against the object, which keeps its full mesh.
+        void DropLight(Entry e, string reason)
+        {
+            LogStep("light_dropped", e, JsonValue.Object().Set("sha256", e.LightSha).Set("reason", reason ?? string.Empty));
+            e.LightPending = false;
+            e.LightCondemned = true;
+            EndDownload();
+        }
+
+        // The light copy could not be had now. It stays pending and is asked for again after 15 s, then 30, 60 and
+        // 120 s at the longest: a Forge that stays away costs one attempt of three requests per object per two
+        // minutes, one object at a time, and never before every full copy has been served.
+        void DeferLight(Entry e, string reason)
+        {
+            float wait = LightRetrySeconds;
+            for (int i = 0; i < e.LightFails && wait < LightRetryCapSeconds; i++) wait *= 2f;
+            e.LightFails++;
+            e.LightRetryAt = _now + math.min(wait, LightRetryCapSeconds);
+            LogStep("light_deferred", e, JsonValue.Object().Set("sha256", e.LightSha).Set("reason", reason ?? string.Empty)
+                .Set("retryIn", math.min(wait, LightRetryCapSeconds)));
+            EndDownload();
+        }
+
+        void PlaceLight(Entry e)
+        {
+            if (!_roomView.PlaceGeneratedLight(e.Id, _work.Mesh, e.LightSha)) { DropLight(e, "load_failed"); return; }
+            e.LightPending = false;
+            e.LightFails = 0;
+            LogStep("light_placed", e, JsonValue.Object().Set("sha256", e.LightSha).Set("tris", _work.Mesh.TriangleCount));
+            _download = null;
+            _downloadLight = false;
+            _downloadPhase = DownloadPhase.Idle;
+        }
+
         void Reject(Entry e, string reason)
         {
             LogStep("rejected", e, JsonValue.Object().Set("sha256", e.Sha).Set("reason", reason ?? string.Empty));
             SendAck(e, false, reason);
             e.Sha = string.Empty;
+            e.LightPending = false;
             ToBuiltIn(e, "rejected", true);
         }
 

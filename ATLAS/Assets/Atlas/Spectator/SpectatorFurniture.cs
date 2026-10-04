@@ -20,20 +20,19 @@ namespace Atlas.Spectator
     public sealed class SpectatorFurniture : IAssetRoom, IAfterFrameStep, IDisposable
     {
         const MeshUpdateFlags k_Flags = MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices;
-        // A replaced built-in mesh is still drawn while the room content fades it out.
-        const double RetireSeconds = 1.0;
-
-        struct Retired { public Mesh Mesh; public double At; }
 
         readonly SpectatorAssetsCore _core;
         readonly SpectatorCore _spectator;
         readonly IRoomContent _content;
         readonly Dictionary<int, Mesh> _builtIn = new Dictionary<int, Mesh>();
-        readonly List<Retired> _retired = new List<Retired>();
+        // A replaced first shape is still drawn until its swap has begun and the cross-fade has ended.
+        readonly RetiredMeshes<Mesh> _retired = new RetiredMeshes<Mesh>();
+        // Made once: a method group converted every frame would allocate.
+        readonly Func<Mesh, bool> _isDrawn;
+        readonly Action<Mesh> _destroy = DestroyMesh;
         readonly Action<RoomModel> _onBuilt;
         ushort[] _index16 = new ushort[16384];
         LinkClient _link;
-        double _now;
         bool _built, _disposed;
 
         /// <param name="transport">HTTP to the Forge; the Spectator's one transport.</param>
@@ -51,6 +50,7 @@ namespace Atlas.Spectator
             if (fallback.LastError != null) Debug.LogWarning("Atlas: Spectator: " + fallback.LastError);
             _core = new SpectatorAssetsCore(transport, this, cache, new ThreadPoolAssetWorker(), fallback);
             _onBuilt = OnBuilt;
+            _isDrawn = IsDrawn;
             content.Built += _onBuilt;
             if (content.IsBuilt && content.Room != null) OnBuilt(content.Room);
         }
@@ -83,7 +83,6 @@ namespace Atlas.Spectator
         public void AfterFrame(in FrameContext frame)
         {
             if (_disposed) return;
-            _now = frame.Time;
             // The room content was cleared (a room that no longer matches the phone's): nothing can be placed.
             if (_built && !_content.IsBuilt)
             {
@@ -93,12 +92,7 @@ namespace Atlas.Spectator
             }
             _core.ForgeUrl = _spectator.ForgeUrl;
             _core.Tick(frame.Time);
-            for (int i = _retired.Count - 1; i >= 0; i--)
-            {
-                if (_now - _retired[i].At < RetireSeconds) continue;
-                DestroyMesh(_retired[i].Mesh);
-                _retired.RemoveAt(i);
-            }
+            _retired.Sweep(_isDrawn, _destroy);
         }
 
         /// <summary>Leaves the link and the room content and destroys the built-in meshes still owned here.</summary>
@@ -110,8 +104,7 @@ namespace Atlas.Spectator
             _content.Built -= _onBuilt;
             _core.RoomCleared();
             ReleaseBuiltIn();
-            for (int i = 0; i < _retired.Count; i++) DestroyMesh(_retired[i].Mesh);
-            _retired.Clear();
+            _retired.DestroyAll(_destroy);
         }
 
         void OnBuilt(RoomModel room)
@@ -145,6 +138,10 @@ namespace Atlas.Spectator
             return true;
         }
 
+        // The Spectator stays at the full level: it never downloads a light copy (SpectatorAssetsCore ignores the
+        // light fields of AssetReady) and sets no furniture level, so there is nothing to place here.
+        bool IAssetRoom.PlaceGeneratedLight(int objectId, MeshData data, string sha256) { return false; }
+
         bool IAssetRoom.PlaceBuiltIn(int objectId, MeshData data)
         {
             if (!_content.IsBuilt || data == null || data.TriangleCount == 0) return false;
@@ -156,12 +153,17 @@ namespace Atlas.Spectator
             return true;
         }
 
+        bool IsDrawn(Mesh mesh)
+        {
+            return _content.IsMeshDrawn(mesh);
+        }
+
         void Retire(int objectId)
         {
             Mesh old;
             if (!_builtIn.TryGetValue(objectId, out old)) return;
             _builtIn.Remove(objectId);
-            _retired.Add(new Retired { Mesh = old, At = _now });
+            _retired.Add(old);
         }
 
         // The shared vertex format in one stream (lane A contract, section 10.2), 16-bit indices where they fit.

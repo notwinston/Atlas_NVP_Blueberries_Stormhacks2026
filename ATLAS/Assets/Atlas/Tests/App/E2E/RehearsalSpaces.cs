@@ -543,6 +543,6 @@ namespace Atlas.E2E.Tests
             if (fade <= 0f) WentBlack = true;
         }
 
-        public void ResetForSpace() { Resets++; }
+        public void ResetForSpace(SpaceId? next) { Resets++; }
     }
 }

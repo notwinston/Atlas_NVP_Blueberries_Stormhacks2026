@@ -42,6 +42,11 @@ namespace Atlas.Telemetry
             public ObjectCategory Category;
             public float3 Size;
             public float Yaw;
+            public byte[] Profile;
+            /// <summary>The full target of the object's job, as the phone sent it; 0 for an object that gets no mesh.</summary>
+            public int TriTarget;
+            /// <summary>The first shape is due: every object shows one as soon as the room content is built.</summary>
+            public bool FirstShape;
             /// <summary>The generated mesh the phone shows or is about to show; empty for none.</summary>
             public string Sha = string.Empty, Url = string.Empty;
             /// <summary>A hash that did not pass validation here; it is not fetched again.</summary>
@@ -76,6 +81,8 @@ namespace Atlas.Telemetry
         readonly Action<object> _runWork = RunWork;
 
         Entry[] _entries = new Entry[0];
+        // Objects that get no mesh from the Forge: they keep their first shape.
+        Entry[] _extras = new Entry[0];
         string _roomId = string.Empty, _forgeUrl = string.Empty;
         bool _built, _listDone, _settled;
         double _now, _lastNews;
@@ -133,7 +140,7 @@ namespace Atlas.Telemetry
 
         public SpectatorObjectShows Shows(int objectId)
         {
-            Entry e = Find(objectId);
+            Entry e = Find(objectId) ?? FindIn(_extras, objectId);
             return e != null ? e.Shows : SpectatorObjectShows.Box;
         }
 
@@ -154,18 +161,35 @@ namespace Atlas.Telemetry
             // The objects that take part, as the phone picks them: the triangle target of a mesh depends on
             // how many there are, and the validation below must expect what the Forge was asked for.
             RoomObject[] objects = room.Objects ?? new RoomObject[0];
-            int n = 0;
+            int n = 0, rest = 0;
             var picked = new RoomObject[objects.Length];
+            var others = new RoomObject[objects.Length];
             for (int i = 0; i < objects.Length; i++)
-                if (objects[i] != null && objects[i].TriTarget > 0 && objects[i].Mesh != MeshState.StandIn) picked[n++] = objects[i];
+            {
+                if (objects[i] == null || objects[i].Mesh == MeshState.StandIn) continue;
+                if (objects[i].TriTarget > 0) picked[n++] = objects[i];
+                else others[rest++] = objects[i];
+            }
             Array.Sort(picked, 0, n, s_largestFirst);
+            for (int i = MaxObjects; i < n; i++) others[rest++] = picked[i];
             if (n > MaxObjects) n = MaxObjects;
+
+            _extras = new Entry[rest];
+            for (int i = 0; i < rest; i++)
+            {
+                RoomObject o = others[i];
+                _extras[i] = new Entry { Id = o.Id, Category = o.Category, Size = o.Size, Yaw = o.Yaw, Profile = o.Profile, FirstShape = true };
+            }
 
             _entries = new Entry[n];
             for (int i = 0; i < n; i++)
             {
                 RoomObject o = picked[i];
-                var e = new Entry { Id = o.Id, Category = o.Category, Size = o.Size, Yaw = o.Yaw };
+                var e = new Entry
+                {
+                    Id = o.Id, Category = o.Category, Size = o.Size, Yaw = o.Yaw, Profile = o.Profile, TriTarget = o.TriTarget,
+                    FirstShape = true
+                };
                 if (ForgeProtocol.IsSha256(o.AssetHash)) e.Sha = o.AssetHash;
                 Entry old = before != null ? FindIn(before, o.Id) : null;
                 if (old != null)
@@ -192,14 +216,17 @@ namespace Atlas.Telemetry
         {
             CancelRequests();
             _built = false;
-            for (int i = 0; i < _entries.Length; i++)
-            {
-                Entry e = _entries[i];
-                e.Shows = SpectatorObjectShows.Box;
-                e.ShownSha = string.Empty;
-                e.BuiltInTried = false;
-                e.RetryAt = 0.0;
-            }
+            for (int i = 0; i < _entries.Length; i++) Reset(_entries[i]);
+            for (int i = 0; i < _extras.Length; i++) Reset(_extras[i]);
+        }
+
+        static void Reset(Entry e)
+        {
+            e.Shows = SpectatorObjectShows.Box;
+            e.ShownSha = string.Empty;
+            e.BuiltInTried = false;
+            e.FirstShape = true;
+            e.RetryAt = 0.0;
         }
 
         // ---- The link ------------------------------------------------------------------------------------------
@@ -220,8 +247,10 @@ namespace Atlas.Telemetry
                     Generated(e, data.GetString("sha256", string.Empty), string.Empty);
                     break;
                 case "builtin":
-                    // `placed` is false when the phone kept the box (no template, or the mesh did not fit).
+                    // `placed` is false when the phone kept the box (no shape could be made).
                     if (!data.GetBool("placed")) break;
+                    // The first shape every object gets is not news: this side makes its own.
+                    if (data.GetString("reason", string.Empty) == AssetClientCore.FirstShapeReason) break;
                     e.WantBuiltIn = true;
                     e.BuiltInTried = false;
                     e.Sha = string.Empty;
@@ -244,6 +273,8 @@ namespace Atlas.Telemetry
             Entry e = Find(ready.BoxId);
             if (e == null) return;
             e.HasJob = true;
+            // ready.LightSha256 and ready.LightUrl are left alone on purpose: the Spectator shows the full copy
+            // everywhere (it is not a walker and sets no furniture level), so it never fetches the light one.
             Generated(e, ready.Sha256, ready.Url);
         }
 
@@ -376,21 +407,22 @@ namespace Atlas.Telemetry
         void TickBuiltIn()
         {
             int placed = 0;
-            for (int i = 0; i < _entries.Length && placed < BuiltInPerTick; i++)
-            {
-                Entry e = _entries[i];
-                if (!e.WantBuiltIn || e.BuiltInTried || e.Shows == SpectatorObjectShows.BuiltIn) continue;
-                // A generated mesh that is shown or on its way wins, unless the phone went back to its built-in one.
-                if (e.Sha.Length > 0 && e.Sha != e.BadSha) continue;
-                e.BuiltInTried = true;
-                placed++;
-                FallbackTemplate template = _fallback != null ? _fallback.Get(e.Category) : null;
-                if (template == null) continue;                         // Unknown and Other keep their box
-                if (!_builder.Build(template, e.Size, e.Yaw, _builtInMesh)) continue;
-                if (!_roomView.PlaceBuiltIn(e.Id, _builtInMesh)) continue;
-                e.Shows = SpectatorObjectShows.BuiltIn;
-                e.ShownSha = string.Empty;
-            }
+            for (int i = 0; i < _entries.Length && placed < BuiltInPerTick; i++) PlaceFirstShape(_entries[i], ref placed);
+            for (int i = 0; i < _extras.Length && placed < BuiltInPerTick; i++) PlaceFirstShape(_extras[i], ref placed);
+        }
+
+        void PlaceFirstShape(Entry e, ref int placed)
+        {
+            if (!(e.WantBuiltIn || e.FirstShape) || e.BuiltInTried || e.Shows == SpectatorObjectShows.BuiltIn) return;
+            // A generated mesh that is shown wins, unless the phone went back to its built-in one. One that is
+            // only on its way does not: the first shape stands in for it.
+            if (e.Sha.Length > 0 && e.Sha != e.BadSha && e.Sha == e.ShownSha) return;
+            e.BuiltInTried = true;
+            placed++;
+            if (FittedShapes.Build(_builder, _fallback, e.Category, e.Size, e.Yaw, e.Profile, _builtInMesh) == FirstShapeKind.None) return;
+            if (!_roomView.PlaceBuiltIn(e.Id, _builtInMesh)) return;
+            e.Shows = SpectatorObjectShows.BuiltIn;
+            e.ShownSha = string.Empty;
         }
 
         // ---- Download, validate, load, place -------------------------------------------------------------------
@@ -426,6 +458,7 @@ namespace Atlas.Telemetry
                         e.Shows = SpectatorObjectShows.Generated;
                         e.ShownSha = e.Sha;
                         e.WantBuiltIn = false;
+                        e.FirstShape = false;
                     }
                     else e.RetryAt = _now + RetryLaterSeconds;
                     _download = null;
@@ -476,7 +509,7 @@ namespace Atlas.Telemetry
             work.Expect = new GlbExpectation
             {
                 DimX = e.Size.x, DimY = e.Size.y, DimZ = e.Size.z,
-                TriTarget = ObjectMeshRules.TriTarget(_entries.Length),
+                TriTarget = e.TriTarget,
                 Sha256 = e.Sha
             };
             work.Done = false;
@@ -498,7 +531,7 @@ namespace Atlas.Telemetry
                     bytes = work.Cache.TryRead(work.Sha);
                     if (bytes == null) { work.Outcome = WorkOutcome.NeedDownload; return; }
                 }
-                bool ok = bytes.Length <= GlbValidator.MaxBytes && GlbValidator.Validate(bytes, in work.Expect).Ok
+                bool ok = bytes.Length <= GlbValidator.MaxBytesOf(work.Expect.Level) && GlbValidator.Validate(bytes, in work.Expect).Ok
                           && GlbMeshReader.TryRead(bytes, bytes.Length, work.Mesh);
                 if (!ok)
                 {
@@ -551,6 +584,7 @@ namespace Atlas.Telemetry
         {
             int n = 0;
             for (int i = 0; i < _entries.Length; i++) if (_entries[i].Shows == shows) n++;
+            for (int i = 0; i < _extras.Length; i++) if (_extras[i].Shows == shows) n++;
             return n;
         }
 

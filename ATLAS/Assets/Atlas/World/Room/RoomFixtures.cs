@@ -4,8 +4,8 @@ using System.IO;
 namespace Atlas.World
 {
     /// <summary>
-    /// The five RoomModel fixtures frozen at gate G0 (Master Plan section 4.3): three sample rooms, the budget
-    /// room and a standing-mode room. This file is engine-free; the Resources loader is in RoomFixturesLoader.cs.
+    /// The RoomModel fixtures: the five frozen at gate G0 (Master Plan section 4.3), three sample rooms, the budget
+    /// room and a standing-mode room, and budget_room_120k of the mesh design (section 5.4). This file is engine-free; the Resources loader is in RoomFixturesLoader.cs.
     /// </summary>
     public static partial class RoomFixtures
     {
@@ -14,13 +14,15 @@ namespace Atlas.World
         public const string Sample4x5Table = "sample_4x5_table";
         public const string BudgetRoom = "budget_room";
         public const string TinyStanding = "tiny_standing";
-        /// <summary>The five names, in this order.</summary>
-        public static readonly string[] All = { Sample3x3, SampleL3x4, Sample4x5Table, BudgetRoom, TinyStanding };
+        /// <summary>The budget room with 24 stand-ins, 120,000 triangles in all.</summary>
+        public const string BudgetRoom120k = "budget_room_120k";
+        /// <summary>The six names, in this order.</summary>
+        public static readonly string[] All = { Sample3x3, SampleL3x4, Sample4x5Table, BudgetRoom, TinyStanding, BudgetRoom120k };
         public const string ResourcesFolder = "AtlasRooms";
         /// <summary>Environment variable that names the Unity project folder for headless runs.</summary>
         public const string ProjectDirVariable = "ATLAS_PROJECT_DIR";
 
-        /// <summary>True when the name is one of the five fixtures.</summary>
+        /// <summary>True when the name is one of the fixtures.</summary>
         public static bool IsFixture(string name)
         {
             return Array.IndexOf(All, name) >= 0;

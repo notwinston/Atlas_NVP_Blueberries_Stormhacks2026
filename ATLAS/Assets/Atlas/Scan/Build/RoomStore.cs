@@ -80,7 +80,11 @@ namespace Atlas.Scan
             return into.Count;
         }
 
-        /// <summary>Reads room_id.json. False, with the reason, when there is no such file or it is no valid RoomModel.</summary>
+        /// <summary>
+        /// Reads room_id.json. False, with the reason, when there is no such file or it is no valid RoomModel.
+        /// The triangle targets of the room's objects are assigned again by today's rule (RefreshTargets); the
+        /// file itself is left as it is.
+        /// </summary>
         public bool TryLoad(string id, out RoomModel room, out string error)
         {
             room = null;
@@ -101,7 +105,23 @@ namespace Atlas.Scan
                     return false;
                 }
             }
-            return RoomModelJson.TryRead(text, out room, out error);
+            if (!RoomModelJson.TryRead(text, out room, out error)) return false;
+            RefreshTargets(room);
+            return true;
+        }
+
+        /// <summary>
+        /// A triangle target is derived from the boxes by the rule of the day (ObjectMeshRules), not scanned. A
+        /// room saved under an earlier rule carries that rule's targets and would fail rule R17 now, so a
+        /// loaded room gets today's. A room of stand-ins keeps its own: each of them is 5,000 by definition.
+        /// </summary>
+        public static void RefreshTargets(RoomModel room)
+        {
+            if (room == null) throw new ArgumentNullException(nameof(room));
+            RoomObject[] objects = room.Objects;
+            for (int k = 0; k < objects.Length; k++)
+                if (objects[k].Mesh == MeshState.StandIn) return;
+            ObjectMeshRules.Assign(objects);
         }
 
         /// <summary>

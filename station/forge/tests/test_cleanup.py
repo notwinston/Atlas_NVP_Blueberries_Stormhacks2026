@@ -38,6 +38,21 @@ def test_blob_of_over_200k_triangles():
     assert result.report.palette_name.startswith("green") and 64 <= result.report.palette_index < 128
 
 
+def test_the_full_target_goes_to_fifteen_thousand():
+    v, f = blob()
+    dims = (0.9, 0.63, 0.72)
+    result = clean(v, f, dims, 15000, (60, 120, 60))
+    verdict = check(result, dims, 15000)
+    assert 12000 < verdict.triangles <= 15000 and result.report.tri_target == 15000
+    assert len(result.glb) < 2 * 1024 * 1024
+    # The light level does not take it; a target above the contract's largest is held to it.
+    assert "triangles.range" in validate_glb(result.glb, box=dims, level="light").codes
+    assert clean(v, f, dims, 20000, (60, 120, 60)).report.tri_target == 15000
+    # And a light target: what the light copy of a crowded room will be held to.
+    light = clean(v, f, dims, 1875, (60, 120, 60))
+    assert validate_glb(light.glb, tri_target=1875, box=dims, level="light").ok and light.report.triangles >= 1500
+
+
 def test_long_thin_triangles():
     # A 3 m plank of twelve triangles: every one is a sliver far over the edge limit.
     plank = trimesh.creation.box((3.0, 0.04, 0.3))
