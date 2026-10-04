@@ -42,3 +42,14 @@ Tile meshes (collection `SmallPlanet_Tiles`) are in tile-local chart coordinates
 **Export to Unity.** `tools/kit/export_planet.py` writes the six tiles as kit GLBs into
 `ATLAS/Assets/Atlas/Spaces/SmallPlanet/Resources/PlanetKit/`; run it with background Blender on a snapshot copy of the
 .blend. Conventions, the command and the wiring checklist: `ATLAS/Assets/Atlas/Spaces/SmallPlanet/PlanetKit.md`.
+
+## Duck (S3 duck maze)
+
+Source: `art/source/free_rubber_duck_3d_model.glb`, "Free Rubber Duck 3d Model" by Ryan King Art (https://sketchfab.com/ryankingart), <https://sketchfab.com/3d-models/free-rubber-duck-3d-model-c5739cd7a94547dcb091bdd527536977>, licensed CC BY 4.0 (<http://creativecommons.org/licenses/by/4.0/>). The licence allows redistribution and adaptation with attribution; this is the attribution: the duck in the S3 maze is that model, merged, decimated to 2,400 triangles, scaled to 0.30 m and recoloured with four palette cells.
+
+Rebuild (from the repo root; `duck_build.py` rebuilds `Hero_Duck` in collection `ATLAS_Hero` from scratch and saves the blend, so hand edits are lost):
+
+    blender -b art/blender/ATLAS_Kit.blend -P art/blender/duck_build.py -- <repo_root>
+    blender -b art/blender/ATLAS_Kit.blend -P tools/kit/export_kit.py -- <repo_root>
+
+The first command imports the GLB, bakes the Sketchfab parent transforms, joins the four meshes, maps `Rubber_Duck_Yellow`, `_Orange`, `_White` and `_Black` to `pal_DuckYellow`, `pal_DuckOrange`, `pal_DuckWhite` and `pal_DuckBlack`, merges vertices closer than 1e-5 m, collapses to at most 2,400 triangles, scales to 0.30 m tall (Z up), and puts the origin at the bottom centre of the bounding box. The source orientation is kept (the beak points along Blender -X). The second writes `duck.glb.bytes` and `manifest.json` into `ATLAS/Assets/Atlas/Spaces/Glued/Resources/AtlasKit/` like the Glued heroes. The four colours are `AtlasPalette.DuckYellow` #FFC21A, `DuckOrange` #FF4A12, `DuckWhite` #E8E8E8 and `DuckBlack` #1A1A1A (cells 60 to 63, the cells of the object categories 28 to 31 that no category uses). Tested by `Tests/AlignedCells/DuckKitTests.cs`.

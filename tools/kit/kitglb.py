@@ -28,8 +28,9 @@ import struct
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# Triangle ceilings per piece: AtlasMeshBudget.GluedCell and AtlasMeshBudget.SelfAvatar.
-BUDGETS = {"landmark": 1500, "avatar": 600}
+# Triangle ceilings per piece: AtlasMeshBudget.GluedCell and AtlasMeshBudget.SelfAvatar; the duck of the S3 maze
+# (2026-10-04 design, section 4) is one piece in a room, at most 2,500.
+BUDGETS = {"landmark": 1500, "avatar": 600, "duck": 2500}
 
 # Positions closer than this are one point when looking for open edges, metres.
 WELD_TOLERANCE = 1e-5

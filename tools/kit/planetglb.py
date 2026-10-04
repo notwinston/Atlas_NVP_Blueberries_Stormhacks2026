@@ -79,6 +79,8 @@ def palette_srgb(index: int) -> tuple[float, float, float]:
         return _hex(_STRUCTURE[column])
     if row in (2, 3):
         k = (row - 2) * 16 + column
+        if 28 <= k <= 31:                      # cells 60 to 63: the rubber duck (AtlasPalette.DuckYellow .. DuckBlack)
+            return _hex((0xFFC21A, 0xFF4A12, 0xE8E8E8, 0x1A1A1A)[k - 28])
         return _hsv(0, 0, 0.45) if k == 0 else _hsv(k * 137.5, 0.40, 0.50)
     if 4 <= row <= 7:
         v = (0.28, 0.42, 0.58, 0.74)[row - 4]

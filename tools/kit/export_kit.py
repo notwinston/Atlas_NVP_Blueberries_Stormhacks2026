@@ -10,7 +10,7 @@ or inside a running Blender (the Blender MCP `exec`):
 
 What the file holds, and how it is read:
 
-- Collection `ATLAS_Hero` with mesh objects `Hero_Landmark` (piece `landmark`) and `Hero_Avatar` (piece `avatar`).
+- Collection `ATLAS_Hero` with mesh objects `Hero_Landmark` (piece `landmark`), `Hero_Avatar` (piece `avatar`) and `Hero_Duck` (piece `duck`).
   A missing object skips its piece with a note; a piece that fails its checks is not written and the error is
   printed. Either way the piece's previous file, if any, stays.
 - Frame: the object origin is the piece origin. Vertices are taken in object space with the modifiers applied,
@@ -44,7 +44,7 @@ if HERE not in sys.path:
 import kitglb  # noqa: E402  (found next to this file)
 
 COLLECTION = "ATLAS_Hero"
-PIECES = {"landmark": "Hero_Landmark", "avatar": "Hero_Avatar"}
+PIECES = {"landmark": "Hero_Landmark", "avatar": "Hero_Avatar", "duck": "Hero_Duck"}
 AO_ATTRIBUTE = "ao"
 LINES_UV = "lines"
 OUT_PARTS = ("ATLAS", "Assets", "Atlas", "Spaces", "Glued", "Resources", "AtlasKit")
