@@ -160,7 +160,7 @@ namespace Atlas.Spaces.Glued
                 GluedShapes.AddNeonCube(data, origin + (float3)TetracubeCell(k) * c + new float3(0f, 0.5f * c, 0f), c, LandmarkEdgeWidth,
                                         face, edge);
             float3 ball = origin + (float3)TetracubeCell(3) * c + new float3(0f, c + LandmarkBall + 0.01f, 0f);
-            GluedShapes.AddSphere(data, ball, LandmarkBall, 12, 8, AtlasPalette.Uv(LandmarkBallColour));
+            data.AddSphere(ball, LandmarkBall, 12, 8, AtlasPalette.Uv(LandmarkBallColour));
             GluedShapes.AddRing(data, pole + new float3(0f, 0.004f, 0f), LandmarkRing - 0.035f, LandmarkRing, 24,
                                 AtlasPalette.Uv(LandmarkGlow));
         }
@@ -218,46 +218,9 @@ namespace Atlas.Spaces.Glued
         }
     }
 
-    /// <summary>Small closed shapes for the cell and the avatar: a sphere, a cube with lit edges, a flat ring. Engine-free.</summary>
+    /// <summary>Small closed shapes for the cell and the avatar: a cube with lit edges, a flat ring (the sphere is AtlasMeshBuilder.AddSphere). Engine-free.</summary>
     static class GluedShapes
     {
-        // A latitude and longitude sphere with smooth normals, faces outwards.
-        public static void AddSphere(AtlasMeshBuilder data, float3 centre, float radius, int segments, int rings, float2 uv0)
-        {
-            data.Reserve((segments + 1) * (rings + 1), segments * rings * 6);
-            int first = data.VertexCount;
-            for (int j = 0; j <= rings; j++)
-            {
-                math.sincos(math.PI * j / rings, out float sinPolar, out float cosPolar);
-                for (int i = 0; i <= segments; i++)
-                {
-                    math.sincos(2f * math.PI * (i % segments) / segments, out float sin, out float cos);
-                    float3 normal = new float3(sinPolar * sin, cosPolar, sinPolar * cos);
-                    data.AddVertex(centre + radius * normal, normal, uv0, float2.zero, 1f, 0);
-                }
-            }
-            int stride = segments + 1;
-            for (int j = 0; j < rings; j++)
-            {
-                for (int i = 0; i < segments; i++)
-                {
-                    int p00 = first + j * stride + i, p10 = p00 + 1, p01 = p00 + stride, p11 = p01 + 1;
-                    // The top and bottom rows collapse to the poles: one triangle each instead of two.
-                    if (j > 0) AddOutward(data, centre, p00, p10, p11);
-                    if (j < rings - 1) AddOutward(data, centre, p00, p11, p01);
-                }
-            }
-        }
-
-        // Adds the triangle wound so that its front (clockwise, Unity's rule) faces away from the centre.
-        static void AddOutward(AtlasMeshBuilder data, float3 centre, int a, int b, int c)
-        {
-            float3 pa = data.Vertices[a].Position, pb = data.Vertices[b].Position, pc = data.Vertices[c].Position;
-            float3 front = math.cross(pb - pa, pc - pa);
-            if (math.dot(front, (pa + pb + pc) / 3f - centre) >= 0f) data.AddTriangle(a, b, c);
-            else data.AddTriangle(a, c, b);
-        }
-
         /// <summary>
         /// A cube of side `side` about `centre` in colour `face`, with its twelve edges drawn as bars `edge` wide in colour
         /// `edgeUv` (a lit colour makes a neon frame). The bars straddle the edges, so they show from every side.
@@ -296,8 +259,8 @@ namespace Atlas.Spaces.Glued
                 data.AddVertex(centre + new float3(outer * c0, 0f, outer * s0), up, uv0, float2.zero, 1f, 0);
                 data.AddVertex(centre + new float3(outer * c1, 0f, outer * s1), up, uv0, float2.zero, 1f, 0);
                 data.AddVertex(centre + new float3(inner * c1, 0f, inner * s1), up, uv0, float2.zero, 1f, 0);
-                AddOutward(data, centre - up, first, first + 1, first + 2);
-                AddOutward(data, centre - up, first, first + 2, first + 3);
+                data.AddTriangleOutward(centre - up, first, first + 1, first + 2);
+                data.AddTriangleOutward(centre - up, first, first + 2, first + 3);
             }
         }
 
