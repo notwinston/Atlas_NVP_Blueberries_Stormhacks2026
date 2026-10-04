@@ -15,6 +15,7 @@ namespace Atlas.World.Lint
         public int CoincidentFaces, StructuralConflicts, RegionMismatches, ContentMismatches, RegionsPresent;
         public int CorridorsMissingKerb; public int Corridors, CorridorsTwoClosed, CorridorsOneClosed, CorridorKerbs;
         public ulong WorldHash1, WorldHash2;
+        public int FootprintSamples, FootprintTilesNotHome, PropTilesInFootprint;   // P1-B11: MP §3.4, §9.5.6 P1-B11
 
         public override string ToString()
         {
@@ -30,6 +31,7 @@ namespace Atlas.World.Lint
             sb.AppendLine($"  CoincidentFaces={CoincidentFaces} StructuralConflicts={StructuralConflicts}");
             sb.AppendLine($"  Corridors={Corridors} TwoClosedAxisEdges={CorridorsTwoClosed} OneClosedAxisEdge={CorridorsOneClosed} CorridorKerbsOwned={CorridorKerbs} MissingKerbs={CorridorsMissingKerb}");
             sb.AppendLine($"  RegionMismatches={RegionMismatches} ContentMismatches={ContentMismatches} RegionsPresent={RegionsPresent}");
+            sb.AppendLine($"  FootprintSamples={FootprintSamples} FootprintTilesNotHome={FootprintTilesNotHome} PropTilesInFootprint={PropTilesInFootprint}");
             sb.AppendLine($"  WorldHash1=0x{WorldHash1:X16} WorldHash2=0x{WorldHash2:X16}");
             foreach (var f in Failures) sb.AppendLine("  FAIL: " + f);
             return sb.ToString();

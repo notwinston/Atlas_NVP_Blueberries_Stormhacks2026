@@ -17,6 +17,7 @@ namespace Atlas.Spaces.CurvedWalk
         TileRenderer tiles;
         TileGraph tilesGraph;
         double tilesL;
+        CurvedRoomView roomView;
         LapMarkerView markers;
         RoomModel room;
 
@@ -31,6 +32,7 @@ namespace Atlas.Spaces.CurvedWalk
         public IActionSource Actions { get; set; }     // lane C's action map
         public event Action<SpaceId> SpaceRequested;   // the host wires this to SpaceLab.Request
         public TileRenderer Tiles => tiles;
+        public CurvedRoomView RoomView => roomView;
         public LapMarkerView Markers => markers;
 
         public void Configure(RoomModel roomModel, ParamRegistry registry)
@@ -47,6 +49,7 @@ namespace Atlas.Spaces.CurvedWalk
             root = new GameObject("S2_CurvedWalk") { hideFlags = HideFlags.DontSave };
             tiles = root.AddComponent<TileRenderer>();
             ConfigureTiles(space.Resolve(5).LengthScaleM);
+            if (Home != null) roomView = new CurvedRoomView(root.transform, SharedMaterial, Home, room.walls);
             markers = new LapMarkerView(root.transform, SharedMaterial);
             markers.Visible = false;
         }
@@ -84,6 +87,13 @@ namespace Atlas.Spaces.CurvedWalk
             if (tiles.gameObject.activeSelf != curved) tiles.gameObject.SetActive(curved);   // S3: hidden at K = 0 (OnDisable restores the fog)
             if (curved) tiles.Upload(f);
             Iso2 u = rig.Pose.Local;
+            if (roomView != null)
+            {
+                bool draw = space.TileZeroFound;
+                if (draw && curved)
+                    draw = Geometry2.Distance(u.M.c2, space.TileZeroInCurrent.M.c2, kappa) <= space.CullRho + space.RoomRadiusM / l;   // [B09 D12]
+                roomView.Upload(kappa, l, u, space.TileZeroInCurrent, draw);
+            }
             markers.Visible = space.Walk.Armed;
             markers.Upload(space.Walk, space.TileZeroInCurrent, u, kappa, l, (Vector3)f.HeadPosition);
         }
@@ -92,6 +102,7 @@ namespace Atlas.Spaces.CurvedWalk
         {
             space.Exit();
             markers?.Dispose(); markers = null;
+            roomView?.Dispose(); roomView = null;
             if (root != null)
             {
                 if (Application.isPlaying) UnityEngine.Object.Destroy(root); else UnityEngine.Object.DestroyImmediate(root);
