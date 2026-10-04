@@ -10,7 +10,7 @@ namespace Atlas.App.Tests
 {
     /// <summary>
     /// The frame loop's order (Master Plan section 6.3, contract README F5) with stand-ins for every hook and
-    /// the real flat kernel.
+    /// the app's real kernel: flat as it boots, and configured curved as a curved space leaves it.
     /// </summary>
     public class FrameLoopTests
     {
@@ -19,7 +19,7 @@ namespace Atlas.App.Tests
         sealed class Rig
         {
             public readonly List<string> Log = new List<string>();
-            public readonly FlatWalkerKernel Kernel = new FlatWalkerKernel();
+            public readonly HolonomyWalkerKernel Kernel = new HolonomyWalkerKernel();
             public readonly FrameLoopCore Loop;
             public readonly FakeSense Pose;
             public readonly FakeGuard Guard;
@@ -88,6 +88,139 @@ namespace Atlas.App.Tests
             }
             Assert.That(rig.Kernel.StepCount - before, Is.EqualTo(10));
             Assert.That(rig.Loop.Current.Kernel.Rejected, Is.True, "a frame with tracking lost integrates nothing");
+        }
+
+        [Test]
+        public void Kernel_Curved_SteppedOncePerFrameAfterThePose_RampOnlyWhileStanding()
+        {
+            // Task P1-B02: with the kernel configured for the {4,5} world, step 4 runs after the pose update
+            // exactly once in each of 600 consecutive frames, and the curvature ramp, which only the frame's
+            // time can advance, moves only in the frames that find the walker standing.
+            const double l5 = 2.0 / 1.0612750619050357;
+            var rig = new Rig(true);
+            IDialKernel kernel = rig.Kernel;
+            kernel.Configure(KernelConfig.Curved(5, l5));
+            rig.Frame();
+            rig.Loop.ResetWalkerToFloor();
+            kernel.ResetToFloorFlat(double2.zero);
+            Assert.That(kernel.SetCurvatureTarget(Curvature.Hyperbolic, l5), Is.True);
+
+            double target = -1.0 / (l5 * l5);
+            long steps = kernel.StepCount;
+            int frames = rig.Loop.FrameCount;
+            float x = 0f;
+            double previous = 0.0;
+            for (int i = 0; i < 600; i++)
+            {
+                // 2 s walking at 0.6 m/s out and back, 3 s standing, 2 s walking, 3 s standing.
+                bool walking = i < 120 || (i >= 300 && i < 420);
+                float before = x;
+                if (walking) x += ((i / 60) % 2 == 0 ? 0.01f : -0.01f);
+                rig.Pose.Position = new float3(x, 1.6f, 0f);
+                rig.Log.Clear();
+                rig.Frame();
+
+                Assert.That(kernel.StepCount - steps, Is.EqualTo(i + 1), "exactly one kernel step per frame");
+                Assert.That(rig.Loop.FrameCount - frames, Is.EqualTo(i + 1));
+                // After the pose update: the step integrated the move the pose filter passed in this very frame.
+                Assert.That(rig.Loop.Current.Kernel.Rejected, Is.False);
+                Assert.That(rig.Loop.Current.Kernel.AppliedMetres.x, Is.EqualTo((double)x - before).Within(1e-6));
+                Assert.That(rig.Loop.Current.Walker, Is.EqualTo(kernel.Pose));
+                Assert.That(rig.Log.IndexOf("filter"), Is.LessThan(rig.Log.IndexOf("space.tick")));
+
+                double now = kernel.CurvatureNow;
+                if (walking)
+                {
+                    Assert.That(now, Is.EqualTo(previous), "frame " + i + ": no ramp while walking");
+                    Assert.That(kernel.Still, Is.False);
+                }
+                else if (previous != target)
+                {
+                    Assert.That(now, Is.LessThan(previous), "frame " + i + ": the ramp advances while standing");
+                    Assert.That(kernel.Still, Is.True);
+                    Assert.That(kernel.CurvatureChanged, Is.True);
+                }
+                previous = now;
+
+                if (i == 119) Assert.That(now, Is.EqualTo(0.0), "two seconds of walking: still flat");
+                if (i == 299) Assert.That(now, Is.EqualTo(0.75 * target).Within(1e-6), "three of the four seconds");
+                if (i == 419) Assert.That(now, Is.EqualTo(0.75 * target).Within(1e-6), "held through the second walk");
+            }
+            Assert.That(kernel.CurvatureNow, Is.EqualTo(target));
+            Assert.That(kernel.Ramping, Is.False);
+            Assert.That(kernel.MetresPerUnit, Is.EqualTo(l5).Within(1e-12));
+            Assert.That(rig.Sink.Last.P0, Is.EqualTo((float)l5), "State.p[0] is L");
+        }
+
+        [Test]
+        public void State_CurvedKernel_TileWordsAndRowMajorFrame()
+        {
+            // kernel.md sections 4.5 and 5.4: tileId holds Xu, Xv, Yu, Yv, Tu, Tv; xform holds Local row-major;
+            // p[0] is L (R on the sphere). In a flat space they stay six zeros, identity and one metre.
+            const double l5 = 2.0 / 1.0612750619050357;
+            var rig = new Rig(true);
+            rig.Frame();
+            Assert.That(rig.Sink.Last.GetTile(4), Is.EqualTo(0L), "flat: six zeros");
+            Assert.That(rig.Sink.Last.P0, Is.EqualTo(1f));
+
+            rig.Kernel.Configure(KernelConfig.Curved(5, l5));
+            rig.Loop.ResetWalkerToFloor();
+            float x = 0f;
+            for (int i = 0; i < 150; i++)
+            {
+                x += 0.02f;
+                rig.Pose.Position = new float3(x, 1.6f, 0.3f * x);
+                rig.Frame();
+            }
+            WalkerPose pose = rig.Kernel.Pose;
+            Assert.That(pose.Tile, Is.Not.EqualTo(TileId.Zero), "the walk left tile zero");
+            StateMessage s = rig.Sink.Last;
+            var words = new long[] { pose.Tile.Xu, pose.Tile.Xv, pose.Tile.Yu, pose.Tile.Yv, pose.Tile.Tu, pose.Tile.Tv };
+            for (int i = 0; i < 6; i++) Assert.That(s.GetTile(i), Is.EqualTo(words[i]), "tile word " + i);
+            var m = new double[9];
+            for (int i = 0; i < 9; i++) m[i] = s.GetXform(i);
+            Assert.That(Iso2.FromRowMajor(m, Curvature.Hyperbolic), Is.EqualTo(pose.Local), "xform is Local, row-major");
+            Assert.That(s.GetXform(2), Is.EqualTo(pose.Local.M.c2.x), "row 0, column 2 is the x of the position column");
+            Assert.That(s.P0, Is.EqualTo((float)l5));
+            Assert.That(s.P2, Is.EqualTo((float)rig.Kernel.CullRho));
+            Assert.That(s.Sheet, Is.EqualTo(0));
+
+            // The round trip through the wire keeps them.
+            var buffer = new byte[StateMessage.Size];
+            s.WriteTo(buffer, 0);
+            StateMessage back = default;
+            Assert.That(back.ReadFrom(buffer, 0, buffer.Length), Is.True);
+            Assert.That(TileId.FromWords(new[] { back.Tile0, back.Tile1, back.Tile2, back.Tile3, back.Tile4, back.Tile5 }), Is.EqualTo(pose.Tile));
+            // The wire layout of lane D's page: tileId at byte 46, xform at byte 96, little-endian.
+            for (int i = 0; i < 6; i++) Assert.That(LittleEndianInt64(buffer, 46 + 8 * i), Is.EqualTo(words[i]));
+            for (int i = 0; i < 9; i++)
+                Assert.That(BitConverter.Int64BitsToDouble(LittleEndianInt64(buffer, 96 + 8 * i)), Is.EqualTo(m[i]));
+
+            // The sphere: the face index in word 0, R in p[0].
+            rig.Kernel.Configure(KernelConfig.Curved(3, 1.3));
+            rig.Loop.ResetWalkerToFloor();
+            for (int i = 0; i < 80; i++)
+            {
+                x += 0.02f;
+                rig.Pose.Position = new float3(x, 1.6f, 0.3f * x);
+                rig.Frame();
+            }
+            pose = rig.Kernel.Pose;
+            int face = CubeTiling.FaceOf(pose.Tile);
+            Assert.That(face, Is.GreaterThan(0), "the walk left face 0");
+            s = rig.Sink.Last;
+            Assert.That(s.GetTile(0), Is.EqualTo((long)face));
+            for (int i = 1; i < 6; i++) Assert.That(s.GetTile(i), Is.EqualTo(0L));
+            for (int i = 0; i < 9; i++) m[i] = s.GetXform(i);
+            Assert.That(Iso2.FromRowMajor(m, Curvature.Spherical), Is.EqualTo(pose.Local));
+            Assert.That(s.P0, Is.EqualTo(1.3f));
+        }
+
+        static long LittleEndianInt64(byte[] buffer, int offset)
+        {
+            ulong value = 0;
+            for (int i = 7; i >= 0; i--) value = (value << 8) | buffer[offset + i];
+            return (long)value;
         }
 
         [Test]

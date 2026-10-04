@@ -5,7 +5,7 @@ using Unity.Mathematics;
 
 namespace Atlas.Blades.Lung.Walking.Tests
 {
-    // Test-only reference of the MP §4.10 static-map logic (G6 §4.5; DV-G6-19: the placeholder BumpGuard.Level is always Clear).
+    // Test-only reference of the MP §4.10 static-map logic (G6 §4.5; DV-G6-19: a reference of the rule, not the real BumpGuard, whose levels Atlas.Safety.Tests cover).
     //   v = mean head-floor velocity over the last 0.2 s (12 frames); now = clear(head); path(T) = min clear along head -> head + v T
     //   (every 0.05 m, both ends); STRONG if now < 0.20 or path(0.4) < 0.05; WARN if now < 0.30 or path(0.8) < 0.05;
     //   relax only after now >= threshold + 0.05 and path >= 0.10, held 0.3 s. WARN start = rising edge into WARN or STRONG.

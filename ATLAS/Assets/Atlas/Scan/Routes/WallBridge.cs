@@ -75,12 +75,14 @@ namespace Atlas.Scan
         /// <summary>A capture is running.</summary>
         public bool Running { get { return _running != null; } }
 
-        /// <summary>The capture on the rig's AR session. False with no ARKit session, and whenever Begin(IntPtr) is.</summary>
+        /// <summary>
+        /// The capture on the rig's AR session. With no rig or no ARKit session none starts, and the last
+        /// capture is forgotten all the same: every scan calls this once.
+        /// </summary>
         public bool Begin(ArSessionRig rig)
         {
-            if (rig == null || !rig.HasAr || rig.Backend != XrBackend.ARKit || rig.Session == null || rig.Session.subsystem == null)
-                return false;
-            return Begin(rig.Session.subsystem.nativePtr);
+            bool arKit = rig != null && rig.HasAr && rig.Backend == XrBackend.ARKit && rig.Session != null && rig.Session.subsystem != null;
+            return Begin(arKit ? rig.Session.subsystem.nativePtr : IntPtr.Zero);
         }
 
         /// <summary>

@@ -34,7 +34,7 @@ namespace Atlas.Blades.FieldFit.BlindSpotFinder
         {
             if (_rig == null || _look == null || _tap == null)
             {
-                if (!BlindSpotPlaceholderSeams.TryResolve(out var r, out var l, out var t, out var e, out var missing))
+                if (!BlindSpotServices.TryResolve(out var r, out var l, out var t, out var e, out var missing))
                 {
                     Debug.LogError("BlindSpot: seams missing: " + missing);
                     return false;
@@ -105,6 +105,7 @@ namespace Atlas.Blades.FieldFit.BlindSpotFinder
             if (_dotMesh != null) Kill(_dotMesh);
             _backdropMesh = _crossMesh = _dotMesh = null;
             if (_isBlanked) { _isBlanked = false; _rig.SetEyeBlank(_blanked, false); }
+            (_look as IDisposable)?.Dispose();   // a look that rented its material gives it back
         }
 
         static void Kill(UnityEngine.Object o)

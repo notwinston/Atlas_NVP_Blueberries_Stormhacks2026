@@ -1,4 +1,5 @@
 using System;
+using Atlas.Kernel;
 using Atlas.Rendering;
 using Unity.Collections;
 using Unity.Mathematics;
@@ -23,17 +24,18 @@ namespace Atlas.Blades.Lung.AirwayKit
     }
 
     // Brief G5 2.4-2.5. Builds the kit in the kit frame (entry edge = edge 0); placement is the caller's anchor product.
-    public sealed class AirwayKitMeshBuilder : IDisposable
+    // Vertices are the one layout of the look shader (AtlasVertex). Every Build has an engine-free form that fills Vertices and
+    // Indices and uploads nothing, and a form that then uploads them to a Mesh, as TileMeshGenerator does.
+    public sealed class AirwayKitMeshBuilder
     {
         public const int MaxVertices = 8192, MaxIndices = 24576;
 
         readonly AirwayPalette pal;
         readonly TileMeshGenerator gen;
-        readonly TileVertex[] verts = new TileVertex[MaxVertices];
+        readonly AtlasVertex[] verts = new AtlasVertex[MaxVertices];
         readonly ushort[] idx = new ushort[MaxIndices];
         readonly WallRun[] runs = new WallRun[8];
         readonly int[] kerbBase = new int[8], memBase = new int[8], cols = new int[8];
-        Mesh scratch;
         int vc, ic;
 
         public AirwayKitMeshBuilder(TilePalette tilePalette, AirwayPalette palette)
@@ -42,10 +44,9 @@ namespace Atlas.Blades.Lung.AirwayKit
             gen = new TileMeshGenerator(tilePalette);
         }
 
-        public void Dispose()
-        {
-            if (scratch != null) { if (Application.isPlaying) UnityEngine.Object.Destroy(scratch); else UnityEngine.Object.DestroyImmediate(scratch); scratch = null; }
-        }
+        /// <summary>The vertices and indices of the last Build, valid up to the layout's VertexCount and IndexCount.</summary>
+        public AtlasVertex[] Vertices => verts;
+        public ushort[] Indices => idx;
 
         // ---- low level ----
 
@@ -53,7 +54,12 @@ namespace Atlas.Blades.Lung.AirwayKit
         {
             if (vc >= MaxVertices) throw new InvalidOperationException("AirwayKitMeshBuilder: vertex budget exceeded");
             byte b = (byte)math.round(255f * ao);
-            verts[vc] = new TileVertex { Position = new float3((float)c.x, y, (float)c.y), Color = new Color32(b, b, b, 255), Uv = uv };
+            // Kit parts carry no lines: a constant line coordinate and line weight 0. The shader does not light by the normal.
+            verts[vc] = new AtlasVertex
+            {
+                Position = new float3((float)c.x, y, (float)c.y), Normal = new float3(0f, 1f, 0f), Color = AtlasVertex.PackColor(b, 0),
+                Uv0 = uv, Uv1 = new float2(0.5f, 0.5f),
+            };
             return vc++;
         }
 
@@ -132,9 +138,9 @@ namespace Atlas.Blades.Lung.AirwayKit
             const MeshUpdateFlags flags = MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices;
             var arr = Mesh.AllocateWritableMeshData(1);
             var md = arr[0];
-            md.SetVertexBufferParams(vc, TileVertex.Descriptors);
+            md.SetVertexBufferParams(vc, AtlasMesh.Layout);
             md.SetIndexBufferParams(ic, IndexFormat.UInt16);
-            NativeArray<TileVertex>.Copy(verts, md.GetVertexData<TileVertex>(), vc);
+            NativeArray<AtlasVertex>.Copy(verts, md.GetVertexData<AtlasVertex>(), vc);
             NativeArray<ushort>.Copy(idx, md.GetIndexData<ushort>(), ic);
             md.subMeshCount = 1;
             md.SetSubMesh(0, new SubMeshDescriptor(0, ic) { bounds = bounds, vertexCount = vc }, flags);
@@ -146,6 +152,14 @@ namespace Atlas.Blades.Lung.AirwayKit
 
         public KitMeshLayout BuildTile(KitKind kind, in TileMeshSpec floorSpec, Mesh target)
         {
+            var lay = BuildTile(kind, floorSpec);
+            Upload(target);
+            return lay;
+        }
+
+        /// <summary>Engine-free: fills Vertices and Indices and uploads nothing.</summary>
+        public KitMeshLayout BuildTile(KitKind kind, in TileMeshSpec floorSpec)
+        {
             int kappa = floorSpec.Kappa; double scale = floorSpec.Scale;
             if (kappa == 1) throw new ArgumentOutOfRangeException(nameof(floorSpec), "airway kit has no spherical variant (D-10)");
             if (kappa == -1 && floorSpec.Q != 5) throw new ArgumentException("airway kit is {4,5} only", nameof(floorSpec));
@@ -153,18 +167,13 @@ namespace Atlas.Blades.Lung.AirwayKit
             double H = KitGeometry.InRadiusMetres(kappa, scale);   // validates kappa / scale (D-10)
 
             // 1. floor: unchanged copy of the P1-B05 generator (LODs, 16 boundary segments, triangle caps)
-            if (scratch == null) scratch = new Mesh { name = "AirwayKit.scratch" };
-            gen.Build(floorSpec, scratch);
             var lay = new KitMeshLayout();
-            using (var data = Mesh.AcquireReadOnlyMeshData(scratch))
-            {
-                var md = data[0];
-                int fv = md.vertexCount, fi = md.GetSubMesh(0).indexCount;
-                NativeArray<TileVertex>.Copy(md.GetVertexData<TileVertex>(), verts, fv);
-                NativeArray<ushort>.Copy(md.GetIndexData<ushort>(), idx, fi);
-                vc = fv; ic = fi;
-                lay.FloorVertices = new RangeInt(0, fv); lay.FloorIndices = new RangeInt(0, fi);
-            }
+            var floor = gen.Build(floorSpec);
+            int fv = floor.VertexCount, fi = floor.IndexCount;   // no kerbs and no posts (checked above): the floor is all of it
+            Array.Copy(gen.Vertices, verts, fv);
+            Array.Copy(gen.Indices, idx, fi);
+            vc = fv; ic = fi;
+            lay.FloorVertices = new RangeInt(0, fv); lay.FloorIndices = new RangeInt(0, fi);
 
             // 2. walls
             int nRuns = KitGeometry.WallPath(kind, kappa, scale, runs);
@@ -210,13 +219,20 @@ namespace Atlas.Blades.Lung.AirwayKit
             lay.GlyphIndices = new RangeInt(i0, ic - i0);
 
             lay.VertexCount = vc; lay.IndexCount = ic;
-            Upload(target);
             return lay;
         }
 
         // ---- valve shell overlay (brief 2.5, D-6) ----
 
         public ValveShellLayout BuildValveShell(KitKind kind, int openIrisKitMask, bool opaque, int kappa, double scale, Mesh target)
+        {
+            var lay = BuildValveShell(kind, openIrisKitMask, opaque, kappa, scale);
+            if (lay.VertexCount == 0) target.Clear(); else Upload(target);
+            return lay;
+        }
+
+        /// <summary>Engine-free: fills Vertices and Indices and uploads nothing.</summary>
+        public ValveShellLayout BuildValveShell(KitKind kind, int openIrisKitMask, bool opaque, int kappa, double scale)
         {
             int mask = KitGeometry.KitMask(kind);
             if ((openIrisKitMask & ~mask) != 0) throw new ArgumentException("openIrisKitMask must be a subset of the kind's open edges", nameof(openIrisKitMask));
@@ -264,8 +280,6 @@ namespace Atlas.Blades.Lung.AirwayKit
             lay.GlyphIndices = new RangeInt(i0, ic - i0);
 
             lay.VertexCount = vc; lay.IndexCount = ic;
-            if (vc == 0) { target.Clear(); return lay; }
-            Upload(target);
             return lay;
         }
     }

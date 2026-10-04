@@ -1,6 +1,8 @@
+#if !ATLAS_HEADLESS
 using System.IO;
 using Atlas.Blades.Lung.Endoluminal;
 using Atlas.Blades.Lung.Endoluminal.Testing;
+using Atlas.Rendering;
 using NUnit.Framework;
 using Unity.Mathematics;
 using UnityEngine;
@@ -13,14 +15,14 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
         static float Luma(Color c) => 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
 
         // Criterion: MP 10.2.3 "true 3D view ... clock positions" (needs a graphics device; skipped under -nographics).
-        [Test]
+        [Test, Category("Unity")]
         public void Endo_Render_GPU()
         {
             if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null) Assert.Ignore("Null graphics device: run without -nographics (docs/laneB/TESTING.md)");
             var palette = new Texture2D(128, 128, TextureFormat.RGBA32, false);
             var px = new Color32[128 * 128]; for (int i = 0; i < px.Length; i++) px[i] = new Color32(230, 140, 128, 255);
             palette.SetPixels32(px); palette.Apply();
-            Shader.SetGlobalTexture("_PaletteTex", palette);
+            Shader.SetGlobalTexture(AtlasShaderIDs.Palette, palette);
             var w = EndoTestUtil.NewWindow(out var go);
             RenderTexture flat = null; Texture2D img = null;
             try
@@ -33,7 +35,7 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
             }
             finally
             {
-                Shader.SetGlobalTexture("_PaletteTex", null);
+                Shader.SetGlobalTexture(AtlasShaderIDs.Palette, null);
                 Object.DestroyImmediate(palette);
                 if (flat != null) { flat.Release(); Object.DestroyImmediate(flat); }
                 if (img != null) Object.DestroyImmediate(img);
@@ -64,7 +66,7 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
 
                 float bg = Luma(EndoluminalWindow.Background.gamma);   // the RT is sRGB in a linear project
                 int differ = 0; foreach (var c in pix) if (Mathf.Abs(Luma(c) - bg) > 0.02f) differ++;
-                Debug.Log($"[P2-B07] GPU: {100.0 * differ / pix.Length:F1}% of pixels differ from the background");
+                TestContext.WriteLine($"[P2-B07] GPU: {100.0 * differ / pix.Length:F1}% of pixels differ from the background");
                 Assert.GreaterOrEqual(differ, pix.Length / 2, "at least 50% of pixels differ from Background");
 
                 var pose = EndoluminalCamera.Pose(f);
@@ -72,7 +74,7 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
                 Matrix4x4 vp = EndoluminalCamera.ProjectionMatrix() * EndoluminalCamera.ViewMatrix(pose, f.Parent.EndMm, s);
                 float refLuma = Luma(img.GetPixel(256, (int)(0.9f * 511)));
                 float darkest = 1f; foreach (var c in pix) { float l = Luma(c); if (l > bg + 0.05f) darkest = Mathf.Min(darkest, l); }
-                Debug.Log($"[P2-B07] GPU: centre luma {Luma(img.GetPixel(256, 256)):F3}, darkest tissue luma {darkest:F3}, reference (0.5, 0.9) luma {refLuma:F3}");
+                TestContext.WriteLine($"[P2-B07] GPU: centre luma {Luma(img.GetPixel(256, 256)):F3}, darkest tissue luma {darkest:F3}, reference (0.5, 0.9) luma {refLuma:F3}");
                 Assert.LessOrEqual(darkest, 0.85f * refLuma, "depth cue: distant tissue must be darker than the near wall (D-27)");
                 for (int k = 0; k < 2; k++)
                 {
@@ -81,16 +83,17 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
                     Vector4 clip = vp * new Vector4(p.x, p.y, p.z, 1);
                     int x = Mathf.Clamp((int)((clip.x / clip.w * 0.5f + 0.5f) * 511), 0, 511), y = Mathf.Clamp((int)((clip.y / clip.w * 0.5f + 0.5f) * 511), 0, 511);
                     float far = Luma(img.GetPixel(x, y));
-                    Debug.Log($"[P2-B07] GPU: child {k} far-axis luma {far:F3}, reference (0.5, 0.9) luma {refLuma:F3}, ratio {far / refLuma:F3} (brief: <= 0.5)");
+                    TestContext.WriteLine($"[P2-B07] GPU: child {k} far-axis luma {far:F3}, reference (0.5, 0.9) luma {refLuma:F3}, ratio {far / refLuma:F3} (brief: <= 0.5)");
 
                     double ang = EndoluminalCamera.ClockAngleDeg(pose, c.Dir) * System.Math.PI / 180;
                     int lx = (int)(256 + 0.35 * 512 * System.Math.Sin(ang)), ly = (int)(256 + 0.35 * 512 * System.Math.Cos(ang));
                     float mx = 0;
                     for (int j = -20; j < 20; j++) for (int i = -20; i < 20; i++) mx = Mathf.Max(mx, Luma(img.GetPixel(Mathf.Clamp(lx + i, 0, 511), Mathf.Clamp(ly + j, 0, 511))));
-                    Debug.Log($"[P2-B07] GPU: label {k} ({w.LabelText(k)}) max luma {mx:F3} at ({lx}, {ly})");
+                    TestContext.WriteLine($"[P2-B07] GPU: label {k} ({w.LabelText(k)}) max luma {mx:F3} at ({lx}, {ly})");
                     Assert.GreaterOrEqual(mx, 0.8f, "label text must be bright");
                 }
             }
         }
     }
 }
+#endif

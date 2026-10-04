@@ -1,3 +1,4 @@
+#if !ATLAS_HEADLESS
 using System;
 using System.IO;
 using System.Text;
@@ -153,3 +154,4 @@ namespace Atlas.Blades.FieldFit.Tests
         static void Flush() { File.WriteAllText(Path.Combine(EvidenceDir(), "ring_test.txt"), "P3-B04 TunnelEdge_10Deg_RingTestScene (CPU mirror of FieldFitBlit, D_test, 360 rays x 2 eyes, 0.25 px steps)\n" + Log); }
     }
 }
+#endif

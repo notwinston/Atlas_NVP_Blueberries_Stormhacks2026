@@ -1,15 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using System.Text;
 using Atlas.Kernel;
 using Atlas.Link;
-using Atlas.Telemetry;
 using Atlas.World;
 using NUnit.Framework;
 using Unity.Mathematics;
-using UnityEngine;
 
 namespace Atlas.Blades.Lung.Walking.Tests
 {
@@ -20,13 +17,9 @@ namespace Atlas.Blades.Lung.Walking.Tests
         static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
         readonly List<AirwayWingModule> _modules = new List<AirwayWingModule>();
 
-        static RoomModel Room(string name) =>
-            RoomModel.Load(Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "recordings", name + ".json")));
+        static RoomModel Room(string name) => RoomFixtures.LoadFromProject(name);
 
-        static string EvidenceDir =>
-            Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "docs", "laneB", "evidence", "P2-B05"));
-
-        // EventLog.Emitted is static: dispose every switch so tests do not leak handlers (G6 §8 pitfall 6).
+        // The module subscribes to the published EventLog: exit every module so no handler outlives its test (G6 §8 pitfall 6).
         [TearDown] public void TearDown() { foreach (var m in _modules) m.Exit(); _modules.Clear(); }
 
         AirwayWingModule MakeModule(RoomModel room, ParamRegistry reg, string route)
@@ -52,13 +45,13 @@ namespace Atlas.Blades.Lung.Walking.Tests
 
         sealed class Run { public bool Ok = true; public string Why = ""; public int Switches; public AirwayMode Final; }
 
-        // Walks one route; requests `target` through registry.ApplyRemote at the trigger frame (after 3 chambers entered).
+        // Walks one route; requests `target` as a remote ParamSet of curved.mode at the trigger frame (after 3 chambers entered).
         static Run Drive(RoomModel room, string route, AirwayMode start, AirwayMode target, When when, ParamRegistry reg, AirwayWingModule module)
         {
             var run = new Run();
             var wing = module.Wing;
-            reg.TryGetId("curved.mode", out ushort id);
-            if (start == AirwayMode.AlignedCells) Assert.IsTrue(reg.ApplyRemote(id, 2));
+            var mode = reg.Find(AirwayParams.CurvedMode);
+            if (start == AirwayMode.AlignedCells) Assert.IsTrue(mode.Set(AirwayParams.IndexOf(AirwayMode.AlignedCells), ParamSource.Remote));
             var w = new SimWalker(wing) { Module = module };
             module.Enter(default);
             var exp = Expected(route); var visited = new List<TileId>(); TileId last = default;
@@ -89,7 +82,7 @@ namespace Atlas.Blades.Lung.Walking.Tests
                     if (trigger)
                     {
                         requested = true;
-                        if (!reg.ApplyRemote(id, (float)target)) Fail("ApplyRemote refused");
+                        if (!mode.Set(AirwayParams.IndexOf(target), ParamSource.Remote)) Fail("ParamSet refused");
                         if (wing.Mode != start) Fail("mode changed on the request frame");
                     }
                 }
@@ -107,7 +100,7 @@ namespace Atlas.Blades.Lung.Walking.Tests
         [Test]
         public void Switch_AtChamber_KeepsAddressUnchanged()
         {
-            var room = Room("room_3x3");
+            var room = Room(RoomFixtures.Sample3x3);
             var routes = SimRoutes.Hundred();
             var sb = new StringBuilder("{\n  \"task\": \"P2-B05\",\n  \"criterion\": \"switch at a chamber keeps the address unchanged\",\n  \"runs\": [\n");
             int pass = 0, total = 0; var why = new List<string>(); bool firstRow = true;
@@ -128,8 +121,7 @@ namespace Atlas.Blades.Lung.Walking.Tests
                     firstRow = false;
                 }
             sb.Append("\n  ],\n  \"runs_passing\": " + pass + ",\n  \"runs_total\": " + total + "\n}\n");
-            Directory.CreateDirectory(EvidenceDir);
-            File.WriteAllText(Path.Combine(EvidenceDir, "switch_sim.json"), sb.ToString());
+            Lung.Tests.LungTestEnv.WriteEvidence("P2-B05", "switch_sim.json", sb.ToString());
             Assert.AreEqual(40, pass, "runs passing of 40: " + string.Join("; ", why));
         }
 
@@ -137,119 +129,137 @@ namespace Atlas.Blades.Lung.Walking.Tests
         [Test]
         public void Auto_SmallLapSide_SelectsMode2()
         {
-            var reg = new ParamRegistry(); MakeModule(Room("room_4x5_table"), reg, "L");
-            reg.TryGetId("curved.mode", out var id);
-            Assert.AreEqual(2f, reg.Get(id), "room_4x5_table (s < 1.5) -> Mode 2");
-            var reg2 = new ParamRegistry(); MakeModule(Room("room_3x3"), reg2, "L");
-            reg2.TryGetId("curved.mode", out var id2);
-            Assert.AreEqual(1f, reg2.Get(id2), "room_3x3 (s = 2.0) -> Mode 1");
+            var reg = new ParamRegistry(); MakeModule(Room(RoomFixtures.Sample4x5Table), reg, "L");
+            Assert.AreEqual(AirwayMode.AlignedCells, AirwayParams.ModeOf(reg.Find(AirwayParams.CurvedMode)), "sample_4x5_table (s = 1.2 < 1.5) -> Mode 2");
+            var reg2 = new ParamRegistry(); MakeModule(Room(RoomFixtures.Sample3x3), reg2, "L");
+            Assert.AreEqual(AirwayMode.CurvedWalk, AirwayParams.ModeOf(reg2.Find(AirwayParams.CurvedMode)), "sample_3x3 (s = 2.0) -> Mode 1");
         }
 
-        // S5.2: automatic rule "FMS > 3/20" (MP §10.2.3); unsubscribed after Dispose.
+        // S5.2: automatic rule "FMS > 3/20" (MP §10.2.3), read from the "fms" event of the published EventLog; unsubscribed after Dispose.
         [Test]
         public void Auto_Fms()
         {
-            var reg = new ParamRegistry(); var m = MakeModule(Room("room_3x3"), reg, "L");
-            reg.TryGetId("curved.mode", out var id);
-            EventLog.Emit("lung", "fms", "{\"score\":3}");
-            Assert.AreEqual(1f, reg.Get(id), "FMS = 3 stays Mode 1");
-            EventLog.Emit("lung", "other", "{\"score\":19}");
-            Assert.AreEqual(1f, reg.Get(id), "other events ignored");
-            EventLog.Emit("lung", "fms", "{\"score\":4}");
-            Assert.AreEqual(2f, reg.Get(id), "FMS = 4 -> Mode 2");
-            reg.Set(id, 1f);
-            m.ModeSwitch.Dispose();
-            EventLog.Emit("lung", "fms", "{\"score\":9}");
-            Assert.AreEqual(1f, reg.Get(id), "no change after Dispose");
+            using (var capture = new Lung.Tests.EventCapture())
+            {
+                var reg = new ParamRegistry(); var m = MakeModule(Room(RoomFixtures.Sample3x3), reg, "L");
+                var mode = reg.Find(AirwayParams.CurvedMode);
+                capture.Log.LogJson("lung", "fms", "{\"score\":3}");
+                Assert.AreEqual(0, mode.Int, "FMS = 3 stays Mode 1");
+                capture.Log.LogJson("lung", "other", "{\"score\":19}");
+                Assert.AreEqual(0, mode.Int, "other events ignored");
+                capture.Log.LogJson("lung", "fms", "{\"score\":4}");
+                Assert.AreEqual(1, mode.Int, "FMS = 4 -> Mode 2");
+                mode.Set(0);
+                m.ModeSwitch.Dispose();
+                capture.Log.LogJson("lung", "fms", "{\"score\":9}");
+                Assert.AreEqual(0, mode.Int, "no change after Dispose");
+            }
         }
 
-        // S5.3: Console switch; encoding 1/2, default 1, DemoLock (MP §7.3.2, §12.4).
+        // S5.3: Console switch; curved.mode is lane A's Enum declaration, index 0 = Mode 1 (default), 1 = Mode 2 (MP §7.3.2, §12.4).
+        // The demo lock is lane D's (LinkClient and LinkPump drop the ParamSet and log param.ignored; Atlas.Link.Tests covers it), not the registry's.
         [Test]
         public void CurvedMode_Param_Range()
         {
-            var reg = new ParamRegistry(); MakeModule(Room("room_3x3"), reg, "L");
-            Assert.IsTrue(reg.TryGetId("curved.mode", out var id));
-            Assert.AreEqual(1f, reg.Get(id), "default 1");
-            Assert.AreEqual(1f, reg.Set(id, 0f), "min 1");
-            Assert.AreEqual(2f, reg.Set(id, 7f), "max 2");
-            reg.Set(id, 1f);
-            reg.DemoLock = true;
-            Assert.IsFalse(reg.ApplyRemote(id, 2f), "DemoLock refuses ParamSet");
-            Assert.AreEqual(1f, reg.Get(id));
-            reg.DemoLock = false;
-            Assert.IsTrue(reg.ApplyRemote(id, 2f));
-            Assert.AreEqual(AirwayMode.AlignedCells, (AirwayMode)_modules[0].Params.CurvedMode, "Console value reaches the field");
+            var reg = new ParamRegistry(); var m = MakeModule(Room(RoomFixtures.Sample3x3), reg, "L");
+            var mode = reg.Find(AirwayParams.CurvedMode);
+            Assert.IsNotNull(mode);
+            Assert.AreEqual(ParamKind.Enum, mode.Kind);
+            Assert.AreEqual(0, mode.Int, "default Mode 1");
+            mode.Set(-1);
+            Assert.AreEqual(0, mode.Int, "min Mode 1");
+            mode.Set(7);
+            Assert.AreEqual(1, mode.Int, "max Mode 2");
+            mode.Set(0);
+            Assert.IsTrue(mode.Set(1, ParamSource.Remote));
+            Assert.AreEqual(AirwayMode.AlignedCells, m.ModeSwitch.Requested, "Console value reaches the switch");
+        }
+
+        // S5.3b: an existing declaration (lane A's AppParams) is the one that stays.
+        [Test]
+        public void CurvedMode_ExistingDeclarationKept()
+        {
+            var reg = new ParamRegistry();
+            var declared = reg.DeclareEnum(AirwayParams.CurvedMode, "curved", new[] { "Mode 1 Curved Walk", "Mode 2 Aligned Cells" }, 0, null, true);
+            MakeModule(Room(RoomFixtures.Sample3x3), reg, "L");
+            Assert.AreSame(declared, reg.Find(AirwayParams.CurvedMode));
+            Assert.AreEqual(1, reg.Count);
         }
 
         // S5.4: App. B.1 State fields.
         [Test]
         public void WriteState_Fields()
         {
-            var room = Room("room_3x3"); var reg = new ParamRegistry();
+            var room = Room(RoomFixtures.Sample3x3); var reg = new ParamRegistry();
             var m = MakeModule(room, reg, "LRLR");
             var w = new SimWalker(m.Wing) { Module = m };
             m.Enter(default);
             for (int i = 0; i < 90; i++) w.Step();
-            var s = StateMessage.Create(); m.WriteState(ref s);
+            var s = StateMessage.Identity; m.WriteState(ref s);
             var pose = m.Wing.Rig.Pose;
-            Assert.AreEqual(2, s.SpaceId, "Mode 1 SpaceId = 2");
-            Assert.AreEqual(pose.Tile.Xu, s.TileId[0]); Assert.AreEqual(pose.Tile.Yu, s.TileId[2]); Assert.AreEqual(pose.Tile.Tv, s.TileId[5]);
-            var M = pose.Local.M;
-            Assert.AreEqual(M.c1.x, s.Xform[1], 0); Assert.AreEqual(M.c0.y, s.Xform[3], 0); Assert.AreEqual(M.c2.z, s.Xform[8], 0);
-            Assert.AreEqual((float)m.Wing.L, s.P[0], 0, "P[0] = L");
+            Assert.AreEqual((byte)SpaceId.CurvedWalk, s.SpaceId, "Mode 1 SpaceId = S2");
+            Assert.AreEqual(pose.Tile.Xu, s.GetTile(0)); Assert.AreEqual(pose.Tile.Yu, s.GetTile(2)); Assert.AreEqual(pose.Tile.Tv, s.GetTile(5));
+            var M = pose.Local.M;   // State.xform is row-major
+            Assert.AreEqual(M.c1.x, s.GetXform(1), 0); Assert.AreEqual(M.c0.y, s.GetXform(3), 0); Assert.AreEqual(M.c2.z, s.GetXform(8), 0);
+            Assert.AreEqual((float)m.Wing.L, s.GetParam(StateMessage.ParamL), 0, "P0 = L");
             Assert.AreEqual(0, s.Sheet);
 
-            reg.TryGetId("curved.mode", out var id); reg.ApplyRemote(id, 2f);
+            reg.Find(AirwayParams.CurvedMode).Set(1, ParamSource.Remote);
             for (int i = 0; i < 5; i++) w.Step();
             Assert.AreEqual(AirwayMode.AlignedCells, m.Wing.Mode);
-            var s2 = StateMessage.Create(); m.WriteState(ref s2);
-            Assert.AreEqual(3, s2.SpaceId, "Mode 2 SpaceId = 3");
+            var s2 = StateMessage.Identity; m.WriteState(ref s2);
+            Assert.AreEqual((byte)SpaceId.AlignedCells, s2.SpaceId, "Mode 2 SpaceId = S3");
             var c = m.Wing.Cells.Cell;
             Assert.AreEqual(c.x + c.y * m.Wing.Grid.CountX, s2.Sheet, "Sheet = cell index");
-            Assert.AreEqual(1.0, s2.Xform[0], 0); Assert.AreEqual(0.0, s2.Xform[1], 0); Assert.AreEqual(0f, s2.P[0], 0);
+            Assert.AreEqual(1.0, s2.GetXform(0), 0); Assert.AreEqual(0.0, s2.GetXform(1), 0); Assert.AreEqual(0f, s2.GetParam(StateMessage.ParamL), 0);
         }
 
-        sealed class FakeS6 : ISpaceModule
-        {
-            public SpaceId Id => SpaceId.S6; public bool Registered => true;
-            public void Configure(RoomModel room, ParamRegistry registry) { }
-            public void Enter(in WalkerPose start) { }
-            public void Tick(in FrameContext frame) { }
-            public void Exit() { }
-            public void WriteState(ref StateMessage state) { }
-        }
-
-        // S5.5: the module registers in the placeholder SpaceLab as S2.
+        // S5.5: the module is S2's entry in the SpaceRegistry and runs the ISpaceModule lifecycle the real SpaceLab drives.
         [Test]
-        public void Module_RegistersInSpaceLab()
+        public void Module_RegistersAsS2_AndRunsTheLifecycle()
         {
-            var room = Room("room_3x3"); var reg = new ParamRegistry();
-            var lab = new SpaceLab(room, reg);
-            var m = new AirwayWingModule(Tiles, new FakeClearance(room), new ScriptedForkChoice("L"), new FakeChamberView(), lab.Request);
+            var room = Room(RoomFixtures.Sample3x3); var reg = new ParamRegistry();
+            var m = new AirwayWingModule(Tiles, new FakeClearance(room), new ScriptedForkChoice("L"), new FakeChamberView(), _ => { });
             _modules.Add(m);
-            lab.Register(m); lab.Register(new FakeS6());
-            lab.Request(SpaceId.S2);
-            lab.Tick(new FrameContext(1, 1 / 60.0, 1 / 60f, new float3(0, 1.6f, 0), quaternion.identity, true, false));
-            Assert.AreEqual(SpaceId.S2, lab.Active.Id);
-            Assert.IsNotNull(m.Wing);
+            try
+            {
+                SpaceRegistry.Register(SpaceId.CurvedWalk, () => m);
+                Assert.IsTrue(SpaceRegistry.IsRegistered(SpaceId.CurvedWalk));
+                ISpaceModule module = SpaceRegistry.Create(SpaceId.CurvedWalk);
+                Assert.AreSame(m, module);
+                Assert.AreEqual(SpaceId.CurvedWalk, module.Id);
+                module.Configure(room, reg);
+                Assert.IsFalse(module.Registered, "constant from Configure to Exit");
+                module.Enter(WalkerPose.Start);
+                for (int f = 1; f <= 3; f++) module.Tick(Lung.Tests.LungTestEnv.Frame(f, f / 60.0, 1 / 60f, new float3(0, 1.6f, 0), quaternion.identity));
+                Assert.IsNotNull(m.Wing);
+                var s = StateMessage.Identity;
+                module.WriteState(ref s);
+                Assert.AreEqual((byte)SpaceId.CurvedWalk, s.SpaceId);
+                module.Exit();
+                Assert.IsFalse(module.Registered);
+            }
+            finally { SpaceRegistry.Clear(); }
         }
 
+#if !ATLAS_HEADLESS
         // G6 §7: Lung_Airway.unity holds one AirwayWingHost (created here with EditorSceneManager on first run, then committed).
-        [Test]
+        [Test, Category("Unity")]
         public void Scene_LungAirway_HasOneAirwayWingHost()
         {
             const string path = "Assets/Atlas/Blades/Lung/Scenes/Lung_Airway.unity";
-            if (!File.Exists(Path.Combine(Application.dataPath, "..", path)))
+            if (!System.IO.File.Exists(System.IO.Path.Combine(Lung.Tests.LungTestEnv.ProjectDir, path)))
             {
-                Directory.CreateDirectory(Path.Combine(Application.dataPath, "Atlas/Blades/Lung/Scenes"));
+                System.IO.Directory.CreateDirectory(System.IO.Path.Combine(Lung.Tests.LungTestEnv.ProjectDir, "Assets/Atlas/Blades/Lung/Scenes"));
                 var created = UnityEditor.SceneManagement.EditorSceneManager.NewScene(UnityEditor.SceneManagement.NewSceneSetup.EmptyScene,
                     UnityEditor.SceneManagement.NewSceneMode.Single);
-                var go = new GameObject("AirwayWingHost"); go.AddComponent<AirwayWingHost>();
+                var go = new UnityEngine.GameObject("AirwayWingHost"); go.AddComponent<AirwayWingHost>();
                 Assert.IsTrue(UnityEditor.SceneManagement.EditorSceneManager.SaveScene(created, path));
                 UnityEditor.AssetDatabase.Refresh();
             }
             var scene = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(path, UnityEditor.SceneManagement.OpenSceneMode.Single);
-            Assert.AreEqual(1, UnityEngine.Object.FindObjectsByType<AirwayWingHost>(FindObjectsSortMode.None).Length, "AirwayWingHost count");
+            Assert.AreEqual(1, UnityEngine.Object.FindObjectsByType<AirwayWingHost>(UnityEngine.FindObjectsSortMode.None).Length, "AirwayWingHost count");
         }
+#endif
     }
 }

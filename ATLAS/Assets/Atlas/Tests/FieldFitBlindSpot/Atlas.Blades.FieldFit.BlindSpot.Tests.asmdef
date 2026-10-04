@@ -4,6 +4,7 @@
     "references": [
         "Atlas.Blades.FieldFit",
         "Unity.TextMeshPro",
+        "UnityEngine.UI",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

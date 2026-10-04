@@ -5,9 +5,9 @@ using Atlas.World;
 namespace Atlas.Blades.Lung.Walking
 {
     // MP §10.2.8 P2-B09 / G6 §3.8: at the end tile of the selected route the walker stands still while curvature ramps to flat
-    // (HolonomyRig, RampSeconds 4.0 s of still time, inside 3-5 s; MP §0.5 rule 4, §4.6), then S6 is requested once.
+    // (HolonomyRig, RampSeconds 4.0 s of still time, inside 3-5 s; MP §0.5 rule 4, §4.6), then S6 (Slicer) is requested once.
     // DV-B09-1: AirwayParams and Mode 2 (P2-B05/P2-B04) are not on this branch, so the route (lung.route) is a constructor value and
-    // only the Mode 1 ramp exists; Mode 2 would call requestSpace(S6) at entry (DV-G6-14).
+    // only the Mode 1 ramp exists; Mode 2 would call requestSpace(Slicer) at entry (DV-G6-14).
     public sealed class LesionHandOver
     {
         readonly AirwayWing _wing;
@@ -49,7 +49,7 @@ namespace Atlas.Blades.Lung.Walking
             if (_wing.Rig.Curvature == 0)
             {
                 S6Requested = true;
-                _request(SpaceId.S6);
+                _request(SpaceId.Slicer);
             }
         }
     }

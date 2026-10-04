@@ -184,15 +184,21 @@ namespace Atlas.App
             Display = new GuardedStereoRig(Rig) { Refused = OnHeadsetRefused };
             Rig.ModeChanged += OnRigModeChanged;
             AtlasServices.Register<IStereoRig>(Display);
+            // The rig itself too, for its eye-target override (FieldFit). The display mode still goes through
+            // IStereoRig, which is where the headset refusal is enforced.
+            AtlasServices.Register(Rig);
 
             // 6  Eye textures and the lens blit to the screen.
             Eyes = new EyeTextureSet(Screen.width, Screen.height);
             Eyes.Bind(Rig.GetEyeCamera(Eye.Left), Rig.GetEyeCamera(Eye.Right));
             Blit = LensBlit.Create(root.transform, Rig, Eyes, Lens);
 
-            // 8, 9  The kernel (the flat stub in this build) and the frame loop, disabled until the end.
-            WalkerKernel = new FlatWalkerKernel();
-            AtlasServices.Register(WalkerKernel);
+            // 8, 9  The kernel and the frame loop, disabled until the end. One walker for every dial position:
+            //       flat until a curved space configures it, and flat again when SpaceLab leaves that space.
+            var kernel = new HolonomyWalkerKernel();
+            WalkerKernel = kernel;
+            AtlasServices.Register<IWalkerKernel>(kernel);
+            AtlasServices.Register<IDialKernel>(kernel);
             LoopCore = new FrameLoopCore(WalkerKernel)
             {
                 Eyes = new RigEyePositions(Rig),
@@ -220,6 +226,8 @@ namespace Atlas.App
             {
                 Guard = SafetyInstaller.Install(boot, HeadLockedMaterial());
                 Loop.SetGuard(new BumpGuardStep(Guard, Pose.Pipeline));
+                // clear(p) of section 4.10 for the code that plans a walk round the room's obstacles.
+                AtlasServices.Register<IClearanceQuery>(Guard);
                 GuardInstalled = true;
             }
             catch (Exception e)

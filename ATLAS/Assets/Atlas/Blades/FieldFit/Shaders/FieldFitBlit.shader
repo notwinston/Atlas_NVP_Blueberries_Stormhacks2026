@@ -1,5 +1,7 @@
 // Master Plan §10.4.3 (composed final blit), §8.2 (the one final pass); Brief §7.3. No keywords.
-// One procedural full-screen triangle over the whole screen; the left eye is uv.x < 0.5.
+// One procedural full-screen triangle over the whole screen; the left eye is uv.x < 0.5. Drawn by the same call as the
+// ordinary lens pass (LensBlitPass, Blitter.BlitTexture), so the vertex stage is Blit.hlsl's: it applies _BlitScaleBias,
+// which flips V when the back buffer's origin differs from the eye textures'.
 Shader "Hidden/Atlas/FieldFitBlit"
 {
     Properties
@@ -14,6 +16,8 @@ Shader "Hidden/Atlas/FieldFitBlit"
         _FFFrustumR ("Frustum R (l,r,b,t)", Vector) = (-10000, 10000, -10000, 10000)
         _FFBadgeRectL ("Badge rect L (xMin,yMin,w,h)", Vector) = (0, 0, 0, 0)
         _FFBadgeRectR ("Badge rect R (xMin,yMin,w,h)", Vector) = (0, 0, 0, 0)
+        // Blitter.BlitTexture sets it for the final pass; the default is no flip for a draw made without it.
+        _BlitScaleBias ("Blit scale and bias", Vector) = (1, 1, 0, 0)
     }
     SubShader
     {
@@ -27,7 +31,9 @@ Shader "Hidden/Atlas/FieldFitBlit"
             #pragma vertex Vert
             #pragma fragment Frag
             #pragma target 3.5
-            #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            // Vert, Varyings (texcoord is (0, 0) bottom left of the screen) and _BlitScaleBias.
+            #include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
 
             TEXTURE2D(_FFSourceL); SAMPLER(sampler_FFSourceL);   // bilinear, clamp (set on the RenderTexture)
             TEXTURE2D(_FFSourceR); SAMPLER(sampler_FFSourceR);
@@ -38,16 +44,6 @@ Shader "Hidden/Atlas/FieldFitBlit"
             float4 _FFFrustumL, _FFFrustumR;
             float4 _FFBadgeRectL, _FFBadgeRectR;
 
-            struct Varyings { float4 positionCS : SV_POSITION; float2 uv : TEXCOORD0; };
-
-            Varyings Vert(uint vertexID : SV_VertexID)
-            {
-                Varyings o;
-                o.positionCS = GetFullScreenTriangleVertexPosition(vertexID);
-                o.uv = GetFullScreenTriangleTexCoord(vertexID);
-                return o;
-            }
-
             float2 LoadLut(int eye, int2 c)
             {
                 c = clamp(c, 0, 511);
@@ -56,8 +52,9 @@ Shader "Hidden/Atlas/FieldFitBlit"
 
             float4 Frag(Varyings i) : SV_Target
             {
-                int eye = i.uv.x >= 0.5 ? 1 : 0;
-                float2 q = float2(2.0 * i.uv.x - eye, i.uv.y);               // per-eye screen uv, origin bottom-left
+                float2 suv = i.texcoord;
+                int eye = suv.x >= 0.5 ? 1 : 0;
+                float2 q = float2(2.0 * suv.x - eye, suv.y);                 // per-eye screen uv, origin bottom-left
 
                 // 1-2. four lookup texels, bilinear weights
                 float2 p = q * 512.0 - 0.5;

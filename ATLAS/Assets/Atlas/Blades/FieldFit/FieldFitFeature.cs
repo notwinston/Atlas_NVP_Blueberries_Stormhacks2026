@@ -77,9 +77,9 @@ namespace Atlas.Blades.FieldFit
         {
             if (setupDone) return;
             var s = LensParamBinding.CreateSource();
-            if (s == null) { Debug.LogError("FieldFit: lens.* parameters are not registered (lane D P3-D02) or FieldFitFeature.BindRegistry was not called; the lens stays off."); enabled = false; return; }
-            if (!PlaceholderRigBinding.Available) { Debug.LogError("FieldFit: no StereoRig; the lens stays off."); enabled = false; return; }
-            Init(new PlaceholderRigBinding(), s, LensParamBinding.CreateSink());
+            if (s == null) { Debug.LogError("FieldFit: lens.* parameters are not registered (lane D P3-D02); the lens stays off."); enabled = false; return; }
+            if (!StereoRigBinding.TryCreate(out var rigBinding)) { Debug.LogError("FieldFit: no StereoRig; the lens stays off."); enabled = false; return; }
+            Init(rigBinding, s, LensParamBinding.CreateSink());
         }
 
         void OnDisable() { Shutdown(); }

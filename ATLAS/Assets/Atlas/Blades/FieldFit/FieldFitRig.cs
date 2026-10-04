@@ -1,10 +1,10 @@
 using Atlas.Rendering;
+using Atlas.World;
 using UnityEngine;
 
 namespace Atlas.Blades.FieldFit
 {
-    // Master Plan §10.4.3; Brief §4. P3-B02 ships only the interfaces (so the FakeRig test double compiles);
-    // PlaceholderRigBinding (P3-B03) is the only type that names lane A.
+    // Master Plan §10.4.3; Brief §4. StereoRigBinding is the only type that names lane A.
     internal enum QualityRung { Nominal = 0, Fair = 1, Serious = 2, Last = 3, High = 4 }
 
     internal interface IFieldFitRig
@@ -21,11 +21,12 @@ namespace Atlas.Blades.FieldFit
     }
 
     /// <summary>
-    /// R1-R7 over lane A's StereoRig and LensBlit placeholders (public surface only). Replaced file-for-file when lane A's real
-    /// rig lands. Deviations DV-B03-b..e in docs/laneB/fieldfit.md: frustum from Camera.projectionMatrix (R5), rung from
-    /// AtlasThermal.State (R7), lateral offset by moving the eye camera (R6), eye size from Screen (R3).
+    /// R1-R7 over lane A's StereoRig and LensBlit. Deviations DV-B03-b..e in docs/laneB/fieldfit.md: frustum from the lens
+    /// model (R5), rung from AtlasThermal.State (R7), lateral offset by moving the eye camera (R6), eye size from Screen (R3).
+    /// The eye-target override is a member of the concrete StereoRig, not of IStereoRig: the rig is the published
+    /// IStereoRig's own "Atlas Head" component (or a StereoRig service when one is published).
     /// </summary>
-    internal sealed class PlaceholderRigBinding : IFieldFitRig
+    internal sealed class StereoRigBinding : IFieldFitRig
     {
         sealed class Geo : IEyeGeometry
         {
@@ -35,34 +36,43 @@ namespace Atlas.Blades.FieldFit
             public Vector2 ScreenToEyeUv(Vector2 q) => LensBlit.SourceUV(eye, q);   // R1: the mapping the ordinary blit applies
         }
 
+        readonly StereoRig rig;
         readonly RenderTexture[] targets = new RenderTexture[2];
         readonly float[] tanHalf = new float[2];
         readonly float[] normalX = new float[2];
-        readonly float[] normalAspect = new float[2];
         readonly bool[] captured = new bool[2];
 
-        public static bool Available => StereoRig.Current != null;
-        static StereoRig Rig => StereoRig.Current;
-        Camera Eye(int e) => e == 0 ? Rig.LeftEye : Rig.RightEye;
+        StereoRigBinding(StereoRig rig) { this.rig = rig; }
 
-        public Vector3 HeadPosition => Rig.Head.position;                                    // R4
+        /// <summary>The concrete rig behind the published services; false when the app has none yet.</summary>
+        public static bool TryCreate(out StereoRigBinding binding)
+        {
+            StereoRig r;
+            if (!AtlasServices.TryGet(out r) && AtlasServices.TryGet(out IStereoRig published) && published.Head != null)
+                r = published.Head.GetComponent<StereoRig>();   // GuardedStereoRig forwards Head: the concrete rig's own transform
+            binding = r != null ? new StereoRigBinding(r) : null;
+            return binding != null;
+        }
+
+        static Eye Side(int e) => e == 0 ? Eye.Left : Eye.Right;
+        Camera Cam(int e) => rig.GetEyeCamera(Side(e));
+
+        public Vector3 HeadPosition => rig.Head.position;                                    // R4
         public QualityRung Rung => (QualityRung)Mathf.Clamp(AtlasThermal.State, 0, 3);       // R7 (DV-B03-c)
         public Vector2Int EyeScreenSize =>                                                   // R3 (DV-B03-e)
             Screen.width > 0 && Screen.height > 0 ? new Vector2Int(Screen.width / 2, Screen.height) : new Vector2Int(1398, 1290);
 
         public IEyeGeometry EyeGeometry(int eye)                                             // R1 + R5
         {
-            var m = Eye(eye).projectionMatrix;
-            float l = (-1f + m[0, 2]) / m[0, 0], r = (1f + m[0, 2]) / m[0, 0];
-            float b = (-1f + m[1, 2]) / m[1, 1], t = (1f + m[1, 2]) / m[1, 1];
-            return new Geo(eye, new Vector4(l, r, b, t));
+            // The lens model's tangents, not the camera's projection: that one is the symmetric wide source while overridden.
+            EyeFrustum f = rig.GetEyeFrustum(Side(eye));
+            return new Geo(eye, new Vector4(-f.TanLeft, f.TanRight, -f.TanDown, f.TanUp));
         }
 
         void Capture(int e)
         {
             if (captured[e]) return;
-            var c = Eye(e);
-            normalX[e] = c.transform.localPosition.x; normalAspect[e] = c.aspect; captured[e] = true;
+            normalX[e] = Cam(e).transform.localPosition.x; captured[e] = true;
         }
 
         public float NormalLateralOffset(int eye) { Capture(eye); return normalX[eye]; }     // R6 (+-IPD/2)
@@ -71,25 +81,23 @@ namespace Atlas.Blades.FieldFit
         {
             Capture(0); Capture(1);
             targets[eye] = target; tanHalf[eye] = tanHalfAngle;
-            var c = Eye(eye);
-            var p = c.transform.localPosition; p.x = lateralOffsetM; c.transform.localPosition = p;
+            var t = Cam(eye).transform;
+            var p = t.localPosition; p.x = lateralOffsetM; t.localPosition = p;
             if (targets[0] == null || targets[1] == null) return;
-            Rig.OverrideEyeTargets(targets[0], targets[1], 2f * Mathf.Atan(tanHalf[0]) * Mathf.Rad2Deg);
-            // DV-B03-d: the placeholder keeps its explicit aspect; the wide source is square.
-            Rig.LeftEye.ResetAspect(); Rig.RightEye.ResetAspect();
+            // The rig's projection is explicit: a symmetric frustum of this field of view and each target's own aspect.
+            rig.OverrideEyeTargets(targets[0], targets[1], 2f * Mathf.Atan(tanHalf[0]) * Mathf.Rad2Deg);
         }
 
         public void ClearEyeOverrides()                                                      // R6
         {
-            if (Rig == null) return;
-            Rig.ClearEyeTargetOverride();
+            if (rig == null) return;
+            rig.ClearEyeTargetOverride();
             for (int e = 0; e < 2; e++)
             {
-                if (!captured[e]) continue;
-                var c = Eye(e);
-                var p = c.transform.localPosition; p.x = normalX[e]; c.transform.localPosition = p;
-                c.aspect = normalAspect[e];
                 targets[e] = null;
+                if (!captured[e]) continue;
+                var t = Cam(e).transform;
+                var p = t.localPosition; p.x = normalX[e]; t.localPosition = p;
             }
         }
 

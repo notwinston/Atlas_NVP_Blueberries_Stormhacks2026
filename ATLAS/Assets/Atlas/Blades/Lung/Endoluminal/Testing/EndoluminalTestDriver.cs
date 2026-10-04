@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using Atlas.Rendering;
 using TMPro;
 using UnityEngine;
 
@@ -12,11 +13,12 @@ namespace Atlas.Blades.Lung.Endoluminal.Testing
     {
         public const int BaselineFrames = 120, FramesPerFork = 300, ForkCount = 4;
 
-        [SerializeField] Shader surfaceShader;      // Atlas/AtlasSurface
+        [SerializeField] Shader surfaceShader;      // Atlas/Surface
         [SerializeField] Shader displayShader;      // Universal Render Pipeline/Unlit
         [SerializeField] TMP_FontAsset labelFont;   // LiberationSans SDF
 
         EndoluminalWindow window;
+        MaterialPool pool;
         ForkView[] forks;
         readonly StringBuilder csv = new StringBuilder(64 * 1024);
         readonly Stopwatch watch = new Stopwatch();
@@ -29,7 +31,8 @@ namespace Atlas.Blades.Lung.Endoluminal.Testing
         {
             var go = new GameObject("EndoluminalWindow");
             window = go.AddComponent<EndoluminalWindow>();
-            window.Initialise(surfaceShader, displayShader, labelFont);
+            pool = new MaterialPool(surfaceShader, 2);   // a test scene has no composition root: its own pool on the serialized shader
+            window.Initialise(pool, displayShader, labelFont);
             var cam = Camera.main;
             if (cam != null) { go.transform.SetParent(cam.transform, false); go.transform.localPosition = new Vector3(0, 0, 0.6f); }
             forks = SyntheticForks.Route(ForkCount);
@@ -64,6 +67,12 @@ namespace Atlas.Blades.Lung.Endoluminal.Testing
                 UnityEngine.Debug.Log($"[P2-B07] done: renders {rendersSeen} (expected {ForkCount}), mean render-frame window time {(rendersSeen > 0 ? renderMsTotal / rendersSeen : 0):F3} ms, " +
                                       $"frames with window work and no render {quietFramesWithWork}, csv {path}");
             }
+        }
+
+        void OnDestroy()
+        {
+            if (window != null) window.Release();
+            if (pool != null) { pool.Dispose(); pool = null; }
         }
     }
 }

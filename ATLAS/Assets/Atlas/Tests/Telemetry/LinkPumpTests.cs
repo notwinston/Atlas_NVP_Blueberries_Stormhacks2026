@@ -312,6 +312,105 @@ namespace Atlas.Telemetry.Tests
             Assert.That(rig.Pump.WorldHashNow, Is.Empty);
         }
 
+        /// <summary>A space with a seeded generator, as the curved spaces are.</summary>
+        sealed class GeneratedSpace : ISpaceModule, ISpaceWorld
+        {
+            public SpaceId Id { get { return SpaceId.CurvedWalk; } }
+            public bool Registered { get { return true; } }
+            public long WorldSeed { get; set; }
+            public int GeneratorVersion { get { return 1; } }
+            public string ContentHash { get; set; }
+            public void Configure(RoomModel room, ParamRegistry registry) { }
+            public void Enter(in Atlas.Kernel.WalkerPose start) { }
+            public void Tick(in FrameContext frame) { }
+            public void Exit() { }
+            public void WriteState(ref StateMessage state) { }
+        }
+
+        sealed class OneSpaceHost : ISpaceHost
+        {
+            public SpaceHostState State { get { return HasSpace ? SpaceHostState.Running : SpaceHostState.Empty; } }
+            public bool HasSpace { get { return Module != null; } }
+            public SpaceId Current { get { return Module != null ? Module.Id : SpaceId.Home; } }
+            public ISpaceModule Module { get; set; }
+            public RoomModel Room { get { return null; } }
+            public bool Standing { get { return false; } }
+            public ushort WorldVersion { get; set; }
+            public bool IsAvailable(SpaceId id) { return true; }
+            public bool RequestSwitch(SpaceId target) { return false; }
+            public bool ReturnHome() { return false; }
+            public void SetRoom(RoomModel room) { }
+            public void BumpWorldVersion() { WorldVersion++; }
+#pragma warning disable 67
+            public event Action<SpaceId> SpaceEntered;
+            public event Action<SpaceId> SpaceExited;
+            public event Action<RoomModel> RoomChanged;
+#pragma warning restore 67
+        }
+
+        [Test]
+        public void The_world_hash_names_the_generator_seed_and_the_dial_target_not_the_ramping_scale()
+        {
+            const double l5 = 1.884526, l6 = 1.518651;
+            var rig = new Rig();
+            var kernel = new Atlas.Kernel.HolonomyWalkerKernel();
+            var space = new GeneratedSpace { WorldSeed = 1, ContentHash = "0123456789abcdef" };
+            var host = new OneSpaceHost { Module = space };
+            rig.Pump.Kernel = kernel;
+            rig.Pump.Spaces = host;
+
+            // Entered as Curved Walk enters: the {4,5} tiling, a flat stand, the ramp towards L5.
+            kernel.Configure(Atlas.Kernel.KernelConfig.Curved(5, l5));
+            kernel.ResetToFloorFlat(double2.zero);
+            kernel.SetCurvatureTarget(Atlas.Kernel.Curvature.Hyperbolic, l5);
+            Assert.That(kernel.MetresPerUnit, Is.EqualTo(1.0), "the scale of this frame is the metre at K = 0");
+            rig.State.SpaceId = 2;
+            rig.State.WorldVer = 1;
+            rig.Step();
+
+            string q5 = WorldHash.Compute(2, 5, 1, 1, null, 1885);
+            Assert.That(rig.Pump.WorldHashNow, Is.EqualTo(q5));
+            JsonValue data = rig.Last(LinkEvents.World).Data;
+            Assert.That(data.GetString("worldHash"), Is.EqualTo(q5));
+            Assert.That(data.GetInt("q"), Is.EqualTo(5));
+            Assert.That(data.GetInt("seed"), Is.EqualTo(1));
+            Assert.That(data.GetInt("genVer"), Is.EqualTo(1));
+            Assert.That(data.GetInt("lMm"), Is.EqualTo(1885));
+            Assert.That(data.GetString("genHash"), Is.EqualTo("0123456789abcdef"), "the generator's own hash, for the IL2CPP check");
+
+            // Through the ramp the hash stays, whenever the event fires.
+            for (int n = 1; n <= 300; n++)
+            {
+                kernel.Step(double2.zero, true, n / 60.0);
+                if (n % 60 != 0) continue;
+                rig.State.WorldVer++;
+                rig.Step();
+                Assert.That(rig.Pump.WorldHashNow, Is.EqualTo(q5), "at " + n / 60 + " s of the ramp");
+            }
+            Assert.That(kernel.MetresPerUnit, Is.EqualTo(l5).Within(1e-12), "the ramp has ended at L5");
+
+            // Another seed is another world; so is the other tiling.
+            space.WorldSeed = 2;
+            rig.State.WorldVer++;
+            rig.Step();
+            Assert.That(rig.Pump.WorldHashNow, Is.EqualTo(WorldHash.Compute(2, 5, 2, 1, null, 1885)));
+            Assert.That(rig.Pump.WorldHashNow, Is.Not.EqualTo(q5));
+            space.WorldSeed = 1;
+            kernel.Configure(Atlas.Kernel.KernelConfig.Curved(6, l6));
+            rig.State.WorldVer++;
+            rig.Step();
+            Assert.That(rig.Pump.WorldHashNow, Is.EqualTo(WorldHash.Compute(2, 6, 1, 1, null, 1519)));
+            Assert.That(rig.Pump.WorldHashNow, Is.Not.EqualTo(q5));
+
+            // A space with no generator: seed 0, no genHash member, as before.
+            host.Module = null;
+            kernel.Configure(Atlas.Kernel.KernelConfig.Flat(2.0));
+            rig.State.SpaceId = 0;
+            rig.Step();
+            Assert.That(rig.Pump.WorldHashNow, Is.EqualTo(WorldHash.Compute(0, 4, 0, 1, null, 1000)));
+            Assert.That(rig.Last(LinkEvents.World).Data.Has("genHash"), Is.False);
+        }
+
         [Test]
         public void Telemetry_rows_keep_the_number_the_probe_gave_them()
         {

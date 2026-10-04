@@ -64,7 +64,11 @@ namespace Atlas.Blades.Lung.Tests
             var old = Thread.CurrentThread.CurrentCulture;
             try
             {
-                Thread.CurrentThread.CurrentCulture = new CultureInfo("de-DE");
+                // a comma-decimal culture built from the invariant one, so it also exists where globalization is invariant (the headless run)
+                var comma = (CultureInfo)CultureInfo.InvariantCulture.Clone();
+                comma.NumberFormat.NumberDecimalSeparator = ",";
+                comma.NumberFormat.NumberGroupSeparator = ".";
+                Thread.CurrentThread.CurrentCulture = comma;
                 string s = RouteCost.At(Synthetic(), AirwayTile.Fork("LR")).Format();
                 StringAssert.Contains("Insertion depth 180 mm", s);
                 StringAssert.Contains("4.0 mm", s);

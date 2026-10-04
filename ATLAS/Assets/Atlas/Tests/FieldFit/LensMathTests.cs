@@ -20,7 +20,7 @@ namespace Atlas.Blades.FieldFit.Tests
         public void KStar_Default_2_918()
         {
             double k = LensMath.KStar(Pow());
-            Debug.Log($"P3-B01 K* = {k:F7}");
+            TestContext.Out.WriteLine($"P3-B01 K* = {k:F7}");
             Assert.That(Math.Abs(k - 2.918), Is.LessThanOrEqualTo(0.001));
         }
 
@@ -44,7 +44,7 @@ namespace Atlas.Blades.FieldFit.Tests
         public void Tanh_K30_Between_30_And_40()
         {
             double k = LensMath.Dilatation(30 * Deg, Tanh());
-            Debug.Log($"P3-B01 tanh K(30) = {k:F3}");
+            TestContext.Out.WriteLine($"P3-B01 tanh K(30) = {k:F3}");
             Assert.That(k, Is.GreaterThan(30).And.LessThan(40));
         }
 

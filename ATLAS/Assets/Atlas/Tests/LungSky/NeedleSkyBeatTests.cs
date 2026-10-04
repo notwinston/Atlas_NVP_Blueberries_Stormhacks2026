@@ -20,16 +20,16 @@ namespace Atlas.Blades.Lung.Sky.Tests
 
         void Tick(int n = 1, quaternion? rot = null)
         {
-            for (int k = 0; k < n; k++) _b.Tick(new FrameContext(_f++, _f * Dt, Dt, float3.zero, rot ?? quaternion.identity, true, false));
+            for (int k = 0; k < n; k++) _b.Tick(SkyTestEnv.Frame(_f++, _f * Dt, Dt, float3.zero, rot ?? quaternion.identity));
         }
 
-        void Set(string id, float v) { Assert.IsTrue(_reg.TryGetId(id, out var i), id); _reg.Set(i, v); }
+        void Set(string id, float v) { Assert.IsNotNull(_reg.Find(id), id); _reg.Set(_reg.Find(id), v); }
 
         [Test] // MP §10.2.2 "click on sky panel"; via ParamSet
         public void B10_ConsoleTwin_Params()
         {
             foreach (var id in new[] { "lung.skyOn", "lung.skyPhase", "lung.skyRobust", "lung.skyPickAz", "lung.skyPickEl", "lung.skyPick" })
-                Assert.IsTrue(_reg.TryGetId(id, out _), id);
+                Assert.IsNotNull(_reg.Find(id), id);
             _b.Enter();
             Set("lung.skyPickAz", 30); Set("lung.skyPickEl", 20); Set("lung.skyPick", 1);
             Tick();
@@ -39,9 +39,9 @@ namespace Atlas.Blades.Lung.Sky.Tests
 
             var ev2 = new FakeSkyEvents(); var reg2 = new ParamRegistry();
             var b2 = new NeedleSkyBeat(_maps, reg2, ev2, null, null);
-            reg2.TryGetId("lung.skyPick", out var id2); reg2.Set(id2, 5);
+            reg2.Set(reg2.Find("lung.skyPick"), 5f);
             b2.Enter();
-            b2.Tick(new FrameContext(0, 0, Dt, float3.zero, quaternion.identity, true, false));
+            b2.Tick(SkyTestEnv.Frame(0, 0, Dt, float3.zero, quaternion.identity));
             Assert.AreEqual(0, ev2.Count("sky_pick"));
         }
 
@@ -65,6 +65,26 @@ namespace Atlas.Blades.Lung.Sky.Tests
             Tick(200);
             Assert.IsFalse(_p.Visible); Assert.IsFalse(_b.SkyOn);
             Assert.AreEqual(0, _ev.Count("sky_pick"));
+        }
+
+        [Test] // MP §0.5 rule 5: the beat reads the one action source, Confirm and the left stick
+        public void B10_ReadsAtlasInput_ConfirmAndStick()
+        {
+            var input = new FakeAtlasInput();
+            var ev = new FakeSkyEvents(); var reg = new ParamRegistry();
+            var b = new NeedleSkyBeat(_maps, reg, ev, input, null);
+            b.Enter();
+            long f = 0;
+            input.StickValue = new UnityEngine.Vector2(1f, 0f);
+            for (int k = 0; k < 50; k++) b.Tick(SkyTestEnv.Frame(f++, f * Dt, Dt, float3.zero, quaternion.identity));
+            SkyDirection.ToAzEl(b.Model.Cursor, out double az, out _);
+            Assert.AreEqual(45.0, az, 0.5, "the stick moved the cursor");
+            Assert.IsFalse(b.Model.CursorAttached);
+            Assert.AreEqual(0, ev.Count("sky_pick"));
+            input.StickValue = default; input.ConfirmNext = true;
+            b.Tick(SkyTestEnv.Frame(f++, f * Dt, Dt, float3.zero, quaternion.identity));
+            Assert.AreEqual(1, ev.Count("sky_pick"), "Confirm picked at the cursor");
+            Assert.AreEqual(45.0, ev.Pick(0).az_deg, 0.5);
         }
 
         [Test] // P2-A32 interface (PH-13)

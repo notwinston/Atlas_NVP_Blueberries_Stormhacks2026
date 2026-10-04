@@ -1,13 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using Atlas.Blades.Lung.AirwayKit;
 using Atlas.Kernel;
 using Atlas.Rendering;
 using NUnit.Framework;
 using Unity.Mathematics;
-using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace Atlas.Blades.Lung.AirwayViews.Tests
 {
@@ -19,15 +16,14 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
         [Test]
         public void Kit_EdgeLength_KerbMembraneIris()
         {
-            var b = KitTestUtil.NewBuilder(); var m = new Mesh();
+            var b = KitTestUtil.NewBuilder();
             double mx = 0;
-            try
             {
                 foreach (var (kappa, scale) in KitTestUtil.Geoms())
                     foreach (var kind in KitTestUtil.Kinds)
                     {
-                        var lay = b.BuildTile(kind, KitTestUtil.Spec(kappa, scale, TileLod.Near), m);
-                        var v = KitTestUtil.Verts(m); var idx = KitTestUtil.Idx(m);
+                        var lay = b.BuildTile(kind, KitTestUtil.Spec(kappa, scale, TileLod.Near));
+                        var v = KitTestUtil.Verts(b, lay.VertexCount); var idx = KitTestUtil.Idx(b, lay.IndexCount);
                         foreach (var r in new[] { lay.KerbIndices, lay.MembraneIndices, lay.StripIndices, lay.GlyphIndices })
                             mx = Math.Max(mx, KitTestUtil.MaxEdge(v, idx, r));
                         int mask = KitGeometry.KitMask(kind);
@@ -36,31 +32,29 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
                             if ((sub & ~mask) != 0) continue;
                             foreach (bool opaque in new[] { true, false })
                             {
-                                var sl = b.BuildValveShell(kind, sub, opaque, kappa, scale, m);
-                                var sv = KitTestUtil.Verts(m); var si = KitTestUtil.Idx(m);
+                                var sl = b.BuildValveShell(kind, sub, opaque, kappa, scale);
+                                var sv = KitTestUtil.Verts(b, sl.VertexCount); var si = KitTestUtil.Idx(b, sl.IndexCount);
                                 foreach (var r in new[] { sl.ShellIndices, sl.IrisIndices, sl.RoofIndices, sl.FloorIndices, sl.GlyphIndices })
                                     mx = Math.Max(mx, KitTestUtil.MaxEdge(sv, si, r));
                             }
                         }
                     }
-                Debug.Log($"[P2-B02] max kit edge = {mx:F4} m (limit {KitGeometry.MaxKitEdge})");
+                TestContext.WriteLine($"[P2-B02] max kit edge = {mx:F4} m (limit {KitGeometry.MaxKitEdge})");
                 Assert.LessOrEqual(mx, KitGeometry.MaxKitEdge);
             }
-            finally { UnityEngine.Object.DestroyImmediate(m); b.Dispose(); }
         }
 
         // Criterion: MP 10.2.3 Chamber and Corridor rows (0.8 m corridor between 0.4 m kerbs, chamber disc 0.5 m, strip 0.2 m, glyph 0.15 m).
         [Test]
         public void Kit_CorridorGeometry()
         {
-            var b = KitTestUtil.NewBuilder(); var m = new Mesh();
-            try
+            var b = KitTestUtil.NewBuilder();
             {
                 foreach (var (kappa, scale) in new[] { (-1, KitTestUtil.LFromS(2.0)), (0, 1.5) })
                     foreach (var kind in KitTestUtil.Kinds)
                     {
-                        var lay = b.BuildTile(kind, KitTestUtil.Spec(kappa, scale, TileLod.Near), m);
-                        var v = KitTestUtil.Verts(m); var idx = KitTestUtil.Idx(m);
+                        var lay = b.BuildTile(kind, KitTestUtil.Spec(kappa, scale, TileLod.Near));
+                        var v = KitTestUtil.Verts(b, lay.VertexCount); var idx = KitTestUtil.Idx(b, lay.IndexCount);
                         var arms = KitTestUtil.OpenArms(kind);
                         double H = KitGeometry.InRadiusMetres(kappa, scale), w = KitGeometry.CorridorHalfWidth;
                         string ctx = $"kappa {kappa} {kind}";
@@ -149,35 +143,32 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
                         Assert.AreEqual(16, rim);
                     }
             }
-            finally { UnityEngine.Object.DestroyImmediate(m); b.Dispose(); }
         }
 
         // Criterion: MP 10.2.3 "dithered membrane"; MP 8.1 (50% geometric dither in the shared shader).
         [Test]
         public void Kit_Dither()
         {
-            var b = KitTestUtil.NewBuilder(); var m = new Mesh();
-            try
+            var b = KitTestUtil.NewBuilder();
             {
                 foreach (var (kappa, scale) in KitTestUtil.Geoms())
                     foreach (var kind in KitTestUtil.Kinds)
                     {
-                        var lay = b.BuildTile(kind, KitTestUtil.Spec(kappa, scale, TileLod.Near), m);
+                        var lay = b.BuildTile(kind, KitTestUtil.Spec(kappa, scale, TileLod.Near));
                         var runs = new WallRun[8]; int n = KitGeometry.WallPath(kind, kappa, scale, runs);
                         int total = 0; for (int i = 0; i < n; i++) total += KitGeometry.ColumnCount(runs[i], kappa, scale) * 11;
                         double ratio = (lay.MembraneIndices.length / 12) / (double)total;
                         Assert.That(ratio, Is.InRange(0.45, 0.55), $"kappa {kappa} scale {scale} {kind}");
                     }
             }
-            finally { UnityEngine.Object.DestroyImmediate(m); b.Dispose(); }
         }
 
+#if !ATLAS_HEADLESS
         // Criterion: MP 8.5 "a tile shell is one draw call per eye".
-        [Test]
+        [Test, Category("Unity")]
         public void Kit_OneDrawPerTile()
         {
             var b = KitTestUtil.NewBuilder();
-            try
             {
                 foreach (var (kappa, scale) in new[] { (-1, KitTestUtil.LFromS(2.0)), (0, 1.5) })
                 {
@@ -187,21 +178,21 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
                         foreach (var lod in KitTestUtil.Lods)
                         {
                             var mesh = cache.Get(kind, lod);
-                            Assert.AreEqual(1, mesh.subMeshCount); Assert.AreEqual(IndexFormat.UInt16, mesh.indexFormat);
+                            Assert.AreEqual(1, mesh.subMeshCount); Assert.AreEqual(UnityEngine.Rendering.IndexFormat.UInt16, mesh.indexFormat);
                         }
                     Assert.AreEqual(kappa, cache.Kappa); Assert.AreEqual(scale, cache.Scale);
                     if (kappa == 0) Assert.AreSame(cache.Get(KitKind.Fork, TileLod.Near), cache.Get(KitKind.Fork, TileLod.Far));
                 }
             }
-            finally { b.Dispose(); }
         }
+
+#endif
 
         // Criterion: MP 10.2.3 steps 1, 4, 5 (shell opaque / iris opens / dithered); MP 0.5 rule 3.
         [Test]
         public void Kit_ValveShell()
         {
-            var b = KitTestUtil.NewBuilder(); var m = new Mesh();
-            try
+            var b = KitTestUtil.NewBuilder();
             {
                 foreach (var (kappa, scale) in KitTestUtil.Geoms())
                     foreach (var kind in KitTestUtil.Kinds)
@@ -209,8 +200,8 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
                         int mask = KitGeometry.KitMask(kind);
                         string ctx = $"kappa {kappa} scale {scale} {kind}";
                         // opaque, nothing open
-                        var lay = b.BuildValveShell(kind, 0, true, kappa, scale, m);
-                        var v = KitTestUtil.Verts(m); var idx = KitTestUtil.Idx(m);
+                        var lay = b.BuildValveShell(kind, 0, true, kappa, scale);
+                        var v = KitTestUtil.Verts(b, lay.VertexCount); var idx = KitTestUtil.Idx(b, lay.IndexCount);
                         var runs = new WallRun[8]; int n = KitGeometry.WallPath(kind, kappa, scale, runs);
                         double sum = 0;
                         for (int i = 0; i < n; i++) if (runs[i].Type == WallRunType.Arc) sum += runs[i].Phi1 - runs[i].Phi0;
@@ -220,18 +211,18 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
                         foreach (int i in wallV) Assert.AreEqual(KitGeometry.ValveShellRadius, math.length(KitTestUtil.Chart(v[i])), Tol, ctx);
                         Assert.Greater(lay.RoofIndices.length, 0); Assert.Greater(lay.FloorIndices.length, 0); Assert.Greater(lay.GlyphIndices.length, 0);
                         Assert.Greater(lay.ShellIndices.length, 0); Assert.Greater(lay.IrisIndices.length, 0);
-                        float ymax = 0; foreach (var vv in v) ymax = Mathf.Max(ymax, vv.Position.y);
+                        float ymax = 0; foreach (var vv in v) ymax = Math.Max(ymax, vv.Position.y);
                         Assert.AreEqual(2.6, ymax, 1e-6, ctx);
 
                         // opaque, one exit iris open
                         foreach (int e in KitTestUtil.OpenArms(kind))
                         {
-                            lay = b.BuildValveShell(kind, 1 << e, true, kappa, scale, m);
-                            v = KitTestUtil.Verts(m); idx = KitTestUtil.Idx(m);
+                            lay = b.BuildValveShell(kind, 1 << e, true, kappa, scale);
+                            v = KitTestUtil.Verts(b, lay.VertexCount); idx = KitTestUtil.Idx(b, lay.IndexCount);
                             AssertNoIrisIn(v, idx, lay.IrisIndices, kind, e, kappa, scale, ctx);
                             // dithered
-                            lay = b.BuildValveShell(kind, 1 << e, false, kappa, scale, m);
-                            v = KitTestUtil.Verts(m); idx = KitTestUtil.Idx(m);
+                            lay = b.BuildValveShell(kind, 1 << e, false, kappa, scale);
+                            v = KitTestUtil.Verts(b, lay.VertexCount); idx = KitTestUtil.Idx(b, lay.IndexCount);
                             Assert.AreEqual(0, lay.ShellIndices.length); Assert.AreEqual(0, lay.RoofIndices.length);
                             Assert.AreEqual(0, lay.FloorIndices.length); Assert.AreEqual(0, lay.GlyphIndices.length);
                             AssertNoIrisIn(v, idx, lay.IrisIndices, kind, e, kappa, scale, ctx + " dithered");
@@ -251,13 +242,12 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
                         }
                         int closedBit = 0; while ((mask & (1 << closedBit)) != 0) closedBit++;
                         int outside = 1 << closedBit;
-                        Assert.Throws<ArgumentException>(() => b.BuildValveShell(kind, outside, true, kappa, scale, m), ctx + " mask outside kind");
+                        Assert.Throws<ArgumentException>(() => b.BuildValveShell(kind, outside, true, kappa, scale), ctx + " mask outside kind");
                     }
             }
-            finally { UnityEngine.Object.DestroyImmediate(m); b.Dispose(); }
         }
 
-        static void AssertNoIrisIn(TileVertex[] v, ushort[] idx, RangeInt r, KitKind kind, int e, int kappa, double scale, string ctx)
+        static void AssertNoIrisIn(AtlasVertex[] v, ushort[] idx, UnityEngine.RangeInt r, KitKind kind, int e, int kappa, double scale, string ctx)
         {
             KitGeometry.IrisSector(kind, e, kappa, scale, out double p0, out double p1);
             for (int i = r.start; i < r.start + r.length; i += 3)
@@ -269,11 +259,26 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
             }
         }
 
-        // Criterion: MP 8.5 "1 kB of managed allocation per frame".
+        // Criterion: MP 8.5 "1 kB of managed allocation per frame": the building of the valve shell, before any upload.
         [Test]
         public void Kit_ValveShell_Alloc()
         {
-            var b = KitTestUtil.NewBuilder(); var m = new Mesh();
+            var b = KitTestUtil.NewBuilder();
+            double L = KitTestUtil.LFromS(2.0);
+            b.BuildValveShell(KitKind.Fork, 0b0010, true, -1, L);
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            b.BuildValveShell(KitKind.Fork, 0b0010, true, -1, L);
+            long bytes = GC.GetAllocatedBytesForCurrentThread() - before;
+            TestContext.WriteLine($"[P2-B02] BuildValveShell managed allocation = {bytes} B");
+            Assert.LessOrEqual(bytes, 1024);
+        }
+
+#if !ATLAS_HEADLESS
+        // The same with the upload to a Mesh.
+        [Test, Category("Unity")]
+        public void Kit_ValveShell_Alloc_WithUpload()
+        {
+            var b = KitTestUtil.NewBuilder(); var m = new UnityEngine.Mesh();
             try
             {
                 double L = KitTestUtil.LFromS(2.0);
@@ -281,10 +286,11 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
                 long before = GC.GetAllocatedBytesForCurrentThread();
                 b.BuildValveShell(KitKind.Fork, 0b0010, true, -1, L, m);
                 long bytes = GC.GetAllocatedBytesForCurrentThread() - before;
-                Debug.Log($"[P2-B02] BuildValveShell managed allocation = {bytes} B");
+                TestContext.WriteLine($"[P2-B02] BuildValveShell with upload, managed allocation = {bytes} B");
                 Assert.LessOrEqual(bytes, 1024);
             }
-            finally { UnityEngine.Object.DestroyImmediate(m); b.Dispose(); }
+            finally { UnityEngine.Object.DestroyImmediate(m); }
         }
+#endif
     }
 }

@@ -210,6 +210,7 @@ namespace Atlas.Telemetry
             if (t.SpaceHost == null && AtlasServices.TryGet(out host))
             {
                 t.SpaceHost = host;
+                t.Pump.Spaces = host;
                 t.RoomTap = t.Pump.SetRoom;
                 host.RoomChanged += t.RoomTap;
                 if (host.Room != null) t.Pump.SetRoom(host.Room);

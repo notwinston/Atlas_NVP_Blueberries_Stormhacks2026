@@ -1,29 +1,22 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using System.Text;
 using Atlas.Kernel;
-using Atlas.Telemetry;
 using Atlas.World;
 using NUnit.Framework;
 using Unity.Mathematics;
-using UnityEngine;
 
 namespace Atlas.Blades.Lung.Walking.Tests
 {
     // P2-B03 ValveSolver tests (Master Plan §10.2.3 steps 1-5; §10.2.8 row P2-B03). Each test names the criterion it checks.
     public class ValveSolverTests
     {
-        static readonly string[] Rooms = { "room_3x3", "room_3x4_L", "room_4x5_table" };
+        static readonly string[] Rooms = { RoomFixtures.Sample3x3, RoomFixtures.SampleL3x4, RoomFixtures.Sample4x5Table };
         static readonly IForkTiles Tiles = new AirwayTreeBinding(Lung.Tests.TreeFixture.Tree);
         static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-        static RoomModel Room(string name) =>
-            RoomModel.Load(Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "recordings", name + ".json")));
-
-        static string EvidenceDir =>
-            Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "docs", "laneB", "evidence", "P2-B03"));
+        static RoomModel Room(string name) => RoomFixtures.LoadFromProject(name);
 
         static List<TileId> ExpectedTiles(string route, IForkTiles tiles, TileGraph g)
         {
@@ -49,7 +42,7 @@ namespace Atlas.Blades.Lung.Walking.Tests
             var g = new TileGraph(5);
             var view = new FakeChamberView();
             var wing = new AirwayWing(room, Tiles, new FakeClearance(room), new ScriptedForkChoice(route), view);
-            var lap = new LapCorners(room.lapSquare.s);
+            var lap = new LapCorners(room.LapSide);
             var exp = ExpectedTiles(route, Tiles, g);
             var visited = new List<TileId>();
             var records = new List<(ShellState rec, ShellState view)>();
@@ -111,8 +104,7 @@ namespace Atlas.Blades.Lung.Walking.Tests
                 json.Append(ri < Rooms.Length - 1 ? ",\n" : "\n");
             }
             json.Append("  ],\n  \"routes_passing\": " + pass + ",\n  \"routes_total\": 300\n}\n");
-            Directory.CreateDirectory(EvidenceDir);
-            File.WriteAllText(Path.Combine(EvidenceDir, "valve_sim.json"), json.ToString());
+            Lung.Tests.LungTestEnv.WriteEvidence("P2-B03", "valve_sim.json", json.ToString());
             Assert.AreEqual(300, pass, "routes passing of 300 (100 per room): " + string.Join("; ", failures));
         }
 
@@ -120,7 +112,7 @@ namespace Atlas.Blades.Lung.Walking.Tests
         [Test]
         public void Valve_StripWobble_HeadAtLeast0p4m()
         {
-            var room = Room("room_3x3");
+            var room = Room(RoomFixtures.Sample3x3);
             int ok = 0; string why = "";
             foreach (var route in SimRoutes.Hundred())
             {
@@ -135,7 +127,7 @@ namespace Atlas.Blades.Lung.Walking.Tests
         // Head at K_i, root chamber at K_i, walker on the glyph (G6 §4.1 T3.2/T3.3).
         static Case MakeCase(RoomModel room, int i, Action<FakeClearance, LapCorners> stamp, int otherCorner = -1)
         {
-            var lap = new LapCorners(room.lapSquare.s);
+            var lap = new LapCorners(room.LapSide);
             var clear = new FakeClearance(room); stamp(clear, lap);
             var view = new FakeChamberView();
             var wing = new AirwayWing(room, Tiles, clear, new ScriptedForkChoice("LRLR"), view);
@@ -167,7 +159,7 @@ namespace Atlas.Blades.Lung.Walking.Tests
                 int blocked = blockedNext == 1 ? (i + 1) & 3 : (i + 3) & 3, other = blockedNext == 1 ? (i + 3) & 3 : (i + 1) & 3;
                 var c = MakeCase(room, i, (cl, lap) => Stamp(cl, lap, i, blocked, r), other);
                 for (int f = 0; f < 10 && c.Reaims.Count == 0; f++) c.Walker.Frame_(c.Walker.HeadXZ);
-                var lapc = new LapCorners(room.lapSquare.s);
+                var lapc = new LapCorners(room.LapSide);
                 bool ok = c.Wing.Phase == ValvePhase.Walking && c.Reaims.Count == 1 && c.Reaims[0].Shell == ShellState.Opaque
                     && math.length(c.Wing.NextChamberWorld - lapc.Corner(other)) < 1e-3;
                 if (ok) pass++; else why.Add($"case {n} room {Rooms[n % 3]} i={i} blocked={blocked} phase={c.Wing.Phase} reaims={c.Reaims.Count} next={c.Wing.NextChamberWorld} cn={ValveSolver.SideClearance(c.Clear, lapc.Corner(i), lapc.Corner((i + 1) & 3))} cp={ValveSolver.SideClearance(c.Clear, lapc.Corner(i), lapc.Corner((i + 3) & 3))}");
@@ -208,7 +200,7 @@ namespace Atlas.Blades.Lung.Walking.Tests
         [Test]
         public void Valve_WaitsForGlyph()
         {
-            var room = Room("room_3x3");
+            var room = Room(RoomFixtures.Sample3x3);
             var wing = new AirwayWing(room, Tiles, new FakeClearance(room), new ScriptedForkChoice("LRLR"), new FakeChamberView());
             int reaims = 0; wing.Reaimed += _ => reaims++;
             var w = new SimWalker(wing) { Head = new float3(-1f + 0.20f, 1.6f, -1f) };   // 0.20 m from K0
@@ -226,7 +218,7 @@ namespace Atlas.Blades.Lung.Walking.Tests
         [Test]
         public void Valve_ChamberEntryAt0p5m()
         {
-            var room = Room("room_3x3");
+            var room = Room(RoomFixtures.Sample3x3);
             var view = new FakeChamberView();
             var wing = new AirwayWing(room, Tiles, new FakeClearance(room), new ScriptedForkChoice("LRLR"), view);
             var w = new SimWalker(wing) { Head = new float3(-1f, 1.6f, -1f) };
@@ -254,7 +246,7 @@ namespace Atlas.Blades.Lung.Walking.Tests
         [Test]
         public void Valve_ReopensWhenCleared()
         {
-            var room = Room("room_3x3");
+            var room = Room(RoomFixtures.Sample3x3);
             var c = MakeCase(room, 0, (cl, lap) => { Stamp(cl, lap, 0, 1, new System.Random(1)); Stamp(cl, lap, 0, 3, new System.Random(2)); });
             for (int f = 0; f < 30; f++) c.Walker.Frame_(c.Walker.HeadXZ);
             Assert.AreEqual(ValvePhase.Waiting, c.Wing.Phase);
@@ -268,7 +260,7 @@ namespace Atlas.Blades.Lung.Walking.Tests
         [Test]
         public void Valve_DeadEndAtGeneration16()
         {
-            var room = Room("room_3x3");
+            var room = Room(RoomFixtures.Sample3x3);
             string route = "LRLRLRLRLRLRLRLR";
             var tiles = new FakeForkTiles();
             var wing = new AirwayWing(room, tiles, new FakeClearance(room), new ScriptedForkChoice(route), new FakeChamberView());
@@ -289,7 +281,7 @@ namespace Atlas.Blades.Lung.Walking.Tests
         [Test]
         public void ForkEvent_Fields()
         {
-            var room = Room("room_3x3");
+            var room = Room(RoomFixtures.Sample3x3);
             string target = Tiles.TargetAddress; string route = target.Substring(0, 4);
             var good = RunForks(room, route, null);
             Assert.AreEqual(4, good.Count);
@@ -311,17 +303,15 @@ namespace Atlas.Blades.Lung.Walking.Tests
         static List<(string scene, ForkEventData d)> RunForks(RoomModel room, string route, string overrideFirst)
         {
             var list = new List<(string, ForkEventData)>();
-            Action<Atlas.Link.EventMessage> h = m => { if (m.Ev == "fork") list.Add((m.Scene, JsonUtility.FromJson<ForkEventData>(m.Data))); };
-            EventLog.Emitted += h;
-            try
+            using (var capture = new Lung.Tests.EventCapture())
             {
+                capture.Log.Logged += m => { if (m.Ev == "fork") list.Add((m.Scene, ForkEventData.FromJson(m.Data))); };
                 var choice = new ScriptedForkChoice(route) { Override = overrideFirst };
                 var wing = new AirwayWing(room, Tiles, new FakeClearance(room), choice, new FakeChamberView());
                 var w = new SimWalker(wing); wing.Enter();
                 int need = overrideFirst != null ? 1 : route.Length;
                 for (int i = 0; i < 40000 && list.Count < need; i++) w.Step();
             }
-            finally { EventLog.Emitted -= h; }
             return list;
         }
     }

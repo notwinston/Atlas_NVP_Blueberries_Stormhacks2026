@@ -28,7 +28,7 @@ namespace Atlas.Blades.Lung.Tests
                 if (node.gen > 14) continue;
                 n++; ids.Add(Tree.FrameOf(node.address).Tile);
             }
-            UnityEngine.Debug.Log($"P2-B01 measured: tree.json load {TreeFixture.LoadMs:F0} ms, tree build {TreeFixture.BuildMs:F0} ms, depth-14 FrameOf {sw.Elapsed.TotalMilliseconds:F0} ms");
+            TestContext.WriteLine($"P2-B01 measured: tree.json load {TreeFixture.LoadMs:F0} ms, tree build {TreeFixture.BuildMs:F0} ms, depth-14 FrameOf {sw.Elapsed.TotalMilliseconds:F0} ms");
             Assert.AreEqual(32767, n);
             Assert.AreEqual(32767, ids.Count);
         }
@@ -82,7 +82,7 @@ namespace Atlas.Blades.Lung.Tests
             }
             Assert.AreEqual(31, maxN); Assert.AreEqual(62, maxT);
             times.Sort();
-            UnityEngine.Debug.Log($"P2-B01 measured: SetCurrent p95 = {times[(int)(times.Count * 0.95)]:F3} ms over {times.Count} calls");
+            TestContext.WriteLine($"P2-B01 measured: SetCurrent p95 = {times[(int)(times.Count * 0.95)]:F3} ms over {times.Count} calls");
             Tree.SetCurrent(AirwayTile.Fork(""));
         }
 

@@ -1,3 +1,4 @@
+#if !ATLAS_HEADLESS
 using System;
 using NUnit.Framework;
 using UnityEngine;
@@ -68,3 +69,4 @@ namespace Atlas.Blades.FieldFit.Tests
         }
     }
 }
+#endif

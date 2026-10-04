@@ -4,6 +4,9 @@
     "references": [
         "Atlas.Kernel",
         "Atlas.Blades.FieldFit",
+        "Atlas.Link",
+        "Atlas.World",
+        "Atlas.Telemetry",
         "Unity.Mathematics",
         "Unity.Burst",
         "Unity.Collections",

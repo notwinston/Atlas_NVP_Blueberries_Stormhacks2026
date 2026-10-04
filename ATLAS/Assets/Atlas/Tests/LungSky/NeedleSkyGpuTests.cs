@@ -1,3 +1,4 @@
+#if !ATLAS_HEADLESS
 using System;
 using NUnit.Framework;
 using UnityEditor;
@@ -10,7 +11,7 @@ namespace Atlas.Blades.Lung.Sky.Tests
     {
         const string SettingsPath = "Assets/Atlas/Blades/Lung/Sky/NeedleSkySettings.asset";
 
-        [Test] // P2-B10 acceptance, rendering path; catches a v-flip or az sign error (graphics sign-off run)
+        [Test, Category("Unity")] // P2-B10 acceptance, rendering path; catches a v-flip or az sign error (graphics sign-off run)
         public void B10_Shader_RawOrientation_GpuOnly()
         {
             Assume.That(SystemInfo.graphicsDeviceType != GraphicsDeviceType.Null, "no graphics device (-nographics)");
@@ -47,3 +48,4 @@ namespace Atlas.Blades.Lung.Sky.Tests
         }
     }
 }
+#endif

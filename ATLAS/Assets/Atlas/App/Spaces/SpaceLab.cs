@@ -33,6 +33,13 @@ namespace Atlas.App
     /// configures it from the active RoomModel and the registry, enters it, ticks it and leaves it, with a
     /// fade through black between two spaces. Engine-free: the loader and the stage bring the engine.
     /// A switch advances at step 8b of the frame, so Bump Guard runs in every frame of it.
+    /// <para>
+    /// The walker's kernel is shared. Between two spaces it is the flat kernel of the room; a curved space
+    /// configures it in its Enter (IDialKernel), and SpaceLab puts it back to flat after that space's Exit,
+    /// with the walker on the room's floor, so the space need not. One switch keeps the walker instead:
+    /// Curved Walk to Aligned Cells (Mode 1 to Mode 2, Master Plan sections 4.8 and 4.9) enters with the
+    /// tile and frame Curved Walk stood in.
+    /// </para>
     /// </summary>
     public sealed class SpaceLab : ISpaceHost, ISpaceFrame, IAfterFrameStep
     {
@@ -60,6 +67,8 @@ namespace Atlas.App
         bool _loadBegun;
         bool _fallbackTried;
         float _timer;
+        bool _keepPose;         // Mode 1 to Mode 2: the new space enters with the pose the old one left
+        WalkerPose _keptPose;
 
         // The newest request made while a switch was under way.
         bool _hasPending;
@@ -136,8 +145,9 @@ namespace Atlas.App
             _worldVersion++;
             if (room != null)
             {
-                double side = room.LapSide > 0f ? room.LapSide : KernelConstants.DefaultFlatTileSideMetres;
-                _kernel.Configure(KernelConfig.Flat(side));
+                // A curved space keeps the kernel it configured until its Exit, which the reload below brings;
+                // the flat kernel of the new room follows from RestoreFlatKernel.
+                if (!_hasSpace || KernelIsFlat()) _kernel.Configure(KernelConfig.Flat(FlatSide()));
                 // The head is still in the old frame: the walker is placed by the frame loop in the first
                 // frame of the room frame, and no space is loaded before that.
                 _walker.LatchRoomReset();
@@ -298,6 +308,13 @@ namespace Atlas.App
         {
             if (!_exited)
             {
+                // Mode 1 to Mode 2 keeps the tile and the frame (Master Plan section 4.8): read before Exit,
+                // while the kernel is still Curved Walk's. Only a walker standing in the {4,5} world has a
+                // tile Aligned Cells can take; from the flat stand it enters registered like any other space.
+                _keepPose = !_toEmpty && _hasSpace && !_faulted && _current == SpaceId.CurvedWalk
+                    && _target == SpaceId.AlignedCells && !_walker.RoomResetPending
+                    && _kernel.Graph != null && _kernel.Graph.Q == 5 && _kernel.Kappa == Curvature.Hyperbolic;
+                if (_keepPose) _keptPose = _kernel.Pose;
                 ExitCurrent();
                 _exited = true;
                 if (_stage != null)
@@ -354,6 +371,7 @@ namespace Atlas.App
             catch (Exception e)
             {
                 Log("space.error", "configure", e.Message);
+                RestoreFlatKernel();
                 _loader.Unload(module);
                 return false;
             }
@@ -362,14 +380,24 @@ namespace Atlas.App
 
             try
             {
-                // A registered space matches the real room: the walker starts where the head is.
-                if (module.Registered) _walker.ResetWalkerToFloor();
-                module.Enter(_kernel.Pose);
+                if (_keepPose && _target == SpaceId.AlignedCells)
+                {
+                    // The same tile id and frame as in Mode 1; the kernel itself is flat again.
+                    _keepPose = false;
+                    module.Enter(in _keptPose);
+                }
+                else
+                {
+                    // A registered space matches the real room: the walker starts where the head is.
+                    if (module.Registered) _walker.ResetWalkerToFloor();
+                    module.Enter(_kernel.Pose);
+                }
             }
             catch (Exception e)
             {
                 Log("space.error", "enter", e.Message);
                 try { module.Exit(); } catch (Exception) { /* it never entered; its root goes next */ }
+                RestoreFlatKernel();
                 _registry.SetGroupActive(group, false);
                 _loader.Unload(module);
                 return false;
@@ -399,7 +427,29 @@ namespace Atlas.App
             Action<SpaceId> exited = SpaceExited;
             if (exited != null) exited(id);
             _registry.SetGroupActive(SpaceIds.ParamGroup(id), false);
+            RestoreFlatKernel();
             _loader.Unload(module);
+        }
+
+        bool KernelIsFlat()
+        {
+            ITileGraph graph = _kernel.Graph;
+            return graph == null || graph.Q == 4;
+        }
+
+        double FlatSide()
+        {
+            return _room != null && _room.LapSide > 0f ? _room.LapSide : KernelConstants.DefaultFlatTileSideMetres;
+        }
+
+        // After a space that configured the kernel curved: the flat kernel of the room again, the walker where
+        // the head is. A flat kernel is left as it is, pose and all, as between two flat spaces before.
+        void RestoreFlatKernel()
+        {
+            if (KernelIsFlat()) return;
+            _kernel.Configure(KernelConfig.Flat(FlatSide()));
+            // With a room reset latched the frame loop places the walker itself, in the room's first frame.
+            if (!_walker.RoomResetPending) _walker.ResetWalkerToFloor();
         }
 
         // No space: the room content stays visible.

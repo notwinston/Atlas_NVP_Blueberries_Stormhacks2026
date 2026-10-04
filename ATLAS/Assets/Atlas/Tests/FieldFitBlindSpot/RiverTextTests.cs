@@ -1,3 +1,4 @@
+#if !ATLAS_HEADLESS
 using System;
 using System.Linq;
 using Atlas.Blades.FieldFit.BlindSpotFinder;
@@ -74,3 +75,4 @@ namespace Atlas.Blades.FieldFit.BlindSpotTests
         }
     }
 }
+#endif

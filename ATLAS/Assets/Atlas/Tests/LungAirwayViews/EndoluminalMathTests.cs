@@ -48,8 +48,9 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
             Assert.Throws<ArgumentOutOfRangeException>(() => EndoluminalCamera.ClockLabel(0));
         }
 
+#if !ATLAS_HEADLESS
         // Criterion: MP 10.2.3 "true 3D view": the projected direction of each child equals its clock angle (a mirrored image would fail).
-        [Test]
+        [Test, Category("Unity")]
         public void Endo_ClockMatchesProjection()
         {
             foreach (var f in SyntheticForks.Route(4))
@@ -72,6 +73,8 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
                 }
             }
         }
+
+#endif
 
         // Criterion: D-12 (up fallback when the parent runs along anterior).
         [Test]
@@ -107,12 +110,11 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
             var f = SyntheticForks.Route(1)[0];
             var pose = EndoluminalCamera.Pose(f);
             double s = EndoluminalCamera.SceneScale(f), rp = f.Parent.RadiusMm;
-            var b = new AirwayTubeMeshBuilder(); var m = new Mesh();
-            try
+            var b = new AirwayTubeMeshBuilder();
             {
                 var c = f.Left;
-                b.Build(c, 0, c.LenMm, f.Parent.EndMm, s, pose.PositionMm, rp, m);
-                var v = KitTestUtil.Verts(m); var idx = KitTestUtil.Idx(m);
+                b.Build(c, 0, c.LenMm, f.Parent.EndMm, s, pose.PositionMm, rp);
+                var v = KitTestUtil.Copy(b.Vertices, b.VertexCount); var idx = KitTestUtil.Copy(b.Indices, b.IndexCount);
                 Vector3 a = EndoluminalCamera.ToScene(c.PosMm, f.Parent.EndMm, s), d = EndoluminalCamera.ToSceneDir(c.Dir);
                 foreach (var vv in v)
                 {
@@ -130,21 +132,20 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
                 int prev = 255;
                 foreach (int i in order)
                 {
-                    int ao = v[i].Color.r;
+                    int ao = v[i].Shade;
                     Assert.That(ao / 255.0, Is.InRange(0.25 - 1.0 / 255, 1.0));
                     Assert.LessOrEqual(ao, prev + 1, "AO must not increase with camera distance");
                     prev = ao;
                 }
                 // parent drawn over 4 r_p only
                 var p = f.Parent;
-                b.Build(p, p.LenMm - 4 * rp, p.LenMm, f.Parent.EndMm, s, pose.PositionMm, rp, m);
-                v = KitTestUtil.Verts(m);
+                b.Build(p, p.LenMm - 4 * rp, p.LenMm, f.Parent.EndMm, s, pose.PositionMm, rp);
+                v = KitTestUtil.Copy(b.Vertices, b.VertexCount);
                 Vector3 pa = EndoluminalCamera.ToScene(p.PosMm, f.Parent.EndMm, s), pd = EndoluminalCamera.ToSceneDir(p.Dir);
                 float lo = float.MaxValue, hi = float.MinValue;
                 foreach (var vv in v) { float t = Vector3.Dot((Vector3)vv.Position - pa, pd); lo = Mathf.Min(lo, t); hi = Mathf.Max(hi, t); }
                 Assert.LessOrEqual(hi - lo, 4 * rp * s + 1e-6);
             }
-            finally { UnityEngine.Object.DestroyImmediate(m); }
         }
 
         // Criterion: tree.json addresses (MP 10.2.4).

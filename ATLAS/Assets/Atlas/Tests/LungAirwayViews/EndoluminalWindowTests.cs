@@ -1,3 +1,4 @@
+#if !ATLAS_HEADLESS
 using System;
 using System.Reflection;
 using Atlas.Blades.Lung.Endoluminal;
@@ -11,7 +12,7 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
     public class EndoluminalWindowTests
     {
         // Criterion: P2-B07 output "512x512" render texture.
-        [Test]
+        [Test, Category("Unity")]
         public void Endo_TextureSpec()
         {
             var w = EndoTestUtil.NewWindow(out var go);
@@ -29,7 +30,7 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
         }
 
         // Criterion: P2-B07 "rendered once per fork"; "render cost in 1 frame only" (the 299 further calls cost nothing).
-        [Test]
+        [Test, Category("Unity")]
         public void Endo_RenderOncePerFork()
         {
             var w = EndoTestUtil.NewWindow(out var go);
@@ -43,13 +44,13 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
                 Assert.AreEqual(1, w.RenderCount);
                 Assert.IsTrue(w.Show(forks[1])); Assert.AreEqual(2, w.RenderCount);
                 Assert.IsTrue(w.Show(forks[0])); Assert.AreEqual(3, w.RenderCount);
-                Debug.Log($"[P2-B07] render-frame CPU time (Editor, last Show) = {w.LastRenderCpuMs:F3} ms");
+                TestContext.WriteLine($"[P2-B07] render-frame CPU time (Editor, last Show) = {w.LastRenderCpuMs:F3} ms");
             }
             finally { EndoTestUtil.Dispose(w, go); }
         }
 
         // Criterion: P2-B07 "0 ms afterwards": no per-frame or render-callback methods; only Display is active after Show.
-        [Test]
+        [Test, Category("Unity")]
         public void Endo_NoPerFrameWork()
         {
             var banned = new[] { "Update", "LateUpdate", "FixedUpdate", "OnGUI", "OnRenderObject", "OnWillRenderObject", "OnPreCull", "OnPreRender", "OnPostRender" };
@@ -71,7 +72,7 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
         }
 
         // Criterion: MP 10.2.3 clock-position labels: root fork of the synthetic route labels L = 9 o'clock, R = 3 o'clock.
-        [Test]
+        [Test, Category("Unity")]
         public void Endo_Labels_SyntheticRoot()
         {
             var w = EndoTestUtil.NewWindow(out var go);
@@ -85,7 +86,7 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
         }
 
         // Criterion: P2-B07 phone test scene (deferred run): the scene loads and the driver references the three assets.
-        [Test]
+        [Test, Category("Unity")]
         public void Endo_TestScene_References()
         {
             const string path = "Assets/Atlas/Blades/Lung/Endoluminal/TestScene/Lung_EndoluminalTest.unity";
@@ -95,7 +96,7 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
                 var driver = UnityEngine.Object.FindFirstObjectByType<EndoluminalTestDriver>();
                 Assert.NotNull(driver);
                 var so = new UnityEditor.SerializedObject(driver);
-                Assert.AreEqual("Atlas/AtlasSurface", ((Shader)so.FindProperty("surfaceShader").objectReferenceValue).name);
+                Assert.AreEqual("Atlas/Surface", ((Shader)so.FindProperty("surfaceShader").objectReferenceValue).name);
                 Assert.AreEqual("Universal Render Pipeline/Unlit", ((Shader)so.FindProperty("displayShader").objectReferenceValue).name);
                 Assert.NotNull(so.FindProperty("labelFont").objectReferenceValue);
                 Assert.NotNull(Camera.main);
@@ -104,3 +105,4 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
         }
     }
 }
+#endif

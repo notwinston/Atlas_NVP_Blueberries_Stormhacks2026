@@ -32,18 +32,17 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
         public static TileMeshSpec Spec(int kappa, double scale, TileLod lod)
             => kappa < 0 ? TileMeshSpec.Hyperbolic(5, scale, lod, 0, 0) : TileMeshSpec.FlatCell(scale, 0, 0);
 
-        public static AirwayKitMeshBuilder NewBuilder() => new AirwayKitMeshBuilder(TilePalette.Provisional, AirwayPalette.Provisional);
+        public static AirwayKitMeshBuilder NewBuilder() => new AirwayKitMeshBuilder(TilePalette.Default, AirwayPalette.Default);
 
-        public static TileVertex[] Verts(Mesh m)
-        {
-            using var d = Mesh.AcquireReadOnlyMeshData(m);
-            return d[0].GetVertexData<TileVertex>().ToArray();
-        }
+        // The vertices and indices of the builder's last Build (engine-free), copied: count is the layout's VertexCount or IndexCount.
+        public static AtlasVertex[] Verts(AirwayKitMeshBuilder b, int count) => Copy(b.Vertices, count);
+        public static ushort[] Idx(AirwayKitMeshBuilder b, int count) => Copy(b.Indices, count);
 
-        public static ushort[] Idx(Mesh m)
+        public static T[] Copy<T>(T[] source, int count)
         {
-            using var d = Mesh.AcquireReadOnlyMeshData(m);
-            return d[0].GetIndexData<ushort>().ToArray();
+            var copy = new T[count];
+            Array.Copy(source, copy, count);
+            return copy;
         }
 
         public static HashSet<int> Used(ushort[] idx, RangeInt r)
@@ -53,7 +52,7 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
             return s;
         }
 
-        public static double MaxEdge(TileVertex[] v, ushort[] idx, RangeInt r)
+        public static double MaxEdge(AtlasVertex[] v, ushort[] idx, RangeInt r)
         {
             double mx = 0;
             for (int i = r.start; i < r.start + r.length; i += 3)
@@ -65,7 +64,7 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
             return mx;
         }
 
-        public static double2 Chart(TileVertex v) => new double2(v.Position.x, v.Position.z);
+        public static double2 Chart(AtlasVertex v) => new double2(v.Position.x, v.Position.z);
 
         public static List<int> OpenArms(KitKind k)
         {

@@ -19,6 +19,7 @@ namespace Atlas.World.Lint
         public int MaxDrawnTilesPerEye = 71;
         public double FaceTolM = 0.001;
         public double FaceBandM = 0.10;
+        public double MaxPropEdgeM = 0.2501; // §8.4 "no edge longer than 0.25 m", with float rounding
         public double FallbackL = 0; // used only when the footprint is null (D13)
     }
 }

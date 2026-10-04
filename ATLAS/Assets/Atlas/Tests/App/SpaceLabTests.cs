@@ -6,8 +6,9 @@ using NUnit.Framework;
 
 namespace Atlas.App.Tests
 {
-    /// <summary>SpaceLab (Master Plan task P1-A08) with stand-in modules: one space at a time, a fade through
-    /// black, parameters with the space, and clean refusals.</summary>
+    /// <summary>SpaceLab (Master Plan task P1-A08) with stand-in modules and the app's kernel: one space at a
+    /// time, a fade through black, parameters with the space, clean refusals, and the shared kernel flat
+    /// again after a curved space.</summary>
     public class SpaceLabTests
     {
         const float Dt = 1f / 60f;
@@ -16,7 +17,7 @@ namespace Atlas.App.Tests
         {
             public readonly List<string> Log = new List<string>();
             public readonly ParamRegistry Registry = new ParamRegistry();
-            public readonly FlatWalkerKernel Kernel = new FlatWalkerKernel();
+            public readonly HolonomyWalkerKernel Kernel = new HolonomyWalkerKernel();
             public readonly FakeWalker Walker = new FakeWalker();
             public readonly FakeStage Stage = new FakeStage();
             public readonly FakeEvents Events = new FakeEvents();
@@ -391,6 +392,155 @@ namespace Atlas.App.Tests
             for (int i = 0; i < SpaceIds.Count; i++)
                 Assert.That(rig.Registry.IsGroupActive(SpaceIds.ParamGroup((SpaceId)i)), Is.False);
             Assert.That(rig.Registry.IsGroupActive("render"), Is.True);
+        }
+
+        // ---- the shared kernel ----------------------------------------------------------------------------
+
+        const double L5 = 2.0 / 1.0612750619050357;
+
+        /// <summary>Every module the loader makes for the space configures the kernel in its Enter, as a curved space does.</summary>
+        static void MakeCurved(Rig rig, SpaceId id, int q, double metresPerUnit)
+        {
+            rig.Loader.OnCreate = module =>
+            {
+                if (module.Id == id) module.OnEnter = () => rig.Kernel.Configure(KernelConfig.Curved(q, metresPerUnit));
+            };
+        }
+
+        [TestCase(5, L5)]
+        [TestCase(6, 1.5)]
+        [TestCase(3, 1.3)]
+        public void CurvedSpace_ConfiguresTheKernelOnEnter_AndSpaceLabRestoresFlatAfterExit(int q, double metresPerUnit)
+        {
+            SpaceId curved = q == 3 ? SpaceId.SmallPlanet : SpaceId.CurvedWalk;
+            var rig = new Rig(SpaceId.Home, SpaceId.Glued, curved);
+            rig.Walker.Log = rig.Log;
+            MakeCurved(rig, curved, q, metresPerUnit);
+            rig.GiveRoom();
+            double side = rig.Lab.Room.LapSide;
+            rig.Lab.RequestSwitch(SpaceId.Home);
+            rig.RunUntilRunning();
+            Assert.That(rig.Kernel.Q, Is.EqualTo(4));
+
+            rig.Lab.RequestSwitch(curved);
+            rig.RunUntilRunning();
+            Assert.That(rig.Kernel.Q, Is.EqualTo(q), "the space's own configuration, untouched by the host");
+            Assert.That(rig.Kernel.MetresPerUnit, Is.EqualTo(metresPerUnit).Within(1e-12));
+
+            // Leaving it: flat for the room again, and the walker put on the floor, before the next space
+            // is configured.
+            rig.Log.Clear();
+            rig.Lab.RequestSwitch(SpaceId.Glued);
+            rig.RunUntilRunning();
+            Assert.That(rig.Kernel.Q, Is.EqualTo(4));
+            Assert.That(rig.Kernel.Kappa, Is.EqualTo(Curvature.Flat));
+            Assert.That(rig.Kernel.MetresPerUnit, Is.EqualTo(KernelConstants.FlatMetresPerUnit));
+            Assert.That(rig.Kernel.Graph.CentreSpacing, Is.EqualTo(side).Within(1e-12));
+            Assert.That(rig.Log.IndexOf("exit " + SpaceIds.Code(curved)), Is.GreaterThanOrEqualTo(0));
+            Assert.That(rig.Log.IndexOf("walker.reset"), Is.GreaterThan(rig.Log.IndexOf("exit " + SpaceIds.Code(curved))));
+            Assert.That(rig.Log.IndexOf("walker.reset"), Is.LessThan(rig.Log.IndexOf("configure S1")));
+            Assert.That(rig.Module.Start, Is.EqualTo(rig.Kernel.Pose));
+
+            // Between two flat spaces nothing is reconfigured: the walker keeps its pose, as before.
+            rig.Kernel.ResetToFloor(new Unity.Mathematics.double2(0.25, -0.5));
+            WalkerPose kept = rig.Kernel.Pose;
+            rig.Loader.Created.Clear();
+            rig.Lab.RequestSwitch(SpaceId.Home);
+            rig.RunUntilRunning();
+            Assert.That(rig.Kernel.Pose, Is.EqualTo(kept));
+        }
+
+        [Test]
+        public void CurvedSpace_ThatFailsInEnter_LeavesTheKernelFlat()
+        {
+            var rig = new Rig(SpaceId.Home, SpaceId.CurvedWalk);
+            rig.Loader.OnCreate = module =>
+            {
+                if (module.Id != SpaceId.CurvedWalk) return;
+                module.OnEnter = () => rig.Kernel.Configure(KernelConfig.Curved(5, L5));
+                module.ThrowInEnter = true;
+            };
+            rig.GiveRoom();
+            rig.Lab.RequestSwitch(SpaceId.Home);
+            rig.RunUntilRunning();
+            rig.Lab.RequestSwitch(SpaceId.CurvedWalk);
+            rig.RunUntilRunning();
+
+            Assert.That(rig.Lab.Current, Is.EqualTo(SpaceId.Home), "the fallback");
+            Assert.That(rig.Events.Has("space.error enter="), Is.True);
+            Assert.That(rig.Kernel.Q, Is.EqualTo(4));
+        }
+
+        [Test]
+        public void SetRoom_InACurvedSpace_LeavesItsKernelUntilTheReloadExitsIt()
+        {
+            var rig = new Rig(SpaceId.Home, SpaceId.CurvedWalk);
+            MakeCurved(rig, SpaceId.CurvedWalk, 5, L5);
+            rig.GiveRoom();
+            rig.Lab.RequestSwitch(SpaceId.CurvedWalk);
+            rig.RunUntilRunning();
+            Assert.That(rig.Kernel.Q, Is.EqualTo(5));
+
+            // The entered space still ticks through the fade-out: its kernel is not pulled from under it.
+            rig.Lab.SetRoom(Rooms.Make("second"));
+            Assert.That(rig.Kernel.Q, Is.EqualTo(5));
+            Assert.That(rig.Walker.RoomResetPending, Is.True);
+            rig.Frames(20);
+            Assert.That(rig.Kernel.Q, Is.EqualTo(4), "flat for the new room once the old space was left");
+            Assert.That(rig.Lab.State, Is.EqualTo(SpaceHostState.Loading), "waiting for the head in the room frame");
+            rig.Walker.RoomResetPending = false;
+            rig.RunUntilRunning();
+            Assert.That(rig.Lab.Current, Is.EqualTo(SpaceId.CurvedWalk));
+            Assert.That(rig.Kernel.Q, Is.EqualTo(5), "entered again, configured again");
+        }
+
+        [Test]
+        public void Mode1ToMode2_KeepsTheTileAndTheFrame()
+        {
+            // Master Plan sections 4.8 and 4.9, task P1-B10: Aligned Cells opens on the tile Curved Walk stood in.
+            var rig = new Rig(SpaceId.Home, SpaceId.CurvedWalk, SpaceId.AlignedCells);
+            rig.Walker.Log = rig.Log;
+            MakeCurved(rig, SpaceId.CurvedWalk, 5, L5);
+            rig.GiveRoom();
+            rig.Lab.RequestSwitch(SpaceId.CurvedWalk);
+            rig.RunUntilRunning();
+
+            // Walk east out of tile zero.
+            var head = new Unity.Mathematics.double2(0.2, 0.1);
+            rig.Kernel.ResetToFloor(head);
+            for (int n = 0; n < 40; n++)
+            {
+                head.x += 0.05;
+                rig.Kernel.Step(head, true, n / 60.0);
+            }
+            WalkerPose walked = rig.Kernel.Pose;
+            Assert.That(walked.Tile, Is.Not.EqualTo(TileId.Zero));
+
+            rig.Log.Clear();
+            Assert.That(rig.Lab.RequestSwitch(SpaceId.AlignedCells), Is.True);
+            rig.RunUntilRunning();
+            Assert.That(rig.Lab.Current, Is.EqualTo(SpaceId.AlignedCells));
+            Assert.That(rig.Module.Start.Tile, Is.EqualTo(walked.Tile), "the same tile id");
+            Assert.That(rig.Module.Start.Local, Is.EqualTo(walked.Local), "the same frame, bit for bit");
+            Assert.That(rig.Kernel.Q, Is.EqualTo(4), "the kernel itself is the room's flat one again");
+            // The floor reset belongs to the restore after Exit; none comes between Configure and Enter.
+            int configure = rig.Log.IndexOf("configure S3");
+            Assert.That(rig.Log.LastIndexOf("walker.reset"), Is.LessThan(configure));
+            Assert.That(rig.Log.IndexOf("enter S3"), Is.EqualTo(configure + 1));
+
+            // Any other switch resets: back to Mode 1 the walker starts registered on the floor.
+            rig.Log.Clear();
+            rig.Lab.RequestSwitch(SpaceId.CurvedWalk);
+            rig.RunUntilRunning();
+            Assert.That(rig.Log.IndexOf("walker.reset"), Is.EqualTo(rig.Log.IndexOf("configure S2") + 1));
+
+            // From the flat stand of Mode 1 there is no tile of the curved world to keep.
+            rig.Kernel.ResetToFloorFlat(new Unity.Mathematics.double2(0.3, 0.0));
+            rig.Log.Clear();
+            rig.Lab.RequestSwitch(SpaceId.AlignedCells);
+            rig.RunUntilRunning();
+            Assert.That(rig.Log.IndexOf("walker.reset", rig.Log.IndexOf("configure S3")), Is.EqualTo(rig.Log.IndexOf("configure S3") + 1));
+            Assert.That(rig.Module.Start, Is.EqualTo(rig.Kernel.Pose));
         }
     }
 }

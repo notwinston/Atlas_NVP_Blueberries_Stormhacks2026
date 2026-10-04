@@ -31,7 +31,7 @@ namespace Atlas.Blades.FieldFit.BlindSpotFinder
             float t0 = Time.realtimeSinceStartup;
             while (Time.realtimeSinceStartup - t0 < 10f)
             {
-                if (BlindSpotPlaceholderSeams.TryResolve(out _rig, out _look, out _tap, out _events, out missing)) { ok = true; break; }
+                if (BlindSpotServices.TryResolve(out _rig, out _look, out _tap, out _events, out missing)) { ok = true; break; }
                 yield return null;
             }
             _blindSpot = gameObject.AddComponent<BlindSpot>();

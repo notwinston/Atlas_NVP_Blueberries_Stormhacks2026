@@ -10,7 +10,8 @@ namespace Atlas.Blades.Lung.Walking
 {
     // MP §10.2.3 airway walking, Mode 1 (curved walk), valve chamber steps 1-5 (P2-B03). Mode 2 (P2-B04), the mode switch (P2-B05)
     // and the hand-over (P2-B09) extend this class; ChamberEntered and the internal Phase setter are their hooks.
-    // Frame order MP §6.3: KernelStep = step 4 (rig), Tick = step 5 (chambers, valves).
+    // Frame order MP §6.3: KernelStep = step 4 (rig), Tick = step 5 (chambers, valves). The app's one kernel does step 4 for the
+    // flat spaces; the wing keeps its own HolonomyRig and AirwayWingModule.Tick calls both, until the kernel carries the curved pose (Phase 2).
     public sealed class AirwayWing
     {
         public const int WalkableGenerations = 16;   // MP §10.2.3 "Walkable depth"
@@ -40,8 +41,8 @@ namespace Atlas.Blades.Lung.Walking
             _choice = choice ?? throw new ArgumentNullException(nameof(choice));
             _view = view ?? throw new ArgumentNullException(nameof(view));
             _clearance = clearance ?? throw new ArgumentNullException(nameof(clearance));
-            _l = room.curvature.L5;
-            _lap = new LapCorners(room.lapSquare.s);
+            _l = room.Curvature.L5;
+            _lap = new LapCorners(room.LapSide);
             _solver = new ValveSolver(_lap, clearance);
             _rig = new HolonomyRig((TileId t, int e, out Iso2 g) => { g = _graph.StepMatrix(t, e); return _graph.Neighbour(t, e); });
             Address = "";
@@ -86,10 +87,11 @@ namespace Atlas.Blades.Lung.Walking
         // MP §6.3 step 4.
         public void KernelStep(in FrameContext f)
         {
-            _frame = f.Frame;
+            _frame = f.FrameIndex;
+            bool tracking = f.Tracking == TrackingState.Normal;
             _headXZ = new double2(f.HeadPosition.x, f.HeadPosition.z);
             if (!_pendingEnter && _mode == AirwayMode.AlignedCells) { _cells.Walk(_headXZ); return; }   // MP §6.3 step 4, Mode 2
-            if (!_pendingEnter) _last = _rig.Step(f.Frame, new HeadSample(f.Frame, f.Time, (double3)f.HeadPosition, f.TrackingNormal));
+            if (!_pendingEnter) _last = _rig.Step(f.FrameIndex, new HeadSample(f.FrameIndex, f.Time, (double3)f.HeadPosition, tracking));
             if (_pendingEnter)
             {
                 _pendingEnter = false;
@@ -106,7 +108,7 @@ namespace Atlas.Blades.Lung.Walking
                 Shell = ShellState.Opaque;
                 _view.SetShell(CurrentTile, ShellState.Opaque);
                 _view.SetIris(CurrentTile, -1);
-                _last = _rig.Step(f.Frame, new HeadSample(f.Frame, f.Time, (double3)f.HeadPosition, f.TrackingNormal));
+                _last = _rig.Step(f.FrameIndex, new HeadSample(f.FrameIndex, f.Time, (double3)f.HeadPosition, tracking));
                 Phase = Address.Length >= WalkableGenerations ? ValvePhase.DeadEnd : ValvePhase.AwaitChoice;
             }
         }
@@ -224,7 +226,7 @@ namespace Atlas.Blades.Lung.Walking
                 if (Phase != ValvePhase.Waiting) { Phase = ValvePhase.Waiting; _view.SetTurnPrompt(true, double2.zero, true); }
                 return;
             }
-            Reaimed?.Invoke(new ReaimRecord(f.Frame, t.Alpha, Shell, CurrentTile, Mode, t.TurnBefore, t.TurnAfter));
+            Reaimed?.Invoke(new ReaimRecord(f.FrameIndex, t.Alpha, Shell, CurrentTile, Mode, t.TurnBefore, t.TurnAfter));
             var u = CellValve.Step(t.Dir);
             _view.SetTurnPrompt(true, new double2(u.x, u.y), false);
             _view.SetIris(CurrentTile, ExitEdge);
@@ -244,7 +246,7 @@ namespace Atlas.Blades.Lung.Walking
             {
                 // 1 -> 2: the current tile sits in the head's cell with turn 0 (MP §4.8: the tile id is kept).
                 if (_cells == null)
-                    _cells = new CellValveWalk(CellGrid.FromFreeRectangle(new FreeRectangle(_room.freeRect.Wf, _room.freeRect.Df)), _graph, _clearance);
+                    _cells = new CellValveWalk(CellGrid.FromFreeRectangle(new FreeRectangle(_room.FreeRect.Wf, _room.FreeRect.Df)), _graph, _clearance);
                 _cells.Enter(_headXZ, CurrentTile);
                 _mode = AirwayMode.AlignedCells;
             }
@@ -258,22 +260,22 @@ namespace Atlas.Blades.Lung.Walking
             }
         }
 
-        // App. B.1 State fields (P2-B05). TileId words are kernel.md §5.4 order Xu, Xv, Yu, Yv, Tu, Tv.
+        // App. B.1 State fields (P2-B05). TileId words are kernel.md §5.4 order Xu, Xv, Yu, Yv, Tu, Tv; the transform is row-major.
         public void WriteState(ref StateMessage s)
         {
             bool m2 = _mode == AirwayMode.AlignedCells;
-            s.SpaceId = (byte)(m2 ? 3 : 2);
+            s.SpaceId = (byte)(m2 ? SpaceId.AlignedCells : SpaceId.CurvedWalk);
             var tile = m2 ? _cells.Cells.Frame.Tile : _rig.Pose.Tile;
-            s.TileId[0] = tile.Xu; s.TileId[1] = tile.Xv; s.TileId[2] = tile.Yu; s.TileId[3] = tile.Yv; s.TileId[4] = tile.Tu; s.TileId[5] = tile.Tv;
-            var x = s.Xform;
-            if (m2) { for (int i = 0; i < 9; i++) x[i] = (i % 4 == 0) ? 1 : 0; }
+            s.SetTile(tile.Xu, tile.Xv, tile.Yu, tile.Yv, tile.Tu, tile.Tv);
+            if (m2) s.SetXformIdentity();
             else
             {
-                var m = _rig.Pose.Local.M;   // row-major
-                x[0] = m.c0.x; x[1] = m.c1.x; x[2] = m.c2.x; x[3] = m.c0.y; x[4] = m.c1.y; x[5] = m.c2.y; x[6] = m.c0.z; x[7] = m.c1.z; x[8] = m.c2.z;
+                Span<double> x = stackalloc double[9];
+                _rig.Pose.Local.CopyTo(x);
+                for (int i = 0; i < 9; i++) s.SetXform(i, x[i]);
             }
             s.Sheet = (short)(m2 ? _cells.Cells.Cell.x + _cells.Cells.Cell.y * _cells.Grid.CountX : 0);
-            s.P[0] = m2 ? 0f : (float)_l;
+            s.SetParam(StateMessage.ParamL, m2 ? 0f : (float)_l);
         }
 
         // MP §0.5 rule 3 exception: the rotation is applied only while the shell is opaque.
@@ -281,7 +283,7 @@ namespace Atlas.Blades.Lung.Walking
         {
             if (Shell != ShellState.Opaque) throw new InvalidOperationException("valve rotation while the shell is not opaque");
             _rig.Reaim(alpha);
-            Reaimed?.Invoke(new ReaimRecord(f.Frame, alpha, Shell, CurrentTile, Mode, 0, 0));
+            Reaimed?.Invoke(new ReaimRecord(f.FrameIndex, alpha, Shell, CurrentTile, Mode, 0, 0));
         }
 
         // Distance (m) and anchor-xz position (MP §4.6 warp) of the centre of tile t seen from the walker.

@@ -1,14 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using System.Text;
+using Atlas.Blades.Lung.Tests;
 using Atlas.Link;
-using Atlas.Telemetry;
 using Atlas.World;
 using NUnit.Framework;
-using Unity.Mathematics;
-using UnityEngine;
 
 namespace Atlas.Blades.Lung.Walking.Tests
 {
@@ -19,20 +16,16 @@ namespace Atlas.Blades.Lung.Walking.Tests
         static readonly IForkTiles Tiles = new AirwayTreeBinding(Lung.Tests.TreeFixture.Tree);
         static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-        static RoomModel Room(string name) =>
-            RoomModel.Load(Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "recordings", name + ".json")));
+        static RoomModel Room(string name) => RoomFixtures.LoadFromProject(name);
 
-        static string EvidenceDir =>
-            Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "docs", "laneB", "evidence", "P2-B12"));
-
-        static readonly string[] Rooms = { "room_3x3", "room_3x4_L", "room_4x5_table" };
+        static readonly string[] Rooms = { RoomFixtures.Sample3x3, RoomFixtures.SampleL3x4, RoomFixtures.Sample4x5Table };
 
         // Walks `route` on the centre strip in Mode 1 until `steps` chambers are entered; returns the oracle result.
         static (int straight, int corner, int strong, int entries) Walk(RoomModel room, string route, double speed, int steps)
         {
             var clear = new FakeClearance(room);
             var wing = new AirwayWing(room, Tiles, clear, new ScriptedForkChoice(route), new FakeChamberView());
-            var oracle = new BumpWarnOracle(clear, new LapCorners(room.lapSquare.s));
+            var oracle = new BumpWarnOracle(clear, new LapCorners(room.LapSide));
             int entries = 0; wing.ChamberEntered = (a, t) => entries++;
             var w = new SimWalker(wing) { Speed = speed };
             wing.Enter();
@@ -74,28 +67,28 @@ namespace Atlas.Blades.Lung.Walking.Tests
                               ",\"hundred_routes\":{\"straight_warn\":" + sStraight + ",\"corner_cues\":" + sCorner + ",\"strong\":" + sStrong + "}}");
                 }
             sb.Append("\n  ]\n}\n");
-            Directory.CreateDirectory(EvidenceDir);
-            File.WriteAllText(Path.Combine(EvidenceDir, "sim_centre_strip.json"), sb.ToString());
+            Lung.Tests.LungTestEnv.WriteEvidence("P2-B12", "sim_centre_strip.json", sb.ToString());
         }
 
         sealed class Run
         {
             public AirwayWing Wing; public NavigationBridge Bridge; public SimWalker Walker; public AirwayRoute Route;
-            public readonly List<EventMessage> Events = new List<EventMessage>(); public Action<EventMessage> Handler; public int Entries;
+            public Lung.Tests.EventCapture Capture; public int Entries;
+            public List<EventMessage> Events => Capture.Events;
             public void Frame() { Walker.Step(); Bridge.Observe(Wing, Walker.Frame * SimWalker.Dt); }
-            public void Dispose() { EventLog.Emitted -= Handler; }
+            public void Dispose() { Capture.Dispose(); }
         }
 
         static Run Start(Func<string, char> source)
         {
-            var room = Room("room_3x3"); var tree = Lung.Tests.TreeFixture.Tree;
+            var room = Room(RoomFixtures.Sample3x3); var tree = Lung.Tests.TreeFixture.Tree;
             var r = new Run { Route = AirwayRoute.Full(tree) };
             r.Bridge = new NavigationBridge(tree, Tiles, r.Route) { ChoiceSource = source };
             r.Wing = new AirwayWing(room, Tiles, new FakeClearance(room), r.Bridge, new FakeChamberView());
             r.Bridge.Attach(r.Wing);
             r.Wing.ChamberEntered = (a, t) => r.Entries++;
             r.Walker = new SimWalker(r.Wing);
-            r.Handler = e => r.Events.Add(e); EventLog.Emitted += r.Handler;
+            r.Capture = new Lung.Tests.EventCapture();
             r.Wing.Enter();
             return r;
         }
@@ -110,9 +103,9 @@ namespace Atlas.Blades.Lung.Walking.Tests
             {
                 for (int f = 0; f < 400000 && r.Entries < 2 * target.Length; f++) r.Frame();
                 Assert.AreEqual(2 * target.Length, r.Entries);
-                EventLog.Emit("lung", "fms", "{\"score\":2}");
+                r.Capture.Log.LogJson("lung", "fms", "{\"score\":2}");
                 if (!r.Events.Exists(e => e.Ev == "compass_choice"))
-                    EventLog.Emit("lung", "compass_choice", "{\"address\":\"\",\"choice\":\"L\",\"correct\":true}");   // injected (G6 §4.5)
+                    r.Capture.Log.LogJson("lung", "compass_choice", "{\"address\":\"\",\"choice\":\"L\",\"correct\":true}");   // injected (G6 §4.5)
                 var rep = AirwayRunReport.FromEvents(r.Events, target);
                 Assert.AreEqual(target.Length, rep.RouteForks);
                 Assert.AreEqual(rep.RouteForks, rep.ForksWalked);
@@ -121,11 +114,10 @@ namespace Atlas.Blades.Lung.Walking.Tests
                 Assert.IsTrue(rep.RescueFree);
                 Assert.AreEqual(2f, rep.FmsMax);
                 Assert.IsTrue(rep.CompassForkLogged);
-                var lines = new List<string>(); foreach (var e in r.Events) lines.Add(AirwayRunReport.ToJsonLine(e));
+                var lines = new List<string>(); foreach (var e in r.Events) lines.Add(e.ToJsonLine());
                 var rep2 = AirwayRunReport.FromJsonLines(lines, target);
                 Assert.IsTrue(rep.SameAs(rep2), rep.ToJson() + " vs " + rep2.ToJson());
-                Directory.CreateDirectory(EvidenceDir);
-                File.WriteAllText(Path.Combine(EvidenceDir, "run_report_sim.json"), rep.ToJson() + "\n");
+                Lung.Tests.LungTestEnv.WriteEvidence("P2-B12", "run_report_sim.json", rep.ToJson() + "\n");
                 // a wrong run is not rescue free; no events gives FmsMax -1
                 Assert.AreEqual(-1f, AirwayRunReport.FromEvents(new List<EventMessage>(), target).FmsMax);
                 Assert.IsFalse(AirwayRunReport.FromEvents(new List<EventMessage>(), target).RescueFree);
@@ -155,9 +147,9 @@ namespace Atlas.Blades.Lung.Walking.Tests
                 r.Bridge.Submit(target[hold.Length]); holdOn = false;
                 for (int i = 0; i < 10; i++) r.Frame();
                 Assert.AreEqual(hold + target[hold.Length], r.Wing.Address, "wing Address gains the submitted letter");
-                var fork = r.Events.Find(e => e.Ev == "fork" && e.Data.Contains("\"address\":\"" + hold + "\""));
-                Assert.IsNotNull(fork.Data, "fork event emitted");
-                StringAssert.Contains("\"beacon_shown\":true", fork.Data);
+                var fork = r.Events.Find(e => e.Ev == "fork" && e.Data.GetString("address") == hold);
+                Assert.IsNotNull(fork, "fork event emitted");
+                Assert.IsTrue(fork.Data.GetBool("beacon_shown"));
             }
             finally { r.Dispose(); }
         }

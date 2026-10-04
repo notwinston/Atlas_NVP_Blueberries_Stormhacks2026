@@ -7,7 +7,7 @@ namespace Atlas.Kernel
     public struct KernelConfig
     {
         /// <summary>Tiles per corner: 3, 4, 5 or 6 (the dial of section 3.2). FlatWalkerKernel takes 4;
-        /// HolonomyWalkerKernel takes 4, 5 and 6.</summary>
+        /// HolonomyWalkerKernel takes all four.</summary>
         public int Q;
         /// <summary>L for q = 5 and 6, R for q = 3; any positive value for q = 4. Metres per kernel unit.</summary>
         public double MetresPerUnit;
@@ -102,5 +102,65 @@ namespace Atlas.Kernel
         /// displacement since its previous call itself. Exactly one call per frame.
         /// </summary>
         KernelStep Step(double2 headFloorMetres, bool trackingNormal);
+
+        /// <summary>
+        /// Step 4 with the frame's time in seconds: what the frame loop calls. The time tells standing from
+        /// walking (head speed at most 0.1 m/s), which is the only state a curvature ramp advances in (Master
+        /// Plan section 4.6). A flat kernel ignores it. The form without a time integrates the same
+        /// displacement and never advances a ramp. Exactly one of the two per frame.
+        /// </summary>
+        KernelStep Step(double2 headFloorMetres, bool trackingNormal, double timeSeconds);
+    }
+
+    /// <summary>
+    /// The frame loop's kernel as a curved space drives it: the dial position, the curvature ramp and the
+    /// re-aim (Master Plan sections 3.2, 4.6 and 10.1.4). Published in AtlasServices next to IWalkerKernel;
+    /// it is the same object. Main thread only.
+    /// </summary>
+    /// <remarks>
+    /// How a space uses it. In Enter: Configure(KernelConfig.Curved(q, L)) for q = 5 or 6, or
+    /// Curved(3, R) for the sphere; then, for a start that matches the room, ResetToFloorFlat(head) and
+    /// SetCurvatureTarget(Curvature.Hyperbolic, L): the walker stands in tile zero at K = 0 and the ramp runs
+    /// while it stands. In Tick: read Pose, Candidates, Still, CurvatureNow. The space never calls Step and
+    /// never restores the flat kernel: SpaceLab does that after Exit.
+    /// </remarks>
+    public interface IDialKernel : IWalkerKernel
+    {
+        /// <summary>Q of the last Configure: 3, 4, 5 or 6. Graph.Q.</summary>
+        int Q { get; }
+        /// <summary>L (or R) of the last Configure or SetCurvatureTarget: the dial's target, constant through
+        /// a ramp. MetresPerUnit is the value of this frame, which moves while the ramp runs and is 1 at K = 0.</summary>
+        double ConfiguredMetresPerUnit { get; }
+        /// <summary>The signed curvature of this frame, 1/m^2: 0 flat, -1/L^2 hyperbolic, +1/R^2 on the sphere.</summary>
+        double CurvatureNow { get; }
+        /// <summary>The curvature the ramp ends at. Equal to CurvatureNow when no ramp is under way.</summary>
+        double CurvatureTarget { get; }
+        /// <summary>CurvatureNow differs from CurvatureTarget.</summary>
+        bool Ramping { get; }
+        /// <summary>The last timed Step found the walker standing: tracking Normal, no jump, floor speed at most
+        /// 0.1 m/s. False after a Step without a time, a Reset or a Configure.</summary>
+        bool Still { get; }
+        /// <summary>The last Step moved the curvature. The scale of every anchor changed with it.</summary>
+        bool CurvatureChanged { get; }
+
+        /// <summary>
+        /// Starts a ramp of four seconds from the curvature of now to kappa / metresPerUnit^2
+        /// (kappa = 0: to flat, metresPerUnit ignored). The ramp advances only in a timed Step that finds the
+        /// walker standing. False, and nothing changes, when Q is not 5 or 6: only the holonomy rig ramps.
+        /// </summary>
+        bool SetCurvatureTarget(double kappa, double metresPerUnit);
+        /// <summary>
+        /// Registers the walker to the room at K = 0 without leaving the configured tiling: tile zero, the frame
+        /// a translation by floorMetres in metres, no ramp under way. The point becomes the kernel's previous
+        /// head position. At Q = 3 and 4, where there is no flat stand on the tiling, it is ResetToFloor.
+        /// While the walker stands like this, ResetToFloor keeps it flat too; once a ramp has begun or ended,
+        /// ResetToFloor registers at the configured curvature and ends the ramp.
+        /// </summary>
+        void ResetToFloorFlat(double2 floorMetres);
+        /// <summary>
+        /// Turns the walker's frame about the walker: U becomes U * Rot(alpha). The position, the previous head
+        /// position and a ramp are untouched (Master Plan section 10.2.3, step 4). False at Q = 4.
+        /// </summary>
+        bool Reaim(double alpha);
     }
 }

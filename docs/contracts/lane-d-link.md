@@ -714,7 +714,10 @@ namespace Atlas.Link
   (`NetManager.TriggerUpdate()`) puts it on the wire. `TPing`, `TPong` and `Hello` are flushed the same way.
 - **Receive point.** `NetManager.PollEvents()` is called inside `LinkClient.Poll()`, once per frame from step
   8b on the phone, and every millisecond in the Hub's link loop. All callbacks therefore run on the caller's
-  thread.
+  thread. One thing happens earlier: `LiteNetTransport` sets `UnsyncedReceiveEvent`, so LiteNetLib hands each
+  data packet over on its receive thread, where the transport only stamps it, copies it into a pooled buffer
+  and queues it for the next `Poll` (§2.7). Order is kept: a peer's packets are delivered after its connect
+  and before its disconnect.
 
 ## 2.2 Message ids
 
@@ -1470,8 +1473,14 @@ afterwards:                                 offset = offset + 0.1 × (best.offse
 - The Hub also pings every client: 8 pings 50 ms apart after its `Hello`, then 4 times per second **(decided
   here)**. That is its heartbeat (§2.8) and gives the Hub its own offset and RTT per client, from which it
   computes the latency of each `State` (§3.2).
-- `t4` is read when `Poll` dispatches the pong, so on the phone it can be up to one frame late. The
-  minimum-RTT rule is what removes that delay.
+- `t4`, and `t2` of an answer, are the time the packet **arrived**, not the time `Poll` dispatched it: a
+  transport that implements `ILinkReceiveStamps` (`StampWith(ILinkClock)`, `LastReceiveUs`) stamps each packet
+  on its receive thread, and `LinkClient` and `LinkHost` read the stamp inside `OnReceive`. `t3` is the clock
+  at the send, so the wait for the poll lies inside `t3 − t2`, where the other side subtracts it. Read at the
+  poll instead, a steady 60 Hz loop cost the phone about 6 ms at p95 (every round trip measures a whole number
+  of frames, so the minimum-RTT rule has nothing to choose from); stamped, both ends hold 2 ms at p95
+  (`Link_ReceiveStamp`). A transport without the interface falls back to the poll time. `LoopbackNetwork`
+  stamps arrivals only with `ArrivalStamps = true`.
 - Example: `t1` 1 000 000, `t2` 5 000 250, `t3` 5 000 300, `t4` 1 000 650 → `rtt` 600 µs, `offset` 3 999 950 µs.
 - LiteNetLib's `RoundTripTime` feeds the link indicator only. Its NTP helper is not used.
 

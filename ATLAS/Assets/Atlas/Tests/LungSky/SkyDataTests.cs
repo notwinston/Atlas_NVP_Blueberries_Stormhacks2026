@@ -94,7 +94,8 @@ namespace Atlas.Blades.Lung.Sky.Tests
             Assert.AreEqual(s, m.RobustSharePercent, 0.01);
         }
 
-        [Test] // MP §8.1 data textures; §10.2.5
+#if !ATLAS_HEADLESS
+        [Test, Category("Unity")] // MP §8.1 data textures; §10.2.5
         public void B10_Textures_R8_Linear_PointClamp_Once()
         {
             Assume.That(SystemInfo.graphicsDeviceType != GraphicsDeviceType.Null, "no graphics device (-nographics)");
@@ -113,7 +114,7 @@ namespace Atlas.Blades.Lung.Sky.Tests
             }
         }
 
-        [Test] // MP §10.2.5 "one inverted sphere"
+        [Test, Category("Unity")] // MP §10.2.5 "one inverted sphere"
         public void B10_Mesh_Inverted()
         {
             var mesh = NeedleSkyMesh.Build();
@@ -130,5 +131,6 @@ namespace Atlas.Blades.Lung.Sky.Tests
             }
             finally { UnityEngine.Object.DestroyImmediate(mesh); }
         }
+#endif
     }
 }

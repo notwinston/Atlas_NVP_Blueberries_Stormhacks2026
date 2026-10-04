@@ -1,14 +1,13 @@
 using System;
 using System.IO;
-using UnityEngine;
+using Atlas.Link;
 
 namespace Atlas.Blades.Lung.Sky
 {
     /// <summary>One sky.json check direction (MP §10.2.4 step 8; fields = placeholder fixture, PH-37).</summary>
-    [Serializable] public sealed class SkyCheck { public float az_deg, el_deg, clear_mm; public float[] clear_mm_phase; }
+    public sealed class SkyCheck { public float az_deg, el_deg, clear_mm; public float[] clear_mm_phase; }
 
     /// <summary>sky.json reader, schema atlas.sky/1 (MP §10.2.4 step 8; PH-30: lane B writes this reader).</summary>
-    [Serializable]
     public sealed class SkyFile
     {
         public string schema; public int width, height, nside, phases; public float threshold_mm, mm_per_unit;
@@ -16,10 +15,33 @@ namespace Atlas.Blades.Lung.Sky
 
         public static SkyFile Parse(string json)
         {
-            var f = JsonUtility.FromJson<SkyFile>(json);
-            if (f == null) throw new InvalidDataException("sky.json: not a JSON object");
+            if (!AtlasJson.TryParse(json, out JsonValue j) || !j.IsObject) throw new InvalidDataException("sky.json: not a JSON object");
+            var f = new SkyFile
+            {
+                schema = j.GetString("schema"), width = j.GetInt("width"), height = j.GetInt("height"), nside = j.GetInt("nside"),
+                phases = j.GetInt("phases"), threshold_mm = j.GetFloat("threshold_mm"), mm_per_unit = j.GetFloat("mm_per_unit"),
+                target_mm = Floats(j["target_mm"]) ?? new float[0], checks = new SkyCheck[0],
+            };
+            JsonValue checks = j["checks"];
+            if (checks.IsArray)
+            {
+                f.checks = new SkyCheck[checks.Count];
+                for (int i = 0; i < f.checks.Length; i++)
+                {
+                    JsonValue c = checks[i];
+                    f.checks[i] = new SkyCheck { az_deg = c.GetFloat("az_deg"), el_deg = c.GetFloat("el_deg"), clear_mm = c.GetFloat("clear_mm"), clear_mm_phase = Floats(c["clear_mm_phase"]) };
+                }
+            }
             f.Validate();
             return f;
+        }
+
+        static float[] Floats(JsonValue a)
+        {
+            if (!a.IsArray) return null;
+            var v = new float[a.Count];
+            for (int i = 0; i < v.Length; i++) v[i] = a[i].AsFloat();
+            return v;
         }
 
         public void Validate()

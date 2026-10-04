@@ -42,6 +42,12 @@ namespace Atlas.Rendering
         /// <summary>The rig whose eye frustum the draw rule widens. Configure takes the published one; null gives the MP 8.5 defaults.</summary>
         public IStereoRig Rig { get; set; }
 
+        /// <summary>
+        /// False while WorldContentRenderer draws the tiles (shell and generated content in one mesh, P1-B07): this renderer then
+        /// keeps the selection, the anchors and the fog, and neither creates nor shows its own tile objects. Set before Configure.
+        /// </summary>
+        public bool DrawShells { get; set; } = true;
+
         /// <summary>Allocates the tile objects once. Every slot rents its own Atlas/Surface instance from the pool; Release returns them.</summary>
         public void Configure(ITileGraph graph, double lengthScale, MaterialPool pool)
         {
@@ -53,7 +59,7 @@ namespace Atlas.Rendering
             selection = new TileSelection(graph, lengthScale);
             shells = new TileShellCache(graph.Q, lengthScale);
             filters = new MeshFilter[PoolSize]; mats = new Material[PoolSize]; slotLod = new int[PoolSize]; slotOn = new bool[PoolSize];
-            for (int i = 0; i < PoolSize; i++)
+            for (int i = 0; DrawShells && i < PoolSize; i++)
             {
                 var child = new GameObject("Tile" + i.ToString("000")) { hideFlags = HideFlags.DontSave };
                 child.transform.SetParent(transform, false);   // identity transform: the warp ignores it
@@ -103,7 +109,7 @@ namespace Atlas.Rendering
             {
                 double L = selection.L, rho = selection.Rho;
                 AtlasLook.SetFog((float)((rho - 1.0) * L), (float)(rho * L));   // MP 8.5 "fog starts at rho - 1", "fully opaque at rho", metres
-                int n = selection.DrawnCount;
+                int n = DrawShells ? Math.Min(selection.DrawnCount, slots.Count) : 0;
                 var drawn = selection.Drawn;
                 for (int i = 0; i < n; i++)
                 {
@@ -112,7 +118,7 @@ namespace Atlas.Rendering
                     if (slotLod[i] != lod) { filters[i].sharedMesh = shells.Get(drawn[i].Lod); slotLod[i] = lod; }
                     if (!slotOn[i]) { slots[i].enabled = true; slotOn[i] = true; }
                 }
-                for (int i = n; i < PoolSize; i++)
+                for (int i = n; i < slots.Count; i++)
                     if (slotOn[i]) { slots[i].enabled = false; slotOn[i] = false; }
                 drawnCount = n;
             }

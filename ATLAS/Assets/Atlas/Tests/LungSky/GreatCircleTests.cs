@@ -45,12 +45,12 @@ namespace Atlas.Blades.Lung.Sky.Tests
             var ev = new FakeSkyEvents(); var p = new FakePresenter(); var reg = new Atlas.Link.ParamRegistry();
             var b = new NeedleSkyBeat(SkyMapsFactory.Fixture(), reg, ev, null, p);
             b.Enter();
-            reg.TryGetId("lung.skyPickAz", out var iaz); reg.TryGetId("lung.skyPickEl", out var iel); reg.TryGetId("lung.skyPick", out var ipk);
+            var iaz = reg.Find("lung.skyPickAz"); var iel = reg.Find("lung.skyPickEl"); var ipk = reg.Find("lung.skyPick");
             int n = 0;
             void Pick(float az, float el)
             {
-                reg.Set(iaz, az); reg.Set(iel, el); reg.Set(ipk, ++n);
-                b.Tick(new Atlas.World.FrameContext(n, n * 0.01, 0.01f, float3.zero, quaternion.identity, true, false));
+                reg.Set(iaz, az); reg.Set(iel, el); reg.Set(ipk, (float)++n);
+                b.Tick(SkyTestEnv.Frame(n, n * 0.01, 0.01f, float3.zero, quaternion.identity));
             }
             Pick(90, 0); Pick(0, 90);
             Assert.AreEqual(0, ev.Count("gc_check"));
@@ -60,7 +60,7 @@ namespace Atlas.Blades.Lung.Sky.Tests
             Assert.AreEqual(3, ev.Count("sky_pick")); Assert.AreEqual(3, k, "gc_check follows the third sky_pick");
             StringAssert.Contains("angle_sum_deg", ev.Data[k]);
             Assert.AreEqual("{\"angle_sum_deg\":", ev.Data[k].Substring(0, 17));
-            var d = UnityEngine.JsonUtility.FromJson<GcCheckData>(ev.Data[k]);
+            var d = GcCheckData.FromJson(Atlas.Link.AtlasJson.Parse(ev.Data[k]));
             Assert.That(d.angle_sum_deg, Is.InRange(269.5f, 270.5f));
             Assert.AreEqual(270.0f, b.Readout.AngleSumShownDeg);
             Assert.IsTrue(p.Last.ArcsOn);
@@ -77,7 +77,7 @@ namespace Atlas.Blades.Lung.Sky.Tests
                 Assert.Greater(s, 180.0);
                 max = Math.Max(max, Math.Abs(s - g));
             }
-            UnityEngine.Debug.Log("B11 max |sum - Girard| = " + max);
+            TestContext.WriteLine("B11 max |sum - Girard| = " + max);
             Assert.Less(max, 0.5);
         }
 

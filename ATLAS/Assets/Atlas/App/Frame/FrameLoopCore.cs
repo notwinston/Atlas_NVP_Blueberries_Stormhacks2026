@@ -297,9 +297,10 @@ namespace Atlas.App
                 }
             }
 
-            // 4  Kernel: exactly once per frame, with the head's floor point (the kernel forms the step itself).
+            // 4  Kernel: exactly once per frame, with the head's floor point (the kernel forms the step itself)
+            //    and the frame's time, by which a curved kernel tells standing from walking for its ramp.
             _frame.Kernel = _kernel.Step(new double2(_frame.HeadPosition.x, _frame.HeadPosition.z),
-                _frame.Tracking == TrackingState.Normal);
+                _frame.Tracking == TrackingState.Normal, _frame.Time);
             _frame.Walker = _kernel.Pose;
 
             // 5  Space module.
@@ -365,9 +366,26 @@ namespace Atlas.App
             state.BumpLevel = 0;
             if (_guardState != null) _guardState.WriteState(ref state);
 
-            state.SetTile(0, 0, 0, 0, 0, 0);
             state.Sheet = 0;
-            state.SetXformIdentity();
+            ITileGraph graph = _kernel.Graph;
+            if (graph == null || graph.Q == 4)
+            {
+                state.SetTile(0, 0, 0, 0, 0, 0);
+                state.SetXformIdentity();
+            }
+            else
+            {
+                // A curved space walks the one kernel, so its tile and frame are the kernel's: the words of
+                // kernel.md section 5.4 in order, and Local row-major (section 4.5). Read now, not from the
+                // frame context: the module may have placed the walker in its Tick.
+                WalkerPose pose = _kernel.Pose;
+                TileId tile = pose.Tile;
+                state.SetTile(tile.Xu, tile.Xv, tile.Yu, tile.Yv, tile.Tu, tile.Tv);
+                Iso2 local = pose.Local;
+                state.Xform0 = local.M00; state.Xform1 = local.M01; state.Xform2 = local.M02;
+                state.Xform3 = local.M10; state.Xform4 = local.M11; state.Xform5 = local.M12;
+                state.Xform6 = local.M20; state.Xform7 = local.M21; state.Xform8 = local.M22;
+            }
             float rho = (float)_kernel.CullRho;
             state.P0 = (float)_kernel.MetresPerUnit;
             state.P1 = rho - 1f;

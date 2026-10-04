@@ -1,12 +1,10 @@
 using System;
 using System.Collections.Generic;
 using Atlas.Kernel;
-using Atlas.Telemetry;
 using Atlas.Link;
 using Atlas.World;
 using NUnit.Framework;
 using Unity.Mathematics;
-using UnityEngine;
 
 namespace Atlas.Blades.Lung.Tests
 {
@@ -16,13 +14,14 @@ namespace Atlas.Blades.Lung.Tests
     {
         static AirwayTree Tree => TreeFixture.Tree;
 
+        // The events body logs, through a real EventLog published as the session's IEventLog.
         static List<EventMessage> Capture(Action body)
         {
-            var got = new List<EventMessage>();
-            Action<EventMessage> h = m => got.Add(m);
-            EventLog.Emitted += h;
-            try { body(); } finally { EventLog.Emitted -= h; }
-            return got;
+            using (var capture = new EventCapture())
+            {
+                body();
+                return capture.Events;
+            }
         }
 
         // C1: row P2-B08 acceptance: at the designed fork the Euclidean compass and the beacon point to different children.
@@ -92,10 +91,10 @@ namespace Atlas.Blades.Lung.Tests
             Assert.AreEqual(2, ev.Count);
             Assert.AreEqual("lung", ev[0].Scene); Assert.AreEqual("lung", ev[1].Scene);
             Assert.AreEqual("fork", ev[0].Ev); Assert.AreEqual("compass_choice", ev[1].Ev);
-            var f = JsonUtility.FromJson<ForkEventData>(ev[0].Data);
+            var f = ForkEventData.FromJson(ev[0].Data);
             Assert.AreEqual("", f.address); Assert.AreEqual("R", f.choice); Assert.IsTrue(f.correct); Assert.IsFalse(f.beacon_shown);
             Assert.AreEqual(3.5f, f.t_s, 1e-4f);
-            var c = JsonUtility.FromJson<CompassChoiceEventData>(ev[1].Data);
+            var c = CompassChoiceEventData.FromJson(ev[1].Data);
             Assert.AreEqual("", c.address); Assert.AreEqual("R", c.choice); Assert.AreEqual("L", c.compass); Assert.AreEqual("R", c.beacon);
             Assert.IsTrue(c.correct);
 
@@ -108,7 +107,7 @@ namespace Atlas.Blades.Lung.Tests
             });
             Assert.AreEqual(1, ev.Count);
             Assert.AreEqual("fork", ev[0].Ev);
-            f = JsonUtility.FromJson<ForkEventData>(ev[0].Data);
+            f = ForkEventData.FromJson(ev[0].Data);
             Assert.AreEqual("R", f.address); Assert.AreEqual("L", f.choice); Assert.IsFalse(f.correct); Assert.IsTrue(f.beacon_shown);
             Assert.AreEqual(10f, f.t_s, 1e-4f);
         }
@@ -128,17 +127,18 @@ namespace Atlas.Blades.Lung.Tests
             Assert.AreEqual(0, ev.Count);
         }
 
+#if !ATLAS_HEADLESS
         // C6 (supporting): the ghost compass arrow is active only at the designed fork.
-        [Test]
+        [Test, Category("Unity")]
         public void TwoCompassesView_OnlyAtDesignedFork()
         {
             var b = new AirwayBeacon(Tree);
-            var go = new GameObject("ghost");
+            var go = new UnityEngine.GameObject("ghost");
             try
             {
                 var v = go.AddComponent<TwoCompassesView>();
                 var pose = new WalkerPose { Tile = TileId.Zero, Local = new Iso2(double3x3.identity, -1) };
-                var frame = new FrameContext(1, 0, 0.01f, new float3(0, 1.6f, 0), quaternion.identity, true, false);
+                var frame = LungTestEnv.Frame(1, 0, 0.01f, new float3(0, 1.6f, 0), quaternion.identity);
                 var route = AirwayRoute.Full(Tree);
                 b.Tick(AirwayTile.Fork(""), 0);
                 v.Apply(frame, pose, Tree, b, route); Assert.IsTrue(go.activeSelf);
@@ -149,5 +149,6 @@ namespace Atlas.Blades.Lung.Tests
             }
             finally { UnityEngine.Object.DestroyImmediate(go); }
         }
+#endif
     }
 }

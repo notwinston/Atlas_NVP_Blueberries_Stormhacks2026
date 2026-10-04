@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using Atlas.Rendering;
+using Atlas.World;
 using Unity.Mathematics;
 using TMPro;
 using Unity.Profiling;
@@ -24,10 +25,10 @@ namespace Atlas.Blades.Lung.Endoluminal
         static readonly int WorldSpaceCameraPosId = Shader.PropertyToID("_WorldSpaceCameraPos");
         static readonly int ScreenParamsId = Shader.PropertyToID("_ScreenParams");   // TMP's SDF shader derives its edge softness from it (D-28)
 
-        [SerializeField] Shader surfaceShader;      // "Atlas/AtlasSurface"
         [SerializeField] Shader displayShader;      // "Universal Render Pipeline/Unlit"
         [SerializeField] TMP_FontAsset labelFont;
 
+        MaterialPool pool;
         RenderTexture rt;
         readonly Mesh[] tubes = new Mesh[3];        // parent, left, right
         Material surfaceMat, displayMat;
@@ -55,15 +56,15 @@ namespace Atlas.Blades.Lung.Endoluminal
 
         void Awake()
         {
-            if (surfaceShader != null && displayShader != null && labelFont != null) Initialise(surfaceShader, displayShader, labelFont);
+            if (displayShader != null && labelFont != null && AtlasServices.TryGet(out MaterialPool published)) Initialise(published, displayShader, labelFont);
         }
 
-        // Idempotent. Does all allocation, once. The surface shader reads _WarpMode as a string property until P1-B03's ids merge
-        // (switch to AtlasShaderIDs.WarpMode at integration).
-        public void Initialise(Shader surface, Shader display, TMP_FontAsset font)
+        // Idempotent. Does all allocation, once. The tube material is one Atlas/Surface instance rented from the pool (never a new Material),
+        // returned by Release. Warp off, and fog off for this draw (D-19): the material's fog weight is 0.
+        public void Initialise(MaterialPool materials, Shader display, TMP_FontAsset font)
         {
             if (IsInitialised) return;
-            if (surface == null || display == null || font == null) throw new ArgumentNullException("surface, display and font are required");
+            if (materials == null || display == null || font == null) throw new ArgumentNullException("materials, display and font are required");
 
             rt = new RenderTexture(TextureSize, TextureSize, 24, RenderTextureFormat.ARGB32)
             {
@@ -75,8 +76,10 @@ namespace Atlas.Blades.Lung.Endoluminal
             for (int i = 0; i < 3; i++) tubes[i] = new Mesh { name = "EndoluminalWindow.Tube" + i };
             tubeBuilder = new AirwayTubeMeshBuilder();
 
-            surfaceMat = new Material(surface) { name = "EndoluminalWindow.Surface", hideFlags = HideFlags.HideAndDontSave };   // never saved as an asset (MP 9.3)
-            surfaceMat.SetFloat("_WarpMode", 0f);
+            pool = materials;
+            surfaceMat = pool.Rent();
+            MaterialPool.SetWarpMode(surfaceMat, 0);
+            MaterialPool.SetSurface(surfaceMat, fogWeight: 0f);
             displayMat = new Material(display) { name = "EndoluminalWindow.Display", hideFlags = HideFlags.HideAndDontSave };
             displayMat.mainTexture = rt;
 
@@ -153,8 +156,7 @@ namespace Atlas.Blades.Lung.Endoluminal
                     labelMatrices[i] = Matrix4x4.TRS(pos, camRot, Vector3.one * k) * Matrix4x4.Translate(-b.center);
                 }
 
-                // Command buffer: tubes, then depth-only clear, then labels. Fog is off for this draw and restored (D-19).
-                float oldFogStart = Shader.GetGlobalFloat(AtlasShaderIDs.FogStart), oldFogEnd = Shader.GetGlobalFloat(AtlasShaderIDs.FogEnd);
+                // Command buffer: tubes, then depth-only clear, then labels. The tube material has no fog (D-19).
                 cmd.Clear();
                 cmd.SetRenderTarget(rt);
                 cmd.ClearRenderTarget(true, true, Background);
@@ -162,14 +164,10 @@ namespace Atlas.Blades.Lung.Endoluminal
                 cmd.SetGlobalVector(WorldSpaceCameraPosId, new Vector4(camPos.x, camPos.y, camPos.z, 1f));
                 Vector4 oldScreen = Shader.GetGlobalVector(ScreenParamsId);
                 cmd.SetGlobalVector(ScreenParamsId, new Vector4(TextureSize, TextureSize, 1f + 1f / TextureSize, 1f + 1f / TextureSize));
-                cmd.SetGlobalFloat(AtlasShaderIDs.FogStart, 0f);
-                cmd.SetGlobalFloat(AtlasShaderIDs.FogEnd, 0f);
                 for (int i = 0; i < 3; i++) cmd.DrawMesh(tubes[i], Matrix4x4.identity, surfaceMat, 0, 0);
                 cmd.ClearRenderTarget(true, false, Color.clear);
                 for (int i = 0; i < 2; i++) cmd.DrawMesh(labels[i].mesh, labelMatrices[i], labels[i].fontSharedMaterial, 0, 0);
                 cmd.SetGlobalVector(ScreenParamsId, oldScreen);
-                cmd.SetGlobalFloat(AtlasShaderIDs.FogStart, oldFogStart);
-                cmd.SetGlobalFloat(AtlasShaderIDs.FogEnd, oldFogEnd);
                 if (SystemInfo.graphicsDeviceType != GraphicsDeviceType.Null) Graphics.ExecuteCommandBuffer(cmd);
                 cmd.Clear();
 
@@ -201,7 +199,9 @@ namespace Atlas.Blades.Lung.Endoluminal
             IsInitialised = false;
             if (rt != null) { rt.Release(); DestroyObj(rt); rt = null; }
             for (int i = 0; i < tubes.Length; i++) { DestroyObj(tubes[i]); tubes[i] = null; }
-            DestroyObj(surfaceMat); DestroyObj(displayMat); DestroyObj(quad);
+            if (surfaceMat != null) pool.Return(surfaceMat);
+            surfaceMat = null; pool = null;
+            DestroyObj(displayMat); DestroyObj(quad);
             cmd?.Release(); cmd = null;
         }
 

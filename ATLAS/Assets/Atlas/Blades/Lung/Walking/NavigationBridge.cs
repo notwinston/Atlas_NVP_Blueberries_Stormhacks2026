@@ -1,6 +1,4 @@
 using System;
-using Atlas.Telemetry;
-using UnityEngine;
 
 namespace Atlas.Blades.Lung.Walking
 {
@@ -53,12 +51,12 @@ namespace Atlas.Blades.Lung.Walking
             if (_route.HasTwoCompasses(_tree) && forkAddress == _tree.CompassForkAddress && _compassLogged != forkAddress)
             {
                 _compassLogged = forkAddress;
-                EventLog.Emit("lung", "compass_choice", JsonUtility.ToJson(new CompassChoiceEventData
+                LungEvents.Emit("compass_choice", new CompassChoiceEventData
                 {
                     address = forkAddress, choice = letter.ToString(), correct = correct,
                     compass = TwoCompasses.EuclideanChild(_tree, forkAddress, _route.TargetAddress).ToString(),
                     beacon = TwoCompasses.BeaconChild(forkAddress, _route.TargetAddress).ToString()
-                }));
+                }.ToJson());
             }
             return true;
         }

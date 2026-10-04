@@ -85,7 +85,12 @@ namespace Atlas.App
         }
     }
 
-    /// <summary>Step 6: the look's shader globals (head position, metres per kernel unit, time, fog cross-fade).</summary>
+    /// <summary>
+    /// Step 6: the look's shader globals (head position, metres per kernel unit, time, fog cross-fade). It runs
+    /// after the entered module's own upload and is the only writer of _HypL and _HeadPosWS: L (or R) is the
+    /// kernel's of this frame, and the head is the geometry head that stepped the kernel, so the warp is
+    /// centred on the sample the anchors were built for.
+    /// </summary>
     public sealed class LookUploadStep : IUploadStep
     {
         readonly IWalkerKernel _kernel;
@@ -94,7 +99,7 @@ namespace Atlas.App
 
         public void Upload(in FrameContext frame)
         {
-            AtlasLook.Upload(frame.RawHeadPosition, _kernel.MetresPerUnit, frame.Time, frame.DeltaTime);
+            AtlasLook.Upload(frame.HeadPosition, _kernel.MetresPerUnit, frame.Time, frame.DeltaTime);
         }
     }
 

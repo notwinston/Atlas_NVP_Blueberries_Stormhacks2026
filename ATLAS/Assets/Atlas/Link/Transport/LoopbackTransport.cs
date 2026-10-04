@@ -60,6 +60,12 @@ namespace Atlas.Link
         public double DisconnectTimeoutMs = 3000.0;
         /// <summary>How long a connect attempt to nobody takes to fail.</summary>
         public double ConnectFailMs = 500.0;
+        /// <summary>
+        /// True: an endpoint stamps a packet with the time it arrived, as <see cref="LiteNetTransport"/> does on
+        /// its receive thread (<see cref="ILinkReceiveStamps"/>). False, the default: with the time of the poll
+        /// that delivers it, which is all a transport without a receive thread can know.
+        /// </summary>
+        public bool ArrivalStamps;
 
         public long PacketsSent { get; private set; }
         public long PacketsLost { get; private set; }
@@ -369,7 +375,7 @@ namespace Atlas.Link
                     {
                         // The stamp a receive thread would have taken: the packet arrived at DeliverAtUs and has
                         // waited for this poll since.
-                        long waitedUs = _clock.NowUs - p.DeliverAtUs;
+                        long waitedUs = ArrivalStamps ? _clock.NowUs - p.DeliverAtUs : 0;
                         endpoint.LastReceiveUs = endpoint.StampClock.NowUs - (waitedUs > 0 ? waitedUs : 0);
                         listener.OnReceive(p.ToPeerId, p.Data, 0, p.Length, p.Delivery);
                     }

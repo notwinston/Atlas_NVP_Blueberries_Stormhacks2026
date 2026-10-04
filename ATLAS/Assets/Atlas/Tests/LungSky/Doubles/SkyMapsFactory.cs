@@ -1,12 +1,12 @@
 using System;
 using System.IO;
-using UnityEngine;
 
 namespace Atlas.Blades.Lung.Sky.Tests
 {
     public static class SkyMapsFactory
     {
-        public static string FixtureRoot => Path.Combine(Application.streamingAssetsPath, "cases", "illustrative");
+        public static string FixtureRoot => Path.Combine(
+            System.Environment.GetEnvironmentVariable("ATLAS_PROJECT_DIR") ?? Directory.GetCurrentDirectory(), "Assets", "StreamingAssets", "cases", "illustrative");
         public static SkyMaps Fixture() => SkyMaps.Load(FixtureRoot);
 
         public static SkyFile Meta(string schema = "atlas.sky/1", float threshold = 5f) => new SkyFile

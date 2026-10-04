@@ -166,7 +166,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8ffc7b7bb80eb462c8eb635985447ee8, type: 3}
   m_Name:
   m_EditorClassIdentifier:
-  surfaceShader: {fileID: 4800000, guid: 7da87378966144846ade55cb8146b92f, type: 3}
+  surfaceShader: {fileID: 4800000, guid: 14b664d1aee1fb2fb118c5430f555be9, type: 3}
   displayShader: {fileID: 4800000, guid: 650dd9526735d5b46b79224bc6e94025, type: 3}
   labelFont: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
 --- !u!1660057539 &9223372036854775807

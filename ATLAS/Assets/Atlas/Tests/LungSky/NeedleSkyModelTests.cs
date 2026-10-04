@@ -137,8 +137,9 @@ namespace Atlas.Blades.Lung.Sky.Tests
         {
             // a gaze that never dwells: moves 0.5 deg per step (> cone is not needed; the anchor resets each step)
             for (int k = 0; k < 10; k++) _m.Step(new SkyInput { Gaze = G(k * 0.5, 0), DeltaTime = Dt });
+            var sw = new Stopwatch();   // allocated before the measurement: the stopwatch is not the model
             long a0 = GC.GetAllocatedBytesForCurrentThread();
-            var sw = Stopwatch.StartNew();
+            sw.Start();
             for (int k = 0; k < 1000; k++)
                 _m.Step(new SkyInput { Gaze = G(10 * 0.5 + k * 0.5 % 300, 0), DeltaTime = Dt });
             sw.Stop();

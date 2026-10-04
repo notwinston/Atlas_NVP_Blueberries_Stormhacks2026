@@ -1,13 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using UnityEngine;
+using Atlas.Link;
 
 namespace Atlas.Blades.Lung
 {
     // Reader for airway/tree.json, schema atlas.tree/2 (Master Plan §10.2.4; PH-30 / R8: lane B writes the reader). Field names are
-    // the file's, because JsonUtility needs them verbatim.
-    [Serializable]
+    // the file's. It reads through the link's AtlasJson, which is engine-free.
     public sealed class AirwayTreeFile
     {
         public const string SchemaId = "atlas.tree/2";
@@ -22,20 +21,50 @@ namespace Atlas.Blades.Lung
         public static AirwayTreeFile Parse(string json)
         {
             if (json == null) throw new ArgumentNullException(nameof(json));
-            AirwayTreeFile f;
-            try { f = JsonUtility.FromJson<AirwayTreeFile>(json); }
-            catch (ArgumentException e) { throw new FormatException("tree.json is not valid JSON: " + e.Message); }
-            if (f == null) throw new FormatException("tree.json is empty");
+            if (!AtlasJson.TryParse(json, out JsonValue j, out string error)) throw new FormatException("tree.json is not valid JSON: " + error);
+            return FromJson(j);
+        }
+
+        static AirwayTreeFile FromJson(JsonValue j)
+        {
+            if (!j.IsObject) throw new FormatException("tree.json is empty");
+            var f = new AirwayTreeFile { schema = j.GetString("schema") };
+            JsonValue nodes = j["nodes"];
+            if (nodes.IsArray)
+            {
+                f.nodes = new AirwayTreeFileNode[nodes.Count];
+                for (int i = 0; i < f.nodes.Length; i++)
+                {
+                    JsonValue n = nodes[i];
+                    f.nodes[i] = !n.IsObject ? null : new AirwayTreeFileNode
+                    {
+                        address = n.GetString("address"), gen = n.GetInt("gen"), len_mm = n.GetDouble("len_mm"), radius_mm = n.GetDouble("radius_mm"),
+                        pos_mm = Vector(n["pos_mm"]), dir = Vector(n["dir"]), source = n.GetString("source"),
+                    };
+                }
+            }
+            if (j["target"].IsObject) f.target = new AirwayAddressRef { address = j["target"].GetString("address") };
+            if (j["compass_fork"].IsObject) f.compass_fork = new AirwayAddressRef { address = j["compass_fork"].GetString("address") };
             f.Validate();
             return f;
         }
 
+        static double[] Vector(JsonValue a)
+        {
+            if (!a.IsArray) return null;
+            var v = new double[a.Count];
+            for (int i = 0; i < v.Length; i++) v[i] = a[i].AsDouble();
+            return v;
+        }
+
         public static AirwayTreeFile Load(string caseRoot)
         {
-            var text = File.ReadAllText(Path.Combine(caseRoot, "airway", "tree.json"));
-            if (text.StartsWith("version https://git-lfs", StringComparison.Ordinal))
+            var bytes = File.ReadAllBytes(Path.Combine(caseRoot, "airway", "tree.json"));
+            if (bytes.Length > 23 && System.Text.Encoding.ASCII.GetString(bytes, 0, 23) == "version https://git-lfs")
                 throw new InvalidDataException("tree.json is a Git LFS pointer; run git lfs pull");
-            return Parse(text);
+            if (!AtlasJson.TryParseUtf8(bytes, 0, bytes.Length, false, out JsonValue j, out string error))
+                throw new FormatException("tree.json is not valid JSON: " + error);
+            return FromJson(j);
         }
 
         // Rules of the brief: schema, non-empty, addresses, gen, duplicates, root and parents, vector lengths, positive len and radius,
@@ -69,12 +98,11 @@ namespace Atlas.Blades.Lung
         }
     }
 
-    [Serializable]
     public sealed class AirwayTreeFileNode
     {
         public string address; public int gen; public double len_mm; public double radius_mm;
         public double[] pos_mm; public double[] dir; public string source;
     }
 
-    [Serializable] public sealed class AirwayAddressRef { public string address; }
+    public sealed class AirwayAddressRef { public string address; }
 }

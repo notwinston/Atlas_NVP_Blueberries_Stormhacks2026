@@ -16,6 +16,10 @@ namespace Atlas.World.Lint
         public int CorridorsMissingKerb; public int Corridors, CorridorsTwoClosed, CorridorsOneClosed, CorridorKerbs;
         public ulong WorldHash1, WorldHash2;
         public int FootprintSamples, FootprintTilesNotHome, PropTilesInFootprint;   // P1-B11: MP §3.4, §9.5.6 P1-B11
+        public int TileMeshKeys, MaxPropTriangles, PropBudgetViolations, PropEdgeViolations; public double MaxPropEdge;   // MP §8.4
+        public ulong RegionHash;                                     // MP §11.1: the same number on the phone and on the Station
+        public int RoomObjects, RoomObjectsWithoutMesh;              // MP §11.1 scan boxes
+        public int WarpedRenderers, WarpedRenderersSmallBounds;      // MP §11.1 localBounds (Editor only)
 
         public override string ToString()
         {
@@ -32,7 +36,10 @@ namespace Atlas.World.Lint
             sb.AppendLine($"  Corridors={Corridors} TwoClosedAxisEdges={CorridorsTwoClosed} OneClosedAxisEdge={CorridorsOneClosed} CorridorKerbsOwned={CorridorKerbs} MissingKerbs={CorridorsMissingKerb}");
             sb.AppendLine($"  RegionMismatches={RegionMismatches} ContentMismatches={ContentMismatches} RegionsPresent={RegionsPresent}");
             sb.AppendLine($"  FootprintSamples={FootprintSamples} FootprintTilesNotHome={FootprintTilesNotHome} PropTilesInFootprint={PropTilesInFootprint}");
-            sb.AppendLine($"  WorldHash1=0x{WorldHash1:X16} WorldHash2=0x{WorldHash2:X16}");
+            sb.AppendLine($"  TileMeshKeys={TileMeshKeys} MaxPropTriangles={MaxPropTriangles} MaxPropEdge={MaxPropEdge.ToString("F4", c)} PropBudgetViolations={PropBudgetViolations} PropEdgeViolations={PropEdgeViolations}");
+            sb.AppendLine($"  RoomObjects={RoomObjects} RoomObjectsWithoutMesh={RoomObjectsWithoutMesh}");
+            sb.AppendLine($"  WarpedRenderers={WarpedRenderers} WarpedRenderersSmallBounds={WarpedRenderersSmallBounds}");
+            sb.AppendLine($"  RegionHash=0x{RegionHash:X16} WorldHash1=0x{WorldHash1:X16} WorldHash2=0x{WorldHash2:X16}");
             foreach (var f in Failures) sb.AppendLine("  FAIL: " + f);
             return sb.ToString();
         }

@@ -15,7 +15,7 @@ namespace Atlas.Blades.Lung.Tests
         static void Ensure()
         {
             if (tree != null) return;
-            var root = CaseManifest.Root("illustrative");
+            var root = LungTestEnv.CaseRoot("illustrative");
             var sw = Stopwatch.StartNew();
             file = AirwayTreeFile.Load(root);
             LoadMs = sw.Elapsed.TotalMilliseconds; sw.Restart();

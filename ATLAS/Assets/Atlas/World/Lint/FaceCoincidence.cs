@@ -14,18 +14,22 @@ namespace Atlas.World.Lint
         readonly TileGraph graph;
         readonly double L, tol, band;
         readonly TileMeshCache meshes;
-        readonly Dictionary<int, int> memo = new Dictionary<int, int>();
+        readonly Dictionary<long, int> memo = new Dictionary<long, int>();
 
         public FaceCoincidence(TileGraph graph, double L, TileMeshCache meshes, double tolM = 0.001, double bandM = 0.10)
         { this.graph = graph; this.L = L; this.meshes = meshes; tol = tolM; band = bandM; }
 
         // t's edge e meets n's edge e2. Returns the number of coincident triangle pairs (both directions).
-        public int Count(TileId t, int e, int kerbT, TileId n, int e2, int kerbN)
+        public int Count(TileId t, int e, int kerbT, TileId n, int e2, int kerbN) =>
+            Count(t, e, new WorldTileKey(Archetype.Plaza, kerbT), n, e2, new WorldTileKey(Archetype.Plaza, kerbN));
+
+        // The same on the meshes the tiles are drawn with: shell, kerbs, wedges and props (P1-B07).
+        public int Count(TileId t, int e, in WorldTileKey keyT, TileId n, int e2, in WorldTileKey keyN)
         {
-            int key = (kerbT << 12) | (e << 10) | (kerbN << 4) | e2;
+            long key = ((long)((keyT.Code << 2) | e) << 16) | (uint)((keyN.Code << 2) | e2);
             if (memo.TryGetValue(key, out int r)) return r;
-            var mt = meshes.Get(TileLod.Near, kerbT);
-            var mn = meshes.Get(TileLod.Near, kerbN);
+            var mt = meshes.Get(TileLod.Near, keyT);
+            var mn = meshes.Get(TileLod.Near, keyN);
             // n's vertices into t's chart: P' = G * exp(x / L), chart = L log(P') (A.2, §4.6)
             var G = graph.StepMatrix(t, e).M;
             var vn = new Vector3[mn.Vertices.Length];

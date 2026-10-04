@@ -215,6 +215,12 @@ namespace Atlas.Kernel
             return result;
         }
 
+        /// <summary>The flat kernel has no ramp: the time is ignored.</summary>
+        public KernelStep Step(double2 headFloorMetres, bool trackingNormal, double timeSeconds)
+        {
+            return Step(headFloorMetres, trackingNormal);
+        }
+
         /// <summary>The edge the walker is furthest past, or -1 when no edge is passed by more than the band.
         /// On a tie the lowest edge index.</summary>
         private static int EdgePassed(in Iso2 local, double a, double band)

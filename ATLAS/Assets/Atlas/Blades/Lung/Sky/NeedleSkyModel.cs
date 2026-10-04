@@ -1,6 +1,6 @@
 using System;
+using Atlas.Link;
 using Unity.Mathematics;
-using UnityEngine;
 
 namespace Atlas.Blades.Lung.Sky
 {
@@ -108,14 +108,14 @@ namespace Atlas.Blades.Lung.Sky
             _picks[_count++] = d;
             SkyDirection.ToAzEl(d, out double az, out double el);
             SkyDirection.Pixel(az, el, out int i, out int j);
-            _events?.Emit("sky_pick", JsonUtility.ToJson(new SkyPickData
+            _events?.Emit("sky_pick", new SkyPickData
             {
                 az_deg = (float)az, el_deg = (float)el, clear_mm = Shown(_maps.MinClearanceMm(i, j)), robust = _maps.IsRobust(i, j),   // D15
-            }));
+            }.ToJson().ToJson(false));
             if (_count == NeedleSkyConstants.PicksPerCheck)                                   // B11
             {
                 Check = GreatCircleCheck.From(_picks[0], _picks[1], _picks[2]);
-                _events?.Emit("gc_check", JsonUtility.ToJson(new GcCheckData { angle_sum_deg = (float)Check.AngleSumDeg }));   // D15: unrounded
+                _events?.Emit("gc_check", new GcCheckData { angle_sum_deg = (float)Check.AngleSumDeg }.ToJson().ToJson(false));   // D15: unrounded
                 _sinceThird = 0;
             }
             return true;

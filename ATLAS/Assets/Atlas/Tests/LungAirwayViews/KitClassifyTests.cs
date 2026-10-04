@@ -66,18 +66,15 @@ namespace Atlas.Blades.Lung.AirwayViews.Tests
         public void Kit_RejectsSphere()
         {
             var b = KitTestUtil.NewBuilder();
-            var m = new UnityEngine.Mesh();
-            try
             {
-                Assert.Catch<ArgumentException>(() => b.BuildTile(KitKind.Fork, Atlas.Rendering.TileMeshSpec.Spherical(2.0, Atlas.Rendering.TileLod.Near, 0, 0), m));
-                Assert.Catch<ArgumentException>(() => b.BuildTile(KitKind.Fork, Atlas.Rendering.TileMeshSpec.FlatCell(0.9, 0, 0), m));
-                Assert.Catch<ArgumentException>(() => b.BuildTile(KitKind.Fork, Atlas.Rendering.TileMeshSpec.Hyperbolic(5, 1.885, Atlas.Rendering.TileLod.Near, 1, 0), m));
-                Assert.Catch<ArgumentException>(() => b.BuildTile(KitKind.Fork, Atlas.Rendering.TileMeshSpec.Hyperbolic(5, 1.885, Atlas.Rendering.TileLod.Near, 0, 1), m));
-                Assert.Catch<ArgumentException>(() => b.BuildTile(KitKind.Fork, Atlas.Rendering.TileMeshSpec.FlatCell(1.5, 0, 0xF), m));
+                Assert.Catch<ArgumentException>(() => b.BuildTile(KitKind.Fork, Atlas.Rendering.TileMeshSpec.Spherical(2.0, Atlas.Rendering.TileLod.Near, 0, 0)));
+                Assert.Catch<ArgumentException>(() => b.BuildTile(KitKind.Fork, Atlas.Rendering.TileMeshSpec.FlatCell(0.9, 0, 0)));
+                Assert.Catch<ArgumentException>(() => b.BuildTile(KitKind.Fork, Atlas.Rendering.TileMeshSpec.Hyperbolic(5, 1.885, Atlas.Rendering.TileLod.Near, 1, 0)));
+                Assert.Catch<ArgumentException>(() => b.BuildTile(KitKind.Fork, Atlas.Rendering.TileMeshSpec.Hyperbolic(5, 1.885, Atlas.Rendering.TileLod.Near, 0, 1)));
+                Assert.Catch<ArgumentException>(() => b.BuildTile(KitKind.Fork, Atlas.Rendering.TileMeshSpec.FlatCell(1.5, 0, 0xF)));
                 Assert.Catch<ArgumentException>(() => KitGeometry.InRadiusMetres(1, 2.0));
                 Assert.Catch<ArgumentException>(() => KitGeometry.InRadiusMetres(0, 0.9));
             }
-            finally { UnityEngine.Object.DestroyImmediate(m); b.Dispose(); }
         }
     }
 }

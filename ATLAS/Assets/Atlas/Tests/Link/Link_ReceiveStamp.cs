@@ -27,55 +27,25 @@ namespace Atlas.Link.Tests
             public long NowUs { get { return _inner.NowUs + _shiftUs; } }
         }
 
-        /// <summary>A transport with its receive stamps hidden: the link then reads its times at the poll, as it did before.</summary>
-        sealed class PollTimedTransport : ILinkTransport
-        {
-            readonly ILinkTransport _inner;
-
-            public PollTimedTransport(ILinkTransport inner) { _inner = inner; }
-
-            public ILinkTransportListener Listener { get { return _inner.Listener; } set { _inner.Listener = value; } }
-            public bool IsRunning { get { return _inner.IsRunning; } }
-            public int LocalPort { get { return _inner.LocalPort; } }
-            public bool StartClient() { return _inner.StartClient(); }
-            public bool StartHost(int port) { return _inner.StartHost(port); }
-            public void Connect(string address, int port) { _inner.Connect(address, port); }
-            public void Poll() { _inner.Poll(); }
-            public bool Send(int peerId, byte[] data, int offset, int length, LinkDelivery delivery) { return _inner.Send(peerId, data, offset, length, delivery); }
-            public void Flush() { _inner.Flush(); }
-            public void Disconnect(int peerId) { _inner.Disconnect(peerId); }
-            public void Disconnect(int peerId, byte[] data, int offset, int length) { _inner.Disconnect(peerId, data, offset, length); }
-            public void Stop() { _inner.Stop(); }
-            public int GetRttMs(int peerId) { return _inner.GetRttMs(peerId); }
-            public float GetSilenceMs(int peerId) { return _inner.GetSilenceMs(peerId); }
-            public int GetLossPermille(int peerId) { return _inner.GetLossPermille(peerId); }
-        }
-
         const long PhoneShiftUs = 250000000;    // the phone's clock runs this far ahead of the Hub's
         const long TickUs = 250;                // the simulation's time step
         const long HubPollUs = 1000;            // the Hub's link loop
         const long FrameUs = 16667;             // the phone's poll, once per 60 Hz frame
-        const long FrameJitterUs = 3000;        // frames run up to this much long or short
+        const long SteadyFrameJitterUs = 200;   // a display-locked loop: frames this much long or short
+        const long RoughFrameJitterUs = 3000;   // a loop that is missing its frame time
 
         /// <summary>
         /// A phone polling once per jittered 60 Hz frame against a Hub polling every millisecond, over 10% loss,
         /// 15 ms one-way delay and 0-5 ms jitter. Adds the absolute error of both estimates, sampled every
         /// 100 ms once the phone is ready: the phone's of the Hub clock, and the Hub's of the phone clock.
         /// </summary>
-        static void Simulate(int seed, bool stamped, double seconds, List<long> phoneErrors, List<long> hubErrors)
+        static void Simulate(int seed, bool stamped, long frameJitterUs, double seconds, List<long> phoneErrors, List<long> hubErrors)
         {
             var clock = new ManualClock(1000000);
-            var network = new LoopbackNetwork(clock, seed) { Loss = 0.10, DelayMs = 15.0, JitterMs = 5.0 };
+            var network = new LoopbackNetwork(clock, seed) { Loss = 0.10, DelayMs = 15.0, JitterMs = 5.0, ArrivalStamps = stamped };
             var random = new Random(seed);
-            ILinkTransport hostWire = network.CreateEndpoint();
-            ILinkTransport phoneWire = network.CreateEndpoint();
-            if (!stamped)
-            {
-                hostWire = new PollTimedTransport(hostWire);
-                phoneWire = new PollTimedTransport(phoneWire);
-            }
-            var host = new LinkHost(hostWire, clock);
-            var phone = new LinkClient(phoneWire, new ShiftedClock(clock, PhoneShiftUs), LinkRole.Phone) { Device = "sim-phone" };
+            var host = new LinkHost(network.CreateEndpoint(), clock);
+            var phone = new LinkClient(network.CreateEndpoint(), new ShiftedClock(clock, PhoneShiftUs), LinkRole.Phone) { Device = "sim-phone" };
             int phonePeer = -1;
             host.PeerJoined += (peer, hello) => phonePeer = peer;
             Assert.That(host.Start(LinkRig.Port), Is.True);
@@ -94,7 +64,7 @@ namespace Atlas.Link.Tests
                 }
                 if (now >= nextFrame)
                 {
-                    nextFrame = now + FrameUs + (long)((random.NextDouble() * 2.0 - 1.0) * FrameJitterUs);
+                    nextFrame = now + FrameUs + (long)((random.NextDouble() * 2.0 - 1.0) * frameJitterUs);
                     phone.Poll();
                 }
                 if (now < nextSample) continue;
@@ -115,11 +85,11 @@ namespace Atlas.Link.Tests
             return values[Math.Max(0, Math.Min(values.Count - 1, index))];
         }
 
-        static void Run(bool stamped, out long phoneP95, out long hubP95)
+        static void Run(bool stamped, long frameJitterUs, out long phoneP95, out long hubP95)
         {
             var phoneErrors = new List<long>();
             var hubErrors = new List<long>();
-            for (int seed = 1; seed <= 10; seed++) Simulate(seed, stamped, 40.0, phoneErrors, hubErrors);
+            for (int seed = 1; seed <= 10; seed++) Simulate(seed, stamped, frameJitterUs, 40.0, phoneErrors, hubErrors);
             Assert.That(phoneErrors.Count, Is.GreaterThan(3000), "the phone was ready for nearly every run");
             Assert.That(hubErrors.Count, Is.GreaterThan(3000));
             phoneP95 = Percentile(phoneErrors, 0.95);
@@ -129,29 +99,35 @@ namespace Atlas.Link.Tests
         [Test]
         public void At_a_60_Hz_poll_the_offset_error_is_within_2_ms_at_p95_on_both_ends()
         {
-            long phoneP95, hubP95;
-            Run(true, out phoneP95, out hubP95);
-            TestContext.Progress.WriteLine("receive stamps: phone p95 " + phoneP95 + " us, hub p95 " + hubP95 + " us");
-            Assert.That(phoneP95, Is.LessThanOrEqualTo(2000), "the phone's estimate of the Hub clock, microseconds");
-            Assert.That(hubP95, Is.LessThanOrEqualTo(2000), "the Hub's estimate of the phone clock, microseconds");
+            foreach (long frameJitterUs in new[] { 0L, SteadyFrameJitterUs, RoughFrameJitterUs })
+            {
+                long phoneP95, hubP95;
+                Run(true, frameJitterUs, out phoneP95, out hubP95);
+                TestContext.Progress.WriteLine("receive stamps, frame jitter " + frameJitterUs + " us: phone p95 " + phoneP95 + " us, hub p95 " + hubP95 + " us");
+                Assert.That(phoneP95, Is.LessThanOrEqualTo(2000), "the phone's estimate of the Hub clock, microseconds, frame jitter " + frameJitterUs);
+                Assert.That(hubP95, Is.LessThanOrEqualTo(2000), "the Hub's estimate of the phone clock, microseconds, frame jitter " + frameJitterUs);
+            }
         }
 
         [Test]
         public void Without_the_stamps_the_same_link_misses_2_ms()
         {
-            // The path this replaces, kept as the reference: every receive time read at the poll.
+            // The path this replaces, kept as the reference: every receive time read at the poll. A pong then
+            // waits for the frame before t4 is read. The minimum-RTT rule hides that only when the frames are
+            // irregular enough for some pong to land just before a poll; on a steady 60 Hz loop the round trips
+            // all measure a whole number of frames and the rule has nothing to choose from. The Hub's side
+            // comes off better, since its four pings per second are not in step with the phone's frames.
             long phoneP95, hubP95;
-            Run(false, out phoneP95, out hubP95);
-            TestContext.Progress.WriteLine("poll times: phone p95 " + phoneP95 + " us, hub p95 " + hubP95 + " us");
+            Run(false, SteadyFrameJitterUs, out phoneP95, out hubP95);
+            TestContext.Progress.WriteLine("poll times, frame jitter " + SteadyFrameJitterUs + " us: phone p95 " + phoneP95 + " us, hub p95 " + hubP95 + " us");
             Assert.That(phoneP95, Is.GreaterThan(3000), "t4 waits for the frame");
-            Assert.That(hubP95, Is.GreaterThan(3000), "t2 waits for the frame and t3 does not show it");
         }
 
         [Test]
         public void The_loopback_stamp_is_the_arrival_time_on_the_listeners_clock()
         {
             var clock = new ManualClock(5000000);
-            var network = new LoopbackNetwork(clock) { DelayMs = 15.0 };
+            var network = new LoopbackNetwork(clock) { DelayMs = 15.0, ArrivalStamps = true };
             LoopbackTransport a = network.CreateEndpoint();
             LoopbackTransport b = network.CreateEndpoint();
             var seen = new List<long>();

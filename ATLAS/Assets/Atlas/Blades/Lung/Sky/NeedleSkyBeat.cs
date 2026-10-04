@@ -10,24 +10,25 @@ namespace Atlas.Blades.Lung.Sky
     /// <summary>Beat G, the needle sky (MP §10.2.2 beat g, §10.2.5). Tick is called by the Lung director at §6.3 step 5 (A-G7-1, D13).</summary>
     public sealed class NeedleSkyBeat : ILungBeat, IDisposable
     {
-        [AtlasParam("lung.skyOn", "lung", 0, 1, 1)] bool _skyOn = true;               // G11 kill switch
-        [AtlasParam("lung.skyPhase", "lung", 0, 9, 0)] int _skyPhase;                 // phase layer
-        [AtlasParam("lung.skyRobust", "lung", 0, 1, 1)] bool _skyRobust = true;       // robust layer
-        [AtlasParam("lung.skyPickAz", "lung", -180, 180, 0)] float _skyPickAz;        // Console twin, deg
-        [AtlasParam("lung.skyPickEl", "lung", -90, 90, 0)] float _skyPickEl;          // Console twin, deg
-        [AtlasParam("lung.skyPick", "lung", 0, 65535, 0)] int _skyPick;               // Console twin: each change commits one pick
+        [AtlasParam("lung.skyOn", true)] bool _skyOn = true;                          // G11 kill switch
+        [AtlasParam("lung.skyPhase", 0f, 9f, 0f)] int _skyPhase;                      // phase layer
+        [AtlasParam("lung.skyRobust", true)] bool _skyRobust = true;                  // robust layer
+        [AtlasParam("lung.skyPickAz", -180f, 180f, 0f)] float _skyPickAz;             // Console twin, deg
+        [AtlasParam("lung.skyPickEl", -90f, 90f, 0f)] float _skyPickEl;               // Console twin, deg
+        [AtlasParam("lung.skyPick", 0f, 65535f, 0f)] int _skyPick;                    // Console twin: each change commits one pick
 
         readonly NeedleSkyModel _model;
-        readonly IActionSource _input;
+        readonly IAtlasInput _input;
         readonly INeedleSkyPresenter _presenter;
+        readonly ParamBinding _binding;
         int _lastSkyPick;
         bool _entered;
 
-        public NeedleSkyBeat(SkyMaps maps, ParamRegistry registry, ISkyEvents events, IActionSource inputOrNull, INeedleSkyPresenter presenterOrNull)
+        public NeedleSkyBeat(SkyMaps maps, ParamRegistry registry, ISkyEvents events, IAtlasInput inputOrNull, INeedleSkyPresenter presenterOrNull)
         {
             _model = new NeedleSkyModel(maps, events);
             _input = inputOrNull; _presenter = presenterOrNull;
-            AtlasParamScanner.Bind(this, registry);
+            _binding = ParamBinder.Bind(this, registry);
             _lastSkyPick = _skyPick;
         }
 
@@ -57,8 +58,8 @@ namespace Atlas.Blades.Lung.Sky
             double3 gaze = math.normalize((double3)math.mul(frame.HeadRotation, new float3(0, 0, 1)));
             bool consolePick = _skyPick != _lastSkyPick;
             _lastSkyPick = _skyPick;
-            bool confirm = _input != null && _input.Triggered(AtlasAction.Confirm);
-            float2 stick = _input != null ? new float2(_input.Stick.x, _input.Stick.y) : float2.zero;
+            bool confirm = _input != null && _input.Pressed(AtlasAction.Confirm);
+            float2 stick = _input != null ? new float2(_input.Axis(AtlasAxis.LeftX), _input.Axis(AtlasAxis.LeftY)) : float2.zero;
             _model.Step(new SkyInput
             {
                 Gaze = gaze, Stick = stick, Confirm = confirm, ConsolePick = consolePick,
@@ -72,6 +73,6 @@ namespace Atlas.Blades.Lung.Sky
                 n == NeedleSkyConstants.PicksPerCheck, _model.Readout));
         }
 
-        public void Dispose() { (_presenter as IDisposable)?.Dispose(); }
+        public void Dispose() { _binding.Dispose(); (_presenter as IDisposable)?.Dispose(); }
     }
 }

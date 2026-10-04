@@ -181,8 +181,12 @@ namespace Atlas.App.Tests
         public readonly List<string> Log;
         public int Configures, Enters, Exits, Ticks, Uploads, States;
         public RoomModel Room;
-        public bool ThrowInConfigure, ThrowInTick;
+        public bool ThrowInConfigure, ThrowInEnter, ThrowInTick;
         public ParamEntry Param;
+        /// <summary>The pose SpaceLab entered the module with.</summary>
+        public WalkerPose Start;
+        /// <summary>Runs inside Enter: what a curved space does to the shared kernel there.</summary>
+        public Action OnEnter;
 
         public FakeModule(SpaceId id, List<string> log, bool registered = true)
         {
@@ -203,7 +207,14 @@ namespace Atlas.App.Tests
             Log.Add("configure " + SpaceIds.Code(Id));
         }
 
-        public void Enter(in WalkerPose start) { Enters++; Log.Add("enter " + SpaceIds.Code(Id)); }
+        public void Enter(in WalkerPose start)
+        {
+            Start = start;
+            if (OnEnter != null) OnEnter();
+            if (ThrowInEnter) throw new InvalidOperationException("enter failed");
+            Enters++;
+            Log.Add("enter " + SpaceIds.Code(Id));
+        }
 
         public void Tick(in FrameContext frame)
         {

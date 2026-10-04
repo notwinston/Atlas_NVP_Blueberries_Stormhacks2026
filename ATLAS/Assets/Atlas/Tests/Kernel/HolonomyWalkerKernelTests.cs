@@ -6,7 +6,8 @@ using Unity.Mathematics;
 namespace Atlas.Kernel.Tests
 {
     /// <summary>The holonomy rig behind IWalkerKernel (lane-b-kernel.md section 4): the frame loop's hook on
-    /// the {4,5} and {4,6} graphs, and the flat kernel unchanged at q = 4.</summary>
+    /// the {4,5} and {4,6} graphs, the sphere walker on the six faces at q = 3, the flat kernel unchanged at
+    /// q = 4, and the dial a curved space drives through IDialKernel.</summary>
     [TestFixture]
     public class HolonomyWalkerKernelTests
     {
@@ -256,11 +257,11 @@ namespace Atlas.Kernel.Tests
             var kernel = new HolonomyWalkerKernel();
             kernel.Configure(KernelConfig.Curved(5, L5));
 
-            Assert.Throws<NotSupportedException>(() => kernel.Configure(KernelConfig.Curved(3, 1.2)));
             Assert.Throws<ArgumentOutOfRangeException>(() => kernel.Configure(KernelConfig.Curved(7, 1.2)));
             foreach (double bad in new[] { 0.0, -1.0, double.NaN, double.PositiveInfinity })
             {
                 Assert.Throws<ArgumentOutOfRangeException>(() => kernel.Configure(KernelConfig.Curved(6, bad)));
+                Assert.Throws<ArgumentOutOfRangeException>(() => kernel.Configure(KernelConfig.Curved(3, bad)));
                 Assert.Throws<ArgumentOutOfRangeException>(() => kernel.Configure(KernelConfig.Flat(bad)));
             }
             // A refused Configure changes nothing.
@@ -324,6 +325,339 @@ namespace Atlas.Kernel.Tests
             Assert.That(kernel.MetresPerUnit, Is.EqualTo(KernelConstants.FlatMetresPerUnit));
             // The log-chart position in metres is kept across the ramp.
             Assert.That(kernel.Pose.Local.M02, Is.EqualTo(0.1).Within(1e-9));
+        }
+
+        [Test]
+        public void HolonomyWalker_DialRamp_OnlyWhileStanding()
+        {
+            // What Curved Walk does through IDialKernel: a registered flat stand on the {4,5} graph, then the
+            // ramp to the dial value, which moves only in timed steps that find the walker standing.
+            IDialKernel kernel = new HolonomyWalkerKernel();
+            Assert.That(kernel.Q, Is.EqualTo(4));
+            Assert.That(kernel.SetCurvatureTarget(Curvature.Hyperbolic, L5), Is.False, "the flat kernel has no ramp");
+            Assert.That(kernel.Reaim(0.3), Is.False);
+            Assert.That(kernel.ConfiguredMetresPerUnit, Is.EqualTo(KernelConstants.FlatMetresPerUnit));
+
+            kernel.Configure(KernelConfig.Curved(5, L5));
+            Assert.That(kernel.Q, Is.EqualTo(5));
+            Assert.That(kernel.CurvatureNow, Is.EqualTo(-1.0 / (L5 * L5)).Within(1e-15));
+            Assert.That(kernel.Ramping, Is.False);
+
+            var head = new double2(0.4, -0.3);
+            kernel.ResetToFloorFlat(head);
+            Assert.That(kernel.Graph.Q, Is.EqualTo(5), "the tiling stays");
+            Assert.That(kernel.Kappa, Is.EqualTo(Curvature.Flat));
+            Assert.That(kernel.MetresPerUnit, Is.EqualTo(KernelConstants.FlatMetresPerUnit));
+            Assert.That(kernel.ConfiguredMetresPerUnit, Is.EqualTo(L5));
+            Assert.That(kernel.CurvatureNow, Is.EqualTo(0.0));
+            Assert.That(kernel.CurvatureTarget, Is.EqualTo(0.0));
+            Assert.That(kernel.Pose.Tile, Is.EqualTo(TileId.Zero));
+            Assert.That(kernel.Pose.Local.M02, Is.EqualTo(0.4));
+            Assert.That(kernel.Pose.Local.M12, Is.EqualTo(-0.3));
+            Assert.That(kernel.Candidates[0].Tile, Is.EqualTo(TileId.Zero));
+            Assert.Throws<ArgumentOutOfRangeException>(() => kernel.ResetToFloorFlat(new double2(double.NaN, 0.0)));
+            Assert.Throws<ArgumentOutOfRangeException>(() => kernel.SetCurvatureTarget(Curvature.Spherical, 1.0));
+            Assert.Throws<ArgumentOutOfRangeException>(() => kernel.SetCurvatureTarget(Curvature.Hyperbolic, 0.0));
+
+            double target = -1.0 / (L5 * L5);
+            Assert.That(kernel.SetCurvatureTarget(Curvature.Hyperbolic, L5), Is.True);
+            Assert.That(kernel.CurvatureTarget, Is.EqualTo(target).Within(1e-15));
+            Assert.That(kernel.Ramping, Is.True);
+
+            // Walking at 1 m/s: the ramp waits.
+            double time = 0.0;
+            const double dt = 1.0 / 60.0;
+            for (int n = 0; n < 60; n++)
+            {
+                time += dt;
+                head += new double2(dt, 0.0);
+                kernel.Step(head, true, time);
+                Assert.That(kernel.Still, Is.False);
+                Assert.That(kernel.CurvatureChanged, Is.False);
+            }
+            Assert.That(kernel.CurvatureNow, Is.EqualTo(0.0));
+            Assert.That(kernel.Pose.Local.M02, Is.EqualTo(1.4).Within(1e-9), "flat metres while K = 0");
+
+            // Standing for two of the four seconds: half way.
+            for (int n = 0; n < 120; n++)
+            {
+                time += dt;
+                kernel.Step(head, true, time);
+                Assert.That(kernel.Still, Is.True);
+                Assert.That(kernel.CurvatureChanged, Is.True);
+            }
+            Assert.That(kernel.CurvatureNow, Is.EqualTo(0.5 * target).Within(1e-9));
+            Assert.That(kernel.Kappa, Is.EqualTo(Curvature.Hyperbolic));
+            Assert.That(kernel.MetresPerUnit, Is.EqualTo(L5 * Math.Sqrt(2.0)).Within(1e-6), "the scale of this frame");
+            Assert.That(kernel.ConfiguredMetresPerUnit, Is.EqualTo(L5), "the dial's target does not follow the ramp");
+
+            // The same target again does not start the four seconds afresh; steps with no time and steps
+            // while walking leave the curvature where it is.
+            Assert.That(kernel.SetCurvatureTarget(Curvature.Hyperbolic, L5), Is.True);
+            double held = kernel.CurvatureNow;
+            for (int n = 0; n < 30; n++) kernel.Step(head, true);
+            Assert.That(kernel.Still, Is.False);
+            for (int n = 0; n < 30; n++)
+            {
+                time += dt;
+                head += new double2(0.0, dt);
+                kernel.Step(head, true, time);
+            }
+            Assert.That(kernel.CurvatureNow, Is.EqualTo(held));
+            Assert.That(kernel.Ramping, Is.True);
+
+            // Standing again: the first standing step follows a walking one; then the rest of the ramp.
+            for (int n = 0; n < 130; n++)
+            {
+                time += dt;
+                kernel.Step(head, true, time);
+            }
+            Assert.That(kernel.CurvatureNow, Is.EqualTo(target));
+            Assert.That(kernel.Ramping, Is.False);
+            Assert.That(kernel.CurvatureChanged, Is.False);
+            Assert.That(kernel.MetresPerUnit, Is.EqualTo(L5).Within(1e-12));
+            Assert.That(kernel.Pose.IsValid, Is.True);
+
+            // Back to flat on the same tiling, and registered again where the head is.
+            Assert.That(kernel.SetCurvatureTarget(Curvature.Flat, 0.0), Is.True);
+            Assert.That(kernel.ConfiguredMetresPerUnit, Is.EqualTo(L5));
+            for (int n = 0; n < 250; n++)
+            {
+                time += dt;
+                kernel.Step(head, true, time);
+            }
+            Assert.That(kernel.CurvatureNow, Is.EqualTo(0.0));
+            Assert.That(kernel.MetresPerUnit, Is.EqualTo(KernelConstants.FlatMetresPerUnit));
+            kernel.ResetToFloorFlat(head);
+            Assert.That(kernel.Pose.Tile, Is.EqualTo(TileId.Zero));
+            Assert.That(kernel.Pose.Local.M02, Is.EqualTo(head.x));
+            Assert.That(kernel.Pose.Local.M12, Is.EqualTo(head.y));
+            Assert.That(kernel.Still, Is.False);
+
+            // A recentre on the flat stand stays flat; with a ramp under way it registers at the dial value.
+            kernel.ResetToFloor(new double2(0.2, 0.1));
+            Assert.That(kernel.Kappa, Is.EqualTo(Curvature.Flat));
+            Assert.That(kernel.Pose.Local.M02, Is.EqualTo(0.2));
+            kernel.SetCurvatureTarget(Curvature.Hyperbolic, L5);
+            kernel.ResetToFloor(new double2(0.2, 0.1));
+            Assert.That(kernel.Ramping, Is.False);
+            Assert.That(kernel.CurvatureNow, Is.EqualTo(target).Within(1e-15));
+            Assert.That(KernelTestUtil.MaxAbsDifference(kernel.Pose.Local,
+                TileZeroPlacement.Registered(new double2(0.2, 0.1), Curvature.Hyperbolic, L5)), Is.LessThan(1e-12));
+        }
+
+        [Test]
+        public void HolonomyWalker_Reaim()
+        {
+            // U becomes U * Rot(alpha): the walker turns where it stands (Master Plan section 10.2.3).
+            IDialKernel kernel = new HolonomyWalkerKernel();
+            kernel.Configure(KernelConfig.Curved(5, L5));
+            kernel.ResetToFloor(new double2(0.3, 0.2));
+            WalkerPose before = kernel.Pose;
+            Assert.That(kernel.Reaim(0.7), Is.True);
+            Assert.That(kernel.Pose.Tile, Is.EqualTo(before.Tile));
+            Assert.That(Geometry2.Distance(kernel.Pose.Local.Position, before.Local.Position, Curvature.Hyperbolic), Is.LessThan(1e-12));
+            Assert.That(KernelTestUtil.MaxAbsDifference(kernel.Pose.Local, before.Local * Iso2.Rot(0.7, Curvature.Hyperbolic)), Is.LessThan(1e-12));
+            // The previous head position is kept: the next step is integrated.
+            KernelStep step = kernel.Step(new double2(0.35, 0.2), true);
+            Assert.That(step.AppliedMetres.x, Is.EqualTo(0.05).Within(1e-12));
+
+            kernel.Configure(KernelConfig.Curved(3, 1.3));
+            kernel.ResetToFloor(new double2(0.3, 0.2));
+            before = kernel.Pose;
+            Assert.That(kernel.Reaim(-0.4), Is.True);
+            Assert.That(KernelTestUtil.MaxAbsDifference(kernel.Pose.Local, before.Local * Iso2.Rot(-0.4, Curvature.Spherical)), Is.LessThan(1e-12));
+        }
+
+        [Test]
+        public void HolonomyWalker_Sphere_Configure()
+        {
+            const double r = 2.0 * Side / Math.PI;
+            var kernel = new HolonomyWalkerKernel();
+            kernel.Configure(KernelConfig.Curved(3, r));
+
+            Assert.That(kernel.Q, Is.EqualTo(3));
+            Assert.That(kernel.Graph, Is.InstanceOf<CubeTileGraph>());
+            Assert.That(kernel.Graph.Q, Is.EqualTo(3));
+            Assert.That(kernel.Kappa, Is.EqualTo(Curvature.Spherical));
+            Assert.That(kernel.MetresPerUnit, Is.EqualTo(r));
+            Assert.That(kernel.ConfiguredMetresPerUnit, Is.EqualTo(r));
+            Assert.That(kernel.CurvatureNow, Is.EqualTo(1.0 / (r * r)).Within(1e-15));
+            Assert.That(kernel.Ramping, Is.False);
+            Assert.That(kernel.Graph.CentreSpacing * kernel.MetresPerUnit, Is.EqualTo(Side).Within(1e-12), "the lap side is a quarter of the sphere");
+            Assert.That(kernel.Rig, Is.Null);
+            Assert.That(kernel.Pose.Tile, Is.EqualTo(CubeTiling.FaceId(0)));
+            Assert.That(kernel.Pose.Local, Is.EqualTo(Iso2.IdentityFor(Curvature.Spherical)));
+            Assert.That(kernel.LastStep.LastEdge, Is.EqualTo(-1));
+            Assert.That(kernel.SetCurvatureTarget(Curvature.Flat, 0.0), Is.False, "the sphere has no ramp");
+
+            // All six faces, the walker's first, with the chains of the graph.
+            var expected = new List<VisibleTile>();
+            new CubeTileGraph().VisibleSet(CubeTiling.FaceId(0), kernel.CullRho, expected);
+            Assert.That(kernel.Candidates.Count, Is.EqualTo(CubeTiling.FaceCount));
+            for (int n = 0; n < expected.Count; n++)
+            {
+                Assert.That(kernel.Candidates[n].Tile, Is.EqualTo(expected[n].Tile));
+                Assert.That(kernel.Candidates[n].Chain, Is.EqualTo(expected[n].Chain));
+            }
+
+            // ResetToFloor is the registered placement on face 0, re-rooted when the point lies beyond it.
+            var p = new double2(0.4, -0.3);
+            kernel.ResetToFloor(p);
+            Assert.That(kernel.Pose.Tile, Is.EqualTo(CubeTiling.FaceId(0)));
+            Assert.That(KernelTestUtil.MaxAbsDifference(kernel.Pose.Local, Iso2.Boost(p / r, Curvature.Spherical)), Is.LessThan(1e-15));
+            kernel.ResetToFloor(new double2(0.75 * Side, 0.0));
+            Assert.That(kernel.Pose.Tile, Is.EqualTo(kernel.Graph.Neighbour(CubeTiling.FaceId(0), 0)));
+            Assert.That(kernel.Candidates[0].Tile, Is.EqualTo(kernel.Pose.Tile));
+            Iso2 inZero = kernel.Graph.EdgeStep(CubeTiling.FaceId(0), 0) * kernel.Pose.Local;
+            Assert.That(KernelTestUtil.MaxAbsDifference(inZero, Iso2.Boost(new double2(0.75 * Side, 0.0) / r, Curvature.Spherical)), Is.LessThan(1e-12));
+            Assert.Throws<ArgumentOutOfRangeException>(() => kernel.ResetToFloor(new double2(0.0, double.PositiveInfinity)));
+
+            // Reset takes a face and a spherical frame, or a flat-tagged rotation.
+            var far = new WalkerPose { Tile = CubeTiling.FaceId(4), Local = Iso2.Boost(new double2(0.2, 0.1), Curvature.Spherical) * Iso2.Rot(0.4) };
+            kernel.Reset(far);
+            Assert.That(kernel.Pose.Tile, Is.EqualTo(far.Tile));
+            Assert.That(KernelTestUtil.MaxAbsDifference(kernel.Pose.Local, far.Local), Is.LessThan(1e-15));
+            Assert.Throws<ArgumentException>(() => kernel.Reset(WalkerPose.Start), "tile zero of {4,5} is no face");
+            Assert.Throws<ArgumentException>(() => kernel.Reset(
+                new WalkerPose { Tile = CubeTiling.FaceId(1), Local = Iso2.IdentityFor(Curvature.Hyperbolic) }));
+            Assert.Throws<ArgumentException>(() => kernel.Reset(
+                new WalkerPose { Tile = CubeTiling.FaceId(1), Local = Iso2.Boost(new double2(0.5, 0.0), Curvature.Flat) }));
+            Assert.That(kernel.Pose.Tile, Is.EqualTo(far.Tile));
+
+            // Back to flat.
+            kernel.Configure(KernelConfig.Flat(Side));
+            Assert.That(kernel.Q, Is.EqualTo(4));
+            Assert.That(kernel.Kappa, Is.EqualTo(Curvature.Flat));
+            Assert.That(kernel.Pose, Is.EqualTo(WalkerPose.Start));
+        }
+
+        [TestCase(true, true)]
+        [TestCase(true, false)]
+        [TestCase(false, true)]
+        [TestCase(false, false)]
+        public void HolonomyWalker_Sphere_LapCloses(bool fromCentre, bool left)
+        {
+            // The q = 3 walk of Appendix A.4 through the hook: three sides of (pi / 2) R with quarter turns end
+            // where they began, and the walker has turned by a quarter turn against the room.
+            const double r = 2.0 * Side / Math.PI;
+            var kernel = new HolonomyWalkerKernel();
+            kernel.Configure(KernelConfig.Curved(3, r));
+            var direct = new SphereWalker();
+            double2 start = fromCentre ? double2.zero : new double2(-0.5 * Side, -0.5 * Side);
+            kernel.ResetToFloor(start);
+            direct.Reset(new WalkerPose { Tile = CubeTiling.FaceId(0), Local = Iso2.Boost(start / r, Curvature.Spherical) }, r);
+            direct.SetPrevious(start);
+            KernelTestUtil.AssertBitIdentical(direct.Pose, kernel.Pose);
+
+            WalkerPose first = kernel.Pose;
+            double3 firstPoint = (CubeTiling.Frame(CubeTiling.FaceOf(first.Tile)) * first.Local).Position;
+            double2[] legs = { new double2(Side, 0.0), new double2(0.0, left ? Side : -Side), new double2(-Side, 0.0) };
+            var faces = new List<int> { CubeTiling.FaceOf(first.Tile) };
+            int crossings = 0;
+            double2 head = start;
+            double time = 0.0;
+            for (int leg = 0; leg < 3; leg++)
+            {
+                const int n = 200;
+                double2 corner = head;
+                for (int i = 1; i <= n; i++)
+                {
+                    head = corner + legs[leg] * ((double)i / n);
+                    time += 1.0 / 60.0;
+                    KernelStep step = kernel.Step(head, true, time);
+                    direct.Step(head, true);
+
+                    Assert.That(step.Rejected, Is.False);
+                    Assert.That(step.Crossings, Is.EqualTo(direct.LastCrossings));
+                    Assert.That(step.AppliedMetres, Is.EqualTo(direct.LastApplied));
+                    KernelTestUtil.AssertBitIdentical(direct.Pose, kernel.Pose);
+                    int face = CubeTiling.FaceOf(kernel.Pose.Tile);
+                    Assert.That(face, Is.GreaterThanOrEqualTo(0), "the tile is a face id of CubeTiling");
+                    Assert.That(kernel.Candidates[0].Tile, Is.EqualTo(kernel.Pose.Tile), "the candidates follow the walker's face");
+                    Assert.That(kernel.Candidates.Count, Is.EqualTo(CubeTiling.FaceCount));
+                    if (step.Crossings > 0)
+                    {
+                        Assert.That(kernel.Graph.Neighbour(CubeTiling.FaceId(faces[faces.Count - 1]), step.LastEdge), Is.EqualTo(kernel.Pose.Tile));
+                        faces.Add(face);
+                    }
+                    crossings += step.Crossings;
+                }
+                if (leg < 2)
+                {
+                    double3 here = (CubeTiling.Frame(CubeTiling.FaceOf(kernel.Pose.Tile)) * kernel.Pose.Local).Position;
+                    Assert.That(r * Geometry2.Distance(here, firstPoint, Curvature.Spherical), Is.GreaterThan(0.5 * Side), "not closed yet");
+                }
+            }
+
+            Iso2 firstWorld = CubeTiling.Frame(CubeTiling.FaceOf(first.Tile)) * first.Local;
+            Iso2 lastWorld = CubeTiling.Frame(CubeTiling.FaceOf(kernel.Pose.Tile)) * kernel.Pose.Local;
+            Assert.That(r * math.length(lastWorld.Position - firstPoint), Is.LessThan(1e-3), "closed to a millimetre");
+            Iso2 turned = firstWorld.Inverse() * lastWorld;
+            Assert.That(KernelTestUtil.MaxAbsDifference(turned, Iso2.Rot((left ? 1.0 : -1.0) * Math.PI / 2.0, Curvature.Spherical)),
+                Is.LessThan(1e-9), "the holonomy of an octant");
+            if (fromCentre)
+            {
+                Assert.That(crossings, Is.EqualTo(3));
+                Assert.That(faces, Is.EqualTo(left ? new[] { 0, 1, 2, 0 } : new[] { 0, 1, 4, 0 }));
+            }
+            Assert.That(kernel.StepCount, Is.EqualTo(600));
+        }
+
+        [Test]
+        public void HolonomyWalker_Sphere_Rejections()
+        {
+            const double r = 1.3;
+            IDialKernel kernel = new HolonomyWalkerKernel();
+            kernel.Configure(KernelConfig.Curved(3, r));
+            var head = new double2(0.1, 0.2);
+            kernel.ResetToFloor(head);
+
+            // The point given to ResetToFloor is the previous head position: the first step is integrated.
+            head += new double2(0.05, 0.0);
+            KernelStep step = kernel.Step(head, true, 1.0);
+            Assert.That(step.Rejected, Is.False);
+            Assert.That(step.AppliedMetres.x, Is.EqualTo(0.05).Within(1e-12));
+            Assert.That(kernel.Still, Is.False, "0.05 m in a second is slow, but there was no step before it to time");
+            step = kernel.Step(head + new double2(0.05, 0.0), true, 2.0);
+            head += new double2(0.05, 0.0);
+            Assert.That(kernel.Still, Is.True, "0.05 m/s");
+            step = kernel.Step(head + new double2(0.15, 0.0), true, 3.0);
+            head += new double2(0.15, 0.0);
+            Assert.That(step.Rejected, Is.False);
+            Assert.That(kernel.Still, Is.False, "0.15 m/s");
+
+            WalkerPose before = kernel.Pose;
+            head += new double2(0.25, 0.0);
+            step = kernel.Step(head, true, 4.0);
+            Assert.That(step.Rejected, Is.True, "a jump");
+            Assert.That(step.AppliedMetres, Is.EqualTo(double2.zero));
+            AssertSamePose(before, kernel.Pose);
+            Assert.That(kernel.Still, Is.False);
+
+            step = kernel.Step(new double2(double.NaN, 0.0), true, 5.0);
+            Assert.That(step.Rejected, Is.True);
+            AssertSamePose(before, kernel.Pose);
+            head += new double2(0.0, 0.05);
+            step = kernel.Step(head, true, 6.0);
+            Assert.That(step.Rejected, Is.False, "a broken sample is not remembered");
+            Assert.That(step.AppliedMetres.y, Is.EqualTo(0.05).Within(1e-12));
+
+            before = kernel.Pose;
+            head += new double2(0.05, 0.0);
+            step = kernel.Step(head, false, 7.0);
+            Assert.That(step.Rejected, Is.True, "tracking lost");
+            AssertSamePose(before, kernel.Pose);
+            step = kernel.Step(head, true, 8.0);
+            Assert.That(step.Rejected, Is.False);
+            Assert.That(step.AppliedMetres, Is.EqualTo(double2.zero));
+
+            // The first Step after Reset integrates nothing.
+            kernel.Reset(kernel.Pose);
+            before = kernel.Pose;
+            step = kernel.Step(head + new double2(0.1, 0.1), true, 9.0);
+            Assert.That(step.AppliedMetres, Is.EqualTo(double2.zero));
+            AssertSamePose(before, kernel.Pose);
         }
     }
 }

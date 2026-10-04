@@ -1,3 +1,4 @@
+#if !ATLAS_HEADLESS
 using System;
 using System.IO;
 using Atlas.Kernel;
@@ -98,3 +99,4 @@ namespace Atlas.Blades.FieldFit.Tests
         }
     }
 }
+#endif

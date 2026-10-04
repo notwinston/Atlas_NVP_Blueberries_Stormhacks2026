@@ -2,14 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
-using System.IO;
 using System.Linq;
 using Atlas.Kernel;
 using Atlas.Link;
 using Atlas.World;
 using NUnit.Framework;
 using Unity.Mathematics;
-using UnityEngine;
 
 namespace Atlas.Blades.Lung.Walking.Tests
 {
@@ -19,11 +17,7 @@ namespace Atlas.Blades.Lung.Walking.Tests
         static readonly IForkTiles Tiles = new AirwayTreeBinding(Lung.Tests.TreeFixture.Tree);
         static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-        static RoomModel Room() =>
-            RoomModel.Load(Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "recordings", "room_3x3.json")));
-
-        static string EvidenceDir =>
-            Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "docs", "laneB", "evidence", "P2-B09"));
+        static RoomModel Room() => RoomFixtures.LoadFromProject(RoomFixtures.Sample3x3);
 
         sealed class Rig
         {
@@ -116,49 +110,70 @@ namespace Atlas.Blades.Lung.Walking.Tests
             Assert.AreNotEqual(0.0, k0);
         }
 
-        sealed class AirwayTestModule : ISpaceModule, IKernelStage
+        sealed class AirwayTestModule : ISpaceModule
         {
             readonly Rig _r; public AirwayTestModule(Rig r) { _r = r; }
-            public SpaceId Id => SpaceId.S2;
+            public SpaceId Id => SpaceId.CurvedWalk;
             public bool Registered => false;
             public void Configure(RoomModel room, ParamRegistry registry) { }
             public void Enter(in WalkerPose start) { _r.Wing.Enter(); }
-            public void KernelStep(in FrameContext f) { _r.Wing.KernelStep(f); }
-            public void Tick(in FrameContext f) { _r.Wing.Tick(f); _r.Hand.Tick(f); }
+            public void Tick(in FrameContext f) { _r.Wing.KernelStep(f); _r.Wing.Tick(f); _r.Hand.Tick(f); }
             public void Exit() { _r.Wing.Exit(); }
-            public void WriteState(ref Atlas.Link.StateMessage s) { }
+            public void WriteState(ref StateMessage s) { }
         }
 
         sealed class FakeS6 : ISpaceModule
         {
             public int Enters;
-            public SpaceId Id => SpaceId.S6; public bool Registered => true;
+            public SpaceId Id => SpaceId.Slicer; public bool Registered => true;
             public void Configure(RoomModel room, ParamRegistry registry) { }
             public void Enter(in WalkerPose start) { Enters++; }
             public void Tick(in FrameContext f) { }
             public void Exit() { }
-            public void WriteState(ref Atlas.Link.StateMessage s) { }
+            public void WriteState(ref StateMessage s) { }
         }
 
-        // Builds a lab with the airway module (S2) and a fake S6; frames go through SpaceLab.Tick (MP §6.3 steps 4-5).
-        static (Rig r, SpaceLab lab, FakeS6 s6) MakeLab(int route)
+        // What SpaceLab does with a request, reduced to what the hand-over needs (MP §6.5): the switch happens at the next frame, the
+        // old module is left (Exit), the new one is configured and entered, and only the entered module ticks.
+        sealed class SpaceHarness
+        {
+            readonly RoomModel _room; readonly ParamRegistry _registry = new ParamRegistry();
+            readonly Dictionary<SpaceId, ISpaceModule> _modules = new Dictionary<SpaceId, ISpaceModule>();
+            SpaceId? _pending;
+            public ISpaceModule Active { get; private set; }
+            public SpaceHarness(RoomModel room) { _room = room; }
+            public void Register(ISpaceModule m) { _modules[m.Id] = m; }
+            public bool Request(SpaceId id) { if (!_modules.ContainsKey(id) || (Active != null && Active.Id == id)) return false; _pending = id; return true; }
+            public void Tick(in FrameContext f)
+            {
+                if (_pending.HasValue)
+                {
+                    var next = _modules[_pending.Value]; _pending = null;
+                    Active?.Exit();
+                    next.Configure(_room, _registry);
+                    next.Enter(WalkerPose.Start);
+                    Active = next;
+                }
+                Active?.Tick(f);
+            }
+        }
+
+        // Builds a harness with the airway module (S2) and a fake S6; frames go through it (MP §6.3 steps 4-5).
+        static (Rig r, SpaceHarness lab, FakeS6 s6) MakeLab(int route)
         {
             var r = Make(route);
-            var room = Room();
-            var lab = new SpaceLab(room, new ParamRegistry());
+            var lab = new SpaceHarness(Room());
             var s6 = new FakeS6();
-            var mod = new AirwayTestModule(r);
-            lab.Register(mod); lab.Register(s6);
-            // the hand-over's request goes through the lab
-            var r2 = new Rig { Wing = r.Wing, Hand = null };
+            lab.Register(new AirwayTestModule(r)); lab.Register(s6);
+            // the hand-over's request goes through the harness
             r.Hand = new LesionHandOver(r.Wing, Tiles, id => { r.Requests.Add(id); lab.Request(id); }, route);
             r.Walker.Sink = f => lab.Tick(f);
-            lab.Request(SpaceId.S2);
-            lab.Tick(new FrameContext(0, 0, 1f / 60f, r.Walker.Head, quaternion.identity, true, false));
+            lab.Request(SpaceId.CurvedWalk);
+            lab.Tick(Lung.Tests.LungTestEnv.Frame(0, 0, 1f / 60f, r.Walker.Head, quaternion.identity));
             return (r, lab, s6);
         }
 
-        // T9.3, criteria: "S6 load through the placeholder request"; beat interface (PH-13).
+        // T9.3, criteria: "S6 (Slicer) load requested through the host"; beat interface (PH-13).
         [Test]
         public void HandOver_S6LoadRequestedOnce_BeatCompleted()
         {
@@ -173,7 +188,7 @@ namespace Atlas.Blades.Lung.Walking.Tests
             Assert.AreEqual(0.0, curvAtRequest, "requested only after Curvature == 0");
             for (int i = 0; i < 120; i++) r.Walker.Frame_(r.Walker.HeadXZ);
             Assert.AreEqual(1, r.Requests.Count, "exactly once");
-            Assert.AreEqual(SpaceId.S6, lab.Active.Id);
+            Assert.AreEqual(SpaceId.Slicer, lab.Active.Id);
             Assert.AreEqual(1, s6.Enters);
             Assert.IsTrue(beat.Completed);
         }
@@ -189,15 +204,14 @@ namespace Atlas.Blades.Lung.Walking.Tests
             double max = times.Max();
             var sorted = times.OrderBy(x => x).ToList();
             double p95 = sorted[(int)Math.Floor(0.95 * (sorted.Count - 1))];
-            Directory.CreateDirectory(EvidenceDir);
-            File.WriteAllText(Path.Combine(EvidenceDir, "handover_sim.json"),
+            Lung.Tests.LungTestEnv.WriteEvidence("P2-B09", "handover_sim.json",
                 "{\n  \"criterion\": \"P2-B09 no frame > 33 ms (Editor simulation; phone deferred)\",\n  \"frames\": " + times.Count +
                 ",\n  \"max_ms\": " + max.ToString("F3", Inv) + ",\n  \"p95_ms\": " + p95.ToString("F3", Inv) +
                 ",\n  \"ramp_still_s\": " + m.r.Hand.RampStillSeconds.ToString("F4", Inv) + "\n}\n");
             Assert.LessOrEqual(max, 33.0, "max frame ms");
         }
 
-        static void RunTimed((Rig r, SpaceLab lab, FakeS6 s6) m, List<double> times)
+        static void RunTimed((Rig r, SpaceHarness lab, FakeS6 s6) m, List<double> times)
         {
             var r = m.r;
             for (int f = 0; f < 200000 && !r.Hand.Started; f++) r.Walker.Step();
@@ -209,9 +223,9 @@ namespace Atlas.Blades.Lung.Walking.Tests
                 r.Walker.Step();
                 sw.Stop();
                 times?.Add(sw.Elapsed.TotalMilliseconds);
-                if (m.lab.Active.Id == SpaceId.S6) after = after < 0 ? 0 : after + 1;
+                if (m.lab.Active.Id == SpaceId.Slicer) after = after < 0 ? 0 : after + 1;
             }
-            Assert.AreEqual(SpaceId.S6, m.lab.Active.Id);
+            Assert.AreEqual(SpaceId.Slicer, m.lab.Active.Id);
         }
     }
 }

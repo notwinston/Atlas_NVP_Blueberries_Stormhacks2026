@@ -2,15 +2,18 @@ using System.Linq;
 using Atlas.Blades.FieldFit.BlindSpotFinder;
 using Atlas.Blades.FieldFit.ScotomaRiver;
 using NUnit.Framework;
+#if !ATLAS_HEADLESS
 using UnityEditor;
 using UnityEditor.Compilation;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+#endif
 
 namespace Atlas.Blades.FieldFit.BlindSpotTests
 {
     public class FieldFitBlindSpotGuardTests
     {
+#if !ATLAS_HEADLESS
         [Test]
         public void Dependencies()
         {
@@ -22,6 +25,8 @@ namespace Atlas.Blades.FieldFit.BlindSpotTests
                 Assert.IsTrue(allowed.Contains(n) || n.StartsWith("Atlas.Spaces."), n);
             Assert.IsFalse(atlas.Any(n => n.StartsWith("Atlas.Blades.") || n == "Atlas.Spectator"));
         }
+
+#endif
 
         [Test]
         public void NoClinicalClaim()
@@ -35,6 +40,7 @@ namespace Atlas.Blades.FieldFit.BlindSpotTests
                 StringAssert.DoesNotContain(bad, all);
         }
 
+#if !ATLAS_HEADLESS
         [Test]
         public void TestScene_Opens()
         {
@@ -49,5 +55,6 @@ namespace Atlas.Blades.FieldFit.BlindSpotTests
             }
             finally { EditorSceneManager.CloseScene(scene, true); }
         }
+#endif
     }
 }

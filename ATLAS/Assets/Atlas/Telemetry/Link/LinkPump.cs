@@ -136,9 +136,15 @@ namespace Atlas.Telemetry
 
         /// <summary>
         /// The walker's kernel, for the world hash (q and metres per unit). While null the values of the flat
-        /// kernel of this build are used: q 4, one metre per unit.
+        /// kernel are used: q 4, one metre per unit.
         /// </summary>
         public IWalkerKernel Kernel { get; set; }
+
+        /// <summary>
+        /// The space host, for the world hash: an entered module that is an ISpaceWorld gives the generator's
+        /// seed and version, and its content hash goes into the <c>world</c> event. May be null (seed 0, version 1).
+        /// </summary>
+        public ISpaceHost Spaces { get; set; }
 
         /// <summary>The world hash last computed: 16 hexadecimal digits, or empty while no space is entered.</summary>
         public string WorldHashNow { get { return _client.WorldHash; } }
@@ -261,23 +267,29 @@ namespace Atlas.Telemetry
             _client.Scene = scene;
 
             // The world hash (section 7.3.1): into Hello, so the Hub can tell a Spectator, and into the event.
-            int q, lMm;
-            string hash = ComputeWorldHash(space, out q, out lMm);
+            int q, lMm, genVer;
+            long seed;
+            string genHash;
+            string hash = ComputeWorldHash(space, out q, out lMm, out seed, out genVer, out genHash);
             _client.SetWorld(hash, _roomId);
             if (_events != null)
             {
                 _events.Scene = scene;
                 if (spaceChanged && space != NoSpace) _events.Log("space.entered", JsonValue.Object().Set("from", SceneOf(previous)).Set("to", scene));
-                _events.Log(LinkEvents.World, JsonValue.Object()
+                JsonValue world = JsonValue.Object()
                     .Set("worldVer", (int)state.WorldVer)
                     .Set("worldHash", hash)
                     .Set("space", (int)space)
                     .Set("roomId", _roomId)
                     .Set("geomHash", string.IsNullOrEmpty(_geometryHash) ? WorldHash.NoGeometry : _geometryHash)
                     .Set("q", q)
-                    .Set("seed", WorldSeed)
-                    .Set("genVer", GeneratorVersion)
-                    .Set("lMm", lMm));
+                    .Set("seed", seed)
+                    .Set("genVer", genVer)
+                    .Set("lMm", lMm);
+                // The generator's own hash of what it made: the same on every runtime for the same seed and
+                // room, which is what the IL2CPP check of P1-B07 compares with the golden file.
+                if (genHash.Length > 0) world.Set("genHash", genHash);
+                _events.Log(LinkEvents.World, world);
             }
             if (spaceChanged)
             {
@@ -286,19 +298,34 @@ namespace Atlas.Telemetry
             }
         }
 
-        // The world generator has no seed yet and is at its first version (contract section 2.5).
-        const int WorldSeed = 0;
-        const int GeneratorVersion = 1;
+        // A space with no generator: seed 0, the first version (contract section 2.5).
+        const long NoWorldSeed = 0;
+        const int FirstGeneratorVersion = 1;
 
         // Runs on a change of space, world version or room, never per frame. Empty while no space is entered:
         // there is no world to compare.
-        string ComputeWorldHash(byte space, out int q, out int lMm)
+        string ComputeWorldHash(byte space, out int q, out int lMm, out long seed, out int genVer, out string genHash)
         {
             IWalkerKernel kernel = Kernel;
             q = kernel != null && kernel.Graph != null ? kernel.Graph.Q : 4;
-            lMm = WorldHash.Millimetres(kernel != null ? kernel.MetresPerUnit : 1.0);
+            // The dial's target, not the scale of this frame: L moves through a curvature ramp and is one metre
+            // at K = 0, and the phone and the Spectator must agree whenever the event happens to fire.
+            IDialKernel dial = kernel as IDialKernel;
+            lMm = WorldHash.Millimetres(dial != null ? dial.ConfiguredMetresPerUnit : (kernel != null ? kernel.MetresPerUnit : 1.0));
+
+            seed = NoWorldSeed;
+            genVer = FirstGeneratorVersion;
+            genHash = string.Empty;
+            ISpaceHost host = Spaces;
+            ISpaceWorld generated = host != null && host.HasSpace && space != NoSpace ? host.Module as ISpaceWorld : null;
+            if (generated != null)
+            {
+                seed = generated.WorldSeed;
+                genVer = generated.GeneratorVersion;
+                genHash = generated.ContentHash ?? string.Empty;
+            }
             if (space == NoSpace) return string.Empty;
-            return WorldHash.Compute(space, q, WorldSeed, GeneratorVersion, _geometryHash, lMm);
+            return WorldHash.Compute(space, q, seed, genVer, _geometryHash, lMm);
         }
 
         static string SceneOf(byte space)
@@ -589,8 +616,10 @@ namespace Atlas.Telemetry
         // step 8a when the host has raised the world version.
         void TellWorld()
         {
-            int q, lMm;
-            _client.SetWorld(ComputeWorldHash(_prevSpace, out q, out lMm), _roomId);
+            int q, lMm, genVer;
+            long seed;
+            string genHash;
+            _client.SetWorld(ComputeWorldHash(_prevSpace, out q, out lMm, out seed, out genVer, out genHash), _roomId);
         }
 
         // A room that is not complete (no distance field yet) has no geometry hash; it counts as no geometry

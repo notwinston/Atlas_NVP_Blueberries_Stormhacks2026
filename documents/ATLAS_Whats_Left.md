@@ -57,7 +57,7 @@ Of 48 Phase 1 tasks audited: 10 built and proven without Unity; 3 built and need
 | P1-A03 quality tiers | One URP asset plus code table; the asset on disk is still the pre-build one | Lead sign-off; thermal ladder check |
 | Per-lane sandbox scenes | None exist; the boot scene with a fixture room and keyboard walker serves all lanes | Strict reading of G0 acceptance |
 | Gaze twins for four space actions | Return home, next and previous space, space menu work from the gamepad, and by gaze only through the menu, not as own dwell targets | Strict G5 |
-| Clock sync (P1-D01) | About 3.8 ms p95 with one poll per frame against 2 ms; needs receive-thread timestamps on the phone | Link timing claim |
+| Clock sync (P1-D01) | Receive-thread timestamps are in: 2 ms p95 holds headless at one poll per frame (`Link_ReceiveStamp`); still to be measured on the phone over Wi-Fi | Link timing claim |
 | Editor headset view | A mouse click on the development overlay still counts as the lever for a gaze target | Editor-only; minor |
 | Baked parameter defaults (P1-D03) | No defaults file exists, so the end of the bake path is unproven | Running tuned values with the Station off |
 | Fallback furniture (P1-D12) | The built-in meshes are generated box composites of 22 to about 100 triangles, not sourced CC0 models; the retry back-off has no 4 s step | Look of a room when the Forge is away |

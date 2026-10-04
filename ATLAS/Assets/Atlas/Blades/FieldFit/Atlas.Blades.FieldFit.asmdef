@@ -13,6 +13,7 @@
         "Unity.Mathematics",
         "Unity.Burst",
         "Unity.Collections",
-        "Unity.TextMeshPro"
+        "Unity.TextMeshPro",
+        "UnityEngine.UI"
     ]
 }

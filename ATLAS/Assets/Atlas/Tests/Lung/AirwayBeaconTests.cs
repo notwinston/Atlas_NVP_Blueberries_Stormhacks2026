@@ -74,7 +74,7 @@ namespace Atlas.Blades.Lung.Tests
             Assert.AreEqual(0, mismatchA, "NextStep vs prefix step");
             Assert.AreEqual(0, mismatchB, "ExitCanonicalEdge vs tile graph");
             Assert.AreEqual(0, mismatchC, "ArrowDirection probe vs tile graph");
-            UnityEngine.Debug.Log($"N1: 1000 targets, {arrived} arrived cases, 0 mismatches");
+            TestContext.WriteLine($"N1: 1000 targets, {arrived} arrived cases, 0 mismatches");
         }
 
         static List<AirwayTile> TreeNeighbours(AirwayTile t)
@@ -174,8 +174,9 @@ namespace Atlas.Blades.Lung.Tests
             Assert.IsTrue(b.Step.Arrived); Assert.AreEqual(-1, b.Step.TreeEdge); Assert.AreEqual(-1, b.ExitCanonicalEdge);
         }
 
+#if !ATLAS_HEADLESS
         // N9: BeaconArrowView places the arrow 0.6 m ahead of the head, 0.01 m above the floor (D-G4-12; supporting).
-        [Test]
+        [Test, Category("Unity")]
         public void BeaconArrowView_Places()
         {
             var b = new AirwayBeacon(Tree);
@@ -201,7 +202,7 @@ namespace Atlas.Blades.Lung.Tests
             {
                 var v = go.AddComponent<BeaconArrowView>();
                 var pose = new WalkerPose { Tile = TileId.Zero, Local = new Iso2(double3x3.identity, -1) };
-                var frame = new FrameContext(1, 9.0, 0.01f, new float3(1, 1.6f, 2), quaternion.identity, true, false);
+                var frame = LungTestEnv.Frame(1, 9.0, 0.01f, new float3(1, 1.6f, 2), quaternion.identity);
                 v.Apply(frame, pose, b);
                 Assert.IsTrue(go.activeSelf);
                 Assert.AreEqual(1.6f, go.transform.position.x, 1e-5f);
@@ -217,7 +218,7 @@ namespace Atlas.Blades.Lung.Tests
         }
 
         // Supporting: the arrow mesh is a 0.20 x 0.20 m floor triangle, every edge within 0.25 m (MP §8.4 A.6), face up.
-        [Test]
+        [Test, Category("Unity")]
         public void ArrowMesh_Geometry()
         {
             var m = ArrowMesh.Build(3);
@@ -227,9 +228,10 @@ namespace Atlas.Blades.Lung.Tests
                 Assert.AreEqual(3, v.Length); CollectionAssert.AreEqual(new[] { 0, 1, 2 }, t);
                 for (int i = 0; i < 3; i++) Assert.LessOrEqual(Vector3.Distance(v[i], v[(i + 1) % 3]), 0.25f);
                 Assert.Greater(Vector3.Cross(v[1] - v[0], v[2] - v[0]).y, 0f);
-                Assert.AreEqual(Atlas.Rendering.AtlasPalette.CellUV(3), m.uv[0]);
+                Assert.AreEqual((Vector2)Atlas.Rendering.AtlasPalette.Uv(3), m.uv[0]);
             }
             finally { UnityEngine.Object.DestroyImmediate(m); }
         }
+#endif
     }
 }

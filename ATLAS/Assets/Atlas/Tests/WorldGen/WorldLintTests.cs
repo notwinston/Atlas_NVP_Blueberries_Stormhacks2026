@@ -19,9 +19,9 @@ namespace Atlas.WorldGen.Tests
             }
         }
 
-#if !ATLAS_HEADLESS
-        // §9.5.6 "WorldLint passes for three seeds"; §11.1 WorldLint_All. WorldLint.Run reads back generated Mesh objects.
-        [Test, TestCaseSource(nameof(Cases)), Timeout(600000), Category("Unity")]
+        // §9.5.6 "WorldLint passes for three seeds"; §11.1 WorldLint_All. The lint measures the meshes the phone draws
+        // (WorldTileMeshBuilder) and needs no engine object.
+        [Test, TestCaseSource(nameof(Cases)), Timeout(600000)]
         public void WorldLint_All(uint seed, string room)
         {
             var report = WorldLint.Run(seed, room == "R45" ? WorldGeneratorTests.R45 : WorldGeneratorTests.R33);
@@ -46,7 +46,6 @@ namespace Atlas.WorldGen.Tests
             Assert.AreEqual(report.WorldHash1, report.WorldHash2, "same seed same world hash");
             Assert.IsTrue(report.Passed, report.ToString());
         }
-#endif
 
         static (WorldGenerator g, TileId n, int back) Pair()
         {
@@ -55,9 +54,8 @@ namespace Atlas.WorldGen.Tests
             return (g, n, g.BackEdge(TileId.Zero, 0));
         }
 
-#if !ATLAS_HEADLESS
         // §3.4 "no coincident faces"
-        [Test, Category("Unity")]
+        [Test]
         public void WorldLint_DetectsCoincidentKerbs()
         {
             var (g, n, back) = Pair();
@@ -70,7 +68,6 @@ namespace Atlas.WorldGen.Tests
             Assert.AreEqual(0, one);
             Assert.AreEqual(0, none);
         }
-#endif
 
         // §3.4 "a tower within rho = 2.5" (the check must be able to fail)
         [Test]
@@ -100,9 +97,8 @@ namespace Atlas.WorldGen.Tests
             Assert.AreEqual(0, WorldLint.CountUnreachable(g, g.Ball(6), 8, t => g.Content(t).ClosedMask));
         }
 
-#if !ATLAS_HEADLESS
         // §9.9 rule 7: a budget number binds
-        [Test, Timeout(600000), Category("Unity")]
+        [Test, Timeout(600000)]
         public void WorldLint_BudgetIsBinding()
         {
             var s = new WorldLintSettings { TriCap = 100000 };
@@ -110,6 +106,5 @@ namespace Atlas.WorldGen.Tests
             Assert.IsFalse(report.Passed);
             Assert.IsTrue(report.Failures.Exists(f => f.StartsWith("budget:") && f.Contains("triangles")), report.ToString());
         }
-#endif
     }
 }

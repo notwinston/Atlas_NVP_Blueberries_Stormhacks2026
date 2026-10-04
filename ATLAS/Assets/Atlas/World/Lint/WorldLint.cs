@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Atlas.Kernel;
 using Atlas.Rendering;
 using Unity.Mathematics;
+using UnityEngine;
 
 namespace Atlas.World.Lint
 {
@@ -11,7 +12,10 @@ namespace Atlas.World.Lint
     {
         const double Phi = 1.618033988749895;
 
-        public static WorldLintReport Run(uint seed, RoomFootprint footprint, WorldLintSettings s = null)
+        public static WorldLintReport Run(uint seed, RoomFootprint footprint, WorldLintSettings s = null) => Run(seed, footprint, null, s);
+
+        /// <summary>The same, and when a room is given, §11.1 "every scan box has a generated mesh, a fallback mesh or a placeholder".</summary>
+        public static WorldLintReport Run(uint seed, RoomFootprint footprint, RoomModel room, WorldLintSettings s = null)
         {
             s = s ?? new WorldLintSettings();
             double L = footprint != null ? footprint.L : s.FallbackL;
@@ -29,10 +33,12 @@ namespace Atlas.World.Lint
             CheckTowers(g1, ball, s, rep);
             CheckWedges(g1, ball, meshes, rep);
             CheckStartSpan(g1, ball, s, rep);
+            CheckProps(g1, ball, meshes, s, rep);
             CheckBudget(g1, ball, L, meshes, s, rep);
             CheckCoincidence(g1, ball, L, meshes, s, rep);
             CheckDeterminism(g1, g2, ball, s, rep);
             if (footprint != null) CheckFootprint(g1, footprint, rep);
+            if (room != null) CheckRoomContent(room, rep);
             return rep;
         }
 
@@ -119,7 +125,8 @@ namespace Atlas.World.Lint
             foreach (var t in ball)
             {
                 var c = g.Content(t);
-                bool ok = c.PostMask == 0xF && meshes.Get(TileLod.Near, c.KerbMask).AllWedges && meshes.Get(TileLod.Mid, c.KerbMask).AllWedges;
+                var key = WorldTileKey.From(c);
+                bool ok = c.PostMask == 0xF && meshes.Get(TileLod.Near, key).AllWedges && meshes.Get(TileLod.Mid, key).AllWedges;
                 if (!ok) rep.TilesMissingWedges++;
             }
             if (rep.TilesMissingWedges > 0) rep.Failures.Add($"{rep.TilesMissingWedges} tiles lack one of four corner wedges");
@@ -149,12 +156,28 @@ namespace Atlas.World.Lint
             if (rep.StartSpanPairs < 1) rep.Failures.Add("no spanning object near the start");
         }
 
-        // ---- 5. budget (§3.4, §8.4, §8.5; D5, D6) ----
-        static long PropTris(Archetype a) => a switch
+        // ---- 5a. props (§3.4, §8.4): every archetype's mesh inside its triangle cap, no edge over 0.25 m in the curved metric ----
+        static void CheckProps(WorldGenerator g, List<TileId> ball, TileMeshCache meshes, WorldLintSettings s, WorldLintReport rep)
         {
-            Archetype.Tower => 1500, Archetype.Garden => 600, Archetype.Doorway => 400,
-            Archetype.SpanA => 200, Archetype.SpanB => 200, _ => 0,
-        };
+            var seen = new HashSet<int>();
+            foreach (var t in ball)
+            {
+                var c = g.Content(t);
+                var key = WorldTileKey.From(c);
+                if (!seen.Add(key.Code)) continue;
+                var e = meshes.Get(TileLod.Near, key);
+                rep.MaxPropTriangles = Math.Max(rep.MaxPropTriangles, e.PropTriangles);
+                rep.MaxPropEdge = Math.Max(rep.MaxPropEdge, e.PropLongestEdge);
+                bool carries = WorldPropBudget.Triangles(c.Archetype) > 0;
+                if (e.PropTriangles > WorldPropBudget.Triangles(c.Archetype) || (carries && e.PropTriangles == 0)) rep.PropBudgetViolations++;
+                if (e.PropLongestEdge > s.MaxPropEdgeM) rep.PropEdgeViolations++;
+            }
+            rep.TileMeshKeys = seen.Count;
+            if (rep.PropBudgetViolations > 0) rep.Failures.Add($"{rep.PropBudgetViolations} archetype meshes are missing or over their triangle cap (§8.4)");
+            if (rep.PropEdgeViolations > 0) rep.Failures.Add($"{rep.PropEdgeViolations} archetype meshes have an edge over {s.MaxPropEdgeM} m (worst {rep.MaxPropEdge})");
+        }
+
+        // ---- 5. budget (§3.4, §8.4, §8.5; D5): the triangles of the meshes that are drawn ----
 
         static void CheckBudget(WorldGenerator g, List<TileId> ball, double L, TileMeshCache meshes, WorldLintSettings s, WorldLintReport rep)
         {
@@ -173,7 +196,7 @@ namespace Atlas.World.Lint
                     c[i] = new double3(L * tc.x, -s.EyeHeight, L * tc.y);
                     var lod = P.z <= phi2 + 1e-9 ? TileLod.Near : TileLod.Mid;
                     var cont = g.Content(list[i].Id);
-                    tris[i] = meshes.Get(lod, cont.KerbMask).Triangles + PropTris(cont.Archetype);
+                    tris[i] = meshes.Get(lod, WorldTileKey.From(cont)).Triangles;
                 }
                 for (int k = 0; k < s.Headings; k++)
                     foreach (double psi in s.PitchesDeg)
@@ -225,7 +248,7 @@ namespace Atlas.World.Lint
                     if (closed && (ct.FeatureEdge == e || cn.FeatureEdge == e2)) rep.StructuralConflicts++;
                     if (closed != ((cn.ClosedMask & (1 << e2)) != 0)) rep.StructuralConflicts++;
                     if (TileOrder.Compare(t, n) < 0) // each shared edge once
-                        rep.CoincidentFaces += fc.Count(t, e, ct.KerbMask, n, e2, cn.KerbMask);
+                        rep.CoincidentFaces += fc.Count(t, e, WorldTileKey.From(ct), n, e2, WorldTileKey.From(cn));
                 }
             }
             if (rep.StructuralConflicts > 0) rep.Failures.Add($"{rep.StructuralConflicts} structural conflicts between neighbours");
@@ -328,6 +351,9 @@ namespace Atlas.World.Lint
                 seenRegions[a.Region] = true;
             }
             foreach (bool r in seenRegions) if (r) rep.RegionsPresent++;
+            rep.RegionHash = RegionHash(ball);
+            if (s.LintDepth == 6 && rep.RegionHash != RegionHashDepth6)
+                rep.Failures.Add($"the regions to depth 6 hash to 0x{rep.RegionHash:X16}, not the frozen 0x{RegionHashDepth6:X16}: the phone and the Station would disagree");
             rep.WorldHash1 = g1.WorldHash(s.LintDepth);
             rep.WorldHash2 = g2.WorldHash(s.LintDepth);
             if (rep.RegionMismatches > 0) rep.Failures.Add($"{rep.RegionMismatches} tiles have a region that differs from Regions.RegionOf or between two runs");
@@ -335,5 +361,94 @@ namespace Atlas.World.Lint
             if (rep.RegionsPresent != Regions.Count) rep.Failures.Add($"only {rep.RegionsPresent} regions present");
             if (rep.WorldHash1 != rep.WorldHash2) rep.Failures.Add("world hash differs between two runs");
         }
+
+        /// <summary>
+        /// §11.1 "the region of every tile to depth 6 (597 tiles) is the same ... on the phone and on the Station". A region
+        /// depends on the tile id alone, so one number stands for the whole table (Tests/WorldGen/Golden/Region_Depth6_golden.csv):
+        /// any build, on any platform, that hashes its own 597 regions to this value agrees with every other.
+        /// </summary>
+        public const ulong RegionHashDepth6 = 0x62A399FF040834A1UL;
+
+        /// <summary>SplitMix64 fold (kernel.md §5.7) over the tiles in TileOrder, six id words then the region; integers only.</summary>
+        public static ulong RegionHash(IReadOnlyList<TileId> tiles) => RegionHash(tiles, Regions.RegionOf);
+
+        internal static ulong RegionHash(IReadOnlyList<TileId> tiles, Func<TileId, int> regionOf)
+        {
+            var sorted = new List<TileId>(tiles);
+            sorted.Sort(TileOrder.Compare);
+            unchecked
+            {
+                ulong h = 0x9E3779B97F4A7C15UL;
+                foreach (var t in sorted)
+                {
+                    for (int w = 0; w < 6; w++) h = Mix(h, t[w]);
+                    h = Mix(h, regionOf(t));
+                }
+                return h;
+            }
+        }
+
+        static ulong Mix(ulong h, long w)
+        {
+            unchecked
+            {
+                h += (ulong)w + 0x9E3779B97F4A7C15UL;
+                h = (h ^ (h >> 30)) * 0xBF58476D1CE4E5B9UL;
+                h = (h ^ (h >> 27)) * 0x94D049BB133111EBUL;
+                return h ^ (h >> 31);
+            }
+        }
+
+        // ---- 9. room content (§11.1 "every scan box has a generated mesh, a fallback mesh or a placeholder") ----
+        /// <summary>
+        /// A box is covered when it has a generated mesh (Ready, with its asset hash), a fallback (BuiltIn, StandIn) or a
+        /// placeholder (Placeholder, or Requested: the placeholder stands while the Forge works), and a size a placeholder box
+        /// can be built from.
+        /// </summary>
+        public static void CheckRoomContent(RoomModel room, WorldLintReport rep)
+        {
+            if (room == null) throw new ArgumentNullException(nameof(room));
+            if (rep == null) throw new ArgumentNullException(nameof(rep));
+            rep.RoomObjects = room.Objects.Length;
+            foreach (var o in room.Objects)
+                if (o == null || !HasMeshOrPlaceholder(o)) rep.RoomObjectsWithoutMesh++;
+            if (rep.RoomObjectsWithoutMesh > 0)
+                rep.Failures.Add($"{rep.RoomObjectsWithoutMesh} of {rep.RoomObjects} scan boxes have neither a generated mesh, a fallback mesh nor a placeholder (§11.1)");
+        }
+
+        internal static bool HasMeshOrPlaceholder(RoomObject o)
+        {
+            if (!(o.Size.x > 0f && o.Size.y > 0f && o.Size.z > 0f)) return false;
+            switch (o.Mesh)
+            {
+                case MeshState.Placeholder: case MeshState.Requested: case MeshState.BuiltIn: case MeshState.StandIn: return true;
+                case MeshState.Ready: return !string.IsNullOrEmpty(o.AssetHash);
+                default: return false;
+            }
+        }
+
+        // ---- 10. warped renderers (§8.3, §11.1 "enlarged localBounds on every warped renderer") ----
+        /// <summary>
+        /// Every renderer under root whose material has the warp on must carry the enlarged bounds (AtlasWarpBounds), or Unity
+        /// culls it by a box the warp has moved it out of. Needs the engine: run it on a space's objects in the Editor.
+        /// </summary>
+        public static void CheckWarpedRenderers(GameObject root, WorldLintReport rep)
+        {
+            if (root == null) throw new ArgumentNullException(nameof(root));
+            if (rep == null) throw new ArgumentNullException(nameof(rep));
+            int small = 0;
+            foreach (var r in root.GetComponentsInChildren<Renderer>(true))
+            {
+                var m = r.sharedMaterial;
+                if (m == null || !m.HasProperty(AtlasShaderIDs.WarpMode) || m.GetFloat(AtlasShaderIDs.WarpMode) < 0.5f) continue;
+                rep.WarpedRenderers++;
+                if (!BoundsEnlarged(r.localBounds.size)) small++;
+            }
+            rep.WarpedRenderersSmallBounds += small;
+            if (small > 0) rep.Failures.Add($"{small} warped renderers under '{root.name}' lack the enlarged localBounds (§8.3)");
+        }
+
+        internal static bool BoundsEnlarged(Vector3 size) =>
+            size.x >= AtlasWarpBounds.Size && size.y >= AtlasWarpBounds.Size && size.z >= AtlasWarpBounds.Size;
     }
 }

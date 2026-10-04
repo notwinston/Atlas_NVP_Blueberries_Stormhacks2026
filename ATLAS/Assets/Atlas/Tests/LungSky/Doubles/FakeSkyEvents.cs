@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Atlas.Link;
 
 namespace Atlas.Blades.Lung.Sky.Tests
 {
@@ -12,7 +13,7 @@ namespace Atlas.Blades.Lung.Sky.Tests
         {
             int n = 0;
             for (int i = 0; i < Names.Count; i++)
-                if (Names[i] == "sky_pick") { if (n == index) return UnityEngine.JsonUtility.FromJson<SkyPickData>(Data[i]); n++; }
+                if (Names[i] == "sky_pick") { if (n == index) return SkyPickData.FromJson(AtlasJson.Parse(Data[i])); n++; }
             throw new System.IndexOutOfRangeException("sky_pick " + index);
         }
     }

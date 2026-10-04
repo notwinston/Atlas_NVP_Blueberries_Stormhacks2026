@@ -25,6 +25,7 @@ namespace Atlas.Blades.Lung.Sky
         float _t0;
         int _sweepK = -1, _sweepOk, _sweepDone;   // _sweepDone: 0 running, 1 finished
         string _lastEvent = "";
+        EventLog _log;
 
         IEnumerator Start()
         {
@@ -35,15 +36,17 @@ namespace Atlas.Blades.Lung.Sky
                 SceneManager.SetActiveScene(SceneManager.GetSceneByName("Atlas_Boot"));
             }
             float w0 = Time.realtimeSinceStartup;
-            while (Time.realtimeSinceStartup - w0 < 10f && (StereoRig.Current == null || StereoRig.Current.Head == null)) yield return null;
-            _head = StereoRig.Current != null ? StereoRig.Current.Head : null;
-            if (_head == null) { Debug.LogError("NeedleSkyTestScene: StereoRig.Current.Head missing (lane A P1-A04)"); yield break; }
+            IStereoRig rig = null;
+            while (Time.realtimeSinceStartup - w0 < 10f && !AtlasServices.TryGet(out rig)) yield return null;
+            _head = rig != null ? rig.Head : null;
+            if (_head == null) { Debug.LogError("NeedleSkyTestScene: no IStereoRig published by the composition root"); yield break; }
 
             var registry = new ParamRegistry();
-            _maps = SkyMaps.Load(NeedleSkyPlaceholderSeams.CaseRoot("illustrative"));
+            _maps = SkyMaps.Load(NeedleSkyServices.CaseRoot("illustrative"));
             _presenter = new NeedleSkyPresenter(_maps, settings, transform);
-            if (!NeedleSkyPlaceholderSeams.TryResolveInput(out var input, out var missing)) Debug.LogWarning("NeedleSkyTestScene: missing " + missing);
-            _beat = new NeedleSkyBeat(_maps, registry, NeedleSkyPlaceholderSeams.EventLogSink(), input, _presenter);
+            var input = NeedleSkyServices.Input();
+            if (input == null) Debug.LogWarning("NeedleSkyTestScene: no IAtlasInput published; the beat reads no action and no stick");
+            _beat = new NeedleSkyBeat(_maps, registry, NeedleSkyServices.EventLogSink(), input, _presenter);
             _beat.Enter();
 
             var go = new GameObject("NeedleSkyDebugLine");
@@ -51,13 +54,13 @@ namespace Atlas.Blades.Lung.Sky
             _debug = go.AddComponent<TextMeshPro>();
             _debug.fontSize = NeedleSkyConstants.PanelFontSize * 0.7f; _debug.richText = false;
             _debug.alignment = TextAlignmentOptions.Center; _debug.textWrappingMode = TextWrappingModes.NoWrap;
-            EventLog.Emitted += OnEmitted;
+            if (AtlasServices.TryGet<IEventLog>(out var log)) { _log = log as EventLog; if (_log != null) _log.Logged += OnLogged; }
             _t0 = Time.time;
         }
 
-        void OnEmitted(EventMessage m) { if (m.Scene == "lung") _lastEvent = m.Ev + " " + m.Data; }
+        void OnLogged(EventMessage m) { if (m.Scene == LungEvents.Scene) _lastEvent = m.Ev + " " + m.Data.ToJson(false); }
 
-        void OnDestroy() { EventLog.Emitted -= OnEmitted; _presenter?.Dispose(); }
+        void OnDestroy() { if (_log != null) _log.Logged -= OnLogged; _presenter?.Dispose(); }
 
         void Update()
         {
@@ -86,7 +89,11 @@ namespace Atlas.Blades.Lung.Sky
                     line = "Sweep " + (k + 1) + "/" + checks.Length + ": sky.json " + c.clear_mm.ToString("F1") + " mm";
                 }
             }
-            _beat.Tick(new FrameContext(_frame++, Time.timeAsDouble, Time.deltaTime, pos, rot, true, false));
+            _beat.Tick(new FrameContext
+            {
+                FrameIndex = (int)_frame++, Time = Time.timeAsDouble, DeltaTime = Time.deltaTime, HeadPosition = pos, HeadRotation = rot,
+                RawHeadPosition = pos, RawHeadRotation = rot, Tracking = TrackingState.Normal,
+            });
             // place the debug line under the panel (0.1 m lower, same head-locked frame)
             if (_debug != null)
             {

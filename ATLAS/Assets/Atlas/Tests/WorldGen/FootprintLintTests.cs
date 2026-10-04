@@ -36,9 +36,8 @@ namespace Atlas.WorldGen.Tests
             if (name == RoomFixtures.Sample3x3) Assert.Greater(samples, 10000);
         }
 
-#if !ATLAS_HEADLESS
         // WorldLint.Run reports the same fields (MP §11.1 WorldLint_All) and fails when either count is positive
-        [Test, Category("Unity")]
+        [Test]
         public void Run_ReportsFootprintFields()
         {
             var room = Room(RoomFixtures.Sample3x3);
@@ -49,7 +48,6 @@ namespace Atlas.WorldGen.Tests
             StringAssert.Contains("FootprintSamples=", rep.ToString());
             foreach (var f in rep.Failures) StringAssert.DoesNotContain("room footprint", f);
         }
-#endif
 
         // Control: a generator that ignores the footprint is caught
         [Test]

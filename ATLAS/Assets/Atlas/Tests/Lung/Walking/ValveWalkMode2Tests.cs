@@ -174,15 +174,6 @@ namespace Atlas.Blades.Lung.Walking.Tests
             }
         }
 
-        static void WriteEvidence(string name, string json)
-        {
-            try
-            {
-                string dir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "docs", "laneB", "evidence", "P2-B04"));
-                Directory.CreateDirectory(dir);
-                File.WriteAllText(Path.Combine(dir, name), json);
-            }
-            catch (Exception e) { Debug.LogWarning("P2-B04 evidence not written: " + e.Message); }
-        }
+        static void WriteEvidence(string name, string json) => Lung.Tests.LungTestEnv.WriteEvidence("P2-B04", name, json);
     }
 }

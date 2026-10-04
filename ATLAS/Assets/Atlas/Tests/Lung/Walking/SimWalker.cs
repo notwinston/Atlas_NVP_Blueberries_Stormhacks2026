@@ -14,7 +14,7 @@ namespace Atlas.Blades.Lung.Walking.Tests
         public double Speed = 0.7, Lateral;
         public float3 Head = new float3(0, 1.6f, 0);
         public long Frame;
-        public Action<FrameContext> Sink;   // P2-B09: route frames through SpaceLab.Tick instead of the wing directly
+        public Action<FrameContext> Sink;   // P2-B09: route frames through a host (the real module path) instead of the wing directly
         bool _walking = true, _haveSeg; double _u, _len; double2 _dirN;
 
         public SimWalker(AirwayWing wing) { Wing = wing; }
@@ -44,9 +44,9 @@ namespace Atlas.Blades.Lung.Walking.Tests
         {
             Head = new float3((float)pos.x, 1.6f, (float)pos.y);
             Frame++;
-            var f = new FrameContext(Frame, Frame * Dt, (float)Dt, Head, quaternion.identity, true, false);
+            var f = Lung.Tests.LungTestEnv.Frame(Frame, Frame * Dt, (float)Dt, Head, quaternion.identity);
             if (Sink != null) { Sink(f); return; }
-            if (Module != null) { Module.KernelStep(f); Module.Tick(f); }
+            if (Module != null) Module.Tick(f);
             else { Wing.KernelStep(f); Wing.Tick(f); }
         }
     }

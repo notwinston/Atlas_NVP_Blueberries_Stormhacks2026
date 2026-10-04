@@ -17,7 +17,7 @@ namespace Atlas.Blades.Lung.Walking.Tests
         public void ClearDynamic() => _cells.Clear();
         public float Clearance(float2 p)
         {
-            double best = _room.sdf.Sample(p.x, p.y);
+            double best = _room.Sdf.Sample(p);
             for (int i = 0; i < _cells.Count; i++)
             {
                 double dx = Math.Max(Math.Max(_cells[i].x - p.x, 0), p.x - (_cells[i].x + 0.05));

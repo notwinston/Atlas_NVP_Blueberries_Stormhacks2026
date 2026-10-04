@@ -30,6 +30,7 @@ namespace Atlas.Scan
         readonly ScanSensors _sensors;
         readonly List<ARRaycastHit> _hits = new List<ARRaycastHit>(16);
         readonly ScanPhotoDriver _photos;
+        readonly WallBridgeCapture _wallBridge = new WallBridgeCapture();
 
         bool _featuresOn, _meshOn, _boxesOn, _capturing, _classesAsked;
         bool _depthBefore;
@@ -289,6 +290,8 @@ namespace Atlas.Scan
                 // Starting a capture can replace the session's configuration: ask for depth again.
                 _rig.ApplyDepth();
             }
+            // Route 4 rides on the furniture capture; where it is off or absent this only forgets the last scan's walls.
+            _wallBridge.Begin(_capturing ? _rig : null);
             Debug.Log(LogPrefix + "scan started: mesh " + (_meshOn ? "on" : "off") + ", boxes " + (_boxesOn ? "on" : "off") +
                       (_capturing ? " (RoomPlan capture)" : ""));
         }
@@ -332,6 +335,7 @@ namespace Atlas.Scan
             _capturing = false;
             _flow.ExternalHint = ScanHint.None;
             if (_rig.Boxes != null) ArMeshPlatform.Current.StopRoomCapture(_rig.Boxes.subsystem);
+            _wallBridge.End();
             _rig.ApplyDepth();
         }
 
@@ -351,6 +355,9 @@ namespace Atlas.Scan
         void Finalise()
         {
             RoomModel room = _flow.Proposal.Preview;
+            // Route 4: RoomPlan's wall heights, doors and windows onto the outline's walls, when a capture ran.
+            WallBridgeReport bridge = _wallBridge.Apply(room);
+            if (bridge.Tried) Debug.Log(LogPrefix + bridge.Text);
             ReleaseAnchor();
             string anchorId;
             ResultAnchor = CreateAnchor(room, out anchorId);

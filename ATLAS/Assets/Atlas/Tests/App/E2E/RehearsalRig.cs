@@ -51,7 +51,7 @@ namespace Atlas.E2E.Tests
 
         // ---- the phone ----
         public readonly ParamRegistry Registry = new ParamRegistry();
-        public readonly FlatWalkerKernel Kernel = new FlatWalkerKernel();
+        public readonly HolonomyWalkerKernel Kernel = new HolonomyWalkerKernel();
         public readonly FrameLoopCore Loop;
         public readonly RehearsalPosePipeline Pipeline = new RehearsalPosePipeline();
         public readonly SyntheticDepthSource Depth = new SyntheticDepthSource();
