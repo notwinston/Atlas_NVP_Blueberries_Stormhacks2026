@@ -293,13 +293,16 @@ namespace Atlas.Input
 
                 // The hands come first: where the fingertips are decides which dwell waits and whose pinch counts.
                 _touch.Step(in raw.Hands, headPosition, headRotation, dt, context, _dwell);
-                bool pinch = _touch.Pinched(in raw.Hands);
 
-                if (_dwell.Tick(headPosition, headRotation, dt, context, lever, out GazeFiring g, _touch.Near, pinch))
+                // A pinch opens the on-device menu, and closes it when it is open. It fires nothing the gaze is on.
+                if (_touch.Pinched(in raw.Hands) && (live & BitOf(AtlasAction.ParamMenu)) != 0)
                 {
-                    Fire(g.Action, g.Source, g.Tag, g.Id, g.Callback);
-                    if (_dwell.FiredByPinch) _touch.NotePinch(g.Id);
+                    Fire(AtlasAction.ParamMenu, InputSource.Gaze, 0, default, null);
+                    _touch.NotePinch();
                 }
+
+                if (_dwell.Tick(headPosition, headRotation, dt, context, lever, out GazeFiring g, _touch.Near, false))
+                    Fire(g.Action, g.Source, g.Tag, g.Id, g.Callback);
 
                 if (_dwell.TryGetHold(out AtlasAction holdAction, out AtlasAxis holdAxis, out float holdValue))
                     Hold(holdAction, holdAxis, holdValue);

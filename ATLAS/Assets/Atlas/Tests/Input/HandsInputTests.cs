@@ -6,8 +6,8 @@ namespace Atlas.Input.Tests
 {
     /// <summary>
     /// Hands beside the routes input already has (documents/ATLAS_Hands_Design.md sections 6.3 and 6.7): a touch
-    /// is a twin of the dwell, the dwell waits for a finger that is on its way, a pinch fires what the gaze is
-    /// on, and without hands nothing is different.
+    /// is a twin of the dwell, the dwell waits for a finger that is on its way, a pinch opens and closes the
+    /// on-device menu, and without hands nothing is different.
     /// </summary>
     public class HandsInputTests
     {
@@ -195,7 +195,7 @@ namespace Atlas.Input.Tests
         }
 
         [Test]
-        public void Input_Hands_PinchFiresTheGazedTarget()
+        public void Input_Hands_PinchTogglesTheMenu()
         {
             var rig = new HandsRig();
             GazeTargetId far = rig.Add(HandsRig.Chip(AtlasAction.NextSpace, Beacon, tag: 3, radius: 0.2f));
@@ -204,81 +204,54 @@ namespace Atlas.Input.Tests
             var free = new HandsInput { Active = true, Right = HandsRig.Tip(Aside) };
             var pinch = new HandsInput { Active = true, Right = HandsRig.Tip(Aside), PinchDownRight = true };
 
-            // Nothing under the gaze: a pinch fires nothing, not even Confirm.
+            // Nothing under the gaze: the pinch asks for the menu.
             rig.Tick(pinch);
-            Assert.That(rig.Events, Is.Empty);
-            Assert.That(rig.Input.HandsTouch.PinchFired, Is.False);
-            Assert.That(rig.Input.HandsTouch.PinchTarget.IsValid, Is.False);
+            Assert.That(rig.Events, Is.EqualTo(new[] { (AtlasAction.ParamMenu, InputSource.Gaze, 0) }));
+            Assert.That(rig.Input.Pressed(AtlasAction.ParamMenu), Is.True);
+            Assert.That(rig.Input.HandsTouch.PinchFired, Is.True);
+            Assert.That(rig.Input.HandsTouch.PinchTarget.IsValid, Is.False, "a pinch fires no target");
+            rig.Tick(free);
+            Assert.That(rig.Input.HandsTouch.PinchFired, Is.False, "for the frame it fired");
 
-            // The gaze on the beacon: the pinch fires it at once, as the gaze itself would have after its dwell.
+            // The gaze on the beacon: the pinch still only asks for the menu; the beacon is left to the dwell.
             rig.LookAt(Beacon);
             rig.Tick(free);
             Assert.That(rig.Input.GazeFocused, Is.EqualTo(far));
             rig.Tick(pinch);
-            Assert.That(rig.Events, Is.EqualTo(new[] { (AtlasAction.NextSpace, InputSource.Gaze, 3) }));
-            Assert.That(rig.Calls, Is.EqualTo(new[] { (far, 3) }));
-            Assert.That(rig.Input.Pressed(AtlasAction.NextSpace), Is.True);
-            Assert.That(rig.Input.HandsTouch.PinchFired, Is.True);
-            Assert.That(rig.Input.HandsTouch.PinchTarget, Is.EqualTo(far));
-            rig.Tick(free);
-            Assert.That(rig.Input.HandsTouch.PinchFired, Is.False, "for the frame it fired");
-            // The target is spent as after the lever: the dwell does not fire it again while the gaze stays.
-            rig.Rest(Aside, 2f);
-            Assert.That(rig.Events.Count, Is.EqualTo(1));
+            Assert.That(rig.Events.Count, Is.EqualTo(2));
+            Assert.That(rig.Events[1], Is.EqualTo((AtlasAction.ParamMenu, InputSource.Gaze, 0)));
+            Assert.That(rig.Input.Pressed(AtlasAction.NextSpace), Is.False);
+            Assert.That(rig.Calls, Is.Empty);
+
+            // With the menu open the same pinch closes it: ParamMenu is live there too.
+            rig.LookAt(HandsRig.Eye + new float3(0f, 5f, 1f));
+            rig.Rest(Aside, 0.3f);
+            rig.Input.PushContext(InputContext.Menu);
+            int before = rig.Events.Count;
+            rig.Tick(pinch);
+            Assert.That(rig.Events.Count, Is.EqualTo(before + 1));
+            Assert.That(rig.Events[before], Is.EqualTo((AtlasAction.ParamMenu, InputSource.Gaze, 0)));
+            rig.Input.PopContext(InputContext.Menu);
 
             // While that hand's fingertip hovers a target its pinch is not a pinch: touch wins.
+            before = rig.Events.Count;
             float3 hovering = face.At(0.05f, 0f, 0.04f);
             rig.Tick(new HandsInput { Active = true, Right = HandsRig.Tip(hovering), PinchDownRight = true });
             Assert.That(rig.R.Target, Is.EqualTo(row));
-            Assert.That(rig.Events.Count, Is.EqualTo(1));
+            Assert.That(rig.Events.Count, Is.EqualTo(before));
             Assert.That(rig.Input.HandsTouch.PinchFired, Is.False);
             // The other hand, over nothing, is free to pinch.
             rig.Tick(new HandsInput { Active = true, Left = HandsRig.Tip(Aside), Right = HandsRig.Tip(hovering), PinchDownLeft = true });
-            Assert.That(rig.Events.Count, Is.EqualTo(2));
-            Assert.That(rig.Events[1], Is.EqualTo((AtlasAction.NextSpace, InputSource.Gaze, 3)));
+            Assert.That(rig.Events.Count, Is.EqualTo(before + 1));
+            Assert.That(rig.Events[before], Is.EqualTo((AtlasAction.ParamMenu, InputSource.Gaze, 0)));
 
             // A hand that is not trusted, and hands that are not active, do not pinch.
             rig.Rest(Aside, 1f);
+            before = rig.Events.Count;
             rig.Tick(new HandsInput { Active = true, Right = HandsRig.Tip(Aside, 0.5f), PinchDownRight = true });
             rig.Tick(new HandsInput { Active = true, Right = new HandsFingertip { Valid = false, World = Aside, Confidence = 1f }, PinchDownRight = true });
             rig.Tick(new HandsInput { Active = false, Right = HandsRig.Tip(Aside), PinchDownRight = true });
-            Assert.That(rig.Events.Count, Is.EqualTo(2));
-
-            // The lever is still the lever: with a pinch in the same frame the firing is the lever's.
-            rig.Tick(new RawInput { PointerDown = true, Hands = pinch });
-            Assert.That(rig.Events.Count, Is.EqualTo(3));
-            Assert.That(rig.Events[2], Is.EqualTo((AtlasAction.NextSpace, InputSource.Lever, 3)));
-            Assert.That(rig.Input.HandsTouch.PinchFired, Is.False);
-        }
-
-        [Test]
-        public void Input_Hands_APinchJustAfterTheDwellFiredIsSwallowed()
-        {
-            var rig = new HandsRig();
-            rig.Add(HandsRig.Chip(AtlasAction.NextSpace, Beacon, radius: 0.2f));
-            rig.LookAt(Beacon);
-            rig.Rest(Aside, 0.75f);
-            Assert.That(rig.Events.Count, Is.EqualTo(1), "the dwell got there first");
-            var pinch = new HandsInput { Active = true, Right = HandsRig.Tip(Aside), PinchDownRight = true };
-            rig.Tick(pinch);
-            Assert.That(rig.Events.Count, Is.EqualTo(1), "the pinch that was already closing is not a second firing");
-            rig.Rest(Aside, 0.6f);
-            rig.Tick(pinch);
-            Assert.That(rig.Events.Count, Is.EqualTo(2), "a later one is");
-
-            // The same after a touch: one hand presses a chip the walker is looking at, the other pinches in that moment.
-            var both = new HandsRig();
-            GazeTargetId chip = both.Add(HandsRig.Chip(AtlasAction.Primary, HandsRig.Panel));
-            HandsRig.Face face = both.FaceOf(chip);
-            both.LookAt(HandsRig.Panel);
-            both.Glide(face.At(0f, 0f, 0.10f), face.At(0f, 0f, -0.02f), 0.3f);
-            Assert.That(both.Events.Count, Is.EqualTo(1));
-            var leftPinch = new HandsInput { Active = true, Left = HandsRig.Tip(Aside), Right = HandsRig.Tip(face.At(0f, 0f, -0.02f)), PinchDownLeft = true };
-            both.Tick(leftPinch);
-            Assert.That(both.Events.Count, Is.EqualTo(1), "the press and the pinch were one intent");
-            both.Rest(face.At(0f, 0f, -0.02f), 0.6f);
-            both.Tick(leftPinch);
-            Assert.That(both.Events.Count, Is.EqualTo(2));
+            Assert.That(rig.Events.Count, Is.EqualTo(before));
         }
 
         [Test]
@@ -551,7 +524,7 @@ namespace Atlas.Input.Tests
                     Assert.That(math.length(h.FaceNormal), Is.EqualTo(1f).Within(1e-3f), where);
                     Assert.That(input.LabelOf(h.Target), Is.EqualTo("fuzz"), where);
                 }
-                if (touch.PinchFired) Assert.That(touch.PinchTarget.IsValid, Is.True, "frame " + frame);
+                if (touch.PinchFired) Assert.That(touch.PinchTarget.IsValid, Is.False, "frame " + frame);
                 if (touch.AnyNear) Assert.That(hands.Active, Is.True, "frame " + frame);
             }
 

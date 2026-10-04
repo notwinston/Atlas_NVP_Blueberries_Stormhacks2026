@@ -627,7 +627,7 @@ namespace Atlas.E2E.Tests
         }
 
         [Test]
-        public void E2E_Hands_PinchConfirmsTheGazedTarget()
+        public void E2E_Hands_PinchOpensAndClosesTheMenu()
         {
             RoomModel room = Room();
             var calls = new List<int>();
@@ -636,97 +636,42 @@ namespace Atlas.E2E.Tests
             using (RehearsalRig rig = EnterWithThePinchingHand(room, LookingAway, out replay, out target, calls))
             {
                 SwitchOn(rig);
-                const int lookAt = 24;
-                int downs = 0, firstDown = -1;
-                bool looking = false, firedOtherwise = false;
-                for (int frame = 0; frame < 300 && downs < 3; frame++)
-                {
-                    // The walker looks at the target 0.4 s into the session, the hand open: the first pinch
-                    // closes before the dwell is two thirds through. After the second pinch the walker looks away.
-                    if (frame == lookAt)
-                    {
-                        rig.StandAt(float2.zero, 0f);
-                        looking = true;
-                    }
-                    if (looking && downs == 2 && !rig.Hands.Pinch(HandSide.Right).Pinching)
-                    {
-                        rig.StandAt(float2.zero, LookingAway);
-                        looking = false;
-                    }
-                    int fired = rig.Input.Fired.Count;
-                    rig.Step();
-                    bool down = rig.Hands.Pinch(HandSide.Right).Down;
-                    string at = "frame " + frame;
-                    if (down)
-                    {
-                        downs++;
-                        if (firstDown < 0) firstDown = frame;
-                    }
-                    if (down && downs <= 2)
-                    {
-                        // At once: in the frame the pinch closes, by the route the gaze takes.
-                        Assert.That(rig.Input.Fired.Count, Is.EqualTo(fired + 1), at + ": the pinch fired nothing");
-                        InputFiring firing = rig.Input.Fired[fired];
-                        Assert.That(firing.Action, Is.EqualTo(AtlasAction.Confirm), at);
-                        Assert.That(firing.Source, Is.EqualTo(InputSource.Gaze), at + ", decision R1");
-                        Assert.That(firing.Tag, Is.EqualTo(11), at);
-                        Assert.That(rig.Input.HandsTouch.PinchFired, Is.True, at);
-                        Assert.That(rig.Input.HandsTouch.PinchTarget, Is.EqualTo(target), at);
-                    }
-                    else if (rig.Input.Fired.Count != fired)
-                    {
-                        firedOtherwise = true;
-                    }
-                }
-                Assert.That(downs, Is.EqualTo(3), "the recording pinches three times");
-                int dwellFrames = (int)math.round(rig.Input.DwellSeconds * 60f);
-                TestContext.WriteLine("the first pinch closed {0} frames after the gaze came to the target (the dwell takes {1})", firstDown - lookAt, dwellFrames);
-                Assert.That(firstDown - lookAt, Is.InRange(1, dwellFrames - 1), "the pinch did not come before the dwell");
-                // Two pinches with the target under the gaze, one with nothing under it; the dwell never got to fire.
-                Assert.That(firedOtherwise, Is.False, "the target fired without a pinch on it: by the dwell, or by the pinch made looking away");
-                Assert.That(rig.Input.Fired.Count, Is.EqualTo(2));
-                Assert.That(calls, Is.EqualTo(new[] { 11, 11 }));
-
-                AssertTheHubHasEveryHandsEvent(rig);
-                Assert.That(RehearsalRig.CountOf(rig.HubEvents, "hands.pinch"), Is.EqualTo(2));
-                JsonValue pinch = RehearsalRig.LastOf(rig.HubEvents, "hands.pinch").Data;
-                Assert.That(pinch.GetString("hand"), Is.EqualTo("R"));
-                Assert.That(pinch.GetString("label"), Is.EqualTo("e2e.far"));
-                Assert.That(rig.HasEvent("hands.touch"), Is.False);
-                AssertHealthy(rig);
-            }
-        }
-
-        [Test]
-        public void E2E_Hands_PinchWithNothingUnderTheGazeFiresNothing()
-        {
-            RoomModel room = Room();
-            var calls = new List<int>();
-            ReplayHandsSource replay;
-            GazeTargetId target;
-            using (RehearsalRig rig = EnterWithThePinchingHand(room, LookingAway, out replay, out target, calls))
-            {
-                SwitchOn(rig);
-                int downs = 0, ups = 0;
+                int downs = 0, ups = 0, toggles = 0;
                 while (!replay.Ended && rig.Frames < 2000)
                 {
+                    int fired = rig.Input.Fired.Count;
                     rig.Step();
+                    string at = "frame " + rig.Frames;
                     if (rig.Hands.Pinch(HandSide.Right).Down) downs++;
                     if (rig.Hands.Pinch(HandSide.Right).Up) ups++;
                     Assert.That(rig.Input.Core.GazeFocused.IsValid, Is.False, "the gaze came onto the target");
-                    Assert.That(rig.Input.HandsTouch.PinchFired, Is.False);
+                    if (!rig.Input.HandsTouch.PinchFired)
+                    {
+                        Assert.That(rig.Input.Fired.Count, Is.EqualTo(fired), at + ": something fired without a pinch");
+                        continue;
+                    }
+                    // In the frame the pinch closes: the menu is asked for, by the route the gaze takes, and nothing else.
+                    toggles++;
+                    Assert.That(rig.Hands.Pinch(HandSide.Right).Down, Is.True, at);
+                    Assert.That(rig.Input.Fired.Count, Is.EqualTo(fired + 1), at);
+                    InputFiring firing = rig.Input.Fired[fired];
+                    Assert.That(firing.Action, Is.EqualTo(AtlasAction.ParamMenu), at);
+                    Assert.That(firing.Source, Is.EqualTo(InputSource.Gaze), at + ", decision R1");
+                    Assert.That(rig.Input.HandsTouch.PinchTarget.IsValid, Is.False, at + ": a pinch fires no target");
                 }
                 Assert.That(replay.Ended, Is.True);
-                // The hand did pinch, three times, and the pinches were handed to input.
-                Assert.That(downs, Is.EqualTo(3));
+                Assert.That(downs, Is.EqualTo(3), "the recording pinches three times");
                 Assert.That(ups, Is.EqualTo(3));
-                Assert.That(rig.Input.Fired, Is.Empty, "a pinch at nothing fired something");
-                Assert.That(calls, Is.Empty);
+                Assert.That(toggles, Is.GreaterThanOrEqualTo(1), "no pinch reached the menu");
+                Assert.That(calls, Is.Empty, "a pinch fired the target");
+
                 rig.Registry.Set(HandsSystem.ParamEnabled, 0f);
+                rig.Steps(4);
                 AssertTheHubHasEveryHandsEvent(rig);
-                Assert.That(rig.HasEvent("hands.pinch"), Is.False);
-                Assert.That(RehearsalRig.LastOf(rig.HubEvents, "hands.stats").Data.GetInt("pinches"), Is.EqualTo(0));
-                Assert.That(RehearsalRig.LastOf(rig.HubEvents, "hands.stats").Data.GetString("source"), Is.EqualTo("replay"));
+                Assert.That(RehearsalRig.CountOf(rig.HubEvents, "hands.pinch"), Is.EqualTo(toggles));
+                Assert.That(RehearsalRig.LastOf(rig.HubEvents, "hands.pinch").Data.GetString("hand"), Is.EqualTo("R"));
+                Assert.That(rig.HasEvent("hands.touch"), Is.False);
+                Assert.That(RehearsalRig.LastOf(rig.HubEvents, "hands.stats").Data.GetInt("pinches"), Is.EqualTo(toggles));
                 AssertHealthy(rig);
             }
         }
