@@ -492,7 +492,8 @@ namespace Atlas.App.Menu
                 {
                     ParamEntry entry = row.Entry;
                     float value = Stepped(entry, _hasPending ? _pendingValue : entry.Value, direction);
-                    if (!entry.OnRelease)
+                    // A switch waits for Apply like an on-release value: applied here, Apply's toggle undid it.
+                    if (!entry.OnRelease && entry.Kind != ParamKind.Bool)
                     {
                         Apply(entry, value);
                         break;
