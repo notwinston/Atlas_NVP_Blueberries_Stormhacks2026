@@ -9,6 +9,10 @@
         "Atlas.World",
         "Atlas.Rendering",
         "Atlas.Safety",
+<<<<<<< HEAD
+=======
+        "Atlas.Spaces.AlignedCells",
+>>>>>>> P2-B04
         "Unity.Mathematics",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"

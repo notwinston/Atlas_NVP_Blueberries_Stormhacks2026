@@ -1,0 +1,9 @@
+{
+  "grids": [
+    {"name":"room_3x3","cells":"3x3","side_m":0.8,"free_cells":9,"routes":100,"completed":100,"valves":800},
+    {"name":"room_3x3_b","cells":"3x3","side_m":0.8,"free_cells":9,"routes":100,"completed":100,"valves":800},
+    {"name":"corner_demo_2x2","cells":"2x2","side_m":0.75,"free_cells":4,"routes":100,"completed":100,"valves":800},
+    {"name":"1x2_in_3x3","cells":"3x3","side_m":0.8,"free_cells":2,"routes":100,"completed":100,"valves":800},
+    {"name":"corner_demo_1x2","cells":"2x2","side_m":0.75,"free_cells":2,"routes":100,"completed":100,"valves":800}
+  ]
+}

@@ -1,0 +1,78 @@
+using System;
+using Atlas.Kernel;
+using Unity.Mathematics;
+
+namespace Atlas.Spaces.AlignedCells
+{
+    public sealed class CellWalker
+    {
+        readonly CellGrid grid;
+        readonly TileGraph graph;
+
+        public int2 Cell { get; private set; }
+        public CellFrame Frame { get; private set; }
+        public double2 LastHead { get; private set; }
+
+        public CellWalker(CellGrid grid, TileGraph graph)
+        {
+            if (graph.Q != 5) throw new ArgumentException("Aligned Cells uses {4,5} only", nameof(graph));
+            this.grid = grid; this.graph = graph;
+        }
+
+        public void Reset(double2 headXZ, CellFrame frame)
+        {
+            Cell = grid.CellAt(headXZ); Frame = frame; LastHead = headXZ;
+        }
+
+        // Master Plan §4.8: switching from Mode 1 keeps the tile id.
+        public void EnterFromCurvedWalk(in WalkerPose pose, double2 headXZ)
+            => Reset(headXZ, new CellFrame(pose.Tile, TurnFromCurvedWalk(pose.Local)));
+
+        // Master Plan §4.7: each cell edge crossed along the head's segment steps the tile graph.
+        public int Walk(double2 headXZ)
+        {
+            int2 target = grid.CellAt(headXZ);
+            if (target.Equals(Cell)) { LastHead = headXZ; return 0; }
+            Span<double> tt = stackalloc double[grid.CountX + grid.CountZ];
+            Span<int> dd = stackalloc int[grid.CountX + grid.CountZ];
+            int n = 0;
+            double2 d = headXZ - LastHead;
+            double g = grid.Side;
+            int lo, hi;
+            if (target.x > Cell.x) { lo = Cell.x + 1; hi = target.x; }
+            else { lo = target.x + 1; hi = Cell.x; }
+            if (target.x != Cell.x)
+                for (int X = lo; X <= hi; X++) { tt[n] = Param(grid.Origin.x + g * X, LastHead.x, d.x); dd[n++] = target.x > Cell.x ? 0 : 2; }
+            if (target.y > Cell.y) { lo = Cell.y + 1; hi = target.y; }
+            else { lo = target.y + 1; hi = Cell.y; }
+            if (target.y != Cell.y)
+                for (int Z = lo; Z <= hi; Z++) { tt[n] = Param(grid.Origin.y + g * Z, LastHead.y, d.y); dd[n++] = target.y > Cell.y ? 1 : 3; }
+            // insertion sort by t; stable, so equal t keeps x before z
+            for (int i = 1; i < n; i++)
+            {
+                double t = tt[i]; int dir = dd[i]; int j = i - 1;
+                while (j >= 0 && tt[j] > t) { tt[j + 1] = tt[j]; dd[j + 1] = dd[j]; j--; }
+                tt[j + 1] = t; dd[j + 1] = dir;
+            }
+            var f = Frame; var c = Cell;
+            for (int i = 0; i < n; i++)
+            {
+                f = f.Cross(graph, dd[i]);
+                c += dd[i] == 0 ? new int2(1, 0) : dd[i] == 1 ? new int2(0, 1) : dd[i] == 2 ? new int2(-1, 0) : new int2(0, -1);
+            }
+            Frame = f; Cell = c; LastHead = headXZ;
+            return n;
+        }
+
+        static double Param(double line, double from, double delta) => delta == 0 ? 0 : (line - from) / delta;
+
+        // Master Plan §4.8 / A.2: U = Boost(t)·Rot(theta); the room turn is the nearest quarter-turn.
+        public static int TurnFromCurvedWalk(in Iso2 local)
+        {
+            double2 t = Geometry2.Log(local.M.c2, -1);
+            Iso2 r = Iso2.Boost(t, -1).Inverse() * local;
+            double theta = Math.Atan2(r.M.c0.y, r.M.c0.x);
+            return (int)Math.Floor(-theta / (Math.PI / 2) + 0.5) & 3;
+        }
+    }
+}
