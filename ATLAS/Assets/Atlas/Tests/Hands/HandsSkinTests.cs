@@ -289,7 +289,8 @@ namespace Atlas.Hands.Tests
         public void Hands_Skin_Mesh_AnyPoseAHandCanTake_KeepsEveryTriangleTheRightWayOut()
         {
             // A thousand hands drawn at random from what joints allow, each finger on its own, half of them with
-            // 2 mm of error on every joint as well: no band inside out, no triangle flat.
+            // 2 mm of error on every joint as well: no band inside out, no triangle flat, every finger leaving the
+            // palm from inside it.
             var random = new Unity.Mathematics.Random(4242u);
             HandsMeshTemplate left = HandsMeshTemplate.Build(HandSide.Left), right = HandsMeshTemplate.Build(HandSide.Right);
             int[] leftIndices = HandsSkinRig.Indices(left), rightIndices = HandsSkinRig.Indices(right);
@@ -305,8 +306,18 @@ namespace Atlas.Hands.Tests
                 string what = "trial " + trial;
                 AtlasVertex[] vertices = HandsSkinRig.Skin(template, in pose, HandsSkinRig.PalmUp, out float3 min, out float3 max);
                 AssertSound(template, vertices, min, max, AtlasShading.LightDirection, what);
-                int flat = AssertWoundOutwards(vertices, side == HandSide.Left ? leftIndices : rightIndices, template.IndexCount, 0f, what);
-                Assert.That(flat, Is.EqualTo(0), what + ": flat triangles");
+                int[] indices = side == HandSide.Left ? leftIndices : rightIndices;
+                Assert.That(AssertWoundOutwards(vertices, indices, template.IndexCount, 0f, what), Is.EqualTo(0), what + ": flat triangles");
+
+                // And no seam shows where a finger or the cuff leaves the palm.
+                int palmFirst = 3 * HandJoints.FingerCount * HandsMeshTemplate.FingerTriangles, palmCount = 3 * HandsMeshTemplate.PalmTriangles;
+                for (int r = 1; r <= HandJoints.FingerCount; r++)
+                {
+                    HandsMeshTemplate.Ring ring = template.Rings[r * HandsMeshTemplate.FingerRings];
+                    for (int i = 0; i < ring.Count; i++)
+                        if (!IsInside(vertices[ring.First + i].Position, vertices, indices, palmFirst, palmCount))
+                            Assert.Fail(what + ": the first ring of tube " + r + " shows at vertex " + i);
+                }
             }
         }
 
