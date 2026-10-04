@@ -70,7 +70,8 @@ namespace Atlas.Rendering.Room
         }
 
         /// <summary>The room's light total, and the bounds of the light target of one object (design section 5.4).</summary>
-        public const int LightTotal = 60000, LightMin = 1500, LightMax = 5000;
+        public const int LightTotal = ObjectMeshRules.LightTriangles, LightMin = ObjectMeshRules.LightTargetMin,
+            LightMax = ObjectMeshRules.LightTargetMax;
 
         /// <summary>
         /// The light target of every object in a room whose n objects have a triTarget above 0:
@@ -78,8 +79,7 @@ namespace Atlas.Rendering.Room
         /// </summary>
         public static int LightTarget(int n)
         {
-            if (n <= 0) return LightMax;
-            return math.clamp(LightTotal / n, LightMin, LightMax);
+            return n <= 0 ? LightMax : ObjectMeshRules.LightTarget(n);
         }
 
         /// <summary>The light target of a room's objects: LightTarget of the number whose TriTarget is above 0.</summary>
