@@ -29,8 +29,12 @@ namespace Atlas.World
         public float3 Size;
         /// <summary>Radians, room frame.</summary>
         public float Yaw;
-        /// <summary>3000..5000.</summary>
+        /// <summary>3000..15000: the triangle target of the full copy.</summary>
         public int TriTarget;
+        /// <summary>1500..5000: the triangle target of the light copy; 0 lets the Forge choose.</summary>
+        public int TriTargetLight;
+        /// <summary>The object's profile (RoomObject.Profile): null, or exactly 256 bytes.</summary>
+        public byte[] Profile;
         /// <summary>1 to 3; Views[0] feeds generation.</summary>
         public ObjectView[] Views;
     }
