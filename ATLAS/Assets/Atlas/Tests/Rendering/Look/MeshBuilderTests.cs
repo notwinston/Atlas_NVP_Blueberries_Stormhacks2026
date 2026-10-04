@@ -65,6 +65,44 @@ namespace Atlas.Rendering.Tests.Look
         }
 
         [Test]
+        public void Squircle_FillsItsBoxAndFacesTheWalker()
+        {
+            var b = new AtlasMeshBuilder();
+            b.AddSquircle(new float3(1f, 2f, 3f), 0.35f, 0.25f, 0.045f, new float2(0.5f, 0.5f));
+            Assert.That(b.VertexCount, Is.EqualTo(1 + 4 * (AtlasMeshBuilder.SquircleSegments + 1)));
+            Assert.That(math.distance(b.BoundsMin, new float3(0.65f, 1.75f, 3f)), Is.LessThan(1e-5f));
+            Assert.That(math.distance(b.BoundsMax, new float3(1.35f, 2.25f, 3f)), Is.LessThan(1e-5f));
+            // Every triangle turns clockwise as seen from -z (Unity's front face), as AddQuad's do.
+            float area = 0f;
+            for (int i = 0; i < b.IndexCount; i += 3)
+            {
+                float3 p0 = b.Vertices[b.Indices[i]].Position;
+                float z = math.cross(b.Vertices[b.Indices[i + 1]].Position - p0, b.Vertices[b.Indices[i + 2]].Position - p0).z;
+                Assert.That(z, Is.LessThanOrEqualTo(1e-9f));
+                area -= 0.5f * z;
+            }
+            // Smaller than the box, but fuller at the corners than circular corners of that radius would be.
+            float circular = 0.7f * 0.5f - 4f * (1f - math.PI / 4f) * 0.045f * 0.045f;
+            Assert.That(area, Is.LessThan(0.7f * 0.5f).And.GreaterThan(circular));
+        }
+
+        [Test]
+        public void Squircle_ARadiusThatReachesTheShortSideMakesACapsule()
+        {
+            var b = new AtlasMeshBuilder();
+            b.AddSquircle(float3.zero, 0.1f, 0.02f, 0.02f, float2.zero);
+            float area = 0f;
+            for (int i = 0; i < b.IndexCount; i += 3)
+            {
+                float3 p0 = b.Vertices[b.Indices[i]].Position;
+                area -= 0.5f * math.cross(b.Vertices[b.Indices[i + 1]].Position - p0, b.Vertices[b.Indices[i + 2]].Position - p0).z;
+            }
+            // A stadium: the middle rectangle and one whole circle, less what the chords cut off.
+            float stadium = 0.16f * 0.04f + math.PI * 0.02f * 0.02f;
+            Assert.That(area, Is.EqualTo(stadium).Within(0.02f * stadium));
+        }
+
+        [Test]
         public void PackColor_PutsShadeInTheLowestByte()
         {
             uint color = AtlasVertex.PackColor(0x12, 0x34);
