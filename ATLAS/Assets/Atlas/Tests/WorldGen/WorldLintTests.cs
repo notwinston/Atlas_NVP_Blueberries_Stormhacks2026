@@ -39,6 +39,8 @@ namespace Atlas.WorldGen.Tests
             Assert.AreEqual(0, report.CoincidentFaces, "§3.4 no coincident faces");
             Assert.AreEqual(0, report.StructuralConflicts);
             Assert.AreEqual(0, report.RegionMismatches, "§9.5.6 same region on two runs");
+            Assert.AreEqual(0, report.ContentMismatches, "§9.5.6 same content on two runs");
+            Assert.Greater(report.CorridorsTwoClosed, report.Corridors / 2, "§3.4 Corridor: kerbs on two opposite edges (normal case)");
             Assert.AreEqual(4, report.RegionsPresent, "§10.1.4 four regions");
             Assert.AreEqual(report.WorldHash1, report.WorldHash2, "same seed same world hash");
             Assert.IsTrue(report.Passed, report.ToString());
@@ -66,6 +68,7 @@ namespace Atlas.WorldGen.Tests
             Assert.AreEqual(0, none);
         }
 
+        // §3.4 "a tower within rho = 2.5" (the check must be able to fail)
         [Test]
         public void WorldLint_DetectsMissingTower()
         {
@@ -76,6 +79,7 @@ namespace Atlas.WorldGen.Tests
             Assert.LessOrEqual(ok, 2.5);
         }
 
+        // §3.4 / §11.1 "every tile reachable" (the check must be able to fail)
         [Test]
         public void WorldLint_DetectsUnreachable()
         {

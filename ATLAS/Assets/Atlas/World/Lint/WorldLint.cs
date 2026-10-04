@@ -41,6 +41,16 @@ namespace Atlas.World.Lint
             int maxClosed = 0;
             foreach (var t in ball) maxClosed = Math.Max(maxClosed, PopCount(g.Content(t).ClosedMask));
             rep.MaxClosedEdges = maxClosed;
+            foreach (var t in ball)
+            {
+                var c = g.Content(t);
+                if (c.Archetype != Archetype.Corridor) continue;
+                rep.Corridors++;
+                int axis = (int)((c.PropSeed >> 8) & 1); // same axis rule as WorldGenerator (§3.4)
+                if ((c.ClosedMask & (1 << axis)) != 0 && (c.ClosedMask & (1 << (axis + 2))) != 0) rep.CorridorsTwoClosed++;
+                else if ((c.ClosedMask & ((1 << axis) | (1 << (axis + 2)))) != 0) rep.CorridorsOneClosed++;
+                for (int e = 0; e < 4; e++) if ((c.KerbMask & (1 << e)) != 0) rep.CorridorKerbs++;
+            }
             rep.Unreachable = CountUnreachable(g, ball, s.ReachDepth, t => g.Content(t).ClosedMask);
             if (rep.Unreachable > 0) rep.Failures.Add($"{rep.Unreachable} tiles unreachable from tile zero");
             if (maxClosed > 3) rep.Failures.Add($"a tile has {maxClosed} closed edges");
@@ -220,13 +230,15 @@ namespace Atlas.World.Lint
             {
                 var t = ball[i];
                 var a = g1.Content(t); var b = g2.Content(t);
-                if (a != b || Regions.RegionOf(t) != b.Region || a.Region != Regions.RegionOf(t)) rep.RegionMismatches++;
+                if (Regions.RegionOf(t) != b.Region || a.Region != Regions.RegionOf(t)) rep.RegionMismatches++;
+                if (a != b) rep.ContentMismatches++;
                 seenRegions[a.Region] = true;
             }
             foreach (bool r in seenRegions) if (r) rep.RegionsPresent++;
             rep.WorldHash1 = g1.WorldHash(s.LintDepth);
             rep.WorldHash2 = g2.WorldHash(s.LintDepth);
-            if (rep.RegionMismatches > 0) rep.Failures.Add($"{rep.RegionMismatches} tiles differ between two generator runs");
+            if (rep.RegionMismatches > 0) rep.Failures.Add($"{rep.RegionMismatches} tiles have a region that differs from Regions.RegionOf or between two runs");
+            if (rep.ContentMismatches > 0) rep.Failures.Add($"{rep.ContentMismatches} tiles differ in content between two generator runs");
             if (rep.RegionsPresent != Regions.Count) rep.Failures.Add($"only {rep.RegionsPresent} regions present");
             if (rep.WorldHash1 != rep.WorldHash2) rep.Failures.Add("world hash differs between two runs");
         }

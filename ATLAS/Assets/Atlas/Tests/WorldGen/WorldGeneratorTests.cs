@@ -144,6 +144,7 @@ namespace Atlas.WorldGen.Tests
             for (int i = ball.Count - 1; i >= 0; i--) Assert.AreEqual(ca[i], b.Content(ball[i]), ball[i].ToString());
         }
 
+        // §3.4 reachability (T strictly decreasing; tree edge open outside the planned ball, kerbs opened by BFS inside it) and §3.5 kerb placement (axis edges only, never doubled)
         [Test]
         public void Parent_And_Kerbs()
         {
@@ -158,7 +159,7 @@ namespace Atlas.WorldGen.Tests
                     {
                         var p = g.Parent(t);
                         Assert.Less(p.Tu + p.Tv * Phi, t.Tu + t.Tv * Phi, "T decreases");
-                        Assert.AreEqual(0, c.ClosedMask & (1 << c.ParentEdge), "tree edge open");
+                        if (!g.IsPlanned(t) || !g.IsPlanned(p)) Assert.AreEqual(0, c.ClosedMask & (1 << c.ParentEdge), "tree edge open outside the planned ball");
                     }
                     else Assert.AreEqual(-1, c.ParentEdge);
                     if (c.Archetype != Archetype.Corridor) continue;
@@ -174,6 +175,49 @@ namespace Atlas.WorldGen.Tests
                 TestContext.WriteLine($"seed {seed}: {kerbed} kerbs on corridors");
                 Assert.Greater(kerbed, 0);
             }
+        }
+
+        // §3.4 Corridor: "low kerb walls (0.9 m) on two opposite edges". Both axis edges are closed unless the edge touches
+        // Home, carries a feature (door/span), or is a kerb the reachability pass had to open (inside the planned ball, so not asserted per edge).
+        [Test]
+        public void Corridor_TwoOppositeKerbs()
+        {
+            foreach (uint seed in Seeds)
+            {
+                var g = new WorldGenerator(seed, R45);
+                int corridors = 0, two = 0, one = 0, none = 0, kerbs = 0;
+                foreach (var t in g.Ball(6))
+                {
+                    var c = g.Content(t);
+                    if (c.Archetype != Archetype.Corridor) continue;
+                    corridors++;
+                    int axis = (int)((c.PropSeed >> 8) & 1);
+                    int closedAxis = 0;
+                    for (int e = axis; e < 4; e += 2)
+                    {
+                        var n = g.Graph.Neighbour(t, e);
+                        bool closed = (c.ClosedMask & (1 << e)) != 0;
+                        if (closed) closedAxis++;
+                        else
+                        {
+                            bool excused = g.IsHome(n) || c.FeatureEdge == e || g.Content(n).FeatureEdge == g.BackEdge(t, e) || g.IsPlanned(t);
+                            Assert.IsTrue(excused, $"corridor {t} axis edge {e} open without reason");
+                        }
+                    }
+                    if (closedAxis == 2) two++; else if (closedAxis == 1) one++; else none++;
+                    for (int e = 0; e < 4; e++) if ((c.KerbMask & (1 << e)) != 0) kerbs++;
+                }
+                TestContext.WriteLine($"seed {seed}: corridors={corridors} two={two} one={one} none={none} kerbs={kerbs}");
+                Assert.Greater(two, corridors / 2, "most corridors carry two opposite kerbs");
+            }
+        }
+
+        // §8.1 / §3.4 "each with its own hue" (provisional until P1-A06): four distinct regions, four distinct hues
+        [Test]
+        public void Region_Hues_Distinct()
+        {
+            var hues = new HashSet<float>();
+            for (int r = 0; r < Regions.Count; r++) Assert.IsTrue(hues.Add(Regions.Hue(r)));
         }
 
         // §3.5; §10.1.4; D3
@@ -217,6 +261,7 @@ namespace Atlas.WorldGen.Tests
             }
         }
 
+        // Master Plan A.5 / kernel.md §9.2: exact Z[phi] sign, no double rounding
         [Test]
         public void ZPhi_ExactSign()
         {

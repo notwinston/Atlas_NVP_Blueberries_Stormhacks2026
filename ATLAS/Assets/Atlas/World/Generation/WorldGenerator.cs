@@ -6,6 +6,10 @@ using Unity.Mathematics;
 namespace Atlas.World
 {
     // Master Plan §3.4 world generator, {4,5} only. Main thread only (TileGraph is not thread-safe).
+    // Hand-over: (1) the world depends on the whole footprint (TowerClass is the first class with no Home tile), so the Spectator
+    // needs the same footprint as the phone, not only the seed; WorldHash covers HomeTiles and TowerClass to detect a mismatch.
+    // (2) The memo dictionaries and the kerb plan allocate on first query of a tile (the plan on the first Content call, ball of
+    // PlanDepth): P1-B06 must pre-warm Content for the tiles it will pool, or cache content per pooled tile.
     public sealed class WorldGenerator
     {
         const int CodeSpanProposal = 100, CodeStartA = 101, CodeStartB = 102;
@@ -316,21 +320,98 @@ namespace Atlas.World
             return node;
         }
 
-        // Corridor = 0.9 m kerbs on two opposite edges (§3.4/§3.5); a kerb is never doubled, never on a tree edge,
+        // Corridor = 0.9 m kerbs on two opposite edges (§3.4/§3.5); a kerb is never doubled,
         // never next to Home and never on a feature edge (D4).
         bool WantKerb(TileId t, int e) => DoorStage(t).Arch == (int)Archetype.Corridor && (e & 1) == CorridorAxis(t.ContentSeed(Seed));
 
-        bool EdgeClosed(TileId t, int e, out bool ownedByT)
+        // Edge wanted closed by a kerb on either side (before the reachability tree opens its own edges).
+        bool WantsClosed(TileId t, int e, out bool ownedByT)
         {
             ownedByT = false;
             var n = graph.Neighbour(t, e);
             int e2 = BackEdge(t, e);
-            if (home.Contains(t) || home.Contains(n) || IsTreeEdge(t, n)) return false;
+            if (home.Contains(t) || home.Contains(n)) return false;
             if (DoorStage(t).Feature == e || DoorStage(n).Feature == e2) return false;
             bool wt = WantKerb(t, e), wn = WantKerb(n, e2);
             if (!wt && !wn) return false;
             ownedByT = wt && (!wn || TileOrder.Compare(t, n) < 0);
             return true;
+        }
+
+        // Reachability (§3.4, §11.1 "100% of tiles reachable"). Inside the planned ball (PlanDepth) the kerbs are laid first and a
+        // kerb is opened only when the open edges would not reach its far side: breadth-first from tile zero over unwanted edges,
+        // and whenever that stalls, the stalled-at kerb that comes first in (TileOrder, edge) order is opened. Outside the ball
+        // the T-descent tree edges are kept open instead (every tile has an open edge towards a smaller T), which also connects
+        // the ball's rim. Both are pure functions of (seed, footprint).
+        public const int PlanDepth = 8; // equals WorldLintSettings.ReachDepth
+
+        sealed class EdgeOrder : IComparer<(TileId t, int e)>
+        {
+            public int Compare((TileId t, int e) a, (TileId t, int e) b)
+            {
+                int c = TileOrder.Compare(a.t, b.t);
+                return c != 0 ? c : a.e.CompareTo(b.e);
+            }
+        }
+
+        HashSet<(TileId, int)> openedKerbs;
+        HashSet<TileId> planned;
+        public bool IsPlanned(TileId t) { if (openedKerbs == null) BuildPlan(); return planned.Contains(t); }
+        public int OpenedKerbCount => (openedKerbs ?? BuildPlan()).Count;
+
+        HashSet<(TileId, int)> BuildPlan()
+        {
+            var opened = new HashSet<(TileId, int)>();
+            var ball = Ball(PlanDepth);
+            var inBall = new HashSet<TileId>(ball);
+            var reached = new HashSet<TileId> { TileId.Zero };
+            var queue = new Queue<TileId>();
+            var frontier = new SortedSet<(TileId t, int e)>(new EdgeOrder());
+            queue.Enqueue(TileId.Zero);
+            while (true)
+            {
+                while (queue.Count > 0)
+                {
+                    var t = queue.Dequeue();
+                    for (int e = 0; e < 4; e++)
+                    {
+                        var n = graph.Neighbour(t, e);
+                        if (!inBall.Contains(n) || reached.Contains(n)) continue;
+                        if (WantsClosed(t, e, out _)) frontier.Add((t, e));
+                        else { reached.Add(n); queue.Enqueue(n); }
+                    }
+                }
+                bool progressed = false;
+                while (frontier.Count > 0)
+                {
+                    var f = frontier.Min; frontier.Remove(f);
+                    var n = graph.Neighbour(f.t, f.e);
+                    if (reached.Contains(n)) continue;
+                    opened.Add(EdgeKey(f.t, f.e));
+                    reached.Add(n); queue.Enqueue(n); progressed = true;
+                    break;
+                }
+                if (!progressed) break;
+            }
+            planned = inBall;
+            openedKerbs = opened;
+            return opened;
+        }
+
+        (TileId, int) EdgeKey(TileId t, int e)
+        {
+            var n = graph.Neighbour(t, e);
+            return TileOrder.Compare(t, n) < 0 ? (t, e) : (n, BackEdge(t, e));
+        }
+
+        bool EdgeClosed(TileId t, int e, out bool ownedByT)
+        {
+            ownedByT = false;
+            var n = graph.Neighbour(t, e);
+            if (openedKerbs == null) BuildPlan();
+            bool open = planned.Contains(t) && planned.Contains(n) ? openedKerbs.Contains(EdgeKey(t, e)) : IsTreeEdge(t, n);
+            if (open) return false;
+            return WantsClosed(t, e, out ownedByT);
         }
 
         public TileContent Content(TileId id)
