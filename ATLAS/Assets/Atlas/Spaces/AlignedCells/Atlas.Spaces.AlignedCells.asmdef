@@ -3,6 +3,7 @@
     "rootNamespace": "Atlas.Spaces.AlignedCells",
     "references": [
         "Atlas.Kernel",
+        "Atlas.Link",
         "Atlas.World",
         "Atlas.Rendering",
         "Atlas.Input",
