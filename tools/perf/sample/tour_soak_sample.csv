@@ -1,0 +1,22 @@
+# atlas perf tour v1
+# run=soak
+# session=20261004T160500Z-11aa
+# room=budget_room
+# pose=tracked
+# depth=on
+# device=sample
+# build=0.1.0 release
+# intervalSeconds=60
+# plannedSeconds=900
+# note=S2 Curved Walk is not in this build: the soak alternates S1 Glued 5x5 and S0 Home
+# note=the space changes every 60 s; the soak lasts 900 s
+# note=LiDAR depth on
+# note=sample data for tools/perf/test_summarise.py: not a measurement
+run,kind,label,space,variant,room,pose,depth,seconds,frames,p50,p95,p99,max,over17_2,over33_8,fpsMean,fpsMin,drawCalls,setPass,tris,cpuMainP95,cpuRenderP95,gpuP95,memMB,gcAllocB,gcAllocMaxB,thermalMax,tFairS,tSeriousS,tCriticalS,tier,effectMs,result,failed,unmeasured
+# thermalAtStart=0
+# thermal=312.4 1
+# thermal=731 2
+soak,space,S1 Glued 5x5,S1,5x5,budget_room,tracked,on,456.0,27290,16.670,17.400,19.800,41.000,2.900,0.030,59.600,51.000,126,12,148000,5.600,3.600,8.800,668,0,0,2,312.4,731.0,-1.0,-1,-1.0,pass,,
+soak,space,S0 Home,S0,,budget_room,tracked,on,399.0,23900,16.670,17.000,18.200,30.200,0.900,0.000,59.800,56.000,30,9,124000,4.100,2.700,5.900,668,0,0,2,312.4,731.0,-1.0,-1,-1.0,pass,,
+soak,total,soak,,,budget_room,tracked,on,855.0,51190,16.670,17.200,19.100,41.000,1.970,0.016,59.700,51.000,126,12,148000,5.000,3.300,7.900,668,0,0,2,312.4,731.0,-1.0,-1,-1.0,pass,,
+# result=pass

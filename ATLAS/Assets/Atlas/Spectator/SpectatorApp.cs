@@ -89,7 +89,7 @@ namespace Atlas.Spectator
             AtlasServices.Register<IFrameLoop>(Loop);
 
             // The mirror camera is the head every lane reads.
-            View = SpectatorView.Create(boot.Systems, this);
+            View = SpectatorView.Create(boot.Root, this);
             boot.Head = View.Head;
 
             // Room content: it rebuilds on the host's RoomChanged and ticks from the upload step once booted.

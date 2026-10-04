@@ -52,6 +52,7 @@ class Run:
         self.rows = []
         self.result = ""
         self.aborted = ""
+        self.raw = False        # made from the probe's rows, with no summary row
 
     @property
     def kind(self):
@@ -122,11 +123,13 @@ def read_events(text, source):
         except ValueError:
             continue
         name, data = event.get("ev", ""), event.get("data") or {}
-        if name == "session" and isinstance(data, dict) and run is None:
-            session = data.get("sessionId", "")
+        if not isinstance(data, dict):
+            continue
         if name == "perf.runBegin":
             run = Run(source)
             run.facts["run"] = data.get("run", "")
+            if "plannedSeconds" in data:
+                run.facts["plannedSeconds"] = data["plannedSeconds"]
             runs.append(run)
         elif name == "perf.note" and run is not None:
             run.notes.append(data.get("text", ""))
@@ -149,6 +152,7 @@ def read_events(text, source):
 def read_perf(text, source):
     """The probe's rows with no summary: one column per stretch of one space, from the last row of the stretch."""
     run = Run(source)
+    run.raw = True
     run.facts["run"] = "tour"
     run.notes.append("made from the probe's rows: no settle time was left out, and the stretches are those of the session")
     reader = csv.DictReader(io.StringIO(text))
@@ -264,7 +268,13 @@ def judge(run, row):
     if row["kind"] == "ladder":
         return judge_tier(row)
     if row["kind"] == "total":
-        planned = 0.0 if run.aborted else float(run.facts.get("plannedSeconds", row["seconds"]) or 0)
+        if run.aborted:
+            planned = 0.0
+        elif "plannedSeconds" in run.facts:
+            planned = float(run.facts["plannedSeconds"] or 0)
+        else:
+            # The length is not in this file: the phone's own word on it stands.
+            planned = 0.0 if "short" in row["unmeasured"].split("|") else SOAK_SECONDS
         return judge_soak(row, planned)
     failed, unmeasured = judge_space(row, run.kind == "tour")
     # What only the phone can know (the space was never entered, or was left) is taken from its verdict.
@@ -287,8 +297,8 @@ def cell(value, text, name, failed, unmeasured):
     return "**%s**" % text if name in failed else text
 
 
-def metrics_table(columns, rows_by_label, judged):
-    """The table of section 11.2: a row per metric, a column per space."""
+def metrics_table(columns, rows_by_label, judged, cold=True):
+    """The table of section 11.2: a row per metric, a column per space. cold is the per-space run."""
     def line(cells):
         return "| " + " | ".join(cells) + " |"
 
@@ -329,10 +339,11 @@ def metrics_table(columns, rows_by_label, judged):
     metric("Set-pass calls", "≤ 60", whole("setPass", "setPass"))
     metric("Triangles, both eyes", "≤ 500k", whole("tris", "tris"))
     metric("CPU main / render p95 (ms)", "≤ 8 / 6", cpu)
-    metric("GPU p95, cold (ms)", "≤ 9", lambda r, f, u: cell(r["gpuP95"], num(r["gpuP95"]), "gpu", f, u))
+    metric("GPU p95, cold (ms)" if cold else "GPU p95, cold / hot (ms)", "≤ 9" if cold else "≤ 9 / 14",
+           lambda r, f, u: cell(r["gpuP95"], num(r["gpuP95"]), "gpu", f, u))
     metric("Resident memory (MB)", "≤ 1536 (1.5 GB)", whole("memMB", "mem"))
     metric("Managed allocation per frame (B)", "≤ 1024", whole("gcAllocB", "gcAlloc"))
-    metric("Thermal state, highest", "Nominal (cold)", thermal)
+    metric("Thermal state, highest", "Nominal (cold)" if cold else "see the soak's rule", thermal)
     metric("Frames measured", "", lambda r, f, u: "%d" % r["frames"])
     metric("Must column", "", result)
     return out
@@ -378,19 +389,19 @@ def render_run(run, out, problems):
     if run.aborted:
         out.append("")
         out.append("**This run ended early** (%s): its numbers are not evidence." % run.aborted)
-    for note in run.notes:
+    if run.notes:
         out.append("")
-        out.append("- " + note)
+        out.extend("- " + note for note in run.notes)
     out.append("")
 
     if spaces:
         columns = [r["label"] for r in spaces]
         by_label = dict((r["label"], r) for r in spaces)
         by_judged = dict((r["label"], judged[id(r)]) for r in spaces)
-        out.extend(metrics_table(columns, by_label, by_judged))
+        out.extend(metrics_table(columns, by_label, by_judged, kind == "tour"))
         if kind != "tour":
             out.append("")
-            out.append("In a soak the GPU row is judged against the hot limit (≤ 14 ms) once the phone has left Nominal.")
+            out.append("In a soak the GPU row is judged against the hot limit once the phone has left Nominal.")
         out.append("")
 
     for row in totals:
@@ -461,8 +472,17 @@ def summarise(paths):
     runs, problems = [], []
     for path in paths:
         runs.extend(read_file(path))
-    # A summary row beats the probe's rows of the same session.
-    have_summary = any(r.rows and r.source.endswith(".jsonl") or r.facts.get("session") for r in runs)
+    # A summary row beats the probe's rows, and a run given twice (the phone's file and its events) counts once.
+    if any(r.rows and not r.raw for r in runs):
+        runs = [r for r in runs if not r.raw]
+    seen, unique = set(), []
+    for run in runs:
+        signature = (run.kind, tuple((r["label"], r["frames"], r["p95"], r["effectMs"]) for r in run.rows))
+        if run.rows and signature in seen:
+            continue
+        seen.add(signature)
+        unique.append(run)
+    runs = unique
     out = ["# ATLAS performance evidence", ""]
     out.append("Made by `tools/perf/summarise.py` from %d file%s. A value in bold is over its \"must\" limit of "
                "Master Plan section 11.2; n/a is a value the platform did not report (the Editor has no thread times)."
@@ -483,7 +503,7 @@ def summarise(paths):
             out.append("- " + problem)
         out.append("")
     failed = any("FAIL" in p for p in problems)
-    return "\n".join(out), failed, have_summary
+    return "\n".join(out), failed
 
 
 def main(argv=None):
@@ -500,7 +520,7 @@ def main(argv=None):
     if not args.files:
         parser.error("give at least one file, or --empty")
     try:
-        text, failed, _ = summarise(args.files)
+        text, failed = summarise(args.files)
     except (OSError, ValueError) as error:
         sys.stderr.write("summarise.py: %s\n" % error)
         return 2

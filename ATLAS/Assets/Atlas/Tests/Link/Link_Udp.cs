@@ -177,6 +177,95 @@ namespace Atlas.Link.Tests
             }
         }
 
+        /// <summary>Counts what a transport reports while nobody answers.</summary>
+        sealed class AttemptListener : ILinkTransportListener
+        {
+            public int Connected, Failed, NotAnAddress;
+            public string LastReason;
+
+            public void OnPeerConnected(int peerId) { Connected++; }
+
+            public void OnPeerDisconnected(int peerId, string reason)
+            {
+                if (peerId < 0) NotAnAddress++;
+                else Failed++;
+                LastReason = reason;
+            }
+
+            public void OnReceive(int peerId, byte[] data, int offset, int length, LinkDelivery delivery) { }
+        }
+
+        [Test]
+        public void With_no_station_a_repeated_connect_allocates_nothing_and_an_attempt_fails_in_half_a_second()
+        {
+            // The Station's address with no Hub running: a UDP port that is open and never answers.
+            using (var silent = new System.Net.Sockets.UdpClient(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 0)))
+            {
+                int port = ((System.Net.IPEndPoint)silent.Client.LocalEndPoint).Port;
+                var wire = new LiteNetTransport();
+                var listener = new AttemptListener();
+                wire.Listener = listener;
+                try
+                {
+                    Assert.That(wire.StartClient(), Is.True);
+                    Assert.That(wire.Manager.ReconnectDelay, Is.EqualTo(LiteNetTransport.ClientReconnectDelayMs));
+                    Assert.That(wire.Manager.ReconnectDelay, Is.EqualTo(250));
+                    Assert.That(wire.Manager.MaxConnectAttempts, Is.EqualTo(1));
+
+                    // The first call parses the address and LiteNetLib makes its peer. Every further call while
+                    // that attempt runs (the watchdog's back-off, the Reconnect button) must cost nothing.
+                    Stopwatch watch = Stopwatch.StartNew();
+                    wire.Connect("127.0.0.1", port);
+                    wire.Connect("127.0.0.1", port);
+                    long before = System.GC.GetAllocatedBytesForCurrentThread();
+                    for (int i = 0; i < 64; i++) wire.Connect("127.0.0.1", port);
+                    long repeated = System.GC.GetAllocatedBytesForCurrentThread() - before;
+                    Assert.That(watch.ElapsedMilliseconds, Is.LessThan(200L), "measured while the first attempt was still running");
+                    Assert.That(repeated, Is.EqualTo(0L), "bytes allocated by 64 Connect calls to the same address");
+
+                    // One attempt: two requests 250 ms apart, failed after 500 ms. The library does not go on
+                    // retrying for seconds underneath the link's own back-off.
+                    while (listener.Failed == 0 && watch.ElapsedMilliseconds < 4000)
+                    {
+                        wire.Poll();
+                        Thread.Sleep(2);
+                    }
+                    long failedAfterMs = watch.ElapsedMilliseconds;
+                    Assert.That(listener.Failed, Is.EqualTo(1));
+                    Assert.That(listener.LastReason, Is.EqualTo("ConnectionFailed"));
+                    Assert.That(failedAfterMs, Is.InRange(400L, 1500L));
+                    Assert.That(listener.Connected, Is.EqualTo(0));
+
+                    // The next attempt is a new peer inside LiteNetLib; the address is not parsed again and the key
+                    // is not written again. Reported, not asserted: those bytes are the library's.
+                    before = System.GC.GetAllocatedBytesForCurrentThread();
+                    wire.Connect("127.0.0.1", port);
+                    long fresh = System.GC.GetAllocatedBytesForCurrentThread() - before;
+                    TestContext.Out.WriteLine("attempt failed after " + failedAfterMs + " ms; a new attempt allocates " + fresh + " B inside LiteNetLib");
+
+                    // A host name is refused without a DNS lookup, and saying so twice does not allocate either.
+                    wire.Connect("station.local", port);
+                    Assert.That(listener.NotAnAddress, Is.EqualTo(1));
+                    Assert.That(listener.LastReason, Is.EqualTo("address is not an IP literal"));
+                    before = System.GC.GetAllocatedBytesForCurrentThread();
+                    for (int i = 0; i < 8; i++) wire.Connect("station.local", port);
+                    Assert.That(System.GC.GetAllocatedBytesForCurrentThread() - before, Is.EqualTo(0L));
+                    Assert.That(listener.NotAnAddress, Is.EqualTo(9));
+
+                    // "Change IP": another address is parsed once and used from then on.
+                    wire.Connect("127.0.0.2", port);
+                    wire.Connect("127.0.0.2", port);
+                    before = System.GC.GetAllocatedBytesForCurrentThread();
+                    for (int i = 0; i < 8; i++) wire.Connect("127.0.0.2", port);
+                    Assert.That(System.GC.GetAllocatedBytesForCurrentThread() - before, Is.EqualTo(0L));
+                }
+                finally
+                {
+                    wire.Stop();
+                }
+            }
+        }
+
         [Test]
         public void A_client_rejects_incoming_connections_and_a_wrong_key_is_refused()
         {

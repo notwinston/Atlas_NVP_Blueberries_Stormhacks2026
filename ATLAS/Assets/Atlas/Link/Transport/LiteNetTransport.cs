@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using LiteNetLib;
+using LiteNetLib.Utils;
 
 namespace Atlas.Link
 {
@@ -12,9 +13,22 @@ namespace Atlas.Link
     /// </summary>
     public sealed class LiteNetTransport : ILinkTransport, ILinkPeerAddresses, INetEventListener
     {
+        /// <summary>Milliseconds between the two connect requests of one attempt, and from the second to giving up.</summary>
+        public const int ClientReconnectDelayMs = 250;
+
+        // The connection key as LiteNetLib puts it on the wire, made once: connecting with the key as a string
+        // would build a writer and its buffer for every attempt.
+        static readonly byte[] s_keyBytes = NetDataWriter.FromString(LinkProtocol.ConnectionKey).CopyData();
+
         readonly NetManager _net;
         readonly Dictionary<int, NetPeer> _peers = new Dictionary<int, NetPeer>();
         bool _isHost;
+
+        // The Hub's end point, parsed once per (address, port). With the Station away the client asks to connect
+        // again and again for the whole session; none of those calls may allocate (section 7.5, rule 6).
+        string _connectAddress;
+        int _connectPort;
+        IPEndPoint _connectEndPoint;    // null when the address is not an IP literal
 
         public LiteNetTransport()
         {
@@ -45,6 +59,10 @@ namespace Atlas.Link
         {
             _isHost = false;
             _net.AllowPeerAddressChange = false;
+            // One attempt is two requests 250 ms apart and has failed after 500 ms. The link's own back-off decides
+            // when the next one starts, so the library's retries must not run underneath it for seconds.
+            _net.ReconnectDelay = ClientReconnectDelayMs;
+            _net.MaxConnectAttempts = 1;
             return _net.IsRunning || _net.Start();
         }
 
@@ -59,16 +77,23 @@ namespace Atlas.Link
         public void Connect(string address, int port)
         {
             if (!_net.IsRunning || string.IsNullOrEmpty(address)) return;
-            // An IP literal only: a host name would resolve synchronously on this thread. Refusing one here keeps
-            // the frame loop free of DNS (Master Plan section 7.5, rule 2).
-            IPAddress ip;
-            if (!IPAddress.TryParse(address, out ip))
+            if (port != _connectPort || !string.Equals(address, _connectAddress, System.StringComparison.Ordinal))
+            {
+                // An IP literal only: a host name would resolve synchronously on this thread. Refusing one here
+                // keeps the frame loop free of DNS (Master Plan section 7.5, rule 2).
+                IPAddress ip;
+                _connectEndPoint = IPAddress.TryParse(address, out ip) ? new IPEndPoint(ip, port) : null;
+                _connectAddress = address;
+                _connectPort = port;
+            }
+            if (_connectEndPoint == null)
             {
                 ILinkTransportListener listener = Listener;
                 if (listener != null) listener.OnPeerDisconnected(-1, "address is not an IP literal");
                 return;
             }
-            _net.Connect(new IPEndPoint(ip, port), LinkProtocol.ConnectionKey);
+            // While an attempt to this end point is still running, LiteNetLib hands back the peer it has.
+            _net.Connect(_connectEndPoint, new System.ReadOnlySpan<byte>(s_keyBytes));
         }
 
         public void Poll()

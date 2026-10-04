@@ -1,0 +1,22 @@
+# atlas perf tour v1
+# run=tour
+# session=20261004T153012Z-a3f9
+# room=budget_room
+# pose=synthetic
+# depth=on
+# device=sample
+# build=0.1.0 release
+# plannedSeconds=165
+# note=S2 Curved Walk is not in this build: not measured
+# note=S3 Aligned Cells is not in this build: not measured
+# note=S4 Small Planet is not in this build: not measured
+# note=visit 30 s per space after 3 s settle
+# note=sample data for tools/perf/test_summarise.py: not a measurement
+run,kind,label,space,variant,room,pose,depth,seconds,frames,p50,p95,p99,max,over17_2,over33_8,fpsMean,fpsMin,drawCalls,setPass,tris,cpuMainP95,cpuRenderP95,gpuP95,memMB,gcAllocB,gcAllocMaxB,thermalMax,tFairS,tSeriousS,tCriticalS,tier,effectMs,result,failed,unmeasured
+# thermalAtStart=0
+tour,space,S0 Home,S0,,budget_room,synthetic,on,30.0,1800,16.670,16.920,17.480,19.200,0.611,0.000,59.900,59.000,30,9,124000,3.900,2.600,4.400,598,0,0,0,-1.0,-1.0,-1.0,-1,-1.0,pass,,
+tour,space,S1 Glued 5x5,S1,5x5,budget_room,synthetic,on,30.0,1799,16.670,17.050,18.100,22.400,1.556,0.000,59.800,58.000,126,12,148000,5.100,3.400,6.200,641,0,0,0,-1.0,-1.0,-1.0,-1,-1.0,pass,,
+tour,space,S1 Glued 3x3x3,S1,3x3x3,budget_room,synthetic,on,30.0,1798,16.670,17.110,18.300,23.000,1.724,0.000,59.800,58.000,134,12,150000,5.300,3.500,6.400,644,0,0,0,-1.0,-1.0,-1.0,-1,-1.0,pass,,
+tour,space,S5 Impossible Rooms,S5,,budget_room,synthetic,on,30.0,1771,16.680,20.400,25.900,34.600,6.211,0.056,59.000,52.000,58,24,142000,6.200,3.000,9.600,655,512,4096,0,-1.0,-1.0,-1.0,-1,-1.0,fail,p95|over17_2|gpu,
+tour,space,S6 Slicer,S6,,budget_room,synthetic,on,30.0,1800,16.670,16.980,17.900,20.100,0.889,0.000,59.900,59.000,34,10,131000,4.600,2.700,4.900,612,0,0,0,-1.0,-1.0,-1.0,-1,-1.0,pass,,
+# result=fail

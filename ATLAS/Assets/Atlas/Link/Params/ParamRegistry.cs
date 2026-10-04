@@ -62,6 +62,7 @@ namespace Atlas.Link
         internal Action<int> _onInt;
         internal Action<bool> _onBool;
         internal string[] _names;
+        bool _live;
 
         internal ParamEntry(ParamRegistry registry, ushort id, string name, string group, ParamKind kind, bool onRelease)
         {
@@ -107,6 +108,23 @@ namespace Atlas.Link
         /// parameter keeps its value and can still be set; the Console and the menu show its group folded.
         /// </summary>
         public bool Active { get; internal set; }
+
+        /// <summary>
+        /// True for a parameter whose changes are echoed to the Station at once rather than batched: one that code
+        /// on the phone keeps writing and the Console should follow as it moves. False unless set, typically right
+        /// after the <c>Declare</c> call; it survives a redeclaration. Carried in the manifest as <c>live</c>.
+        /// Setting it marks the manifest stale.
+        /// </summary>
+        public bool Live
+        {
+            get { return _live; }
+            set
+            {
+                if (_live == value) return;
+                _live = value;
+                Registry.NoteManifestChanged();
+            }
+        }
 
         /// <summary>Number of named values of an enum parameter; 0 for the other kinds.</summary>
         public int EnumCount { get { return _names != null ? _names.Length : 0; } }
@@ -302,6 +320,8 @@ namespace Atlas.Link
                 if (!string.Equals(a[i], b[i], StringComparison.Ordinal)) return false;
             return true;
         }
+
+        internal void NoteManifestChanged() { ManifestVersion++; }
 
         // ---- enumeration -------------------------------------------------------------------------------
 

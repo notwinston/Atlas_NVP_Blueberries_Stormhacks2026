@@ -220,6 +220,8 @@ namespace Atlas.Link
         public string[] Names;
         /// <summary>False while the parameter's group is inactive (its space is not entered).</summary>
         public bool Active;
+        /// <summary>True when the parameter's changes are echoed at once (<see cref="ParamEntry.Live"/>).</summary>
+        public bool Live;
     }
 
     /// <summary>
@@ -250,7 +252,7 @@ namespace Atlas.Link
                 m.Params.Add(new ParamManifestEntry
                 {
                     Id = e.Id, Name = e.Name, Group = e.Group, Min = e.Min, Max = e.Max, Def = e.Default,
-                    Val = e.Value, OnRelease = e.OnRelease, Kind = e.Kind, Names = names, Active = e.Active
+                    Val = e.Value, OnRelease = e.OnRelease, Kind = e.Kind, Names = names, Active = e.Active, Live = e.Live
                 });
             }
             return m;
@@ -273,6 +275,8 @@ namespace Atlas.Link
                     .Set("onRelease", e.OnRelease)
                     .Set("kind", ParamRegistry.KindName(e.Kind))
                     .Set("active", e.Active);
+                // Written only when set, as names is for enums: most parameters are not live.
+                if (e.Live) p.Set("live", true);
                 if (e.Names != null)
                 {
                     JsonValue names = JsonValue.Array();
@@ -302,7 +306,8 @@ namespace Atlas.Link
                     Val = p.GetFloat("val"),
                     OnRelease = p.GetBool("onRelease"),
                     Kind = ParseKind(p.GetString("kind")),
-                    Active = p.GetBool("active", true)
+                    Active = p.GetBool("active", true),
+                    Live = p.GetBool("live")
                 };
                 JsonValue names = p["names"];
                 if (names.IsArray)

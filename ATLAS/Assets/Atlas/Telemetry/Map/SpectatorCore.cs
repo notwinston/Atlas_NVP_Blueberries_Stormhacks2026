@@ -157,11 +157,27 @@ namespace Atlas.Telemetry
             _trail.Add(in state);
         }
 
-        /// <summary>The phone's manifest: every value this registry knows by name, and its group's state.</summary>
+        /// <summary>
+        /// The phone's manifest: every value this registry knows by name, and its group's state. The Station's
+        /// own link settings are left alone.
+        /// </summary>
         public void OnManifest(ParamManifestMessage manifest)
         {
             if (manifest == null) return;
-            ParamsApplied += manifest.ApplyTo(_registry, ParamSource.Remote);
+            for (int i = 0; i < manifest.Params.Count; i++)
+            {
+                ParamManifestEntry e = manifest.Params[i];
+                ParamEntry entry;
+                if (IsOwn(e.Name) || !_registry.TryGet(e.Name, out entry)) continue;
+                if (_registry.IsGroupActive(entry.Group) != e.Active) _registry.SetGroupActive(entry.Group, e.Active);
+                if (_registry.Set(entry, e.Val, ParamSource.Remote)) ParamsApplied++;
+            }
+        }
+
+        // The phone's link and telemetry switches describe the phone's side of the link, not this one.
+        static bool IsOwn(string name)
+        {
+            return name == null || name.StartsWith("link.", StringComparison.Ordinal) || name.StartsWith("telemetry.", StringComparison.Ordinal);
         }
 
         /// <summary>A relayed event of the phone: a parameter change or a world change. Others are ignored.</summary>
@@ -174,7 +190,7 @@ namespace Atlas.Telemetry
             if (LinkEvents.TryReadParam(message, out id, out name, out value))
             {
                 ParamEntry entry;
-                if (_registry.TryGet(name, out entry) && _registry.Set(entry, value, ParamSource.Remote)) ParamsApplied++;
+                if (!IsOwn(name) && _registry.TryGet(name, out entry) && _registry.Set(entry, value, ParamSource.Remote)) ParamsApplied++;
                 return;
             }
             if (message.Ev != LinkEvents.World || message.Data == null || !message.Data.IsObject) return;
@@ -209,9 +225,13 @@ namespace Atlas.Telemetry
                 _wantRoom = roomId;
                 _asked = false;                 // another room: fetch it now
             }
-            _wantHash = worldHash ?? string.Empty;
-            _wantGeometry = geometryHash ?? string.Empty;
-            if (string.Equals(_wantGeometry, WorldHash.NoGeometry, StringComparison.Ordinal)) _wantGeometry = string.Empty;
+            string hash = worldHash ?? string.Empty, geometry = geometryHash ?? string.Empty;
+            if (string.Equals(geometry, WorldHash.NoGeometry, StringComparison.Ordinal)) geometry = string.Empty;
+            // The phone says something new about its world: a room that did not match is fetched again now.
+            if (!string.Equals(hash, _wantHash, StringComparison.Ordinal) || !string.Equals(geometry, _wantGeometry, StringComparison.Ordinal))
+                _asked = false;
+            _wantHash = hash;
+            _wantGeometry = geometry;
             _wantSpace = space;
             _wantDirty = true;
         }
@@ -264,21 +284,22 @@ namespace Atlas.Telemetry
             }
             _wantDirty = false;
 
+            if (!_fetching && !_roomOk && haveLead && (!_asked || now - _lastFetchAt >= RefetchSeconds))
+            {
+                _asked = true;
+                _lastFetchAt = now;
+                _fetching = true;
+                RoomRequests++;
+                _rooms.Begin(_wantRoom, _forgeUrl, _hasOutline ? _outline : null);
+            }
+            // A fixture is there at once; the Forge answers on a later frame.
             if (_fetching)
             {
                 RoomModel room;
                 if (!_rooms.TryTake(out room)) return;
                 _fetching = false;
                 Take(room);
-                return;
             }
-            if (_roomOk || !haveLead) return;
-            if (_asked && now - _lastFetchAt < RefetchSeconds) return;
-            _asked = true;
-            _lastFetchAt = now;
-            _fetching = true;
-            RoomRequests++;
-            _rooms.Begin(_wantRoom, _forgeUrl, _hasOutline ? _outline : null);
         }
 
         void Take(RoomModel room)

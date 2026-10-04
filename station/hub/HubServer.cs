@@ -794,6 +794,7 @@ namespace Atlas.Station
                 .Set("id", (int)e.Id).Set("name", e.Name ?? string.Empty).Set("group", e.Group ?? string.Empty)
                 .Set("min", e.Min).Set("max", e.Max).Set("def", e.Def).Set("val", value)
                 .Set("onRelease", e.OnRelease).Set("kind", ParamRegistry.KindName(e.Kind)).Set("active", e.Active);
+            if (e.Live) p.Set("live", true);
             if (e.Names != null)
             {
                 JsonValue names = JsonValue.Array();

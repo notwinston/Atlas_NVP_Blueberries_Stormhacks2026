@@ -50,15 +50,15 @@ namespace Atlas.Spectator
         public Camera Mirror { get { return _mirror; } }
         public FlatTwin Map { get { return _map != null ? _map.Twin : null; } }
 
-        /// <summary>Creates the component, disabled, with its two cameras and two panels under parent.</summary>
-        public static SpectatorView Create(Transform parent, SpectatorApp app)
+        /// <summary>Creates the component, disabled, with its two cameras and two panels under the Spectator's root.</summary>
+        public static SpectatorView Create(Transform root, SpectatorApp app)
         {
             var host = new GameObject("SpectatorView");
-            host.transform.SetParent(parent, false);
+            host.transform.SetParent(root, false);
             var view = host.AddComponent<SpectatorView>();
             view.enabled = false;
             view._app = app;
-            view.Build(parent.parent != null ? parent.parent : parent);
+            view.Build(root);
             return view;
         }
 

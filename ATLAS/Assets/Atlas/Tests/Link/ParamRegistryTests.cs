@@ -275,6 +275,52 @@ namespace Atlas.Link.Tests
         }
 
         [Test]
+        public void Live_is_off_unless_set_on_the_entry_and_is_carried_in_the_manifest()
+        {
+            var r = new ParamRegistry();
+            ParamEntry w = r.DeclareFloat("slicer.w", "slicer", -1f, 1f, 0f);
+            ParamEntry rho = r.DeclareFloat("curved.cullRho", "curved", 2f, 3.5f, 3f);
+            Assert.That(w.Live, Is.False);
+            Assert.That(rho.Live, Is.False);
+
+            // Setting it makes the manifest stale, once.
+            int manifest = r.ManifestVersion;
+            w.Live = true;
+            Assert.That(w.Live, Is.True);
+            Assert.That(r.ManifestVersion, Is.EqualTo(manifest + 1));
+            w.Live = true;
+            Assert.That(r.ManifestVersion, Is.EqualTo(manifest + 1), "no change, no new manifest");
+
+            // It belongs to the parameter: a space that declares again in Configure keeps it, and values do not touch it.
+            Assert.That(r.DeclareFloat("slicer.w", "slicer", -1f, 1f, 0f), Is.SameAs(w));
+            w.Set(0.5f);
+            Assert.That(w.Live, Is.True);
+            Assert.That(rho.Live, Is.False);
+
+            // In the manifest it is written only where it is set, so a manifest without live parameters is the
+            // same bytes as before.
+            ParamManifestMessage m = ParamManifestMessage.FromRegistry(r);
+            Assert.That(m.Params[0].Live, Is.True);
+            Assert.That(m.Params[1].Live, Is.False);
+            string json = m.ToJson().ToJson(false);
+            Assert.That(json, Does.Contain("\"name\":\"slicer.w\"").And.Contain("\"kind\":\"float\",\"active\":true,\"live\":true}"));
+            Assert.That(json.Split(new[] { "\"live\"" }, System.StringSplitOptions.None).Length - 1, Is.EqualTo(1));
+            Assert.That(r.ToManifestJson().ToJson(false), Is.EqualTo(json));
+
+            // Through the wire and back.
+            byte[] packet = m.ToBytes();
+            var back = new ParamManifestMessage();
+            Assert.That(back.ReadFrom(packet, 0, packet.Length), Is.True);
+            Assert.That(back.Params[0].Live, Is.True);
+            Assert.That(back.Params[1].Live, Is.False);
+            Assert.That(back.ToBytes(), Is.EqualTo(packet));
+
+            w.Live = false;
+            Assert.That(r.ManifestVersion, Is.EqualTo(manifest + 2));
+            Assert.That(ParamManifestMessage.FromRegistry(r).ToJson().ToJson(false), Does.Not.Contain("live"));
+        }
+
+        [Test]
         public void Groups_can_be_marked_inactive_without_touching_values()
         {
             var r = new ParamRegistry();

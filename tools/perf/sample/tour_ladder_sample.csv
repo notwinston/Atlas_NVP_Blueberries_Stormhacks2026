@@ -1,0 +1,19 @@
+# atlas perf tour v1
+# run=ladder
+# session=20261004T170000Z-33cc
+# room=budget_room
+# pose=synthetic
+# depth=on
+# device=sample
+# build=0.1.0 release
+# plannedSeconds=15
+# note=each tier is forced as the Console forces it and must be in force within 1 s
+# note=sample data for tools/perf/test_summarise.py: not a measurement
+run,kind,label,space,variant,room,pose,depth,seconds,frames,p50,p95,p99,max,over17_2,over33_8,fpsMean,fpsMin,drawCalls,setPass,tris,cpuMainP95,cpuRenderP95,gpuP95,memMB,gcAllocB,gcAllocMaxB,thermalMax,tFairS,tSeriousS,tCriticalS,tier,effectMs,result,failed,unmeasured
+# thermalAtStart=0
+ladder,ladder,Fair,S0,,budget_room,synthetic,on,3.0,0,0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000,0,0,0,0.000,0.000,0.000,0,0,0,0,-1.0,-1.0,-1.0,1,16.8,pass,,
+ladder,ladder,Serious,S0,,budget_room,synthetic,on,3.0,0,0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000,0,0,0,0.000,0.000,0.000,0,0,0,0,-1.0,-1.0,-1.0,2,17.1,pass,,
+ladder,ladder,Critical,S0,,budget_room,synthetic,on,3.0,0,0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000,0,0,0,0.000,0.000,0.000,0,0,0,0,-1.0,-1.0,-1.0,3,16.6,pass,,
+ladder,ladder,High,S0,,budget_room,synthetic,on,3.0,0,0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000,0,0,0,0.000,0.000,0.000,0,0,0,0,-1.0,-1.0,-1.0,4,33.5,pass,,
+ladder,ladder,Nominal,S0,,budget_room,synthetic,on,3.0,0,0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000,0,0,0,0.000,0.000,0.000,0,0,0,0,-1.0,-1.0,-1.0,0,16.7,pass,,
+# result=pass
