@@ -13,14 +13,16 @@ duck's tile.
 
 - Input: the `CellGrid`, the `TileGraph` (q = 5), the start cell, a seed. The root is always
   `CellFrame(TileId.Zero, 0)` in the start cell.
-- State = (tile, turn, cell). Randomised depth-first search: from a state, a step in room direction d (0 +x, 1 +z,
+- State = (tile, turn, cell). The growing-tree algorithm: from a state, a step in room direction d (0 +x, 1 +z,
   2 −x, 3 −z) is a candidate when `cell + d` is inside the grid and `frame.Cross(graph, d).Tile` is not yet in the
-  tree. Stops at `TargetTiles` = 20 tiles or when no candidate is left.
+  tree. Each step picks the newest active state with probability `NewestBias` = 70 % (long corridors), otherwise a
+  random active state (branches), and takes a random candidate of it; a state with no candidate leaves the active
+  list. Stops at `TargetTiles` = 20 tiles or when no state is active.
 - A tree: each tile has one route from the root, hence one cell and one frame. Every open edge is a step the
   physical floor allows, so the maze is always solvable by walking.
-- Duck: the deepest tile (tree depth = steps from the root). Attempts `a = 0, 1, …, 63` each use seed
-  `Mix(seed, a)`; the first attempt whose duck depth is in [8, 12] is kept, otherwise the attempt whose depth is
-  closest to 10. Random numbers come from an own SplitMix64, never `System.Random`, so the phone and the Station
+- Duck: the deepest tile (tree depth = steps from the root), so always a dead end. Attempts `a = 0, 1, …, 63` each
+  seed the generator with `(seed << 32) | a`; the first attempt whose duck depth is in [8, 12] is kept, otherwise
+  the attempt whose depth is closest to 10 (with `NewestBias` = 70 every seed of 1 … 1,000 lands in [8, 12]). Random numbers come from an own SplitMix64, never `System.Random`, so the phone and the Station
   generate the same maze.
 - Walls (tile edges, bit k = tile edge k): a maze tile has a wall on every edge that is not a tree edge; a tile
   outside the maze ("off") has a wall on every edge whose neighbour is a maze tile. Both rules give the same answer
@@ -34,7 +36,13 @@ duck's tile.
   `RoomModel.cells.aligned` are not touched).
 - `cells.mazeSeed` (int, 0 … 1,048,575, default 0). 0: a fresh seed for each run; otherwise every run uses it.
 - Changing `cells.maze` while S3 is entered reconfigures the space as a re-entry does.
-- In maze mode, Enter does not keep Curved Walk's tile: the run starts at tile zero (the maze is a game; §5 needs it).
+- Entered from anywhere but S2 Curved Walk (the menu, Home, another space), a maze run starts at tile zero (the maze
+  is a game; §5 needs it).
+- Entered from S2 Curved Walk (a hyperbolic start pose with a tile: `EnteredFromCurvedWalk`), S3 keeps the walker's
+  tile (Master Plan §4.8) and runs classic S3 for that entry even with `cells.maze` on: `CellGrid.FromRoom`, no maze,
+  `P7` = 0, no maze events, no read-out, no duck. The next entry from anywhere else is a maze run again.
+- A `cells.maze` toggle while entered re-enters with `WalkerPose.Start` (a fresh, non-Curved-Walk start): turning the
+  maze on mid-S3 starts a maze; turning it off never brings back a stale Mode-1 tile.
 
 ## 3. Drawing (`AlignedCellsView`)
 
@@ -64,8 +72,12 @@ duck's tile.
   walker's cell (the walker's frame is relabelled to tile zero, turn 0).
 - Events (phone copy only): `maze.start {seed, tiles, duckDepth, startCell}`, `maze.wall {tile, edge}` (each wall
   walked through), `maze.found {steps, walls, seconds}`, `maze.unavailable`.
-- State: `P7 = seed * 16 + startCellIndex` (< 2^24, exact in a float); 0 = no maze. The Station's copy regenerates
-  the same maze from it and draws the duck; it logs nothing.
+- State: `P7 = seed * 16 + startCellIndex` (< 2^24, exact in a float) in a maze run; 0 otherwise (`cells.maze` off,
+  a floor too small, or S3 entered from Curved Walk). The Station's copy regenerates the same maze from it and draws
+  the duck; it logs nothing. Its find is latched for the run, as the phone's is (a new code, `P7` = 0 or the walker
+  on tile zero ends it). It reads a State only on this room's maze or classic grid (`P4`, `P5`, `P6`); a State on the
+  other of the two switches it to that grid (its `cells.maze` lagging, or a Curved Walk entry), one on neither is
+  ignored.
 
 ## 6. Testing
 
