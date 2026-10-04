@@ -111,6 +111,7 @@ By the gate where each is first checked. The numbers are the plan's pass marks.
 | G4 | P1-B08 Small Planet (S4) | Three corners close to < 0.25 m; no smeared triangle in a 360° look-around |
 | G4 | P1-B10 Aligned Cells (S3) | Four quarter-turns round an interior corner end in a fifth tile; tile instances alone <= 120 draw calls on the 4 × 5 m sample room |
 | G4 | P1-B12 Room content in Aligned Cells | A virtual table edge within 5 cm of the real one at three touch points after ten cell crossings; S3 on `budget_room` <= 170 draw calls, <= 200k triangles, 60 fps |
+| G4 | S3 duck maze | A walk on the phone finds the duck through the maze (walls drawn on the right cell sides, the duck in every view of its tile, the read-out and the new maze 5 s later), and the Unity-category tests of `DuckMazeViewTests` (3) and `DuckMazeSpaceTests` (3) pass in the Test Runner |
 | G4 | P1-A05 Lens blit | A straight grid looks straight to three testers; the pass adds <= 1.0 ms GPU; an Xcode capture shows one blit to the screen and eye passes that resolve on tile |
 | G4 | P1-A07 Thermal ladder | Each tier forced from the Console takes effect within 1 s; at most one step per 20 s |
 | G4 | P1-A08 SpaceLab host | Memory within +/-5 % after 20 switches among the spaces |
