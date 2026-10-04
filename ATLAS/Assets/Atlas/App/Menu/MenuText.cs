@@ -77,7 +77,8 @@ namespace Atlas.App.Menu
                     if (!model.Registry.IsGroupActive(row.Label)) sb.Append(" (inactive)");
                     break;
                 case MenuRowKind.Param:
-                    sb.Append(row.Entry.Name);
+                    // A switch given a plain name (the Spaces page's Hands) shows it; the others their parameter's.
+                    sb.Append(row.Label ?? row.Entry.Name);
                     // The mark of a value that is not the default.
                     if (row.Entry.Value != row.Entry.Default) sb.Append(" *");
                     break;
@@ -90,7 +91,7 @@ namespace Atlas.App.Menu
             }
         }
 
-        static void AppendValue(StringBuilder sb, MenuModel model, int index)
+        public static void AppendValue(StringBuilder sb, MenuModel model, int index)
         {
             MenuRow row = model.Row(index);
             switch (row.Kind)

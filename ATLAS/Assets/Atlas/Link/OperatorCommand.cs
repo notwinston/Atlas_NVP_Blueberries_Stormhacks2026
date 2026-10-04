@@ -35,7 +35,12 @@ namespace Atlas.Link
         /// as JPEG to the Hub's HTTP <c>port</c>. The Hub repeats <c>on</c> every second while anyone watches; the
         /// phone stops after <see cref="OperatorCommand.ViewHoldSeconds"/> without it, or at once on <c>off</c>.
         /// </summary>
-        View = 8
+        View = 8,
+        /// <summary>
+        /// Hands on or off (<c>OperatorCmd hands</c>, args <c>{on}</c>): the phone sets <c>hands.enabled</c> through
+        /// the registry, so it works under the demo lock, which stops <c>ParamSet</c> only.
+        /// </summary>
+        Hands = 9
     }
 
     /// <summary>
@@ -51,6 +56,7 @@ namespace Atlas.Link
         public const string CmdLock = "lock";
         public const string CmdWalk = "walk";
         public const string CmdView = "view";
+        public const string CmdHands = "hands";
 
         /// <summary>Quality tiers: -1 hands the ladder back to automatic, 0-3 are its rungs, 4 is the high tier.</summary>
         public const int TierAuto = -1;
@@ -78,7 +84,7 @@ namespace Atlas.Link
         public string Variant;
         /// <summary>Tier of <see cref="OperatorCommandKind.Quality"/>: -1 automatic, 0-3 the ladder rungs, 4 high.</summary>
         public int Tier;
-        /// <summary>State of <see cref="OperatorCommandKind.Lock"/> and <see cref="OperatorCommandKind.View"/>.</summary>
+        /// <summary>State of <see cref="OperatorCommandKind.Lock"/>, <see cref="OperatorCommandKind.View"/> and <see cref="OperatorCommandKind.Hands"/>.</summary>
         public bool On;
         /// <summary>View: the Hub's HTTP port, 1 to 65535.</summary>
         public int Port;
@@ -107,6 +113,9 @@ namespace Atlas.Link
 
         /// <summary>The STOP button.</summary>
         public static OperatorCommand Stop() { return new OperatorCommand { Kind = OperatorCommandKind.Cue }; }
+
+        /// <summary>Hands on or off, past the demo lock.</summary>
+        public static OperatorCommand Hands(bool on) { return new OperatorCommand { Kind = OperatorCommandKind.Hands, On = on }; }
 
         public static OperatorCommand Lock(bool on) { return new OperatorCommand { Kind = OperatorCommandKind.Lock, On = on }; }
 
@@ -157,6 +166,8 @@ namespace Atlas.Link
                 case OperatorCommandKind.Cue: return new OperatorCmdMessage { Cmd = CmdCue, Args = Args };
                 case OperatorCommandKind.Lock:
                     return new OperatorCmdMessage { Cmd = CmdLock, Args = JsonValue.Object().Set("on", On) };
+                case OperatorCommandKind.Hands:
+                    return new OperatorCmdMessage { Cmd = CmdHands, Args = JsonValue.Object().Set("on", On) };
                 case OperatorCommandKind.Walk:
                     return new OperatorCmdMessage { Cmd = CmdWalk, Args = WalkArgs() };
                 case OperatorCommandKind.View:
@@ -189,6 +200,7 @@ namespace Atlas.Link
                 case CmdQuality: command = Quality(args.GetInt("tier")); break;
                 case CmdCue: command = Stop(); break;
                 case CmdLock: command = Lock(args.GetBool("on")); break;
+                case CmdHands: command = Hands(args.GetBool("on")); break;
                 case CmdWalk:
                     command = Walk(args.GetFloat("x"), args.GetFloat("y"), args.GetFloat("turn"),
                         args.GetFloat("speed", WalkDefaultSpeed));
@@ -213,6 +225,7 @@ namespace Atlas.Link
                     case OperatorCommandKind.Quality: return CmdQuality;
                     case OperatorCommandKind.Cue: return CmdCue;
                     case OperatorCommandKind.Lock: return CmdLock;
+                    case OperatorCommandKind.Hands: return CmdHands;
                     case OperatorCommandKind.Walk: return CmdWalk;
                     case OperatorCommandKind.View: return CmdView;
                     default: return "none";
@@ -231,7 +244,7 @@ namespace Atlas.Link
             JsonValue data = JsonValue.Object().Set("cmd", Name);
             if (Kind == OperatorCommandKind.SwitchSpace) data.Set("space", Space).Set("variant", Variant ?? string.Empty);
             else if (Kind == OperatorCommandKind.Quality) data.Set("tier", Tier);
-            else if (Kind == OperatorCommandKind.Lock) data.Set("on", On);
+            else if (Kind == OperatorCommandKind.Lock || Kind == OperatorCommandKind.Hands) data.Set("on", On);
             else if (Kind == OperatorCommandKind.View) data.Set("on", On).Set("port", Port);
             else if (Kind == OperatorCommandKind.Walk) data.Set("x", MoveX).Set("y", MoveY).Set("turn", Turn).Set("speed", Speed);
             return new EventMessage(timeUs, scene, LinkEvents.Command, data);

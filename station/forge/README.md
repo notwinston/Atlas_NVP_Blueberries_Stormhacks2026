@@ -63,7 +63,9 @@ One process only: it owns the GPU. Start it from `station/forge`.
 | `FORGE_PUBLIC_URL` | empty | Prefix of the asset URL in `AssetReady`, e.g. `http://192.168.8.2:8000` |
 | `FORGE_HOSTED_ENABLED`, `FORGE_HOSTED_URL`, `FORGE_HOSTED_KEY` | off | The hosted fallback; see below |
 | `FORGE_TRIPOSG_REPO`, `FORGE_TRIPOSG_WEIGHTS` | empty | TripoSG checkout and weights folder (`<checkout>/pretrained_weights/TripoSG` when empty) |
-| `FORGE_TRIPOSG_STEPS`, `_GUIDANCE`, `_SEED`, `_FP16` | 50, 7.0, 42, on | Inference settings |
+| `FORGE_TRIPOSG_STEPS`, `_GUIDANCE`, `_SEED`, `_FP16` | 50, 7.0, 42, on | Inference settings. All four are part of the cache key |
+| `FORGE_TRIPOSG_OCTREE_DEPTH` | unset | The decoder's octree depth, 6 to 10; unset leaves TripoSG's own 9. Part of the cache key. **Do not lower it:** depth 8 measured on an RTX 4060 Laptop (4 October 2026) cut generation from 87 s to 50 s, but the flash decoder then gives a stair-stepped surface with holes through the seat of a chair |
+| `FORGE_MAX_GENERATED` | 32 | How many of a room's largest boxes are generated, 1 to 32; the rest are answered `placeholder` and keep their first shape. Lower it where the generator is slow. The triangle targets of the boxes that are generated stay those of the rule of 32, so the phone and the Forge agree |
 | `FORGE_TRIPOSG_FALLBACK_DECODER` | on | When TripoSG's default decoder fails, generate once more with `use_flash_decoder=False` |
 | `FORGE_TRIPOSG_UP` | `Y` | Which axis of TripoSG's own frame is up: `Y`, `Z` or `X`. The only up axis clean-up tries for a TripoSG mesh. Measured on the Station (below) |
 | `FORGE_TRIPOSG_FRONT` | `unknown` | Where the front of a TripoSG mesh is: `canonical` (on its own +Z), `view` (towards the camera of the photo it was generated from) or `unknown`. Breaks a tie of the fit, and decides alone when a job has no profile. Measured on the Station (below) |
@@ -116,7 +118,7 @@ TripoSG). When ready it also holds:
 ## The queue and the furniture budget
 
 - One worker owns the generator and runs one job at a time, the largest box first.
-- When a room is uploaded the Forge ranks its boxes by volume. The 32 largest receive meshes. A job for any
+- When a room is uploaded the Forge ranks its boxes by volume. The 32 largest (or `FORGE_MAX_GENERATED`) receive meshes. A job for any
   other box is answered with `placeholder: true` and is never generated.
 - The room's 120,000 furniture triangles are shared between those boxes by surface area, 3,000 to 15,000 each
   (mesh design §5.4; `forge/budget.py`, in whole numbers so that the phone and `tools/rooms/roommath.py` give
@@ -408,7 +410,7 @@ What to read in the answer, and in `data\jobs\<jobId>\job.json`, which also has 
 |---|---|---|
 | `state` | `ready` | `error` says why; the table below |
 | `generator`, `decoder` | `triposg`, `flash` | `hierarchical`: the default decoder failed and the object was generated twice. Look for `TripoSG's flash decoder failed: …` in the service's output, and see step 3 on `diso` |
-| `timings.generating` | 60 s or less (check M2 of the design) | Fewer steps: `FORGE_TRIPOSG_STEPS` (the official demo allows 8 to 50) |
+| `timings.generating` | 60 s or less (check M2 of the design) | Fewer steps: `FORGE_TRIPOSG_STEPS` (the official demo allows 8 to 50). On an 8 GB card most of the time is the decoder, not the steps: 50 steps took 87 s and 30 steps 80 s, with the diffusion itself 0.73 s a step |
 | `timings.cleaning` | Well under its 60 s time-out | Write the figure down: the raw mesh may be larger than assumed |
 | `report.sourceTriangles` | Not known: several hundred thousand is the guess | Write it down |
 | `report.triangles` | 1,500 to 15,000 | – |

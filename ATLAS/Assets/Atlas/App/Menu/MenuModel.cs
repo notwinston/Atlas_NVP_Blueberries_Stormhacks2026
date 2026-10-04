@@ -123,7 +123,7 @@ namespace Atlas.App.Menu
     public sealed class MenuModel
     {
         /// <summary>Rows shown at once; the list scrolls with the focus.</summary>
-        public const int VisibleRows = 8;
+        public const int VisibleRows = 9;
         public const int PageCount = 4;
         /// <summary>A float parameter moves by this fraction of its range per step.</summary>
         public const float FloatStepFraction = 1f / 20f;
@@ -132,19 +132,23 @@ namespace Atlas.App.Menu
         public const string EventParamSet = "param.set";
 
         /// <summary>
-        /// The kill switches of Master Plan section 12.4 in the order of lane D's contract, section 1.5. The
-        /// Quality page lists the ones that are declared.
+        /// The kill switches of Master Plan section 12.4 in the order of lane D's contract, section 1.5, and
+        /// after them the switch of the tracked hands (documents/ATLAS_Hands_Design.md section 3.7, E11), so
+        /// that hands can be turned off in the headset with the Station off. The Quality page lists the ones
+        /// that are declared.
         /// </summary>
         public static readonly string[] KillSwitchIds =
         {
             "space.id", "demoLock", "thermal.pinTier", "render.scale", "render.msaa", "curved.cullRho", "curved.mode",
             "cells.viewDepth", "planet.R", "planet.fogRho", "glued.mode", "glued.copies", "rooms.count", "portal.depth",
             "slicer.source", "pose.gyroPredict", "scan.route", "link.enabled", "link.stateHz", "telemetry.mode",
-            "forge.backend"
+            "forge.backend", "hands.enabled"
         };
 
         // Resetting space.id would walk the wearer out of the space they are standing in.
         const string SpaceParam = "space.id";
+        /// <summary>The tracked hands' switch, shown at the top of the Spaces page as "Hands".</summary>
+        public const string HandsEnabled = "hands.enabled";
 
         static readonly string[] s_pageNames = { "Spaces", "Quality", "Parameters", "Session" };
 
@@ -308,6 +312,10 @@ namespace Atlas.App.Menu
         void BuildSpaces()
         {
             if (_spaces == null) return;
+            // The tracked hands' switch first, where the menu opens: hands.enabled itself, so it stays in step
+            // with the kill switch on the Quality page and with the Station.
+            ParamEntry hands = _registry.Find(HandsEnabled);
+            if (hands != null) _rows.Add(new MenuRow { Kind = MenuRowKind.Param, Entry = hands, Label = "Hands" });
             for (int i = 0; i < SpaceIds.Count; i++)
             {
                 var id = (SpaceId)i;

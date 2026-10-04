@@ -545,7 +545,7 @@ namespace Atlas.Link.Tests
             OperatorCommand[] commands =
             {
                 OperatorCommand.SwitchSpace(4, "klein"), OperatorCommand.Home(), OperatorCommand.Recentre(),
-                OperatorCommand.Quality(2), OperatorCommand.Stop(), OperatorCommand.Lock(true)
+                OperatorCommand.Quality(2), OperatorCommand.Stop(), OperatorCommand.Lock(true), OperatorCommand.Hands(true)
             };
             string[] golden =
             {
@@ -554,7 +554,8 @@ namespace Atlas.Link.Tests
                 "{\"cmd\":\"recentre\",\"args\":{}}",
                 "{\"cmd\":\"quality\",\"args\":{\"tier\":2}}",
                 "{\"cmd\":\"cue\",\"args\":{}}",
-                "{\"cmd\":\"lock\",\"args\":{\"on\":true}}"
+                "{\"cmd\":\"lock\",\"args\":{\"on\":true}}",
+                "{\"cmd\":\"hands\",\"args\":{\"on\":true}}"
             };
             for (int i = 0; i < commands.Length; i++)
             {
@@ -582,7 +583,7 @@ namespace Atlas.Link.Tests
                 Assert.That(back.On, Is.EqualTo(commands[i].On));
             }
             Assert.That(commands[0].Variant, Is.EqualTo("klein"));
-            Assert.That(Enum.GetValues(typeof(OperatorCommandKind)).Length, Is.EqualTo(9), "None, exactly six, the Map page's walk and the View page's view");
+            Assert.That(Enum.GetValues(typeof(OperatorCommandKind)).Length, Is.EqualTo(10), "None, exactly six, the Map page's walk, the View page's view and the hands switch");
 
             OperatorCommand none;
             Assert.That(OperatorCommand.TryFrom(new OperatorCmdMessage { Cmd = "panic" }, out none), Is.False);

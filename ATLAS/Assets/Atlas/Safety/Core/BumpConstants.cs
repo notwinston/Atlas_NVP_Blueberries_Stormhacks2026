@@ -103,6 +103,56 @@ namespace Atlas.Safety
         /// <summary>Sector ranges older than this are not used by the head-frame fallback, seconds (four images at 15 Hz).</summary>
         public const double DepthResultMaxAgeSeconds = 0.25;
 
+        // ---- Depth mask: the walker's own hands (documents/ATLAS_Hands_Design.md section 7.1 and its review) ----
+        // Bump Guard holds a mask to every one of these itself, whatever built the mask.
+
+        /// <summary>Regions of a depth mask that are read: one for each hand. A mask that claims more is cut to this.</summary>
+        public const int MaskMaxRegions = 2;
+        /// <summary>No sample deeper than this is ever masked, metres, whatever gate a region asks for (7.1: "never beyond 0.80 m").</summary>
+        public const float MaskMaxDepth = 0.80f;
+        /// <summary>
+        /// A mask that would take out more than this share of an image's valid samples (those with a return) is
+        /// ignored for that image. Counted over the samples it would really take, inside a region and inside its
+        /// gate, not over the regions' area. Measured in BumpGuard_Mask_Limits: two open hands with their
+        /// forearms take 12 to 18 % at arm's length (0.45 to 0.60 m) and 31 % at 0.32 m, the nearest LiDAR sees
+        /// them, where every sample has a return, and up to 31 % at arm's length where a third of the picture is
+        /// beyond LiDAR's range; the same hands with a wall inside their gate, which would hide most of the view,
+        /// take 44 to 76 %.
+        /// </summary>
+        public const float MaskMaxShare = 0.35f;
+        /// <summary>
+        /// A dynamic cell under a masked sample is forgotten only if it was first stamped less than this long ago,
+        /// seconds: long enough for the cells a hand leaves before it is detected, too short for an obstacle that
+        /// has been in view. Counted from the first stamp, never from the last hit, which every image renews.
+        /// </summary>
+        public const double MaskYoungSeconds = 1.0;
+        /// <summary>
+        /// ... and only if its stored height is within this of the masked sample's own height, metres. A cell
+        /// whose top is lower or higher than that belongs to something else standing in the same 5 cm of floor.
+        /// </summary>
+        public const float MaskHeightTolerance = 0.15f;
+
+        // ---- Pending cells: in a hands session a near return must be seen twice (decision R13) ----
+        // A hands session is a depth image whose mask says so (DepthKernelMask.Session), with a hand in view or
+        // with none. Outside a session none of these is read.
+
+        /// <summary>
+        /// In a hands session a dynamic cell first stamped by a return nearer than this, metres along the optical
+        /// axis, is pending: it is stored and does not count until it is seen again. As far as a mask may reach
+        /// (<see cref="MaskMaxDepth"/>): the walker's hand is never farther away. A return at this depth or
+        /// beyond counts at once, in a session as outside one.
+        /// </summary>
+        public const float PendingNearMetres = 0.80f;
+        /// <summary>
+        /// A pending cell counts from a hit that comes this long or more after its first hit, seconds. Long
+        /// enough for the hands to be found and masked after they come into view (6 to 9 depth images), short
+        /// enough that someone who steps in half a metre ahead of a walker at 1 m/s is still warned of
+        /// (measured in BumpGuard_Pending: the cue comes 0.15 to 0.17 s after the first image).
+        /// </summary>
+        public const double PendingSeconds = 0.15;
+        /// <summary>A pending cell with no hit for this long starts again, seconds: its next hit is its first.</summary>
+        public const double PendingRestartSeconds = 0.10;
+
         // ---- Rescan check (4.10, "Static map") ----
 
         /// <summary>Median disagreement of live depth and static map that advises a rescan, metres (4.10: "exceeds 0.15 m").</summary>

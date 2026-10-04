@@ -69,3 +69,21 @@ def test_equal_volumes_keep_id_order_and_empty_room():
     assert rank_boxes([(3, (1, 1, 1)), (1, (1, 1, 1)), (2, (2, 1, 1))]) == [2, 1, 3]
     assert plan_room([]) == ([], [], {}, 0)
     assert plan([]) == ({}, 0) and plan_room([]).largest == 0
+
+
+def test_a_lower_cap_meshes_only_the_largest_and_keeps_their_share_of_the_32():
+    # The cap decides which boxes are generated; the triangle split stays the rule of the 32,
+    # so the phone, roommath.py and the Forge still agree on every target.
+    boxes = [(i + 1, (0.1 * (i + 1), 1.0, 1.0)) for i in range(40)]
+    full = plan_room(boxes)
+    capped = plan_room(boxes, max_generated=8)
+    assert capped.generated == list(range(40, 32, -1))
+    assert capped.placeholders == list(range(32, 0, -1))
+    assert all(capped.targets[b] == full.targets[b] for b in capped.generated)
+    assert all(capped.targets[b] == 0 for b in capped.placeholders)
+    assert capped.light == full.light
+
+
+def test_a_cap_above_thirty_two_is_the_rule_of_thirty_two():
+    boxes = [(i + 1, (0.1 * (i + 1), 1.0, 1.0)) for i in range(40)]
+    assert plan_room(boxes, max_generated=50) == plan_room(boxes)

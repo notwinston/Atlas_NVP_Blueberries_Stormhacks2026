@@ -39,6 +39,7 @@ namespace Atlas.Spaces.SmallPlanet
         GameObject dialChip;
         Mesh dialChipMesh;
         Material dialChipMaterial;
+        float dialChipScale = 1f;
         float fogStart = -1f, fogEnd = -1f;
 
         /// <summary>The factory given to SpaceRegistry: a new object named like the scene.</summary>
@@ -107,7 +108,8 @@ namespace Atlas.Spaces.SmallPlanet
             }
             else SmallPlanetSky.ApplyLook(core.View3d);
             // The furniture is laid out about where the walker stands at entry, so it is where the real furniture is until the first step.
-            if (room != null && room.IsBuilt) roomView = new CurvedRoomView(room) { ObjectOrigin = head };
+            // The Small Planet draws no obstacles, only the kerbs (the room outline).
+            if (room != null && room.IsBuilt) roomView = new CurvedRoomView(room) { ObjectOrigin = head, ShowObjects = false };
             ApplyView();
             // Rule 5: the dial is read in Tick, so its gaze twin lives as long as the space is entered.
             ReleaseDial();
@@ -158,6 +160,12 @@ namespace Atlas.Spaces.SmallPlanet
                     if (dialChip.activeSelf != dial.Live) dialChip.SetActive(dial.Live);
                     Vector3 centre = (Vector3)dial.Centre;
                     dialChip.transform.SetPositionAndRotation(centre, Quaternion.LookRotation(centre - (Vector3)frame.HeadPosition));
+                    // Within reach of the hands the plate is as large as its gaze target: its size times the layout's scale.
+                    if (dial.Scale != dialChipScale)
+                    {
+                        dialChipScale = dial.Scale;
+                        dialChip.transform.localScale = new Vector3(dialChipScale, dialChipScale, dialChipScale);
+                    }
                 }
             }
             bool placed = core.Placed;
@@ -217,6 +225,7 @@ namespace Atlas.Spaces.SmallPlanet
             mr.receiveShadows = false;
             mr.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
             mr.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
+            dialChipScale = 1f;
             dialChip.SetActive(false);
         }
 

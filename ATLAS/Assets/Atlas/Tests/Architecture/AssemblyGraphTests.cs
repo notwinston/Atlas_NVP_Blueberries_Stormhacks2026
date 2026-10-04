@@ -28,7 +28,9 @@ namespace Atlas.Architecture.Tests
             { "Atlas.Safety", new[] { "Atlas.World" } },
             { "Atlas.Input", new string[0] },
             { "Atlas.Telemetry", new[] { "Atlas.Kernel", "Atlas.Link", "Atlas.World" } },
-            { "Atlas.App", new[] { "Atlas.Kernel", "Atlas.Link", "Atlas.World", "Atlas.Rendering", "Atlas.Scan", "Atlas.Safety", "Atlas.Input", "Atlas.Telemetry" } },
+            { "Atlas.Hands", new[] { "Atlas.Kernel", "Atlas.Link", "Atlas.World", "Atlas.Rendering", "Atlas.Input" } },
+            { "Atlas.Hands.ARKit", new[] { "Atlas.Kernel", "Atlas.World", "Atlas.Hands" } },
+            { "Atlas.App", new[] { "Atlas.Kernel", "Atlas.Link", "Atlas.World", "Atlas.Rendering", "Atlas.Scan", "Atlas.Safety", "Atlas.Input", "Atlas.Telemetry", "Atlas.Hands" } },
             { Spaces, new[] { "Atlas.Kernel", "Atlas.Link", "Atlas.World", "Atlas.Rendering", "Atlas.Input", "Atlas.Telemetry" } },
             { "Atlas.Spectator", new[] { "Atlas.Kernel", "Atlas.Link", "Atlas.World", "Atlas.Rendering", "Atlas.Telemetry", Spaces } },
             { "Atlas.World.Lint.Editor", new[] { "Atlas.Kernel", "Atlas.World", "Atlas.Rendering" } },
@@ -143,9 +145,11 @@ namespace Atlas.Architecture.Tests
         {
             var all = Load();
             var safety = all.Single(a => a.Name == "Atlas.Safety");
-            Assert.That(safety.References, Has.None.EqualTo("Atlas.Link").And.None.EqualTo("Atlas.Telemetry"));
-            var offenders = Sources(safety, all).Where(f => Regex.IsMatch(Code(f), "\\bAtlas\\.(Link|Telemetry)\\b")).Select(Path.GetFileName);
-            Assert.That(offenders, Is.Empty, "Atlas.Safety sources use a type from Atlas.Link or Atlas.Telemetry");
+            // The hands are kept out as well: Bump Guard takes a depth mask as plain numbers and holds it to its
+            // own limits, whatever built it (documents/ATLAS_Hands_Design.md section 7.1).
+            Assert.That(safety.References, Has.None.EqualTo("Atlas.Link").And.None.EqualTo("Atlas.Telemetry").And.None.EqualTo("Atlas.Hands"));
+            var offenders = Sources(safety, all).Where(f => Regex.IsMatch(Code(f), "\\bAtlas\\.(Link|Telemetry|Hands)\\b")).Select(Path.GetFileName);
+            Assert.That(offenders, Is.Empty, "Atlas.Safety sources use a type from Atlas.Link, Atlas.Telemetry or Atlas.Hands");
         }
 
         // The Hub compiles the same sources, so the link library may not see the engine.

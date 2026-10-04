@@ -5,7 +5,7 @@ import { clampParam, decimalsFor, formatParam, stepFor } from './format.js';
 
 const GROUP_TITLES = {
   app: 'App', home: 'S0 Home', glued: 'S1 Glued', curved: 'S2 Curved Walk', cells: 'S3 Aligned Cells',
-  planet: 'S4 Small Planet', portal: 'S5 Impossible Rooms', slicer: 'S6 Slicer', render: 'Render', pose: 'Pose',
+  planet: 'S4 Small Planet', portal: 'S5 Impossible Rooms', slicer: 'S6 Slicer', net: 'S7 Network', render: 'Render', pose: 'Pose',
   scan: 'Scan', link: 'Link', forge: 'Forge', hud: 'HUD'
 };
 

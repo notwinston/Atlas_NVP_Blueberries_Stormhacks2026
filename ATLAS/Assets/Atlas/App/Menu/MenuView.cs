@@ -6,6 +6,29 @@ using UnityEngine;
 namespace Atlas.App.Menu
 {
     /// <summary>
+    /// What draws the menu. <see cref="OnDeviceMenu"/> drives it and decides everything; null draws nothing,
+    /// and a test puts a recorder in its place.
+    /// </summary>
+    interface IMenuView
+    {
+        /// <summary>Open: the panel. Closed: the corner chip.</summary>
+        void SetOpen(bool open);
+        /// <summary>Stands the panel in the room frame. Called every frame while the menu is open.</summary>
+        void PlacePanel(float3 centre, quaternion rotation);
+        /// <summary>Stands the chip in the room frame, in the frame given. Called every frame while the menu is closed.</summary>
+        void PlaceChip(float3 centre, quaternion frame);
+        /// <summary>
+        /// Brings the panel and the chip within reach of the hands at this scale, drawn on the world layer and
+        /// depth-tested, or puts them back on the head-locked layer at their own size. Called when it changes.
+        /// </summary>
+        void SetReach(bool near, float scale);
+        /// <summary>Redraws the panel from the model. Called when the model's revision moved.</summary>
+        void Show(MenuModel model);
+        /// <summary>Destroys what the view built and gives its material back to the pool.</summary>
+        void Dispose();
+    }
+
+    /// <summary>
     /// What the menu draws (lane D contract, section 5.7), built in code under the HUD parent (contract README
     /// F3): one flat mesh in the look's shader (squircle panel, capsule row and chips) and five
     /// text objects made the way the HUD makes its own. Six draw calls while open, two while closed. Nothing
@@ -13,8 +36,13 @@ namespace Atlas.App.Menu
     /// Legacy text spaces its lines by the font's line height, not by the row pitch, and hangs from the top of
     /// its line box, not from its letters; both are measured from the font once, so every line sits on the
     /// centre of its row target and every label on the centre of its chip.
+    /// <para>
+    /// In a hands session the menu comes within reach (documents/ATLAS_Hands_Design.md section 6.1): the same
+    /// objects, scaled as a whole, on the world layer, where the look's shader tests them against depth, and
+    /// with the text on <see cref="NearText"/>, so that a finger in front of a row covers the row and its text.
+    /// </para>
     /// </summary>
-    sealed class MenuView
+    sealed class MenuView : IMenuView
     {
         const int FontPixels = 64;
         /// <summary>One em of the text: the capitals fill about half of a row's height.</summary>
@@ -41,6 +69,14 @@ namespace Atlas.App.Menu
         readonly Mesh _panelMesh, _chipMesh;
         readonly TextMesh _title, _names, _values;
         readonly Quaternion _chipFacing;
+        // Every text of the panel and of the chip: what changes material when the menu comes within reach.
+        // Names, Values, Title, Close, Apply, Rescan and the chip's Label.
+        readonly MeshRenderer[] _texts = new MeshRenderer[7];
+        readonly Font _font;
+        readonly int _hudLayer;
+        int _textCount;
+        bool _near;
+        float _scale = 1f;
 
         MenuView(Transform hud, MaterialPool pool)
         {
@@ -49,6 +85,7 @@ namespace Atlas.App.Menu
             // Head-locked content: no fog, and the fade of a space switch does not touch it.
             MaterialPool.SetSurface(_material, 1f, 0f, 0f, 0f);
             int layer = hud.gameObject.layer;
+            _hudLayer = layer;
 
             _panel = NewObject("AtlasMenu", hud, layer);
             _builder.Clear();
@@ -66,6 +103,7 @@ namespace Atlas.App.Menu
             AddMesh(_chip, _chipMesh);
 
             Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            _font = font;
             if (font != null)
             {
                 _names = NewText(_panel.transform, "Names", font, Vector3.zero, TextAnchor.UpperLeft);
@@ -83,6 +121,7 @@ namespace Atlas.App.Menu
                 float footer = MenuLayout.FooterY - capCentre;
                 NewText(_panel.transform, "Close", font, new Vector3(MenuLayout.CloseX, footer, TextZ), TextAnchor.UpperCenter).text = "Close";
                 NewText(_panel.transform, "Apply", font, new Vector3(MenuLayout.ApplyX, footer, TextZ), TextAnchor.UpperCenter).text = "Apply";
+                NewText(_panel.transform, "Rescan", font, new Vector3(MenuLayout.RescanX, MenuLayout.RescanY - capCentre, TextZ), TextAnchor.UpperCenter).text = "Rescan";
                 NewText(_chip.transform, "Label", font, new Vector3(0f, -capCentre, TextZ), TextAnchor.UpperCenter).text = "Menu";
             }
 
@@ -111,7 +150,39 @@ namespace Atlas.App.Menu
 
         public void PlaceChip(float3 centre, quaternion frame)
         {
-            if (_chip != null) _chip.transform.SetPositionAndRotation(centre, (Quaternion)frame * _chipFacing);
+            if (_chip == null) return;
+            // A metre away the chip is turned to face the head from its corner; within reach it lies in the
+            // anchor's plane, which already faces the head.
+            _chip.transform.SetPositionAndRotation(centre, _near ? (Quaternion)frame : (Quaternion)frame * _chipFacing);
+        }
+
+        public void SetReach(bool near, float scale)
+        {
+            if (_panel == null) return;
+            float size = near ? scale : 1f;
+            if (near == _near && size == _scale) return;
+            _near = near;
+            _scale = size;
+
+            int layer = near ? PortalStencilTable.WorldLayer : _hudLayer;
+            SetLayer(_panel.transform, layer);
+            SetLayer(_chip.transform, layer);
+            // The texts are children: they are scaled with the panel and the chip, and stay on their rows.
+            var whole = new Vector3(size, size, size);
+            _panel.transform.localScale = whole;
+            _chip.transform.localScale = whole;
+
+            if (_font == null) return;
+            Material text = near ? NearText.For(_font) : null;
+            if (text == null) text = _font.material;
+            for (int i = 0; i < _textCount; i++) _texts[i].sharedMaterial = text;
+        }
+
+        // A child does not take its parent's layer: the object and each text under it are set one by one.
+        static void SetLayer(Transform root, int layer)
+        {
+            root.gameObject.layer = layer;
+            for (int i = 0; i < root.childCount; i++) root.GetChild(i).gameObject.layer = layer;
         }
 
         /// <summary>
@@ -143,6 +214,7 @@ namespace Atlas.App.Menu
                 if (steps) AddRect(MenuLayout.PlusX, y, TextZ, 0.002f, 0.010f, GlyphCell);
             }
             AddCapsule(MenuLayout.CloseX, MenuLayout.FooterY, MarkZ, MenuLayout.ChipHalfWidth, MenuLayout.ChipHalfHeight, ChipCell);
+            AddCapsule(MenuLayout.RescanX, MenuLayout.RescanY, MarkZ, MenuLayout.RescanHalfWidth, MenuLayout.RescanHalfHeight, ChipCell);
             AddCapsule(MenuLayout.ApplyX, MenuLayout.FooterY, MarkZ, MenuLayout.ChipHalfWidth, MenuLayout.ChipHalfHeight,
                 model.ApplyReady ? FocusCell : ChipCell);
             AtlasMesh.Apply(_builder, _panelMesh);
@@ -168,7 +240,7 @@ namespace Atlas.App.Menu
 
         void AddPanel()
         {
-            AddRimmed(0f, 0f, MenuLayout.Width * 0.5f, MenuLayout.Height * 0.5f, PanelRadius, PanelCell);
+            AddRimmed(0f, MenuLayout.PanelY, MenuLayout.Width * 0.5f, MenuLayout.Height * 0.5f, PanelRadius, PanelCell);
         }
 
         // A squircle with its rim showing round it, the rim one layer behind.
@@ -235,13 +307,14 @@ namespace Atlas.App.Menu
         }
 
         // The HUD's text: legacy 3D text in the built-in font, one em of TextHeight.
-        static TextMesh NewText(Transform parent, string name, Font font, Vector3 position, TextAnchor anchor)
+        TextMesh NewText(Transform parent, string name, Font font, Vector3 position, TextAnchor anchor)
         {
             GameObject go = NewObject(name, parent, parent.gameObject.layer);
             go.transform.localPosition = position;
             var text = go.AddComponent<TextMesh>();
             var renderer = go.GetComponent<MeshRenderer>();
             if (renderer == null) renderer = go.AddComponent<MeshRenderer>();
+            _texts[_textCount++] = renderer;
             renderer.sharedMaterial = font.material;
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             renderer.receiveShadows = false;

@@ -78,7 +78,7 @@ namespace Atlas.App
 
         static readonly string[] s_spaceNames =
         {
-            "S0 Home", "S1 Glued", "S2 Curved Walk", "S3 Aligned Cells", "S4 Small Planet", "S5 Impossible Rooms", "S6 Slicer"
+            "S0 Home", "S1 Glued", "S2 Curved Walk", "S3 Aligned Cells", "S4 Small Planet", "S5 Impossible Rooms", "S6 Slicer", "S7 Network"
         };
         static readonly string[] s_curvedModes = { "Mode 1 Curved Walk", "Mode 2 Aligned Cells" };
         static readonly string[] s_slicerSources = { "live", "stepped", "tesseract" };

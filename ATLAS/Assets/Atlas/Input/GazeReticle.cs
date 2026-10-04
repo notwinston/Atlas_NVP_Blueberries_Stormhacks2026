@@ -5,13 +5,16 @@ namespace Atlas.Input
 {
     /// <summary>
     /// The head-locked gaze reticle (lane C contract section 13.2): a dot 2 m ahead under the HUD parent, with
-    /// a ring that fills clockwise as the dwell runs. Built in code (README F3). The ring's progress is the
-    /// number of indices drawn, so a frame costs at most one sub-mesh update and no allocation.
+    /// a ring that fills clockwise as the dwell runs. Over a target nearer than 2 m it comes forward to that
+    /// target's distance, scaled so that it looks the same size, or it would be seen double there
+    /// (<see cref="ReticleDepth"/>). Built in code (README F3). The ring's progress is the number of indices
+    /// drawn, so a frame costs at most one sub-mesh update and no allocation.
     /// </summary>
     public sealed class GazeReticle
     {
         public const string ShaderResource = "AtlasReticle";
-        public const float DistanceMetres = 2.0f;
+        /// <summary>Where the reticle stands with nothing near in focus, and the distance its mesh is sized for.</summary>
+        public const float DistanceMetres = ReticleDepth.FarMetres;
 
         private const int DotSegments = 16;
         private const int RingSegments = 48;
@@ -28,6 +31,7 @@ namespace Atlas.Input
         private readonly int _vertexCount;
         private int _shownSegments = -1;
         private bool _visible = true;
+        private float _metres = DistanceMetres;
 
         /// <summary>
         /// Creates the reticle under the HUD parent. It draws with its own unlit shader from Resources; the
@@ -68,8 +72,11 @@ namespace Atlas.Input
             Set(false, 0f);
         }
 
-        /// <summary>Shows or hides the reticle and sets the ring: 0 = dot only, 1 = full ring.</summary>
-        public void Set(bool visible, float progress)
+        /// <summary>
+        /// Shows or hides the reticle, sets the ring (0 = dot only, 1 = full ring) and how far ahead it stands.
+        /// At any distance it fills the same angle of the view.
+        /// </summary>
+        public void Set(bool visible, float progress, float metres = DistanceMetres)
         {
             if (_object == null) return;                 // destroyed with the scene
             if (visible != _visible)
@@ -78,6 +85,15 @@ namespace Atlas.Input
                 _object.SetActive(visible);
             }
             if (!visible) return;
+
+            if (metres != _metres && metres > 0f)
+            {
+                _metres = metres;
+                float scale = ReticleDepth.Scale(metres);
+                Transform t = _object.transform;
+                t.localPosition = new Vector3(0f, 0f, metres);
+                t.localScale = new Vector3(scale, scale, 1f);
+            }
 
             int segments = Mathf.Clamp(Mathf.CeilToInt(progress * RingSegments - 0.001f), 0, RingSegments);
             if (segments == _shownSegments) return;
@@ -93,9 +109,17 @@ namespace Atlas.Input
 
         public void Dispose()
         {
-            if (_object != null) Object.Destroy(_object);
-            if (_mesh != null) Object.Destroy(_mesh);
-            if (_ownMaterial != null) Object.Destroy(_ownMaterial);
+            Kill(_object);
+            Kill(_mesh);
+            Kill(_ownMaterial);
+        }
+
+        // The same in play mode and in an edit-mode test, where Destroy is not allowed.
+        private static void Kill(Object target)
+        {
+            if (target == null) return;
+            if (Application.isPlaying) Object.Destroy(target);
+            else Object.DestroyImmediate(target);
         }
 
         // Dot first, then the ring's segments in order from 12 o'clock clockwise, so that drawing a prefix of

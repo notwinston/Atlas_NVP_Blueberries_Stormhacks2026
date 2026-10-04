@@ -21,6 +21,7 @@ namespace Atlas.App
             FurnitureLevel.Light,    // S4 Small Planet
             FurnitureLevel.Light,    // S5 Impossible Rooms
             FurnitureLevel.Light,    // S6 Slicer
+            FurnitureLevel.Light,    // S7 Network
         };
 
         /// <summary>The space's own level. Full for a value that is not a space.</summary>

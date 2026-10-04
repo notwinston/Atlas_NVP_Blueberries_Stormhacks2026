@@ -24,9 +24,10 @@ namespace Atlas.Spaces.SmallPlanet
         public const string ParamView3d = "planet.view3d";
         /// <summary>planet.R is a lower bound on the radius, metres; 0 leaves the radius to the room.</summary>
         public const float MaxRadiusM = 4f;
-        /// <summary>planet.R's default: the PlanetKit tiles' authored radius, so their props are not stretched.
-        /// A room whose loop-fit radius is smaller then walks a planet too big to close the 3-corner lap inside it.</summary>
-        public const float DefaultRadiusM = (float)SmallPlanetConstants.KitRadius;
+        /// <summary>planet.R's default: a little under the PlanetKit tiles' authored radius (2.29 m), for a smaller
+        /// planet; the props shrink with it by the same 13 %. A room whose loop-fit radius is smaller then walks a
+        /// planet too big to close the 3-corner lap inside it.</summary>
+        public const float DefaultRadiusM = 2.0f;
 
         readonly LapWalk walk = new LapWalk();
         readonly CurvatureDial dial = new CurvatureDial(3);

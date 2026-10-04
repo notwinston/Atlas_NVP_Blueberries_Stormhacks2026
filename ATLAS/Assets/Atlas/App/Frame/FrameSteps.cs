@@ -78,21 +78,57 @@ namespace Atlas.App
     /// <summary>
     /// Step 2: Bump Guard with the sensor frame the pose pipeline built in step 1 (raw pose, depth). It builds
     /// nothing itself. Also writes Bump Guard's fields of the State, so the frame loop names no safety type.
+    /// <para>With a mask source (the tracked hands), a frame that holds a new depth image is copied and the copy
+    /// carries the source's mask for that image: where the walker's own hands are in it
+    /// (documents/ATLAS_Hands_Design.md section 7.1), and whether a hands session is running, which the mask
+    /// says with a hand in view or with none (decision R13). Bump Guard learns nothing of where the mask came
+    /// from and holds it to its own limits. A source that answers false, or throws, gives a frame with no mask
+    /// and no session. Without a source the step is what it always was.</para>
     /// </summary>
     public sealed class BumpGuardStep : ISafetyStep, IStateWriter
     {
         readonly IBumpGuard _guard;
         readonly IPosePipeline _pipeline;
+        readonly IDepthMaskSource _mask;
 
-        public BumpGuardStep(IBumpGuard guard, IPosePipeline pipeline)
+        /// <param name="mask">Who can say where the walker's hands are in a depth image; may be null.</param>
+        public BumpGuardStep(IBumpGuard guard, IPosePipeline pipeline, IDepthMaskSource mask = null)
         {
             _guard = guard;
             _pipeline = pipeline;
+            _mask = mask;
         }
+
+        /// <summary>
+        /// Times the mask source threw. Bump Guard ran on the unmasked frame each time. The step stays silent,
+        /// so that a source that fails every frame costs nothing: whoever wired the source reads this and reports.
+        /// </summary>
+        public int MaskFaults { get; private set; }
 
         public void Guard(in FrameContext frame)
         {
-            _guard.Tick(in _pipeline.Sensors);
+            ref readonly SensorFrame sensors = ref _pipeline.Sensors;
+            if (_mask != null && sensors.HasDepth)
+            {
+                SensorFrame masked = sensors;
+                bool asked = false;
+                try
+                {
+                    if (!_mask.TryGetMask(sensors.Depth.Sequence, out masked.Mask)) masked.Mask = default(DepthMask);
+                    asked = true;
+                }
+                catch (System.Exception)
+                {
+                    // Nothing outside Bump Guard may stop it: the frame goes in as the pipeline built it.
+                    MaskFaults++;
+                }
+                if (asked)
+                {
+                    _guard.Tick(in masked);
+                    return;
+                }
+            }
+            _guard.Tick(in sensors);
         }
 
         public void WriteState(ref StateMessage state)

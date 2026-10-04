@@ -345,5 +345,366 @@ namespace Atlas.Spaces.CurvedWalk.Tests
             Assert.AreEqual(1f + CurvedWalkChips.DialRight.x, twins.Centre(CurvedWalkTwins.DialRight).x, 1e-5f);
             Assert.DoesNotThrow(twins.Dispose);
         }
+
+        // ---- a hands session: the chips come within reach (documents/ATLAS_Hands_Design.md section 6.1) ----
+
+        static readonly float3 Eyes = new float3(0.3f, 1.6f, -0.4f);
+
+        /// <summary>The near layout as Atlas.Hands publishes it, with every number in the test's hands.</summary>
+        sealed class Reach : IReachLayout
+        {
+            public bool Near { get; set; }
+            public float3 Position { get; set; }
+            public quaternion Rotation { get; set; }
+            public float Scale { get; set; }
+        }
+
+        Reach reach;
+        IReachLayout layoutBefore;
+
+        [SetUp]
+        public void StartWithNoLayout()
+        {
+            // A layout another test left published would move every chip of this one.
+            if (AtlasServices.TryGet(out layoutBefore)) AtlasServices.Unregister(layoutBefore);
+            reach = null;
+        }
+
+        [TearDown]
+        public void PutTheLayoutBack()
+        {
+            if (reach != null) AtlasServices.Unregister<IReachLayout>(reach);
+            if (layoutBefore != null) AtlasServices.Register(layoutBefore);
+        }
+
+        /// <summary>
+        /// Publishes the near anchor of a hands session: 0.48 m from the eyes on a line 25 degrees below the
+        /// horizontal, tilted to face the head (+Z away from the walker, +Y up along the panel).
+        /// </summary>
+        Reach Publish(bool near = true, float scale = 0.75f)
+        {
+            if (reach != null) AtlasServices.Unregister<IReachLayout>(reach);
+            quaternion rotation = math.mul(quaternion.RotateY(math.radians(15f)), quaternion.RotateX(math.radians(25f)));
+            reach = new Reach { Near = near, Scale = scale, Rotation = rotation, Position = Eyes + math.mul(rotation, new float3(0f, 0f, 0.48f)) };
+            AtlasServices.Register<IReachLayout>(reach);
+            return reach;
+        }
+
+        static GazeTargetData Data(CoreInput input, GazeTargetId id)
+        {
+            Assert.IsTrue(input.Core.Targets.TryGet(id, out GazeTargetData data), "the target is registered");
+            return data;
+        }
+
+        /// <summary>Everything the twins hold about where the chips stand, for comparing two runs number by number.</summary>
+        static List<string> Snapshot(CoreInput input, CurvedWalkTwins twins)
+        {
+            var lines = new List<string> { "near " + twins.Near + " scale " + twins.Scale.ToString("R") };
+            for (int i = 0; i < CurvedWalkTwins.Count; i++)
+            {
+                GazeTargetData d = Data(input, twins.Target(i));
+                lines.Add("chip " + i + " " + d.Action + " " + d.Shape + " " + d.Context + " at " + d.Centre + " centre " + twins.Centre(i)
+                    + " r " + d.Radius.ToString("R") + " on " + input.Core.Targets.IsEnabled(twins.Target(i)) + " live " + twins.IsLive(i));
+            }
+            return lines;
+        }
+
+        [Test]
+        public void EachChip_HasItsOwnPlaceWithinReach()
+        {
+            Assert.AreEqual(ReachSlot.DialLeft, CurvedWalkTwins.SlotOf(CurvedWalkTwins.DialLeft));
+            Assert.AreEqual(ReachSlot.DialRight, CurvedWalkTwins.SlotOf(CurvedWalkTwins.DialRight));
+            Assert.AreEqual(ReachSlot.Mode, CurvedWalkTwins.SlotOf(CurvedWalkTwins.Mode));
+            // As a metre away: the two detents level with each other, left and right, the mode chip above the right one.
+            float3 left = ReachSlots.Centre(ReachSlot.DialLeft), right = ReachSlots.Centre(ReachSlot.DialRight), mode = ReachSlots.Centre(ReachSlot.Mode);
+            Assert.Less(left.x, 0f); Assert.Greater(right.x, 0f);
+            Assert.AreEqual(left.y, right.y);
+            Assert.AreEqual(right.x, mode.x);
+            Assert.Greater(mode.y, right.y);
+            Assert.GreaterOrEqual(2f * CurvedWalkChips.NearRadius(0.75f), ReachSlots.MinTargetMetres);
+            Assert.AreEqual(0.75f * CurvedWalkChips.Radius, CurvedWalkChips.NearRadius(0.75f), 1e-7f);
+            Assert.AreEqual(0.5f * ReachSlots.MinTargetMetres, CurvedWalkChips.NearRadius(0.1f), "never under 3 cm across");
+        }
+
+        // Every gaze target that is live while S2 runs, within reach: S2's three chips, the menu chip and the four signs
+        // share one frame, the anchor's, so their places alone keep them apart.
+        [Test]
+        public void Near_NoTargetOfS2OrOfTheApp_StandsOnAnother_AndAllAreWithinReach()
+        {
+            var slots = new List<ReachSlot> { ReachSlot.DialLeft, ReachSlot.DialRight, ReachSlot.Mode, MenuLayout.ChipSlot };
+            var radii = new List<float> { CurvedWalkChips.Radius, CurvedWalkChips.Radius, CurvedWalkChips.Radius, MenuLayout.OpenChipRadius };
+            var names = new List<string> { "dial-", "dial+", "mode", "menu chip" };
+            for (int i = 0; i < SpaceSignLayout.Count; i++)
+            {
+                slots.Add(SpaceSignLayout.SlotOf(i)); radii.Add(SpaceSignLayout.Radius); names.Add(SpaceSignLayout.LabelOf(i));
+            }
+            Assert.AreEqual(8, slots.Count);
+
+            // 0.75 is the usual scale; 0.625 and 0.9375 are what it becomes if it follows the reach from 0.40 to 0.60 m.
+            foreach (float scale in new[] { 0.5f, 0.625f, 0.75f, 0.9375f, 1f })
+            {
+                int pairs = 0;
+                for (int a = 0; a < slots.Count; a++)
+                {
+                    float3 c = ReachSlots.Local(slots[a], scale);
+                    float r = ReachSlots.TargetHalf(radii[a], scale);
+                    Assert.AreEqual(0f, c.z, names[a] + " lies in the anchor's plane");
+                    Assert.GreaterOrEqual(2f * r, ReachSlots.MinTargetMetres, names[a] + " is at least 3 cm across at scale " + scale);
+                    Assert.IsTrue(ReachSlots.HidesWhileMenuOpen(slots[a]), names[a] + " stands where the open menu panel stands");
+                    for (int b = a + 1; b < slots.Count; b++)
+                    {
+                        float gap = math.distance(c, ReachSlots.Local(slots[b], scale)) - r - ReachSlots.TargetHalf(radii[b], scale);
+                        // Over the whole range of the reach, a fingertip's margin: the hover band of one target must not reach the next.
+                        Assert.Greater(gap, scale >= 0.625f ? 0.025f : 0f, names[a] + " and " + names[b] + " at scale " + scale);
+                        pairs++;
+                    }
+                    if (scale != 0.75f) continue;
+                    // The usual scale: within about 20 cm of the anchor to each side.
+                    Assert.LessOrEqual(math.abs(c.x) + r, 0.20f, names[a] + " sideways");
+                    Assert.LessOrEqual(math.abs(c.y) + r, 0.20f, names[a] + " up and down");
+                }
+                Assert.AreEqual(28, pairs);
+            }
+            Assert.IsFalse(ReachSlots.HidesWhileMenuOpen(ReachSlot.MenuPanel));
+        }
+
+        [Test]
+        public void Near_TheChipsStandAtTheirSlots_InTheAnchorsFrame_TimesTheScale()
+        {
+            Reach r = Publish();
+            var input = new CoreInput();
+            input.PushContext(InputContext.Space);
+            var twins = new CurvedWalkTwins(input);
+            twins.Place(Eyes, quaternion.identity);
+            twins.Update(5, true);
+
+            Assert.IsTrue(twins.Near);
+            Assert.AreEqual(0.75f, twins.Scale);
+            for (int i = 0; i < CurvedWalkTwins.Count; i++)
+            {
+                float3 slot = ReachSlots.Centre(CurvedWalkTwins.SlotOf(i));
+                float3 centre = r.Position + math.mul(r.Rotation, 0.75f * new float3(slot.x, slot.y, -slot.z));
+                GazeTargetData d = Data(input, twins.Target(i));
+                Assert.Less(math.distance(d.Centre, centre), 1e-6f, "chip " + i + ": " + d.Centre + " against " + centre);
+                Assert.AreEqual(ReachSlots.World(r.Position, r.Rotation, 0.75f, CurvedWalkTwins.SlotOf(i)), d.Centre);
+                Assert.AreEqual(d.Centre, twins.Centre(i), "the drawn chip stands on its target");
+                Assert.AreEqual(0.75f * CurvedWalkChips.Radius, d.Radius, 1e-7f, "its radius times the scale");
+                Assert.GreaterOrEqual(2f * d.Radius, ReachSlots.MinTargetMetres, "no target under 3 cm");
+                Assert.AreEqual(InputContext.Space, d.Context);
+                Assert.IsTrue(twins.IsLive(i));
+                Assert.IsTrue(input.Core.Targets.IsEnabled(twins.Target(i)), "a target made again takes its flag again");
+            }
+            Assert.AreEqual(AtlasAction.DialLeft, Data(input, twins.Target(CurvedWalkTwins.DialLeft)).Action);
+            Assert.AreEqual(AtlasAction.DialRight, Data(input, twins.Target(CurvedWalkTwins.DialRight)).Action);
+            Assert.AreEqual(AtlasAction.Primary, Data(input, twins.Target(CurvedWalkTwins.Mode)).Action);
+
+            // The anchor moves: the chips move with it, and the head's turning moves nothing.
+            GazeTargetId id = twins.Target(CurvedWalkTwins.Mode);
+            r.Position += new float3(0.1f, -0.05f, 0.2f);
+            twins.Place(Eyes + new float3(1f, 0f, 1f), quaternion.RotateY(math.radians(120f)));
+            Assert.AreEqual(id, twins.Target(CurvedWalkTwins.Mode), "moved, not made again");
+            Assert.AreEqual(ReachSlots.World(r.Position, r.Rotation, 0.75f, ReachSlot.Mode), twins.Centre(CurvedWalkTwins.Mode));
+
+            // The scale moves at the end of the dial: the targets are made again, and a dead detent stays dead.
+            twins.Update(CurvatureDial.MaxQ, true);
+            r.Scale = 0.9f;
+            twins.Place(Eyes, quaternion.identity);
+            Assert.AreNotEqual(id, twins.Target(CurvedWalkTwins.Mode), "a sphere's radius cannot be changed in place");
+            Assert.AreEqual(0.9f * CurvedWalkChips.Radius, Data(input, twins.Target(CurvedWalkTwins.Mode)).Radius, 1e-7f);
+            Assert.AreEqual(0.9f, twins.Scale);
+            Assert.IsFalse(input.Core.Targets.IsEnabled(twins.Target(CurvedWalkTwins.DialRight)), "q = 6 is the end of the dial");
+            Assert.IsTrue(input.Core.Targets.IsEnabled(twins.Target(CurvedWalkTwins.DialLeft)));
+            Assert.IsTrue(input.Core.Targets.IsEnabled(twins.Target(CurvedWalkTwins.Mode)));
+        }
+
+        [Test]
+        public void Near_DwellOnTheRightDetent_FiresDialRight_AfterTheDwell_AndNotBefore()
+        {
+            Reach r = Publish();
+            var input = new CoreInput();
+            input.PushContext(InputContext.Space);
+            var twins = new CurvedWalkTwins(input);
+            int presses = 0, pressedFrame = -1;
+            quaternion look = quaternion.identity;
+            for (int i = 0; i < 90; i++)
+            {
+                // Steps 1 and 6 of the frame, in the loop's order.
+                input.Tick((Vector3)Eyes, (Quaternion)look, Dt);
+                if (input.Pressed(AtlasAction.DialRight)) { presses++; if (pressedFrame < 0) pressedFrame = i; }
+                Assert.IsFalse(input.Pressed(AtlasAction.DialLeft) || input.Pressed(AtlasAction.Primary), "frame " + i);
+                twins.Place(Eyes, look);
+                twins.Update(5, true);
+                look = Toward(Eyes, twins.Centre(CurvedWalkTwins.DialRight));
+            }
+            Assert.AreEqual(ReachSlots.World(r.Position, r.Rotation, 0.75f, ReachSlot.DialRight), twins.Centre(CurvedWalkTwins.DialRight));
+            Assert.AreEqual(1, presses, "one dwell, one step");
+            Assert.GreaterOrEqual(pressedFrame * Dt, 0.69f, "not before the dwell");
+            Assert.AreEqual(InputSource.Gaze, input.LastSource(AtlasAction.DialRight));
+        }
+
+        [Test]
+        public void Near_TheChipsHideWhileAMenuIsOpen_AndAMetreAwayTheyDoNot()
+        {
+            var input = new CoreInput();
+            input.PushContext(InputContext.Space);
+            var twins = new CurvedWalkTwins(input);
+
+            // A metre away, as always: a menu takes the input, and the chips stay as they are.
+            twins.Place(Eyes, quaternion.identity);
+            Assert.IsTrue(twins.Update(5, true));
+            input.PushContext(InputContext.Menu);
+            twins.Place(Eyes, quaternion.identity);
+            Assert.IsFalse(twins.Update(5, true), "nothing changed");
+            for (int i = 0; i < CurvedWalkTwins.Count; i++) Assert.IsTrue(twins.IsLive(i), "far, menu open: chip " + i);
+            input.PopContext(InputContext.Menu);
+
+            // Within reach the open menu panel stands on the chips' places: they are neither drawn nor live.
+            Publish();
+            twins.Place(Eyes, quaternion.identity);
+            Assert.IsFalse(twins.Update(5, true), "within reach, no menu: the same chips are live");
+            input.PushContext(InputContext.Menu);
+            twins.Place(Eyes, quaternion.identity);
+            Assert.IsTrue(twins.Update(5, true), "the caller redraws: the chips go");
+            for (int i = 0; i < CurvedWalkTwins.Count; i++)
+            {
+                Assert.IsFalse(twins.IsLive(i), "near, menu open: chip " + i);
+                Assert.IsFalse(input.Core.Targets.IsEnabled(twins.Target(i)));
+            }
+            input.PopContext(InputContext.Menu);
+            twins.Place(Eyes, quaternion.identity);
+            Assert.IsTrue(twins.Update(5, true), "and come back when the menu closes");
+            for (int i = 0; i < CurvedWalkTwins.Count; i++) Assert.IsTrue(twins.IsLive(i), "near, menu closed: chip " + i);
+        }
+
+        /// <summary>A walker who stands, turns past the chips' follow angle, steps aside and reaches the end of the dial.</summary>
+        static void Walk(CurvedWalkTwins twins, Action<float3, quaternion> between)
+        {
+            quaternion ahead = quaternion.identity, turned = quaternion.RotateY(math.radians(70f));
+            twins.Place(Eyes, ahead);
+            twins.Update(5, true);
+            between(Eyes, ahead);
+            twins.Place(Eyes, turned);
+            twins.Update(5, false);
+            between(Eyes, turned);
+            twins.Place(Eyes + new float3(0.4f, 0f, 0.2f), quaternion.RotateY(math.radians(80f)));
+            twins.Update(CurvatureDial.MaxQ, true);
+        }
+
+        [Test]
+        public void WithNearFalse_EverythingIsExactlyWhereItIsWithNoLayoutAtAll()
+        {
+            var plain = new CoreInput();
+            plain.PushContext(InputContext.Space);
+            var none = new CurvedWalkTwins(plain);
+            Walk(none, (head, look) => { });
+            List<string> expected = Snapshot(plain, none);
+
+            Publish(near: false);
+            var input = new CoreInput();
+            input.PushContext(InputContext.Space);
+            var far = new CurvedWalkTwins(input);
+            Walk(far, (head, look) => { });
+            Assert.That(Snapshot(input, far), Is.EqualTo(expected), "Near false: positions, radii and flags to the last number");
+            Assert.AreEqual(1f, far.Scale);
+            Assert.IsFalse(far.Near);
+        }
+
+        [Test]
+        public void SwitchingNearOnAndOff_ReturnsEverythingToItsPlace()
+        {
+            var plain = new CoreInput();
+            plain.PushContext(InputContext.Space);
+            var control = new CurvedWalkTwins(plain);
+            Walk(control, (head, look) => control.Place(head, look));
+            List<string> expected = Snapshot(plain, control);
+
+            Reach r = Publish(near: false);
+            var input = new CoreInput();
+            input.PushContext(InputContext.Space);
+            var twins = new CurvedWalkTwins(input);
+            bool everNear = false;
+            Walk(twins, (head, look) =>
+            {
+                // The same frame as the control's, within reach.
+                r.Near = true;
+                twins.Place(head, look);
+                everNear |= twins.Near && Data(input, twins.Target(0)).Radius < CurvedWalkChips.Radius;
+                r.Near = false;
+            });
+            Assert.IsTrue(everNear, "the chips were within reach in between");
+            Assert.That(Snapshot(input, twins), Is.EqualTo(expected), "back to the last number: centres, radii, flags");
+        }
+
+        [Test]
+        public void Near_PlacingAllocatesNothing()
+        {
+            Reach r = Publish();
+            var input = new CoreInput();
+            input.PushContext(InputContext.Space);
+            var twins = new CurvedWalkTwins(input);
+            for (int i = 0; i < 20; i++) { twins.Place(Eyes, quaternion.identity); twins.Update(5, i % 2 == 0); }   // warm up
+
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < 100; i++)
+            {
+                r.Position += new float3(0.001f, 0f, 0f);
+                twins.Place(Eyes, quaternion.identity);
+                twins.Update(5, i % 2 == 0);
+            }
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;   // read before the assertion boxes anything
+            Assert.AreEqual(0L, allocated, "bytes allocated by 100 frames within reach");
+        }
+
+#if !ATLAS_HEADLESS
+        // The chips as CurvedWalkHud draws them, in a hands session: each text stands on its twin's slot about the near
+        // anchor, on the world layer, where the eye cameras test it against depth; it goes while a menu holds the input,
+        // and with Near off it is back where it has always been.
+        [Test, Category("Unity")]
+        public void Near_TheDrawnChips_StandOnTheirSlots_OnTheWorldLayer_AndHideWhileAMenuIsOpen()
+        {
+            Reach r = Publish();
+            var input = new CoreInput();
+            input.PushContext(InputContext.Space);
+            var world = new GameObject("S2 world");
+            var hud = new CurvedWalkHud(null, world.transform, input);
+            try
+            {
+                var chips = new Transform[CurvedWalkTwins.Count];
+                for (int i = 0; i < chips.Length; i++) chips[i] = world.transform.Find("CurvedWalkChip" + i);
+                Assume.That(chips[0], Is.Not.Null, "the project's TextMeshPro font: without it S2 draws no chip");
+
+                hud.Upload(Eyes, quaternion.identity, 5, null);
+                for (int i = 0; i < chips.Length; i++)
+                {
+                    Assert.IsTrue(chips[i].gameObject.activeSelf, "chip " + i + " is drawn while it is live");
+                    Vector3 slot = (Vector3)ReachSlots.World(r.Position, r.Rotation, 0.75f, CurvedWalkTwins.SlotOf(i));
+                    Assert.Less(Vector3.Distance(slot, chips[i].position), 1e-5f, "chip " + i + " stands at its slot");
+                    Assert.AreEqual(Atlas.Rendering.PortalStencilTable.WorldLayer, chips[i].gameObject.layer, "depth-tested: the world layer");
+                }
+
+                input.PushContext(InputContext.Menu);
+                hud.Upload(Eyes, quaternion.identity, 5, null);
+                for (int i = 0; i < chips.Length; i++) Assert.IsFalse(chips[i].gameObject.activeSelf, "chip " + i + " is hidden while the menu panel is open");
+                input.PopContext(InputContext.Menu);
+                hud.Upload(Eyes, quaternion.identity, 5, null);
+                for (int i = 0; i < chips.Length; i++) Assert.IsTrue(chips[i].gameObject.activeSelf, "chip " + i + " is back");
+
+                // A gamepad is connected: everything is exactly where it was.
+                r.Near = false;
+                hud.Upload(Eyes, quaternion.identity, 5, null);
+                float3[] far = { CurvedWalkChips.DialLeft, CurvedWalkChips.DialRight, CurvedWalkChips.Mode };
+                for (int i = 0; i < chips.Length; i++)
+                {
+                    Assert.Less(Vector3.Distance((Vector3)(Eyes + far[i]), chips[i].position), 1e-5f, "chip " + i + " a metre away again");
+                    Assert.AreEqual(Atlas.Rendering.PortalStencilTable.WorldLayer, chips[i].gameObject.layer);
+                }
+            }
+            finally
+            {
+                hud.Dispose();
+                UnityEngine.Object.DestroyImmediate(world);
+            }
+        }
+#endif
     }
 }

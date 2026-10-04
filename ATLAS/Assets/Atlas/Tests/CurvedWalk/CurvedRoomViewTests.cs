@@ -333,6 +333,28 @@ namespace Atlas.Spaces.CurvedWalk.Tests
             }
         }
 
+        // ShowObjects = false: the objects stay hidden at every kappa and the kerbs are still drawn; the default shows them.
+        [Test, Category("Unity")]
+        public void View_ShowObjectsFalse_HidesTheObjectsAndKeepsTheKerbs()
+        {
+            Build(RoomFixtures.Sample4x5Table);
+            using (var view = new CurvedRoomView(content))
+            {
+                Assert.IsTrue(view.ShowObjects, "the default draws the objects");
+                Iso2 id = Neutral(1);
+                view.Upload(1, 1.6, id, id, true);
+                Assert.IsTrue(content.ObjectsVisible);
+                view.ShowObjects = false;
+                view.Upload(1, 1.6, id, id, true);
+                Assert.IsFalse(content.ObjectsVisible);
+                Assert.AreEqual(WallMode.Kerbs, content.Walls);
+                view.Upload(0, 1, Iso2.Identity, Iso2.Identity, true);
+                Assert.IsFalse(content.ObjectsVisible);
+            }
+            content.ResetPresentation();
+            Assert.IsTrue(content.ObjectsVisible, "the host's reset gives the objects back");
+        }
+
         // The real room content with a wall-mounted object: its material's anchor carries the height its Transform has, in both
         // curved modes, and the anchor is the identity again at K = 0.
         [Test, Category("Unity")]

@@ -5,6 +5,7 @@ namespace Atlas.Safety
     /// <summary>
     /// clear(p) of Master Plan section 4.10 at a floor point: the smaller of the room's static distance field
     /// and the distance to the nearest live dynamic cell, metres. p is (x, z) in the room (anchor) frame.
+    /// A dynamic cell that is still pending in a hands session (seen once, nearer than 0.80 m) does not count.
     /// <see cref="BumpGuard"/> implements it over the live map; a space that places things on the floor (the
     /// Lung valve chambers) asks it before it puts one down, and a test passes a stand-in.
     /// </summary>

@@ -86,7 +86,7 @@ namespace Atlas.App.Tests
         }
 
         [Test]
-        public void PerfTour_Schedule_VisitsAllSevenSpaces_BothGluedLayouts_AndCurvedWalkAtQ5()
+        public void PerfTour_Schedule_VisitsAllSpaces_BothGluedLayouts_AndCurvedWalkAtQ5()
         {
             PerfSchedule tour = PerfSchedule.Tour(30f, id => true);
             Assert.That(tour.Kind, Is.EqualTo(PerfRunKind.Tour));
@@ -102,7 +102,7 @@ namespace Atlas.App.Tests
             Assert.That(labels, Is.EqualTo(new[]
             {
                 "S0 Home", "S1 Glued 5x5", "S1 Glued 3x3x3", "S2 Curved Walk", "S3 Aligned Cells", "S4 Small Planet",
-                "S5 Impossible Rooms", "S6 Slicer"
+                "S5 Impossible Rooms", "S6 Slicer", "S7 Network"
             }));
             Assert.That(tour.Steps[1].Variant, Is.EqualTo(PerfVariant.Glued5x5));
             Assert.That(tour.Steps[2].Variant, Is.EqualTo(PerfVariant.GluedT3));
@@ -111,7 +111,7 @@ namespace Atlas.App.Tests
             Assert.That(tour.SettleOf(in tour.Steps[3]), Is.EqualTo(PerfSchedule.CurvedStandSeconds));
             Assert.That(tour.SettleOf(in tour.Steps[4]), Is.EqualTo(PerfSchedule.DefaultSettleSeconds));
             Assert.That(PerfSchedule.CurvedStandSeconds, Is.GreaterThan(4f), "the ramp takes 4 s of standing");
-            Assert.That(tour.TotalSeconds, Is.EqualTo(8 * 30f + 7 * PerfSchedule.DefaultSettleSeconds + PerfSchedule.CurvedStandSeconds).Within(1e-3));
+            Assert.That(tour.TotalSeconds, Is.EqualTo(9 * 30f + 8 * PerfSchedule.DefaultSettleSeconds + PerfSchedule.CurvedStandSeconds).Within(1e-3));
 
             string notes = string.Join("\n", tour.Notes);
             Assert.That(notes, Does.Not.Contain("not in this build"));
@@ -137,10 +137,10 @@ namespace Atlas.App.Tests
         }
 
         [Test]
-        public void PerfTour_Schedule_WithEverySpaceBuiltHasEightRows()
+        public void PerfTour_Schedule_WithEverySpaceBuiltHasNineRows()
         {
             PerfSchedule tour = PerfSchedule.Tour(1f, null);
-            Assert.That(tour.Steps.Length, Is.EqualTo(8), "S0 to S6, S1 twice");
+            Assert.That(tour.Steps.Length, Is.EqualTo(9), "S0 to S7, S1 twice");
             Assert.That(tour.Steps[0].Seconds, Is.EqualTo(PerfSchedule.MinVisitSeconds), "a visit is never shorter than two seconds");
         }
 

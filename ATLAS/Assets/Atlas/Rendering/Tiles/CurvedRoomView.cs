@@ -34,6 +34,8 @@ namespace Atlas.Rendering
         public double2 ObjectOrigin { get; set; }
         /// <summary>The warp mode at kappa > 0: spherical (2), or S3 (3) for the Small Planet's planet.view3d.</summary>
         public float SphericalMode { get; set; } = AtlasWarpCpu.ModeSpherical;
+        /// <summary>False draws no objects (the kerbs and the shell only); the default draws and warps every object.</summary>
+        public bool ShowObjects { get; set; } = true;
         public int ObjectCount => room.ObjectCount;
         public Renderer FloorRenderer => room.FloorRenderer;
         /// <summary>The full walls at kappa = 0, the kerbs in curved space.</summary>
@@ -47,7 +49,7 @@ namespace Atlas.Rendering
         public void Upload(double kappa, double lengthScaleM, in Iso2 walker, in Iso2 tileZeroInCurrent, bool drawRoom)
         {
             if (disposed || !room.IsBuilt) return;
-            room.ObjectsVisible = drawRoom;
+            room.ObjectsVisible = drawRoom && ShowObjects;
             if (kappa == 0)
             {
                 Flatten();
@@ -65,7 +67,7 @@ namespace Atlas.Rendering
             shell.SetFloat(AtlasShaderIDs.WarpMode, mode);
             shell.SetMatrix(AtlasShaderIDs.Anchor, WarpAnchor.ToMatrix(a0));
             AtlasWarpBounds.Apply(room.WallRenderer);
-            for (int i = 0; i < room.ObjectCount; i++)
+            for (int i = 0; ShowObjects && i < room.ObjectCount; i++)
             {
                 IRoomObjectView view = room.GetObject(i);
                 RoomObject o = view.Data;

@@ -94,9 +94,16 @@ def plan(boxes: Iterable[tuple[int, Sequence[float]]]) -> tuple[dict[int, int], 
     return targets, light_target(n)
 
 
-def plan_room(boxes: Iterable[tuple[int, Sequence[float]]]) -> RoomPlan:
-    """Split a room's boxes into those that receive meshes and those that stay without, with the targets."""
+def plan_room(boxes: Iterable[tuple[int, Sequence[float]]], max_generated: int = MAX_GENERATED_PER_ROOM) -> RoomPlan:
+    """Split a room's boxes into those that receive meshes and those that stay without, with the targets.
+
+    ``max_generated`` lowers the 32 where the generator is slow. It only decides which boxes are
+    generated: the targets of those that are stay the rule's, so the phone and the Forge agree.
+    """
     boxes = [(int(box_id), dims) for box_id, dims in boxes]
     order = rank_boxes(boxes)
     targets, light = plan(boxes)
-    return RoomPlan(order[:MAX_GENERATED_PER_ROOM], order[MAX_GENERATED_PER_ROOM:], targets, light)
+    cap = min(int(max_generated), MAX_GENERATED_PER_ROOM)
+    for box_id in order[cap:]:
+        targets[box_id] = 0
+    return RoomPlan(order[:cap], order[cap:], targets, light)

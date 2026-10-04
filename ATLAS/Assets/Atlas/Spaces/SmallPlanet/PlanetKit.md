@@ -108,18 +108,19 @@ so a re-export of the same .blend changes nothing. Missing `.meta` files are wri
    = 28,488 triangles, inside 70 and 190k.
 7. **Done.** planet.R's default is now `SmallPlanetConstants.KitRadius` = 2.291831 m (this manifest's R0; a test
    checks the two agree), still a lower bound: R = max(room radius, planet.R). Setting planet.R to 0 gives the room's
-   loop-fit planet again, with the props relatively taller.
+   loop-fit planet again, with the props relatively taller. Later lowered to 2.0 m (`SmallPlanetCore.DefaultRadiusM`)
+   for a smaller planet: the props shrink with it by about 13 %.
 8. Unchanged: the committed `.meta` files are used.
 
 Left over:
 
-- **The default planet no longer closes the 3-corner lap on foot in a small room.** With planet.R = 2.29 m, any room
+- **The default planet no longer closes the 3-corner lap on foot in a small room.** With planet.R = 2.0 m, any room
   whose loop-fit radius is smaller (the 3 x 3 m sample room: 1.27 m) walks the bigger planet, so three right turns
   of the room's lap side do not close the loop (see `art/blender/README.md`, "Planet size"). For the lap demo, set
   planet.R to 0 in the menu (or re-export at `PLANET_SCALE = 1.0`). The walk tests set planet.R = 0 explicitly.
 - `planet.R`'s default is a constant, not read from the manifest at run time, so the phone, the Station and the menu
   agree before any kit is loaded; re-exporting at another scale means updating `SmallPlanetConstants.KitRadius`
-  (`PlanetKitTests` fails until it matches).
+  (`PlanetKitTests` fails until it matches). The default itself, `SmallPlanetCore.DefaultRadiusM`, is set apart.
 - The ground lines (uv1 on the ground) were not compared on a device against the procedural tile edges.
 
 ## Sky (`SmallPlanetSky`, `SmallPlanetSkyMesh`)

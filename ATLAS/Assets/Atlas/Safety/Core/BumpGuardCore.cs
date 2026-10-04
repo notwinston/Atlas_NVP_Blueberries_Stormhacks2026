@@ -17,7 +17,7 @@ namespace Atlas.Safety
         public float Speed;
         /// <summary>How long tracking has not been Normal, or the anchor not tracked, seconds.</summary>
         public float NotNormalSeconds;
-        /// <summary>Occupied cells in the dynamic layer.</summary>
+        /// <summary>Occupied cells in the dynamic layer, pending ones included.</summary>
         public int DynamicCells;
         /// <summary>Times the level rose since Reset.</summary>
         public int RisingEdges;
@@ -40,10 +40,12 @@ namespace Atlas.Safety
         float[] _sdf;
         float[] _topHeight;
         double[] _lastHit;
+        double[] _firstHit;
+        byte[] _pending;
         int[] _emptyState;
         int[] _blockCount;
         readonly int[] _activeCount = new int[1];
-        GCHandle _sdfPin, _topPin, _hitPin, _emptyPin, _blockPin, _activePin;
+        GCHandle _sdfPin, _topPin, _hitPin, _firstPin, _pendingPin, _emptyPin, _blockPin, _activePin;
         bool _pinned;
         BumpGridSpec _grid;
         DynamicGrid _dynamic;
@@ -90,7 +92,7 @@ namespace Atlas.Safety
         public BumpLevel RawLevel { get; private set; }
         /// <summary>Diagnostic: the last step saw a pose jump.</summary>
         public bool PoseJumped { get; private set; }
-        /// <summary>Diagnostic: occupied cells in the dynamic layer.</summary>
+        /// <summary>Diagnostic: occupied cells in the dynamic layer, pending ones included.</summary>
         public int DynamicCellCount => _activeCount[0];
         /// <summary>Diagnostic: the last depth image's result.</summary>
         public DepthFrameResult LastDepth => _depth;
@@ -137,6 +139,8 @@ namespace Atlas.Safety
             Array.Copy(sdfMetres, _sdf, cells);
             _topHeight = new float[cells];
             _lastHit = new double[cells];
+            _firstHit = new double[cells];
+            _pending = new byte[cells];
             _emptyState = new int[cells];
             int bx = DynamicLayer.BlocksFor(width), bz = DynamicLayer.BlocksFor(height);
             _blockCount = new int[bx * bz];
@@ -145,6 +149,8 @@ namespace Atlas.Safety
             _sdfPin = GCHandle.Alloc(_sdf, GCHandleType.Pinned);
             _topPin = GCHandle.Alloc(_topHeight, GCHandleType.Pinned);
             _hitPin = GCHandle.Alloc(_lastHit, GCHandleType.Pinned);
+            _firstPin = GCHandle.Alloc(_firstHit, GCHandleType.Pinned);
+            _pendingPin = GCHandle.Alloc(_pending, GCHandleType.Pinned);
             _emptyPin = GCHandle.Alloc(_emptyState, GCHandleType.Pinned);
             _blockPin = GCHandle.Alloc(_blockCount, GCHandleType.Pinned);
             _activePin = GCHandle.Alloc(_activeCount, GCHandleType.Pinned);
@@ -154,6 +160,8 @@ namespace Atlas.Safety
             {
                 TopHeight = (float*)_topPin.AddrOfPinnedObject(),
                 LastHit = (double*)_hitPin.AddrOfPinnedObject(),
+                FirstHit = (double*)_firstPin.AddrOfPinnedObject(),
+                Pending = (byte*)_pendingPin.AddrOfPinnedObject(),
                 EmptyState = (int*)_emptyPin.AddrOfPinnedObject(),
                 BlockCount = (int*)_blockPin.AddrOfPinnedObject(),
                 ActiveCount = (int*)_activePin.AddrOfPinnedObject(),
@@ -204,7 +212,7 @@ namespace Atlas.Safety
             if (_pinned) DynamicLayer.ClearAll(_dynamic);
         }
 
-        /// <summary>Test hook: marks the dynamic cell under a floor point as hit at this height and time.</summary>
+        /// <summary>Test hook: marks the dynamic cell under a floor point as hit at this height and time, outside a hands session: it counts at once.</summary>
         public void StampDynamic(float2 xz, float height, double time)
         {
             if (_pinned) DynamicLayer.Stamp(_dynamic, xz, height, time);
@@ -216,6 +224,7 @@ namespace Atlas.Safety
         /// <summary>
         /// Describes a depth image for <see cref="BumpDepthKernel.Process"/>, for callers that run the kernel in
         /// a job and hand the result to <see cref="SubmitDepthResult"/>. Gives the image its sequence number.
+        /// The description carries no depth mask; a caller that has one sets <see cref="DepthKernelInput.Mask"/>.
         /// </summary>
         public DepthKernelInput MakeDepthInput(int width, int height, in DepthIntrinsics intrinsics,
             float3 sensorPosition, quaternion sensorRotation, double time, bool trackingNormal, bool anchorTracked)
@@ -244,6 +253,16 @@ namespace Atlas.Safety
         {
             DepthKernelInput input = MakeDepthInput(width, height, intrinsics, sensorPosition, sensorRotation, time,
                 trackingNormal, anchorTracked);
+            ProcessDepth(depth, input);
+        }
+
+        /// <summary>
+        /// Processes one depth image now from a description made by <see cref="MakeDepthInput"/>: the way in
+        /// for an image that comes with a depth mask (<see cref="DepthKernelInput.Mask"/>).
+        /// </summary>
+        /// <param name="depth">input.Width x input.Height depths in metres, row 0 at the top of the image.</param>
+        public void ProcessDepth(float* depth, in DepthKernelInput input)
+        {
             BumpDepthKernel.Process(depth, input, StaticField, _grid, _dynamic, out DepthFrameResult result);
             SubmitDepthResult(result);
         }
@@ -357,7 +376,7 @@ namespace Atlas.Safety
             // Otherwise no bearing is known this frame: the last direction stands.
         }
 
-        /// <summary>clear(p) of section 4.10: the smaller of the static clearance and the distance to the nearest dynamic cell, metres.</summary>
+        /// <summary>clear(p) of section 4.10: the smaller of the static clearance and the distance to the nearest dynamic cell that counts, metres.</summary>
         public float ClearAt(float2 xz, double time)
         {
             if (!_pinned) return float.PositiveInfinity;
@@ -477,6 +496,8 @@ namespace Atlas.Safety
                 _sdfPin.Free();
                 _topPin.Free();
                 _hitPin.Free();
+                _firstPin.Free();
+                _pendingPin.Free();
                 _emptyPin.Free();
                 _blockPin.Free();
                 _activePin.Free();
@@ -487,6 +508,8 @@ namespace Atlas.Safety
             _sdf = null;
             _topHeight = null;
             _lastHit = null;
+            _firstHit = null;
+            _pending = null;
             _emptyState = null;
             _blockCount = null;
             _activeCount[0] = 0;

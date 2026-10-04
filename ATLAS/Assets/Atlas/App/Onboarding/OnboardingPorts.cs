@@ -74,6 +74,8 @@ namespace Atlas.App.Onboarding
         Adjust = 15,
         Back = 16,
         HeadsetNow = 17,
+        /// <summary>Switches the Station's TripoSG models of the scanned objects on or off (forge.backend).</summary>
+        ToggleForge = 18,
     }
 
     public enum CameraAccess : byte { NotAsked = 0, Asking = 1, Granted = 2, Denied = 3 }
@@ -157,6 +159,18 @@ namespace Atlas.App.Onboarding
         RoomModel Activate(RoomSource source);
         /// <summary>The walker has been placed in the room frame: Home may be entered.</summary>
         bool RoomInForce { get; }
+    }
+
+    /// <summary>
+    /// Whether the scanned objects are sent to the Forge, where the Station's TripoSG makes a model of each
+    /// (the parameter forge.backend). Off, every object keeps its built-in mesh.
+    /// </summary>
+    public interface IOnboardingForge
+    {
+        /// <summary>False when the build has no asset client to send photos with: the switch is not offered.</summary>
+        bool Available { get; }
+        bool Enabled { get; }
+        void SetEnabled(bool enabled);
     }
 
     /// <summary>Row 5 of section 14.2: the stereo view, Bump Guard armed, gaze input, Home.</summary>
