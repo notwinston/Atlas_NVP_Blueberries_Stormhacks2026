@@ -70,3 +70,18 @@ Files (all `Assets/Atlas/Blades/FieldFit/`): `FieldFitFeature.cs` (`FieldFitFeat
 | DV-B03-g | GPU tests need a graphics device. The shared runner passes `-nographics`, so they call `Assert.Ignore` there instead of failing (Brief §2 says fail); the CPU mirror `BlitReference` of the shader runs the same criterion everywhere. Run `FieldFitBlitTests` once without `-nographics` before G13. |
 | DV-B03-h | `lens.on` handling: if the lookup was never built (invalid parameters on activation) the rig is left on the ordinary path. |
 | DV-B03-i | Tests are written together with the implementation; the red phase was a compile failure (missing types), as in B02. |
+
+## Field-loss mask and slider (P3-B04)
+
+`FieldLossMask.FromTexture(tex, halfWidthDeg)` (R channel, threshold 0.5, Felzenszwalb signed EDT, boundary half-way between pixels, radians),
+`FieldLossMaskData.Margin/MarginStatic`, mask terms phi_mask and phi_out in `LensLutJob`, `LensRadialTable` (1,024 samples) for Morph 0 < t < 1 (DV16),
+`lens.t` read by `RegistryLensSource` (already in B03). Measured (Editor, CPU mirror of the blit rule, D_test, 720 rays):
+tunnel edge max error (a) None+mask 0.082, (b) Morph+mask 0.081, (c) Morph no mask 0.057, (d) lane D placeholder preset 0.131 deg (limit 0.2);
+radial table inverse worst 0.0067 deg (limit 0.02); partial-morph round trip 0.039 deg (limit 0.1); rebuild median 0.58 ms. Evidence: `docs/laneB/evidence/P3-B04/` (`ring_test.png` has red circles at 9.8 and 10.2 deg).
+
+| Id | Note |
+|---|---|
+| DV-B04-a | The shader edge rule is unchanged (no defect found). |
+| DV-B04-b | One line in `FieldFitFeature.Init` (owned by B03) builds the mask from `settings.fieldLossMask`; nothing else of B03's files changed. |
+| DV-B04-c | Config (d) treats lane D's placeholder `tunnel10.png` (4 px/deg, README) as M = 64 deg, not the DV6 M = 30 deg: lane D and lane B must agree on one (set `FieldFitSettings.maskHalfWidthDeg` accordingly). `FieldFitSettings.asset` leaves `fieldLossMask` empty (StreamingAssets file, lane D's). |
+| DV-B04-d | The ring test scene is the CPU mirror of the shader (DV14, DV-B03-g). |
