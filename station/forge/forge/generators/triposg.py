@@ -230,6 +230,11 @@ class TripoSGGenerator:
             self._loading = "the model is being loaded"
             return pipeline_class.from_pretrained(str(weights)).to("cuda", dtype)
 
+        def not_loaded(error) -> str:
+            # A file still left half-way after the fetch is most likely why: say so beside the error.
+            gap = self.weights_gap()
+            return f"the model could not be loaded from {weights}: {error}" + (f" ({gap})" if gap else "")
+
         fetched = bool(self.weights_gap())
         if fetched:
             # No folder, no marker, or a file a stopped download left half-way: fetch what is missing.
@@ -238,7 +243,7 @@ class TripoSGGenerator:
             pipe = read()
         except Exception as exc:
             if fetched:
-                raise _NotReady(f"the model could not be loaded from {weights}: {exc}") from exc
+                raise _NotReady(not_loaded(exc)) from exc
             # The folder looked whole and did not load. A download that stopped leaves the marker
             # and not the weights, so fetch what is missing (a whole folder costs a few requests)
             # and read once more.
@@ -250,7 +255,7 @@ class TripoSGGenerator:
             except _NotReady as fetch:
                 raise _NotReady(f"the model could not be loaded from {weights}: {exc}; {fetch}") from exc
             except Exception as again:
-                raise _NotReady(f"the model could not be loaded from {weights}: {again}") from again
+                raise _NotReady(not_loaded(again)) from again
         self._torch = torch
         log.info("TripoSG loaded on %s", self._gpu_name)
         return pipe
@@ -263,10 +268,11 @@ class TripoSGGenerator:
             self._runtime.download(str(weights))
         except Exception as exc:
             raise _NotReady(f"the weights could not be downloaded to {weights}: {exc}") from exc
-        gap = self.weights_gap()
-        if gap:
-            # Without a network the library hands back the folder as it is.
-            raise _NotReady(f"the weights are still not complete after the download ({gap})")
+        # A download that came back is taken at its word, apart from the marker: without a network
+        # the library hands the folder back as it is, and an unfinished file may be a leftover of
+        # another revision that it will never finish. The load says whether the weights are there.
+        if not (weights / _WEIGHTS_MARKER).is_file():
+            raise _NotReady(f"the download left no {_WEIGHTS_MARKER} in {weights}")
 
     # -- one object --------------------------------------------------------------------
 

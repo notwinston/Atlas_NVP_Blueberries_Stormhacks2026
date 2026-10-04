@@ -163,7 +163,9 @@ What the `triposg` generator does around the model (mesh design §5.1):
   alone says nothing. A folder is downloaded (the download resumes what it has) when it has no
   `model_index.json`, or when `.cache/huggingface/download` under it holds a file that was left half-way. A
   folder that shows neither and still does not load is fetched once and read again, before the load is given
-  up: that is the folder of a download that stopped before one of its files was begun.
+  up: that is the folder of a download that stopped before one of its files was begun. A download that came
+  back without an error is followed by the load whatever lies in that folder: a half-way file can be the
+  leftover of an older revision, which no download finishes, and must not keep whole weights from loading.
 - **Matting is required.** TripoSG is never given a picture that is not matted. With no matting model
   installed, `generatorReady` is false and a job fails with `TripoSG cannot run: no matting model is installed`.
   A view whose matting fails, or whose matte is empty, is not sent; the next view is tried.
@@ -368,7 +370,9 @@ curl http://127.0.0.1:8000/health
 | `PyTorch is not installed`, `diso is not installed …`, `no matting model is installed …`, `FORGE_TRIPOSG_REPO does not point at a TripoSG checkout` | That step of the install is missing in this environment, or the variable is not set in this prompt |
 | `CUDA is not available to PyTorch` | Step 2's check line |
 | `diso cannot be imported: …` | The build of `diso`; see step 3 |
-| `the model could not be loaded from …: …` | The rest of the line is PyTorch's or diffusers' own error. Out of memory: close whatever else uses the card |
+| `the model is not loaded yet, and the weights are not complete (…): they are downloaded first` | No job has come yet. The first one downloads what is missing, then loads |
+| `the weights could not be downloaded to …: …` | The network, or the disk. The next job tries again and resumes what is there |
+| `the model could not be loaded from …: …` | The rest of the line is PyTorch's or diffusers' own error. Out of memory: close whatever else uses the card. `no file named …`, with `a download into … stopped before it was whole` behind it: the weights are not all there and the Station could not reach the hub (without a network the library hands the folder back as it is); give it a network and send a job |
 | `the matting model could not be loaded: …` | `rembg` could not fetch or start its model |
 
 ### 5 · Send one object and read the job report

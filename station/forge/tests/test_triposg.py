@@ -329,6 +329,21 @@ def test_a_marker_without_the_weights_is_fetched_when_the_load_fails(tmp_path, m
     assert generator.generate(request()).decoder == "flash" and runtime.downloads == [folder]
 
 
+def test_a_leftover_of_another_download_does_not_keep_the_model_from_loading(tmp_path, matting):
+    # The weights are whole, and beside them lies an unfinished file of another revision, which no download
+    # will ever finish. It costs a look at the hub at every start, and nothing else.
+    settings = station(tmp_path)
+    stale = Path(weights_folder(settings)) / PART.parent / "old=.0000aaaa.incomplete"
+    stale.parent.mkdir(parents=True, exist_ok=True)
+    stale.write_bytes(b"")
+    runtime = FakeRuntime()
+    generator = TripoSGGenerator(settings, runtime)
+    assert "stopped before it was whole" in generator.weights_gap()
+    generator.warm_up()
+    assert runtime.downloads == [weights_folder(settings)] and runtime.loads == [weights_folder(settings)]
+    assert generator.availability() == (True, "") and stale.is_file()
+
+
 def test_weights_setting_and_full_precision(tmp_path, matting):
     elsewhere = tmp_path / "weights"
     settings = station(tmp_path, triposg_weights=str(elsewhere), triposg_half_precision=False)
@@ -353,11 +368,21 @@ def test_a_download_that_fails_stops_or_has_no_network(tmp_path, matting):
         generator.warm_up()
     assert runtime.loads == [] and "stopped before it was whole" in generator.weights_gap()
 
-    # No network: the library hands the folder back as it is, and the adapter says it is still not whole.
+    # No network: the library hands the folder back as it is. The load is tried, once, and says what is missing.
+    settings = station(tmp_path / "c", weights="partial")
     runtime = FakeRuntime(download="offline")
-    generator = TripoSGGenerator(station(tmp_path / "c", weights="partial"), runtime)
-    with pytest.raises(GeneratorUnavailable, match="still not complete after the download"):
+    generator = TripoSGGenerator(settings, runtime)
+    with pytest.raises(GeneratorUnavailable, match="could not be loaded from .*no file named diffusion_pytorch_model"
+                                                   ".*stopped before it was whole"):
         generator.warm_up()
+    assert runtime.loads == [weights_folder(settings)] and runtime.downloads == [weights_folder(settings)]
+    # No network and a folder with no marker at all: nothing to load from.
+    settings = station(tmp_path / "c2", weights="absent")
+    (Path(weights_folder(settings)) / "vae").mkdir(parents=True)
+    (Path(weights_folder(settings)) / "vae" / "config.json").write_text("{}")
+    runtime = FakeRuntime(download="offline")
+    with pytest.raises(GeneratorUnavailable, match="the download left no model_index.json"):
+        TripoSGGenerator(settings, runtime).warm_up()
     assert runtime.loads == []
 
     # No network and a marker without the weights: both loads fail, and the reason is the load's own.
