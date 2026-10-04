@@ -2971,21 +2971,21 @@ Every lane's content counts against these. A gate measures them on `budget_room`
 | S0 Home | ≤ 80 | ≤ 250k | Up to 32 furniture meshes at the full copy, 120,000 triangles in total; shell ≤ 3,000. Held by `RoomBudget.HomeDrawCallsPerFrame` and `HomeTrianglesPerFrame` and by their tests |
 | S1 Glued 5 × 5 | ≤ 150 | ≤ 250k | 25 cells, 24 avatars, the room once |
 | S1 Glued T³ | ≤ 160 | ≤ 250k | 27 cells, 26 avatars, the room once |
-| S2 Curved Walk, ρ = 3 | ≤ 210 | ≤ 250k | Up to 71 tiles, plus the room |
+| S2 Curved Walk, ρ = 3 | ≤ 240 | ≤ 370k | Up to 71 tiles, plus the room at Home's full load (80 draws, 250k triangles); the tiles' own share stays at 150 draws and 120k triangles |
 | S3 Aligned Cells | ≤ 170 | ≤ 200k | Up to 57 cell instances; furniture once |
 | S4 Small Planet | ≤ 70 | ≤ 190k | Six tiles plus the room |
 | S5 Impossible Rooms | ≤ 60 | ≤ 150k | Two rooms through one portal, plus the room |
 | S6 Slicer | ≤ 70 | ≤ 160k | Home plus the cross-section |
 
-Only Home's row is changed here, and only Home's row is held by code: `RoomBudget.Estimate` gives about 246,000
+Home's and S2's rows are changed here, and only they are held by code: `RoomBudget.Estimate` gives about 246,000
 triangles and 52 draw calls per frame for the 24 stand-ins of 5,000 triangles of `budget_room_120k` at `Full`
 (`FurnitureLevelTests`), and the Home tests assert at most 80 draw calls and 250,000 triangles. That is a count of
-the builders' output, not a phone measurement. The mesh design §5.4 proposes S2 Curved Walk at ≤ 240 draw calls
-and ≤ 370k triangles, because it also shows the full copies, and 24 more draw calls for each of S1, S3, S4, S5 and
-S6 (their triangles stay as they are, since they show the light copies). Those figures are planning figures: no
+the builders' output, not a phone measurement. S2 Curved Walk, which also shows the full copies, is held by the world lint: `WorldLintSettings` counts the room at Home's
+full load and caps S2 at 240 draw calls and 370,000 triangles, the tiles' own share staying at 150 and 120,000
+(`WorldLintTests` asserts all three); that is a count, and the phone measurement is still open. The mesh design also expects 24 more draw calls for each of S1, S3, S4, S5 and
+S6 (their triangles stay as they are, since they show the light copies). Those last figures are planning figures: no
 test holds them, and check M3 on the phone (`budget_room_120k` through the PerfTour) replaces them with measured
-ones or moves the space to `Light`. The rows of S1 to S6 above are therefore still the old ones.
-`WorldLintSettings` (`World/Lint`) still counts the room as 60 draw calls and 130,000 triangles in its S2 lint.
+ones or moves the space to `Light`. The rows of S1, S3, S4, S5 and S6 above are therefore still the old ones.
 
 **Shares inside a frame** (so that the sums hold; phone A, p95):
 
