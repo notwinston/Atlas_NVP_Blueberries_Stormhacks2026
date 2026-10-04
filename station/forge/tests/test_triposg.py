@@ -782,3 +782,13 @@ def test_what_was_measured_of_triposgs_frame_steers_the_fit(tmp_path, matting):
                     reason="PyTorch is installed here: the service's own start-up may load it")
 def test_no_test_imported_pytorch():
     assert "torch" not in sys.modules and "diso" not in sys.modules and "rembg" not in sys.modules
+
+
+def test_a_decoder_depth_is_given_to_both_decoders(tmp_path, matting):
+    pipe = FakePipe(flash="boom")
+    generator, _ = loaded(tmp_path, pipe, triposg_octree_depth=8)
+    mesh = generator.generate(request())
+    assert mesh.decoder == "hierarchical"
+    flash, hierarchical = pipe.calls
+    assert flash["flash_octree_depth"] == 8 and "hierarchical_octree_depth" not in flash
+    assert hierarchical["hierarchical_octree_depth"] == 8 and "flash_octree_depth" not in hierarchical
