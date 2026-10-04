@@ -8,10 +8,12 @@ namespace Atlas.Blades.Lung.Sky
     public sealed class NeedleSkyPanel : IDisposable
     {
         const string Format = "Clearance {0:1} mm, minimum over 10 phases\nRobust windows {1:1} % of the sky (at least 5 mm in every phase; teaching threshold)\nMarked {2:0} of 3";
+        const string FormatDone = "Clearance {0:1} mm, minimum over 10 phases\nRobust windows {1:1} % of the sky (at least 5 mm in every phase; teaching threshold)\nTriangle angle sum {2:1}\u00b0";
         readonly GameObject _go;
         readonly Transform _tf;
         readonly TextMeshPro _tmp;
         float _a = float.NaN, _b = float.NaN, _c = float.NaN;
+        bool _done;
         static readonly float Down = Mathf.Sin(NeedleSkyConstants.PanelBelowDeg * Mathf.Deg2Rad), Fwd = Mathf.Cos(NeedleSkyConstants.PanelBelowDeg * Mathf.Deg2Rad);
 
         public NeedleSkyPanel(TMP_FontAsset fontOrNull, Transform parent)
@@ -37,11 +39,12 @@ namespace Atlas.Blades.Lung.Sky
             Vector3 p = (Vector3)f.HeadPosition + q * new Vector3(0f, -Down, Fwd) * NeedleSkyConstants.PanelDistanceM;
             _tf.SetPositionAndRotation(p, q);
             var r = f.Readout;
-            float c = r.Picks;
-            if (r.ClearanceShownMm != _a || r.RobustSharePercent != _b || c != _c)
+            bool done = f.PickCount == NeedleSkyConstants.PicksPerCheck && !float.IsNaN(r.AngleSumShownDeg);
+            float c = done ? r.AngleSumShownDeg : r.Picks;
+            if (r.ClearanceShownMm != _a || r.RobustSharePercent != _b || c != _c || done != _done)
             {
-                _a = r.ClearanceShownMm; _b = r.RobustSharePercent; _c = c;
-                _tmp.SetText(Format, _a, _b, _c);
+                _a = r.ClearanceShownMm; _b = r.RobustSharePercent; _c = c; _done = done;
+                _tmp.SetText(done ? FormatDone : Format, _a, _b, _c);
             }
         }
 

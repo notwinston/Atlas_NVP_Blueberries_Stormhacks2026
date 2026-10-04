@@ -69,7 +69,7 @@ namespace Atlas.Blades.Lung.Sky
             _presenter.Present(new NeedleSkyFrame(frame.HeadPosition, frame.HeadRotation, ActivePhaseLayer, _skyRobust,
                 (float3)_model.Cursor, n,
                 n > 0 ? (float3)_model.Pick(0) : float3.zero, n > 1 ? (float3)_model.Pick(1) : float3.zero, n > 2 ? (float3)_model.Pick(2) : float3.zero,
-                false, _model.Readout));
+                n == NeedleSkyConstants.PicksPerCheck, _model.Readout));
         }
 
         public void Dispose() { (_presenter as IDisposable)?.Dispose(); }
