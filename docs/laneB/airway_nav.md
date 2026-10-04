@@ -50,3 +50,10 @@ The fixture route has 6 forks (`target.address = "RRRLLR"`), not the 4 of P2-D07
 - Acceptance: beacon step equals the address-prefix step on 1,000 random targets: 0 mismatches for the step, for the exit canonical edge against `TileGraph`, and for the 0.6-unit arrow probe against `TileGraph.ExitEdge` (58 arrived cases agreed). Supporting: greedy routing equals the prefix step (Sarkar) on 1,000 pairs of depth <= 11, no ties.
 - Fixture facts: the lumen falls below 4.2 mm first at generation 7 (3.581 mm; generation 6 is 4.51 mm). Along the fixture route (6 forks) it ends at 4.51 mm, so all three scopes fit on the route.
 - Phone items: none (both rows say "Editor"). The views are driven by the module (H-2); `BeaconArrowView.material` and `paletteCell` are set in the scene (D-G4-12).
+
+## P2-B08 (Two Compasses)
+
+- Files: `Airway/TwoCompasses.cs`, `Airway/ForkLog.cs`, `Airway/Views/TwoCompassesView.cs`; tests `TwoCompassesTests` (C1-C6). C3 is `[Ignore]`d: blocked on PH-39 (fixture route has 6 forks); P2-D07's 4-fork criterion is not claimed.
+- Editor acceptance (C1): on the fixture the designed fork (from `tree.json`) is a proper prefix of the target, the Euclidean child differs from the beacon child, and the two arrows are more than 179 degrees apart.
+- D-G4-13/14: `ForkLog` emits `fork` and `compass_choice`. `compass_choice` fields: address, choice, compass, beacon, correct, t_s.
+- Phone part deferred: docs/laneB/TESTING.md.
