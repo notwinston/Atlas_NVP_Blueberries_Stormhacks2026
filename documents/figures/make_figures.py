@@ -207,9 +207,9 @@ def fig_345():
         xy1, _ = view(P)
         ax.plot(*xy1[0], "o", color=ACCENT, ms=6)
     ax.set_xlim(-1.25, 1.25)
-    ax.set_ylim(-1.4, 1.3)
-    ax.set_title("Sphere  (K = +1/L²)", color=SPH, fontsize=13, fontweight="bold")
-    ax.text(0, -1.27, "closes after 3 corners\ns = (π/2)·L   →   L = 2s/π", ha="center", va="center", fontsize=10.5)
+    ax.set_ylim(-1.78, 1.3)
+    ax.set_title("Sphere  (K = +1/R²)", color=SPH, fontsize=13, fontweight="bold")
+    ax.text(0, -1.12, "closes after 3 corners\ns = (π/2)·R   →   R = 2s/π", ha="center", va="top", fontsize=10.5)
 
     # --- flat: square ---
     ax = axes[1]
@@ -226,9 +226,9 @@ def fig_345():
                 arrowprops=dict(arrowstyle="-|>", color=ACCENT, lw=2.2, mutation_scale=16))
     ax.text(0, -0.76, "s", ha="center", va="center", color=ACCENT, fontsize=12, style="italic")
     ax.set_xlim(-1.25, 1.25)
-    ax.set_ylim(-1.4, 1.3)
+    ax.set_ylim(-1.78, 1.3)
     ax.set_title("Flat  (K = 0)", color=FLAT, fontsize=13, fontweight="bold")
-    ax.text(0, -1.27, "closes after 4 corners\nany s", ha="center", va="center", fontsize=10.5)
+    ax.text(0, -1.12, "closes after 4 corners\nany s", ha="center", va="top", fontsize=10.5)
 
     # --- hyperbolic: right-angled pentagon in the Poincare disc ---
     ax = axes[2]
@@ -246,9 +246,11 @@ def fig_345():
         v = poincare(boost(R5 * math.cos(a), R5 * math.sin(a)) @ ORIGIN)[0]
         ax.plot(*v, "o", color=ACCENT, ms=6)
     ax.set_xlim(-1.25, 1.25)
-    ax.set_ylim(-1.4, 1.3)
+    ax.set_ylim(-1.78, 1.3)
     ax.set_title("Hyperbolic  (K = −1/L²)", color=HYP, fontsize=13, fontweight="bold")
-    ax.text(0, -1.27, f"closes after 5 corners\ns = {s5:.4f}·L   →   L = s/{s5:.4f}", ha="center", va="center", fontsize=10.5)
+    ax.text(0, -1.12, f"closes after 5 corners\ns = {s5:.4f}·L   →   L = s/{s5:.4f}", ha="center", va="top", fontsize=10.5)
+    ax.text(0, -1.50, "the loop is a right-angled pentagon: its corners are the\ncentres of the five rooms round one post (Figure 2)",
+            ha="center", va="top", fontsize=8.6, color=MUTED)
 
     fig.suptitle("One instruction, three universes:  walk s, turn left 90°, repeat", fontsize=14, fontweight="bold", y=0.99)
     fig.tight_layout(rect=(0, 0, 1, 0.95))
@@ -290,10 +292,10 @@ def fig_tiling():
         rr = math.tanh(rho / 2)
         ax.add_patch(Circle((0, 0), rr, fc="none", ec=col, lw=1.5, ls=(0, (5, 3))))
         a = math.radians(lab_ang)
-        ax.annotate(f"ρ = {rho:g}:  {count(rho)} tiles",
+        ax.annotate(f"ρ = {rho:g}:  {count(rho)} tile centres",
                     xy=(rr * math.cos(a), rr * math.sin(a)),
-                    xytext=(1.20 * math.cos(a), 1.13 * math.sin(a)),
-                    ha="center", fontsize=9.5, color=col, fontweight="bold",
+                    xytext=((0.88, 0.74) if lab_ang < 80 else (-0.90, 0.72) if lab_ang > 100 else (1.20 * math.cos(a), 1.13 * math.sin(a))),
+                    ha=("left" if lab_ang < 80 else "right" if lab_ang > 100 else "center"), fontsize=9.5, color=col, fontweight="bold",
                     arrowprops=dict(arrowstyle="-", color=col, lw=1.0))
 
     # the five-corner loop: walk 2*r_in (centre to centre), turn left 90 deg, five times
@@ -357,12 +359,12 @@ def fig_modes():
     ax.annotate(f"real {ROOM:g} × {ROOM:g} m room", xy=(ROOM / 2, ROOM / 2), xytext=(2.7, 3.9), fontsize=9.3,
                 arrowprops=dict(arrowstyle="-", color=INK, lw=0.9), zorder=6,
                 bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.9))
-    ax.annotate(f"tile zero\n(lap square, s = {W_FREE:g} m)", xy=(-0.45, -0.6), xytext=(-4.9, -4.2), fontsize=9.3,
+    ax.annotate(f"tile zero\n(mid-width = lap square, s = {W_FREE:g} m)", xy=(-0.45, -0.6), xytext=(-4.9, -4.2), fontsize=9.3,
                 color="#14543d", fontweight="bold", arrowprops=dict(arrowstyle="-", color=FLAT, lw=0.9), zorder=6,
                 bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.9))
     ax.plot(0, 0, marker="o", color=INK, ms=7, zorder=5)
     ax.text(0.16, 0.16, "you", fontsize=9.5, fontweight="bold", zorder=5)
-    ax.text(0, rho_fog * L + 0.22, f"fog opaque at ρ = {rho_fog:g}  ({rho_fog * L:.1f} m):  {n_in} tiles drawn",
+    ax.text(0, rho_fog * L + 0.22, f"fog opaque at ρ = {rho_fog:g}  ({rho_fog * L:.1f} m):  {n_in} tile centres inside",
             ha="center", color=ACCENT, fontsize=9.6, fontweight="bold")
     lim = rho_fog * L + 0.9
     ax.set_xlim(-lim, lim)
@@ -515,7 +517,7 @@ def fig_dial():
                                 alpha=max(0.15, 1.0 - 0.3 * d), zorder=1)
                 ln.set_clip_path(clip)
 
-    fig.suptitle(f"The curvature dial counts rooms per corner.  Tile zero is your lap square (s = {W_FREE:g} m here); "
+    fig.suptitle(f"The curvature dial counts rooms per corner.  Tile zero is the tile whose mid-widths equal your lap square (s = {W_FREE:g} m here); "
                  f"dotted = the real {ROOM:g} m room.  Axes in metres from your head.",
                  fontsize=11.5, fontweight="bold", y=0.985)
     fig.tight_layout(rect=(0, 0, 1, 0.94))
@@ -528,13 +530,14 @@ def fig_dial():
 # Figure 4: the breathing worldtube (z-t diagram): slice, shadow, tilt
 # =====================================================================
 def fig_worldtube():
-    b, rad = 12.0, 10.0   # motion amplitude (mm) and tumour radius (mm) -- illustrative, as in the Brief
+    b, rad = 15.0, 5.0   # the illustrative twin of the plan: a 10 mm nodule moving 15 mm head-to-feet
+    dia = 2 * rad
 
     def zc(ph):
         return -b * np.cos(np.pi * ph) ** 4
 
     fig, ax = plt.subplots(figsize=(12.4, 5.9))
-    ph = np.linspace(0, 2, 900)
+    ph = np.linspace(0, 2, 1200)
     up, lo = zc(ph) + rad, zc(ph) - rad
     one = ph <= 1.0
     ax.fill_between(ph[one], lo[one], up[one], color=BLUE, alpha=0.22, lw=0)
@@ -542,46 +545,57 @@ def fig_worldtube():
     ax.plot(ph, up, color=BLUE, lw=1.6)
     ax.plot(ph, lo, color=BLUE, lw=1.6)
     ax.plot(ph, zc(ph), color=BLUE, lw=1.0, ls="--", alpha=0.8)
-    ax.text(0.50, zc(0.5) + 0.8, "tumour worldtube", color=BLUE, fontsize=11, fontweight="bold", ha="center")
+    ax.text(0.50, 1.6, "tumour worldtube", color=BLUE, fontsize=11, fontweight="bold", ha="center", va="center")
 
     # (1) slice perpendicular to time
-    t0 = 0.18
+    t0 = 0.17
     ax.plot([t0, t0], [zc(t0) - rad, zc(t0) + rad], color=FLAT, lw=4.5, solid_capstyle="butt")
-    ax.annotate("① slice across time\n= the tumour at one instant\n(true size 20 mm)", xy=(t0, zc(t0) + rad), xytext=(0.20, 21.5),
+    ax.annotate(f"① slice across time\n= the tumour at one instant\n(true size {dia:.0f} mm)", xy=(t0, zc(t0) + rad), xytext=(0.33, 13.2),
                 color="#14543d", fontsize=9.8, ha="center", arrowprops=dict(arrowstyle="-", color=FLAT, lw=1.2))
 
     # (2) shadow along time = ITV, and the gated version
     itv_lo, itv_hi = lo[one].min(), up[one].max()
-    ax.plot([-0.10, -0.10], [itv_lo, itv_hi], color=ACCENT, lw=7, solid_capstyle="butt")
-    ax.text(-0.125, (itv_lo + itv_hi) / 2, f"② shadow along time\n= ITV  {itv_hi - itv_lo:.0f} mm", color=ACCENT, fontsize=9.8,
+    ax.plot([-0.115, -0.115], [itv_lo, itv_hi], color=ACCENT, lw=7, solid_capstyle="butt")
+    ax.text(-0.145, (itv_lo + itv_hi) / 2, f"② shadow along time\n= ITV  {itv_hi - itv_lo:.0f} mm", color=ACCENT, fontsize=9.8,
             ha="right", va="center", fontweight="bold")
     g0, g1 = 0.30, 0.70
     gmask = (ph >= g0) & (ph <= g1)
     g_lo, g_hi = lo[gmask].min(), up[gmask].max()
     ax.axvspan(g0, g1, color=SPH, alpha=0.12, lw=0)
     ax.plot([-0.045, -0.045], [g_lo, g_hi], color=SPH, lw=7, solid_capstyle="butt")
-    ax.text(0.5, -27.2, f"gating window 30–70 %  →  shadow shrinks to {g_hi - g_lo:.0f} mm", color=SPH, fontsize=9.8, ha="center", fontweight="bold")
+    ax.text(-0.045, g_hi + 0.9, "gated\nshadow", color=SPH, fontsize=8.6, ha="center", va="bottom", fontweight="bold")
+    ax.text(0.5, -23.3, f"gating window 30–70 %  →  shadow shrinks to {g_hi - g_lo:.0f} mm", color=SPH, fontsize=9.8, ha="center", fontweight="bold")
     for y in (itv_lo, itv_hi):
-        ax.plot([-0.10, 1.0], [y, y], color=ACCENT, lw=0.7, ls=":", alpha=0.7)
+        ax.plot([-0.115, 1.0], [y, y], color=ACCENT, lw=0.7, ls=":", alpha=0.7)
+
+    # (5) the core: heights that are inside the tumour at every phase
+    core_top, core_bot = up[one].min(), lo[one].max()      # top of the lowest position, bottom of the highest
+    for y in (core_top, core_bot):
+        ax.plot([0.0, 1.0], [y, y], color=MUTED, lw=0.9, ls=(0, (1, 2)))
+    ax.annotate("", xy=(0.5, core_top), xytext=(0.5, core_bot), arrowprops=dict(arrowstyle="<->", color=MUTED, lw=1.0))
+    core = max(0.0, core_top - core_bot)
+    ax.text(0.5, core_top - 1.0, "⑤ core: " + ("empty" if core == 0 else f"{core:.0f} mm")
+            + "\nthe tumour at 0 % and at 50 %\ndo not overlap, so no height\nis inside it at every phase",
+            color=MUTED, fontsize=8.8, ha="center", va="top")
 
     # (3) tilted slice: a scanner that moves along z while the patient breathes
-    t_a, z_a, t_b, z_b = 1.02, 14.0, 1.62, -26.0
-    tt = np.linspace(t_a, t_b, 600)
+    t_a, z_a, t_b, z_b = 1.08, 9.0, 1.92, -24.0
+    tt = np.linspace(t_a, t_b, 2000)
     zz = z_a + (z_b - z_a) * (tt - t_a) / (t_b - t_a)
     inside = (zz <= zc(tt) + rad) & (zz >= zc(tt) - rad)
     ax.plot(tt, zz, color=HYP, lw=1.6, ls=(0, (4, 3)))
     ax.plot(tt[inside], zz[inside], color=HYP, lw=4.5, solid_capstyle="butt")
     seen = zz[inside].max() - zz[inside].min()
-    ax.annotate(f"③ tilted slice (space and time mixed)\n= what a moving scan records\nfrom a breathing patient:\nit sees {seen:.0f} mm instead of 20 mm",
-                xy=(tt[inside][len(tt[inside]) // 2], zz[inside][len(zz[inside]) // 2]), xytext=(1.80, 17.0),
+    ax.annotate(f"③ tilted slice (space and time mixed)\n= what a moving scan records\nfrom a breathing patient:\nit sees {seen:.0f} mm instead of {dia:.0f} mm",
+                xy=(tt[inside][len(tt[inside]) // 2], zz[inside][len(zz[inside]) // 2]), xytext=(1.76, 11.6),
                 color=HYP, fontsize=9.8, ha="center", arrowprops=dict(arrowstyle="-", color=HYP, lw=1.2))
 
     # periodicity
     ax.axvline(1.0, color=MUTED, lw=1.0, ls="-.")
-    ax.text(1.0, -31.6, "④ phase wraps: 100 % is 0 % again  (time is a circle, ℝ³ × S¹)", color=MUTED, fontsize=9.8, ha="center")
+    ax.text(1.0, -26.6, "④ phase wraps: 100 % is 0 % again  (time is a circle, ℝ³ × S¹)", color=MUTED, fontsize=9.8, ha="center")
 
-    ax.set_xlim(-0.52, 2.05)
-    ax.set_ylim(-34, 27)
+    ax.set_xlim(-0.56, 2.05)
+    ax.set_ylim(-28.5, 18)
     ax.set_xticks([0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0])
     ax.set_xticklabels(["0 %", "25 %", "50 %", "75 %", "100 % = 0 %", "25 %", "50 %", "75 %", "100 %"])
     ax.set_xlabel("breathing phase  (the fourth axis)")
@@ -589,51 +603,95 @@ def fig_worldtube():
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)
     ax.set_title("The medical 4D in one picture: a tumour over one breath is a tube in space × phase", fontsize=12.5, fontweight="bold")
-    ax.text(-0.50, -33.4, "Illustrative motion:\nz(φ) = −12·cos⁴(πφ) mm,\n20 mm tumour", ha="left", va="bottom", fontsize=8, color=MUTED)
+    ax.text(-0.54, -28.0, f"Illustrative twin:\nz(φ) = −{b:.0f}·cos⁴(πφ) mm,\n{dia:.0f} mm nodule", ha="left", va="bottom", fontsize=8, color=MUTED)
     fig.tight_layout()
     fig.savefig(OUT / "fig04_worldtube.png", dpi=200, bbox_inches="tight", pad_inches=0.18)
     plt.close(fig)
-    return dict(itv=itv_hi - itv_lo, gated=g_hi - g_lo, tilted=seen)
+    return dict(itv=itv_hi - itv_lo, gated=g_hi - g_lo, tilted=seen, core=core)
 
 
 # =====================================================================
 # Figure 5: tiles in view vs cull radius, against the draw-call budget
 # =====================================================================
 def fig_budget(counts):
-    tiles = build_tiling(4, 5, 5.05)
-    dists = sorted(math.acosh(max((M @ ORIGIN)[2], 1.0)) for M in tiles)
-    rho = np.linspace(0.5, 5.0, 300)
-    n = np.array([np.searchsorted(dists, r + 1e-9) for r in rho])
-    area = 2 * math.pi / 5
-    approx = 2 * math.pi * (np.cosh(rho) - 1) / area
+    """Tile counts against the fog radius: centres inside, tiles that touch the fog disc, tiles drawn after the view cull."""
+    h_edge, r_in, R_c, area = tiling_consts(4, 5)
+    tiles = build_tiling(4, 5, 5.75)
+    C = np.array([M @ ORIGIN for M in tiles])
+    rho = np.linspace(0.5, 4.0, 141)
+    side = math.radians(62.0)      # half the horizontal view (50°) plus the 12° margin of the draw rule
+    gaze = np.linspace(-math.pi, math.pi, 120, endpoint=False)
 
-    fig, ax = plt.subplots(figsize=(9.6, 5.4))
-    ax.step(rho, n, where="post", color=HYP, lw=2.4, label="tiles in view, exact count ({4,5})")
-    ax.plot(rho, approx, color=HYP, lw=1.1, ls="--", alpha=0.75, label="area estimate  5·(cosh ρ − 1)")
+    # walker positions: the tile centre first, then 1,500 points uniform in the tile (Klein square), fixed seed
+    hk = math.tanh(r_in)
+    rng = np.random.default_rng(7)
+    pos = [(0.0, 0.0)]
+    for _ in range(1500):
+        kx, ky = rng.uniform(-hk, hk, 2)
+        kr = math.hypot(kx, ky)
+        dd = math.atanh(kr) if kr > 0 else 0.0
+        pos.append((kx / kr * dd, ky / kr * dd) if kr > 0 else (0.0, 0.0))
+    gaze = np.linspace(-math.pi, math.pi, 1440, endpoint=False)
+
+    centre_n = np.zeros(len(rho))
+    touch_max = np.zeros(len(rho))
+    drawn_max = np.zeros(len(rho))
+    eta = np.diag([1.0, 1.0, -1.0])
+    for k, (px, py) in enumerate(pos):
+        W = boost(px, py)
+        P = ((eta @ W.T @ eta) @ C.T).T
+        d = np.arccosh(np.maximum(1.0, P[:, 2]))
+        order = np.argsort(d)
+        d = d[order]
+        keep = d <= rho[-1] + R_c + 1e-9
+        d = d[keep]
+        brg = np.arctan2(P[order, 1], P[order, 0])[keep]
+        with np.errstate(invalid="ignore", divide="ignore"):
+            ang = np.where(d > R_c, np.arcsin(np.minimum(1.0, math.sinh(R_c) / np.sinh(np.maximum(d, 1e-9)))), math.pi)
+        dif = np.abs((brg[None, :] - gaze[:, None] + math.pi) % (2 * math.pi) - math.pi)      # gaze × tile, tiles sorted by distance
+        # the tile's floor disc (radius R_c) is outside a side plane when d·sin(offset − 62°) > R_c
+        off = np.clip(dif - side, 0.0, math.pi / 2)
+        cum = np.cumsum((d[None, :] <= R_c) | (d[None, :] * np.sin(off) <= R_c), axis=1)
+        n_touch = np.searchsorted(d, rho + R_c + 1e-9)                                         # tiles that reach inside each radius
+        touch_max = np.maximum(touch_max, n_touch)
+        best = np.where(n_touch > 0, cum[:, np.maximum(n_touch - 1, 0)].max(axis=0), 0)
+        drawn_max = np.maximum(drawn_max, best)
+        if k == 0:
+            centre_n = np.searchsorted(d, rho + 1e-9).astype(float)
+
+    fig, ax = plt.subplots(figsize=(9.8, 5.6))
+    ax.step(rho, touch_max, where="post", color=MUTED, lw=1.8, label="tiles that reach inside the fog radius (all directions)")
+    ax.step(rho, drawn_max, where="post", color=HYP, lw=2.6, label="tiles drawn with a level gaze: those, inside the widened view (worst case)")
+    ax.step(rho, centre_n, where="post", color=FLAT, lw=1.4, ls=(0, (5, 2)), label="tile centres inside the fog radius (walker at a tile centre)")
     ax.axhline(150, color=ACCENT, lw=1.6)
-    ax.text(0.55, 163, "MUST: 300 draw calls per frame  =  150 per eye", color=ACCENT, fontsize=9.6, fontweight="bold")
-    ax.axhline(100, color=SPH, lw=1.4, ls=(0, (6, 3)))
-    ax.text(0.55, 108, "SHOULD: 200 per frame  =  100 per eye", color=SPH, fontsize=9.6, fontweight="bold")
-    for r, lab, col in ((3.0, "default cull\nρ = 3", FLAT), (3.5, "high tier\nρ = 3.5", BLUE), (2.0, "thermal\nρ = 2", MUTED)):
-        k = int(np.searchsorted(dists, r + 1e-9))
-        ax.plot([r, r], [1, k], color=col, lw=1.3, ls=":")
-        ax.plot(r, k, "o", color=col, ms=8)
-        ax.text(r + 0.04, k * 0.60, f"{lab}\n{k} tiles", color=col, fontsize=9.3, fontweight="bold", va="top")
+    ax.text(0.55, 163, "MUST: 300 draw calls per frame  =  150 per eye, for everything", color=ACCENT, fontsize=9.4, fontweight="bold")
+    ax.axhline(75, color=SPH, lw=1.4, ls=(0, (6, 3)))
+    ax.text(0.55, 81, "budget for tile shells: 150 per frame  =  75 per eye", color=SPH, fontsize=9.4, fontweight="bold")
+    out = {}
+    for r, lab, col in ((2.0, "thermal\nρ = 2", MUTED), (2.5, "ρ = 2.5", BLUE), (3.0, "default\nρ = 3", HYP), (3.5, "high tier\nρ = 3.5", BLUE)):
+        i = int(np.argmin(np.abs(rho - r)))
+        k = int(drawn_max[i])
+        out[r] = dict(centres=int(centre_n[i]), touching=int(touch_max[i]), drawn=k)
+        ax.plot([r, r], [1, k], color=col, lw=1.2, ls=":")
+        ax.plot(r, k, "o", color=col, ms=8, zorder=5)
+        down = {2.0: 38, 2.5: 52, 3.0: 71, 3.5: 106}[r]      # worst case at any head pitch (research/scripts/tile_draw_rule.py)
+        ax.text(r + 0.04, k * 0.62, f"{lab}\n{k} drawn\n({down} looking down)", color=col, fontsize=9.0, fontweight="bold", va="top")
     ax.set_yscale("log")
-    ax.set_ylim(1, 600)
-    ax.set_xlim(0.5, 5.0)
+    ax.set_ylim(1, 420)
+    ax.set_xlim(0.5, 4.0)
     ax.set_yticks([1, 3, 10, 30, 100, 300])
     ax.set_yticklabels(["1", "3", "10", "30", "100", "300"])
-    ax.set_xlabel("cull / fog radius ρ  (hyperbolic units; metres = ρ·L)")
-    ax.set_ylabel("tiles drawn per eye (one draw call each)")
+    ax.set_xlabel("fog radius ρ  (hyperbolic units; metres = ρ·L)")
+    ax.set_ylabel("tiles per eye (one draw call each)")
     ax.grid(True, which="major", color=GRID, lw=0.6)
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)
-    ax.legend(loc="lower right", frameon=False, fontsize=9.3)
-    ax.set_title("Why the fog must close at ρ ≈ 3: hyperbolic space grows exponentially", fontsize=12.5, fontweight="bold")
+    ax.legend(loc="lower right", frameon=True, facecolor="white", edgecolor="none", framealpha=0.93, fontsize=9.0)
+    ax.set_title("Why the fog closes at ρ = 3: hyperbolic space grows exponentially", fontsize=12.5, fontweight="bold")
     fig.tight_layout()
     fig.savefig(OUT / "fig05_tile_budget.png", dpi=200, bbox_inches="tight", pad_inches=0.18)
     plt.close(fig)
+    return out
 
 
 if __name__ == "__main__":
@@ -641,10 +699,11 @@ if __name__ == "__main__":
     counts = fig_tiling()
     L = fig_modes()
     tube = fig_worldtube()
-    fig_budget(counts)
+    budget = fig_budget(counts)
     dial = fig_dial()
     print("dial lengths (m):", {k: round(v, 3) for k, v in dial.items()})
     print("tile counts by radius:", counts)
     print(f"Mode-1 example L = {L:.3f} m")
+    print("draw rule (centres / touching / drawn):", budget)
     print("worldtube numbers (mm):", {k: round(v, 1) for k, v in tube.items()})
     print("written to", OUT)
