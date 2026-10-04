@@ -1,3 +1,5 @@
+> **ATLAS_Master_Plan.pdf has not been regenerated.** This Markdown is current as of 4 October 2026 for the changes of the mesh design (`documents/ATLAS_Mesh_Design.md`): decision D20, §4.2 route 4, §4.5, §6.4, §7.4 and §8.5. The PDF still has the old furniture rule.
+
 # ATLAS: Master Build Plan
 
 **One plan, end to end: what we build, in what order, who builds which part, and how we know each part works.**
@@ -185,7 +187,7 @@ Every choice that shapes the build, in one table. "Source" says who decided: **L
 | D17 | 4D | `Mesh4D`: tetrahedra in ℝ⁴ cut by a hyperplane on the CPU with Burst. One code path for polytopes and for the medical worldtube. The vertex-shader slicer only above about 50,000 tetrahedra | (BP §0, §4), (R2) | Compute-shader slicer with indirect draw |
 | D18 | The room's role | "My room is tile zero." Home is the room rebuilt 1:1, flat and registered to reality. Turning the dial places it in curved space as the home tile of an endless generated world | Lead | Hub as a neutral Euclidean lobby |
 | D19 | Safety | **Bump Guard**: the scan's static map plus live LiDAR depth predicts contact and gives a warning cue and haptic pulses. No passthrough, no ghost of the room, no freezing of the world. LiDAR depth stays on while walking; meshing and plane detection are off after the scan | Lead | Passthrough Safe Harbour within 300 ms; taped outline; depth off after set-up (BP §5) |
-| D20 | Furniture | Scanned objects are photographed, sent to the Station, generated as meshes (TripoSG on the RTX 5070, hosted API as fallback), cleaned and returned live. At most 20 objects per room receive a generated mesh, largest boxes first, and together they never exceed 60,000 triangles; further objects stay placeholder boxes. A placeholder box, tinted by category, stands in until its mesh arrives, and a built-in fallback set replaces the boxes when the Forge is unreachable (§4.5, §7.4) | Lead (live, per object); the cap of 20 (derived) | Kit props; pre-generated assets |
+| D20 | Furniture | Scanned objects are photographed, sent to the Station, generated as meshes (TripoSG on the RTX 5070, hosted API as fallback), cleaned and returned live. At most 32 objects per room receive a generated mesh, largest boxes first, and together they never exceed 120,000 triangles (3,000 to 15,000 each, shared by surface area; §4.5); further objects keep their first shape. Every object shows a first shape at once, facing the way the real one faces: the category's shape fitted to the scan, or a shape cut from the scan; a placeholder box is left only where the scan gave too little. The generated mesh replaces it when it arrives, and the built-in set stands in when the Forge is unreachable (§4.5, §7.4) | Lead (live, per object); the cap of 32 and the 120,000 (lead, 4 October 2026; mesh design M9) | Kit props; pre-generated assets |
 | D21 | Scanning | Both paths: the walker self-scans (headline), or the team pre-scans and the app relocalises from a saved world map (fast path). Scan routes in order of robustness: manual outline, LiDAR mesh plus planes, RoomPlan boxes, Swift RoomPlan bridge | Lead, (R1) | Venue scanned the day before |
 | D22 | Phone ↔ Station link | LiteNetLib on both ends. A .NET Hub on the Station terminates it. Phase 1 ends with all four functions: Spectator mirror, live tuning and Console, telemetry, scan and asset round-trip. Assets and uploads travel over HTTP to the Forge | (BP §0.5), Lead, (R4) | Python FastAPI link, WebSocket, raw UDP, MessagePack |
 | D23 | Look | "Lit architectural diagram": one palette texture, one material, vertex-colour ambient occlusion, edge and tile lines in the shader, fog in the room's hue, emissive accents. Dark palette. No post-processing, no shadows, no bloom | (BP §2), (R5) | Lit shader with probes, LUTs and trim sheets |
@@ -216,7 +218,7 @@ In a flat space the two layers coincide, so what you see is where things are. In
 
 | Id | Space | Geometry | What is generated, and from what | Matches the real room? | The "aha" | Flat twin |
 |---|---|---|---|---|---|---|
-| **S0** | Home | Flat | Floor, walls and door openings rebuilt from the scan on a 0.25 m grid; one AI-generated mesh per scanned object, for at most 20 objects, largest first (§4.5) | Yes, 1:1 | "This is my room." It is the calibration and the place every journey starts and ends | Floor plan |
+| **S0** | Home | Flat | Floor, walls and door openings rebuilt from the scan on a 0.25 m grid; one AI-generated mesh per scanned object, for at most 32 objects, largest first (§4.5) | Yes, 1:1 | "This is my room." It is the calibration and the place every journey starts and ends | Floor plan |
 | **S1** | Glued | Flat, wrapped: torus T², Klein bottle, 3-torus T³ | One open-frame cell cut from the free floor (corner posts, floor grid, one chiral landmark); copies of it laid out as a lattice fixed to the floor (5 × 5 around the walker for T² and the Klein bottle, 3 × 3 × 3 for T³); mirrored rows for the Klein bottle; a self-avatar in every copy but the walker's own. The room itself is not repeated: its walls sink to kerbs and its furniture is drawn once, where it really is | Yes | Look ahead and see your own back. Walk east and re-enter from the west. In the Klein bottle your copy raises the other hand | Lattice plan with the fundamental cell |
 | **S2** | Curved Walk (Mode 1) | H² × E: hyperbolic floor, ordinary height | {4,5} tiling generated lazily by exact tile id; tile zero carries the room; other tiles get an archetype and props from a hash of their id | Only at the start | Five rooms meet at every corner. A closed square on the floor is not closed in the world. There is far more room than there should be | Poincaré disc map |
 | **S3** | Aligned Cells (Mode 2) | The same tiling, built from flat pieces | The free floor cut into square cells; each cell shows one flat tile; which tile depends on the path walked | Yes | Walk once round a corner post, through its four cells, and you are standing in a fifth room. All the curvature sits at the corners | The same disc map |
@@ -367,9 +369,9 @@ Four scan routes, from most robust to most detailed. Each later route adds to th
 | 1 Manual outline | Taps on the floor corners, or the path walked along the walls | Floor polygon | Core; always available |
 | 2 FloorScan | LiDAR mesh with per-triangle classes, plus plane detection | Free floor with holes for furniture, wall directions, obstacle blobs | Core |
 | 3 Object boxes | RoomPlan through AR Foundation's bounding-box manager (iOS 17+) | One oriented box per piece of furniture, with a category | Core; needed for live furniture |
-| 4 Wall bridge | A Swift plugin around `RoomCaptureSession(arSession:)` | Clean walls, doors, windows and openings | Extended |
+| 4 Wall bridge | A Swift plugin around `RoomCaptureSession(arSession:)` | Clean walls, doors, windows and openings | Extended. Built into the Xcode project by a post-build step and switched on when the bridge reports itself available and the parameter `scan.wallBridge` is on (default on; off gives the outline's walls as before). Compiled and linked in a copy of an earlier export only; it has not run on a phone |
 
-Facts that constrain the design (R1, verified against Apple and Unity documentation): AR Foundation exposes RoomPlan only as furniture boxes, so walls come from planes and the mesh unless route 4 is built; the LiDAR reaches about 5 m; glass and mirrors produce missing or phantom floor, which is why unknown cells are never treated as free and the walker confirms the outline; meshing and plane detection are switched off as soon as the scan is confirmed because they are a major source of heat.
+Facts that constrain the design (R1, verified against Apple and Unity documentation): AR Foundation exposes RoomPlan only as furniture boxes, so walls come from planes and the mesh unless route 4 supplies them; the LiDAR reaches about 5 m; glass and mirrors produce missing or phantom floor, which is why unknown cells are never treated as free and the walker confirms the outline; meshing and plane detection are switched off as soon as the scan is confirmed because they are a major source of heat.
 
 What each of the phone's sensors does in ATLAS:
 
@@ -438,16 +440,27 @@ The scan never measures W and D. It produces the free rectangle Wf × Df (§4.3)
 
 Home (S0) is the room rebuilt from the RoomModel: floor, walls and door openings as clean meshes on a 0.25 m grid in the shared palette, placed at the anchor so they coincide with the real ones. It is flat and registered: touching a virtual wall is touching the real wall.
 
-Each scanned object starts as a **placeholder box** of the scanned size, tinted by category. In parallel:
+Each scanned object shows a **first shape** as soon as the room is built, at the scanned size and facing the way the real object faces. The shape is chosen by category:
 
-1. During the scan the phone keeps, for each object box, the one to three camera frames in which the box is best seen (largest on screen, centred, sharp, from different sides), and crops them.
-2. The crops go to the Forge on the Station with the box's size and category and the object's triangle target.
-3. The Forge makes a mesh from the photo, then cleans it: oriented and scaled to the box, decimated to the triangle target, no edge longer than 0.25 m so it can bend, one palette colour taken from the photo, baked vertex shading.
-4. The phone downloads the result, checks it against the asset contract (§6.4), and swaps the box for the mesh.
+| Object | First shape |
+|---|---|
+| Chair, couch, bed | The category's template with the seat or mattress at the height the scan shows: the median height of the seen cells in the front half of the object's profile, kept between fixed limits, and the template stretched in height to match |
+| Other named categories | The category's fixed template, now facing the right way |
+| `unknown`, `other`, and any template that cannot be built | A shape cut from the scan: the profile reduced to 8 × 8 columns from the floor to their height (4 × 4 when that passes 1,500 triangles), tinted by category |
+| No profile, or the scan saw under 30% of the box, and no template | The placeholder box. This is the only case left in which a box is seen |
 
-**The furniture budget.** At most 20 objects receive generated meshes, largest boxes first, which is also the order of the Forge's queue. Any further objects stay placeholder boxes. The triangle target for each object is clamp(60,000 ÷ n, 3,000, 5,000), where n is the number of objects that receive meshes, so the furniture of one room never exceeds 60,000 triangles. Whatever the target, the asset validator accepts only 1,500 to 5,000 triangles and no edge longer than 0.25 m.
+A first shape stays under the built-in limit of 1,500 triangles and the 0.25 m edge rule, and its mesh state stays built-in. The **object profile** carries the scan into all this: a 16 × 16 grid of heights of the scanned surface inside the object's box, made on the phone by casting rays straight down onto the LiDAR mesh, 256 bytes in the RoomModel. **Facing** is decided from it once, when the RoomModel is built, by the first rule in the category's list that gives an answer (the profile's tall edge strip, the nearest table, the free floor in front, or RoomPlan's own box axis); after it, local +Z is the front of every object. Position and size do not move: the scan's box is never changed except by whole quarter turns. In parallel:
 
-The walker sees their room fill in. If the Forge cannot be reached, the placeholder boxes are replaced by the built-in fallback set: one CC0 mesh of at most 1,500 triangles per RoomPlan category, scaled to the box (task `P1-D12`). An object with no usable photo, or whose job fails, takes its mesh from the same set. §7.4 specifies the round-trip.
+1. During the scan the phone keeps, for each object box, the one to three camera frames in which the box is best seen (largest on screen, centred, sharp, from different sides, preferring views from the front half of the object and from no more than 30° above it), and crops them.
+2. The crops go to the Forge on the Station with the box's size and category, the object's profile and the object's triangle targets, full and light.
+3. The Forge makes a mesh from the photo, then cleans it: oriented by comparing its own profile with the scan's and scaled to the box, decimated to the triangle target, no edge longer than 0.25 m so it can bend, palette colours taken per face from the photos, baked vertex shading, and a light copy (§7.4 says how much of this the Forge does today).
+4. The phone downloads the full copy, then the light one, checks each against the asset contract (§6.4), and swaps the first shape for the full mesh.
+
+**The furniture budget.** At most 32 objects receive generated meshes, largest boxes first by volume (ties to the lower id), which is also the order of the Forge's queue. Any further objects keep their first shape. The triangles are shared by surface area, in whole numbers: each of the n meshed objects has a full target t = clamp(⌊120,000 · a ÷ A⌋, 3,000, 15,000), where a is its box's surface area in whole square millimetres and A the sum over the n objects; when the targets add up to more than 120,000 their excess over 3,000 is scaled down together, so the furniture of one room never exceeds 120,000 triangles and no object falls under 3,000. Equal boxes get clamp(120,000 ÷ n, 3,000, 15,000): 15,000 each up to eight objects, 10,000 at twelve, 6,000 at twenty, 3,750 at thirty-two. The asset validator accepts 1,500 to 15,000 triangles for a full copy and no edge longer than 0.25 m.
+
+**Two levels.** Every generated object has a **full** copy (at most its target) and a **light** copy, whose target is clamp(60,000 ÷ n, 1,500, 5,000) and whose total is at most 60,000. Each space asks for a level and the room content swaps meshes when a space is entered, never during a frame. Home and Curved Walk ask for the full copies; the other spaces show the light ones until the phone measurement (mesh design check M3) says they can afford more. The quality ladder holds the furniture at the light level from its first step below nominal (§8.5), and the parameter `render.furniture` (auto, light, full) lets the Console force a level.
+
+The walker sees their room fill in: first shapes at once, then generated meshes, largest first. If the Forge cannot be reached the first shapes stay, and the built-in set (one CC0 mesh of at most 1,500 triangles per RoomPlan category, scaled to the box, task `P1-D12`) is what an object with no usable photo, or whose job fails, shows. §7.4 specifies the round-trip.
 
 ### 4.6 Mode 1 · Curved Walk
 
@@ -806,7 +819,7 @@ Lanes work in parallel because these are agreed first and changed only with noti
 | Shader include contract | Entry points and signatures of `AtlasCore.hlsl`, `AtlasWarp.hlsl`, `AtlasPortalClip.hlsl`, `AtlasGates.hlsl`; the single `UnityPerMaterial` block; every property id in `AtlasShaderIDs.cs` (edited by lanes A and B only; an id is added or changed only after all four lanes are told) | A and B | all |
 | Parameter registry | How a tunable is declared (id, group, range, default) and reaches the Console. Bump Guard declares none: its thresholds and depth rate are constants in code (§4.10) | D | all |
 | Link schema | Message ids, the `State` layout, the event format (Appendix B) | D | all |
-| Asset contract | What a generated GLB must satisfy: one mesh, no textures or materials (the phone assigns the shared one), metres, Y up, origin at the centre of the box's base, longest edge ≤ 0.25 m, 1,500–5,000 triangles (the validator's hard range) and never more than the triangle target sent with its job. The target is clamp(60,000 ÷ n, 3,000, 5,000) when n objects receive meshes (§4.5) | D | C |
+| Asset contract | What a generated GLB must satisfy: one mesh, no textures or materials (the phone assigns the shared one), metres, Y up, origin at the centre of the box's base, longest edge ≤ 0.25 m, within 10% of the box, each face carrying one object cell of the palette (one or more cells per mesh; every vertex of a face has that face's cell). Two copies: the **full** copy has 1,500–15,000 triangles, at most 2 MB, and never more than the triangle target sent with its job; the **light** copy has 1,500–5,000 triangles, at most 1 MB, and never more than the light target sent with its job. The targets follow the area rule of §4.5: full 3,000–15,000 per object, 120,000 in all for at most 32 objects; light clamp(60,000 ÷ n, 1,500, 5,000) | D | C |
 | Layer and stencil table | One row per room layer and stencil reference (1–15) | A | B |
 | Frame loop | `AtlasFrameLoop` and its call order (§6.3, steps 2–6) | A | B, C |
 | Scene ownership | Who may edit which scene and prefab (§9.3) | A | all |
@@ -964,14 +977,14 @@ sequenceDiagram
   participant F as Forge :8000
   participant H as Hub
   participant S as Spectator
-  P->>P: scan ends, RoomModel built, placeholder boxes placed
+  P->>P: scan ends, RoomModel built (profiles, facing), first shapes placed
   P->>H: RoomOutline (ch 0)
   P->>F: POST /rooms (RoomModel JSON)
   F-->>P: 201 roomId, roomHash
   opt decimated mesh
     P->>F: PUT /rooms/{roomId}/mesh
   end
-  loop up to 20 object boxes, largest first
+  loop up to 32 object boxes, largest first
     P->>P: select 1–3 key frames, crop
     P->>F: POST /rooms/{roomId}/objects (meta + crops)
     F-->>P: 202 jobId (or 200 cached assetHash)
@@ -982,7 +995,7 @@ sequenceDiagram
     H->>P: JobStatus
     H->>P: AssetReady
     H->>S: AssetReady
-    P->>F: GET /assets/{sha256}.glb
+    P->>F: GET /assets/{sha256}.glb (full copy, then the light copy)
     P->>P: validate, load off main thread, swap
     P->>H: AssetAck
   end
@@ -990,10 +1003,10 @@ sequenceDiagram
 
 **Phone: capture and selection.**
 - During the scan the app keeps a key-frame ring in memory: a new frame when the camera has moved ≥ 0.25 m or turned ≥ 15°, and gyro speed < 30°/s; at most 96 frames, each with camera pose and intrinsics (thresholds derived; tune at G6).
-- When the RoomModel is final, the phone picks the objects that receive meshes: all of them, or the 20 largest boxes by volume when there are more. The rest keep their placeholder box (§4.5). Each job carries a triangle target in its `meta` (`triTarget`, Appendix B.4): clamp(60,000 ÷ n, 3,000, 5,000), where n is the number of objects that receive meshes. That is 5,000 up to twelve objects and 3,000 at twenty. The furniture of one room therefore never exceeds 60,000 triangles.
+- When the RoomModel is final, the phone picks the objects that receive meshes: all of them, or the 32 largest boxes by volume when there are more. The rest keep their first shape (§4.5). Each job carries its own triangle target in its `meta` (`triTarget`, Appendix B.4), the one the RoomModel holds for that object by the area rule of §4.5 (3,000 to 15,000), and the room's light target (`triTargetLight`, clamp(60,000 ÷ n, 1,500, 5,000)), and the object's profile (`profile`, 256 bytes as base64). The furniture of one room therefore never exceeds 120,000 triangles at the full level and 60,000 at the light level.
 - Each picked box is projected into each key frame. A frame is a candidate when all eight corners are inside the image with a 5% margin, the projected bounding box covers 10–70% of the image, the camera is 0.6–3.0 m from the box, and LiDAR depth at the box centre is within 0.15 m of the expected distance (not occluded).
 - Score = 0.4·min(area / 0.35, 1) + 0.3·centredness + 0.3·sharpness, where centredness = 1 − (offset of the box centre from the image centre ÷ half-diagonal) and sharpness = variance of the Laplacian on a 160-pixel thumbnail ÷ the scan's median (derived).
-- Take the best frame, then up to two more whose azimuth about the box differs by ≥ 30° from every frame already taken. Zero candidates → no upload; the box is reported in the log and takes its built-in fallback mesh at once.
+- A candidate seen from the back half of the object, or from more than 30° above its centre, has its score halved but is still taken when there is no other. Take the best frame, then up to two more whose azimuth about the box differs by ≥ 30° from every frame already taken. Zero candidates → no upload; the box is reported in the log and takes its built-in fallback mesh at once.
 - Crop to the projected box padded by 12%, squared, ≤ 768 × 768, JPEG quality 85, on a worker thread. View 0 feeds generation; views 1–2 are retry inputs and colour samples (TripoSG takes one image: verify).
 
 **Forge: job per object.**
@@ -1001,21 +1014,21 @@ sequenceDiagram
 | State | Work | Timeout |
 |---|---|---|
 | `queued` | Cache lookup by `sha256(view 0)`, the triangle target and `pipelineVer`; a hit goes straight to `ready` | – |
-| `matting` | Background removal (`rembg`) | 10 s |
-| `generating` | TripoSG on the RTX 5070 (BP §0.5) | 90 s, then one retry with view 1, then the hosted API if a key is configured (120 s) |
-| `cleaning` | Up axis and the yaw in {0°, 90°, 180°, 270°} whose bounds best match the scanned box; scale to the box (≤ ±15% per axis); decimate to the triangle target sent with the job and regrid so no edge exceeds 0.25 m, ending at or below the target; nearest palette entry to the photo's dominant colour; vertex ambient occlusion; export GLB | 20 s |
+| `matting` | Background removal (`rembg`). Required for TripoSG: the crop is cut to the matte's bounding box, put on white and padded to a square by 10% of its long side on every side before it is handed on | 10 s |
+| `generating` | TripoSG on the RTX 5070 (BP §0.5), with its default decoder and, if that fails, its fallback decoder inside the same time-out. As designed, one generation from view 0 and, only when the fit to the scan is poor (a score above 0.20), a second from view 1 and a third from view 2, publishing the attempt with the lowest score; a mesh is always published and a poor fit is reported, never hidden. In the merged code the Forge still retries only on failure, with view 1 | 90 s per generation, then, on failure, one retry with view 1, then the hosted API if a key is configured (120 s) |
+| `cleaning` | **In the merged code:** weld; decimate to the triangle target sent with the job; drop detached fragments; up axis and the yaw in {0°, 90°, 180°, 270°} whose bounds best match the scanned box; scale to the box (≤ ±15% per axis); regrid so no edge exceeds 0.25 m, ending at or below the target; the nearest palette entry to the photo's dominant colour; vertex ambient occlusion; export GLB. **As the mesh design specifies it (§5.3), not yet wired into clean-up:** weld, decimate to the full target and drop fragments; *orient by the fit* (the mesh's own profile is cast the same way as the scan's, for each up axis times four yaws, and the lowest mean height difference over the cells the scan saw wins; ties by the model's front); scale; regrid; *colour per face* (each face takes the palette cell of the photo pixels that see it, smoothed, at most 6 cells per object, so an object with two colours shows both); bake shade × ambient occlusion; *make the light copy* from the full one (decimate to the light target, then regrid, colour and bake again); validate and publish both. The report gains `fit`, `fitYaw`, `fitUp` and `attempts` | 60 s |
 | `ready` / `failed` | `AssetReady`, or `JobStatus failed` → the box takes its built-in fallback mesh | – |
 
-- GLB contract: one mesh, `POSITION`, `NORMAL`, `TEXCOORD_0` (palette cell), `COLOR_0` (ambient occlusion), no textures, no material; box-local frame, origin at the base centre, +Y up, metres. The phone assigns the shared look material.
+- GLB contract: one mesh, `POSITION`, `NORMAL`, `TEXCOORD_0` (the face's palette cell; one or more object cells per mesh), `COLOR_0` (ambient occlusion), no textures, no material; box-local frame, origin at the base centre, +Y up, metres. The phone assigns the shared look material.
 - One GPU job at a time; the queue is ordered by box volume, largest first.
 - The `forge.backend` setting (§12.4) is sent in each job's `meta`. `local`, the default, runs the table above. `hosted` goes to the hosted API without trying the local generator. `cache` answers from the cache only: a miss fails the job at once and nothing is generated, on the Station or by a third party. With `off` the phone sends nothing. A picked box whose job fails, or is not sent because of this setting, takes its built-in fallback mesh.
 
 **Phone: placement.**
-- Placeholder: a box of the scanned dimensions, tinted by category, gridded at 0.25 m, present from the moment Home is built.
-- On `AssetReady`: download to `persistentDataPath/assets/<sha256>.glb`, verify the SHA-256, load with glTFast asynchronously, instantiate at most one asset per frame, validate triangles ≤ 5,000 and bounds within ±10% of the box, then cross-fade placeholder to mesh over 0.3 s. Send `AssetAck {ok, loadMs, worstFrameMs}`. A rejected asset is not shown: the phone reports `ok: false` and the box takes its built-in fallback mesh.
+- First shape: present from the moment the room is built (§4.5), at the scanned dimensions and facing as the real object faces; a box of the scanned dimensions, tinted by category and gridded at 0.25 m, only where the scan gave too little for any shape.
+- On `AssetReady`: download to `persistentDataPath/assets/<sha256>.glb`, verify the SHA-256, load with glTFast asynchronously, instantiate at most one asset per frame, validate triangles against the copy's level (full ≤ 15,000 and its target, light ≤ 5,000 and the light target) and bounds within ±10% of the box, then cross-fade the first shape to the mesh over 0.3 s. The light copy is fetched after the full one, when no full copy waits and the room is built; a light copy that fails its hash, its validation or its download is dropped on its own, and the object keeps its full mesh. Send `AssetAck {ok, loadMs, worstFrameMs}`. A rejected asset is not shown: the phone reports `ok: false` and the box takes its built-in fallback mesh.
 - Without the Hub, the phone polls `GET /jobs?room=` every 2 s.
-- Without the Forge, the placeholder box of every picked object is replaced by a mesh from the built-in fallback set (`P1-D12`): one CC0 mesh of at most 1.5k triangles per RoomPlan category, palette-mapped, shipped in the build and scaled to the box. The set is placed after 3 failed uploads (back-off 1, 2, 4 s). An attempt also counts as failed when no connection is made within 2 s (proposed), so the set is in place at most 9 s after the first attempt (derived: 3 × 2 s + 1 s + 2 s). A box with no candidate frame, a failed job or a rejected asset takes its built-in mesh at once. Each built-in mesh is tagged "built-in" in the log and on the Console. Uploads resume when the Forge returns, and each built-in mesh is then replaced by the generated one.
-- The saved RoomModel stores `boxId → sha256`, so the pre-scan path (D21) loads furniture from the phone's cache with no Station.
+- Without the Forge nothing has to be replaced, because the first shapes (§4.5) already stand: they are built from the built-in templates (`P1-D12`: one CC0 mesh of at most 1.5k triangles per RoomPlan category, palette-mapped, shipped in the build) fitted to the scan, or cut from it. Each is tagged "built-in" in the log with the reason `first_shape` and the kind of shape (template, fitted, scancut or kept), and on the Console. A box with no candidate frame, a failed job or a rejected asset keeps its first shape, logged with its real reason. An upload is tried 3 times (back-off 1, 2, 4 s; an attempt also counts as failed when no connection is made within 2 s, proposed) and then given up for the object; uploads resume when the Forge returns, and each generated mesh then replaces the first shape.
+- The saved RoomModel stores `boxId → sha256` for the full copy and for the light copy (`assetHash`, `assetHashLight`), so the pre-scan path (D21) loads furniture from the phone's cache with no Station.
 
 **Privacy.** Only crops leave the phone; full camera frames are never uploaded or written to disk and the ring is cleared when cropping ends. The Forge holds crops in memory and deletes them when the job finishes. `FORGE_DEBUG_KEEP=1` keeps them for debugging and is for team sessions only: the Forge reports the flag in its status (`GET /health`) and the Console shows a red "crops kept" banner. The hosted fallback (D20) sends the crop to a third party whose retention we do not control. The booth sign's data line says so, the operator tells a walker from outside the team before the scan, and if they decline the operator sets `forge.backend` to `cache`, so their objects use the cache or the built-in set. Scan with no other person in view; a crop in which ARKit's human stencil covers > 5% of pixels is discarded (Extended: the human stencil is off by default, §8.2, and this check switches it on for the scan only). The room record, its mesh and the GLBs made for it are removed from the Forge with `DELETE /rooms/{roomId}` (Appendix B.4); §13.5 says what is kept from a session and when it is deleted.
 
@@ -1024,8 +1037,8 @@ sequenceDiagram
 | RoomModel JSON | ≤ 300 kB (160 × 160 grid, base64; derived from R1 C.3) |
 | Decimated room mesh | ≤ 2 MB; optional |
 | Crop | ≤ 200 kB each; ≤ 3 per object |
-| GLB | ≤ 1 MB; 1.5–5k triangles (§6.4), and no more than the target sent with its job |
-| Furniture of one room | ≤ 20 meshes; ≤ 60,000 triangles in total (§4.5) |
+| GLB | Full copy ≤ 2 MB, 1.5–15k triangles; light copy ≤ 1 MB, 1.5–5k triangles (§6.4); each no more than the target sent with its job |
+| Furniture of one room | ≤ 32 meshes; ≤ 120,000 triangles in total at the full level and ≤ 60,000 at the light level (§4.5) |
 | Worst frame during a swap | < 20 ms |
 
 ### 7.5 Link rules
@@ -1155,16 +1168,20 @@ Licence rules: Asset Store packs never enter the repository; CC-BY assets and an
 
 | Space | Draw calls per frame | Triangles per frame | What drives it |
 |---|---|---|---|
-| S0 Home | ≤ 60 | ≤ 130k | Up to 20 furniture meshes, 60,000 triangles in total |
+| S0 Home | ≤ 80 | ≤ 250k | Up to 32 furniture meshes at the full level, 120,000 triangles in total (about 246,000 per frame with the shell; 68 draw calls for 32 objects, both eyes) |
 | S1 Glued, 5 × 5 (T², Klein) | ≤ 150 | ≤ 250k | 25 cell frames, 24 avatars, the room drawn once |
 | S1 Glued, T³ 3 × 3 × 3 | ≤ 160 | ≤ 250k | 27 cell frames, 26 avatars, the room drawn once |
-| S2 Curved Walk, ρ = 3 | ≤ 210 | ≤ 250k | Up to 71 tiles drawn, plus the room |
+| S2 Curved Walk, ρ = 3 | ≤ 240 | ≤ 370k | Up to 71 tiles drawn, plus the room with the full furniture copies |
 | S3 Aligned Cells | ≤ 170 | ≤ 200k | Up to 57 cell instances; furniture drawn once |
 | S4 Small Planet | ≤ 70 | ≤ 190k | Six tiles plus the room |
 | S5 Impossible Rooms | ≤ 60 | ≤ 150k | Two rooms through one portal, plus the room's content (Home shell and furniture, 63,000 per eye) |
 | S6 Slicer | ≤ 70 | ≤ 160k | Home plus the dynamic cross-section |
 
-`budget_room` is the performance fixture frozen with the contracts at G0 (§4.3, task `P1-X02`): a 4 × 5 m room with twelve stand-in objects of exactly 5,000 triangles each and no edge over 0.25 m, which is the full furniture load of §8.4 (60,000 triangles). Budgets are measured on it; the three sample rooms stay for functional tests. In Glued the room is drawn once, among the copies of the cell. In Aligned Cells an instance is one draw call (the flat tile shell and its props merged), and each piece of furniture is drawn once per eye, however many instances of its cell are drawn (§4.7).
+**What is held and what is planned.** Only Home's row is held by code: `RoomBudget.HomeDrawCallsPerFrame` is 80 and `HomeTrianglesPerFrame` 250,000, and the Home tests count the room's builders against them. That is a count of what the builders make, not a measurement on a phone. S2's row is the mesh design's proposal (it also shows the full copies) and no test holds it. S1, S3, S4, S5 and S6 show the light copies, so their triangles are as listed and each is expected to need 24 more draw calls (the twelve extra stand-in objects of `budget_room_120k`, both eyes); their rows above are the old figures, unchanged, until the phone measurement (mesh design check M3). If a space does not hold 60 frames per second with the full copies on the phone, its default level becomes light and this table is corrected. The must-limits of 300 draw calls and 500,000 triangles per frame do not change, and every row stays inside them.
+
+**Furniture level in the quality ladder.** The ladder's table (lane A contract §9.5) gains one column, the highest furniture level a tier allows: Nominal and High allow the full copies, so a space keeps the level it asks for (full in Home and Curved Walk, light in the rest); Fair, Serious and Critical force the light copies in every space. The first step below nominal therefore lowers the furniture before any step lowers the render scale. The parameter `render.furniture` (auto, light, full; default auto) overrides it: light forces the light copies, full forces the full ones whatever the ladder says.
+
+`budget_room` is the performance fixture frozen with the contracts at G0 (§4.3, task `P1-X02`): a 4 × 5 m room with twelve stand-in objects of exactly 5,000 triangles each and no edge over 0.25 m, 60,000 triangles in all. Its companion `budget_room_120k` is the same room with 24 stand-ins of exactly 5,000 triangles, 120,000 in all, which is the full furniture load of §4.5. Budgets are measured on them; the three sample rooms stay for functional tests. In Glued the room is drawn once, among the copies of the cell. In Aligned Cells an instance is one draw call (the flat tile shell and its props merged), and each piece of furniture is drawn once per eye, however many instances of its cell are drawn (§4.7).
 
 ![Tile counts against fog radius](figures/fig05_tile_budget.png)
 

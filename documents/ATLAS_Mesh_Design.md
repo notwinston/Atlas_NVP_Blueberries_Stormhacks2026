@@ -4,6 +4,9 @@
 A design to build now. The decisions in §2 were taken by the team lead on 4 October 2026. Facts about the code were
 read from this tree; anything that could not be checked says so. The PDF (`ATLAS_Mesh_Design.pdf`) carries the same
 text and is written by hand in `ATLAS_Mesh_Design.tex`.
+Corrected on 4 October 2026 after the first build, so that it says what the code does. Nothing in it has run on a phone,
+and the real generator (TripoSG) has never run. When this text was corrected, the Forge's fit, attempts, colour per face and
+light copy existed as separate modules (`forge/profile.py`, `forge/colour.py`) and were not yet wired into clean-up (§5.3).
 
 ## 1 · The problem and the outcome
 
@@ -113,6 +116,15 @@ Nothing was run. "Read" means read in the source; "inferred" means worked out fr
 needs the Microsoft build tools and the CUDA toolkit with `CUDA_HOME` set; without `CUDA_HOME` it builds without its
 CUDA part and reports no error. The installed versions and the TripoSG commit go into `docs/versions.md`.
 
+**What the Forge's first round established beyond the research above** (`station/forge/README.md`, "First run on the
+Station"; nothing here was run on the Station):
+
+- **The lock file did not install on Windows.** `requirements.lock` pinned `uvloop` with no platform marker, and `uvloop` has no Windows build, so `pip install -r requirements.lock` would have failed on the Station. It is now compiled with `uv pip compile --universal`: `uvloop` is skipped on Windows, `colorama` is added there, and no version changed.
+- **`diso` cannot be in a requirements file.** Its build script imports PyTorch and pip builds in an isolated environment that has none (seen: `ModuleNotFoundError: No module named 'torch'`). It is installed by its own command, after PyTorch: `pip install setuptools wheel`, then `pip install --no-build-isolation diso==0.1.4` with `CUDA_HOME` set. `opencv-python` and `pymeshlab`, which only TripoSG's scripts use, are left out of the list.
+- **The pinned versions.** `torch==2.7.1` and `torchvision==0.22.1` from the cu128 index, `diffusers==0.33.1`, `transformers==4.49.0`, `huggingface-hub==0.30.2`, `scikit-image==0.25.2`, `scipy==1.15.2`, `peft==0.15.2`, `diso==0.1.4`, `rembg[gpu]==2.0.69`, TripoSG commit `fc5c40990181e2a756c4e0b1c2f4d6b5202faf8c`. The lists were resolved with `uv pip compile` for Python 3.11 on Windows, and every pin has a Windows wheel except `antlr4-python3-runtime`, which is pure Python.
+- **What was tried, and where.** In a throw-away Python 3.11 environment on the build Mac, with PyTorch for the processor, the TripoSG package imported with `diso` replaced by a stub, and `rembg` cut four of TripoSG's example pictures, which the Forge framed. No weights were downloaded and nothing was generated. The Windows commands of the run-book are written from reading, not from running.
+- **What exists to run it.** The adapter's fallback decoder, the `model_index.json` and `diso` checks, the model loaded when the service starts, the run-book, `tools/check_station.py` (checks the install) and `tools/first_run.py` (posts a room and one photo, follows the job, validates the GLB and reads the frame).
+
 **The input picture.** The Forge prepares the crop the way the repository's own script does:
 
 1. Matte the crop. Matting becomes required for the `triposg` generator: `GET /health` reports `generatorReady: false` when no matting model is installed, instead of sending unmatted room photos to the model.
@@ -124,8 +136,10 @@ on: a view's score is halved when the camera stands in the back half of the obje
 A view from behind is still taken when there is no other.
 
 **The output frame.** Which way is up, and where the mesh's front is, is measured once on the Station with a test
-photo of an object that is clearly not symmetric (a chair seen from the front-left). The answer is written into
-`forge/config.py` as `triposg_up` and `triposg_front`. `triposg_front` is `canonical` (the front is on the mesh's own
+photo of an object that is clearly not symmetric (a chair seen from the front-left). The answer is set as `triposg_up` and
+`triposg_front` in `forge/config.py`; they are settings, read from `FORGE_TRIPOSG_UP` and `FORGE_TRIPOSG_FRONT` (defaults `Y` and
+`unknown`) and checked at start-up, and nothing reads them yet because the fit is not wired into clean-up. `tools/first_run.py`
+reads the frame from a finished job. `triposg_front` is `canonical` (the front is on the mesh's own
 +Z, which after §5.2 is also the box's front), `view` (the front follows the camera) or `unknown`. §5.3 uses the scan
 to choose the orientation in any case; this setting only breaks ties.
 
@@ -145,7 +159,7 @@ For each object box of a scan that has a real LiDAR mesh (`ScanSnapshot.MeshFrom
 - **Rays.** Four rays per cell (a 2 × 2 pattern at the quarter points), 1,024 per object. Each starts 0.05 m above the top of the box and points straight down. It is tested against the scan triangles that overlap the box, floor-class triangles left out. A hit counts when it lies from 0.02 m above the base to the ray's start.
 - **Value.** The highest hit of the cell's four rays, as a byte: `q = clamp(floor(255 · height / h + 0.5), 1, 255)`. `0` means no ray of the cell hit anything.
 - **Coverage.** Cells that are not 0, divided by 256.
-- **Where it lives.** `objects[k].profile` in the RoomModel: the 256 bytes as base64 (344 characters). The key is optional. It is absent for route 1, for a phone without LiDAR and for fixtures. It is not part of the geometry hash. 64 objects add about 23 kB to a file whose limit is 300 kB.
+- **Where it lives.** `objects[k].profile` in the RoomModel: the 256 bytes as base64 (344 characters). The key is optional. It is absent for route 1, for a phone without LiDAR, for fixtures, and for an object in which no ray hit anything (coverage 0); a profile is never stored as 256 zeros. It is not part of the geometry hash. 64 objects add about 23 kB to a file whose limit is 300 kB.
 - **Where it is made.** `Atlas.Scan`, engine-free, inside `ScanSolver.Solve` on its worker thread, which already holds the mesh, its classes and the boxes.
 
 #### Facing
@@ -168,7 +182,27 @@ are swapped on an odd turn, and the profile is turned with them. No reader of th
 | storage, screen, refrigerator, oven, dishwasher, washerDryer, stove, fireplace, sink, bathtub | `clearance`, `box` |
 | table, lamp, plant, stairs, keyboard, mouse, laptop, other, unknown | `box` |
 
+**Ties in `clearance`.** An object's own box limits what any open side can read: the probe is 0.30 m out but the free
+region stops one cell (0.05 m) short, so every open side reads at most 0.25 m. A deep appliance against a wall then reads
+the same on all three open sides, and "the most free floor" is an exact three-way tie, which taken literally goes to the
+lowest side: right only when RoomPlan's axis happens to point into the room, and `box` otherwise, which is the case the
+rule exists for. So the sides that read within one cell (0.05 m, `ClearanceTie`) of the best count as equally free, and of
+those the side that exceeds its opposite side by most is taken. The 0.10 m acceptance is unchanged, and an exact tie that
+remains (a square box in a corner) goes to the lowest quarter turn.
+
+**Two readings** that the table leaves open. In `profile`, "the next side's" mean is the highest mean of the other three
+strips (a tie gives no answer); the strips share their corner cells, so a scan that saw only the back gives no answer; the
+quarter-seen test applies to the highest strip only, so a strip that is highest on a few cells blocks the rule and the next
+one answers. In `table`, "within 1.0 m" is the distance between the two footprints on the floor, 0 when they overlap; of two
+tables equally near the nearer centre wins, and a table that is the object itself gives no answer. In both rules "exceeds by"
+means at least.
+
 The rule that answered is written to `objects[k].facing` (optional key; absent means `box`). Check M1 counts it.
+
+Facing can be switched off by a scan option, `ScanOptions.DecideFacing` (true in `ScanOptions.Default`). With it off the
+profile is still computed, because the first shapes and the Forge read it, and only the turning and `facing` are left out.
+In this tree `ScanFlow` does not yet hand the option to `ScanSolver.Solve`, so in the app facing is always on; only a direct
+call of `ScanSolver.Solve` or `RoomModelBuilder.Build` can switch it off.
 
 #### First shapes
 
@@ -177,7 +211,7 @@ Forge is away. The mesh state stays `builtIn`; the built-in limit of 1,500 trian
 
 | Object | First shape |
 |---|---|
-| chair, couch, bed | The category's template with its measures taken from the profile: seat or mattress height is the median height of the seen cells in the front half, the back stands on local −Z at the height of the box. Defaults are the template's own when the cells are unseen |
+| chair, couch, bed | The category's template with its measures taken from the profile: seat or mattress height is the median height of the seen cells in the front half, the back stands on local −Z at the height of the box. Defaults are the template's own when the cells are unseen. The height is kept within 0.25 to 0.70 of the box height for a chair, 0.25 to 0.65 for a couch and 0.30 to 0.75 for a bed (the templates' own are 0.50, 0.45 and 0.55). The fitted shape is the template stretched in height, piecewise linear, so that the floor, the seat and the top of the box stay where they are and every rectangle of the template stays a rectangle |
 | Other named categories | The fixed template, now facing the right way |
 | `unknown`, `other`, and any template that cannot be built | A shape cut from the scan: the profile reduced to 8 × 8 (the highest of each 2 × 2), unseen cells filled from their seen neighbours, one column per cell from the floor to its height, the top and the steps between columns as faces. If that passes 1,500 triangles it is reduced to 4 × 4. Tinted by category as the box was |
 | No profile, or coverage under 0.30, and no template | The placeholder box. This is the only case left in which a box is seen |
@@ -222,6 +256,8 @@ hidden. At most three generations per object.
 - Smoothing: three passes in which a face takes the cell that two of its three neighbours share; then regions under 2 % of the surface merge into their largest neighbour, and the smallest regions merge until at most 6 cells remain.
 - A face no view saw takes the cell of the nearest seen face along the surface. With no seen face at all, the object keeps one cell from the dominant colour, as today.
 - Vertices are split only where two faces of different cells meet, and every vertex of a face points at the centre of that face's cell. The shader, the palette and the vertex format do not change. `AssetReady.palette` reports the cell that covers the most surface.
+
+**Four departures in `forge/colour.py`** (a module with tests; not yet wired into clean-up). Speckle is counted after the three passes and the 2 % merge, not after the limit to 6 cells, because counted after the limit a clean object of eight equal stripes limited to three cells looks speckled and collapses to one cell. A face no view saw takes the cell of the nearest seen face by distance along the surface, centre to centre over faces that share a corner or an edge, not by a count of edges crossed, because the count ran the border between two colours at 45° across an unseen back. After the unseen faces are filled, the 2 % merge and the limit run a second time over the whole mesh, so a small island of seen faces surrounded by unseen ones cannot survive. And "no other triangle first" is an exact ray test from the camera to each face centre, with triangles binned by their footprint in the picture, not a depth buffer (tolerance 0.01 m; a view that would need more than 12,000,000 ray-triangle tests sees nothing).
 
 #### Two levels (decision M10)
 
@@ -283,10 +319,12 @@ entered, never during a frame.
 | S1, S3, S4, S5, S6 | Light | 126,000, as today | Triangles as today; 24 more draw calls each, for the 12 more objects |
 
 The must-limits of the plan (300 draw calls and 500,000 triangles per frame) do not change, and every row stays
-inside them. Two further controls:
+inside them. Of these rows only Home's is held by code (`RoomBudget`: 80 draw calls and 250,000 triangles per frame,
+counted from what the builders make); the others are planning figures until check M3. Three further controls:
 
-- **The quality ladder.** The quality table gains one column, furniture level. The first step below nominal sets it to light in every space, before any step lowers the render scale.
-- **A parameter.** `render.furniture` = `auto`, `light` or `full`, so the Console can force a level.
+- **The quality ladder.** The quality table gains one column, furniture level. It is a table in `Rendering/Quality/QualityFurniture.cs`, not a field of `QualityRow`, which lives in `Atlas.World`. Nominal and High allow Full; Fair, Serious and Critical force Light in every space, so the first step below nominal drops the furniture to its light copies before any step lowers the render scale. `QualityApplier.FurnitureCap` and `QualityLadder.FurnitureCap` publish the column, and `FurnitureLevelPolicy` (`App/Spaces/FurnitureLevels.cs`) puts the resulting level on the room when a space is entered, when the tier changes, when the parameter changes and when the room is rebuilt.
+- **A parameter.** `render.furniture` = `auto`, `light` or `full`, so the Console can force a level: `light` forces Light in every space, `full` forces Full whatever the ladder says.
+- **The Spectator** always shows the full copy: it downloads no light copy and sets no level.
 
 #### The measurement (check M3)
 
@@ -301,8 +339,8 @@ The shell stays as it is: the floor from the confirmed outline, the walls on the
 makes a virtual wall coincide with the real one. The wall bridge (`P1-C05`), already written and tested headless,
 adds what the shell lacks:
 
-1. **Build the plugin.** A post-build step adds `Plugins/iOS/AtlasRoomPlan.swift` to the generated Xcode project, with the RoomPlan framework linked weakly. It has never been built inside Unity's Xcode project; this is the first thing to prove.
-2. **Switch it on.** `WallBridge.Enabled` is set when the bridge reports itself available and the new parameter `scan.wallBridge` is on (default on; it is the kill switch).
+1. **Build the plugin.** A post-build step, `Editor/AtlasRoomPlanProject.cs` (called from `AtlasPostBuild`), adds `Plugins/iOS/AtlasRoomPlan.swift` to the sources of the `UnityFramework` target of the generated Xcode project, links the RoomPlan framework weakly and sets the Swift build settings; applied twice it equals applied once. What was proved: the step was applied to a copy of an earlier Unity export (made on 3 October 2026, without the Swift file) and the `UnityFramework` target then built (`BUILD SUCCEEDED`), exporting the four `AtlasRoomPlan` functions with RoomPlan linked weakly. The app target (`Unity-iPhone`) stopped at its two storyboards, "iOS 26.1 Platform Not Installed": the iOS platform component is not installed on the build Mac. So it is proved that the file and the settings build in a framework target, not that Unity's export of this tree does, and nothing has run on a phone.
+2. **Switch it on.** `WallBridge.Apply(bool)` sets `WallBridge.Enabled` to the parameter `scan.wallBridge` (default on; it is the kill switch) and the bridge's own report that it is available. The parameter is not in the on-device menu's kill-switch list, because the link contract fixes that list as the 21 names of its §1.5 and a test asserts the count; it is on the menu's Parameters page.
 3. **Nothing else moves.** A RoomPlan wall still only matches an outline wall; the outline wall keeps its end points. It takes the height, and its doors, windows and openings. With no capture, an unreadable file or no match, the walls are as today.
 
 The room's distance field treats every outline edge as a wall, with or without an opening (rule G7), so doors do
@@ -444,6 +482,8 @@ The five fixtures are regenerated by `tools/rooms/make_fixtures.py`; their geome
 1. TripoSG's output frame is inferred, not documented (§5.1), and is measured on area A's first run. The design works with any of the three settings; the setting only breaks ties.
 2. The thresholds are starting values: 0.15 and 0.10 m for facing, 0.20 for a poor fit, 0.30 for coverage, 6 cells per object. Check M1 and M2 on the record are where they are tuned.
 3. Unity's support for ray tracing on the target phones is unchecked. It matters only for §6.2 step 3.
+4. The two profile implementations differ in one way far below anything measurable. The phone's limits are the float constants 0.02f and 0.05f widened to double (0.0199999996 and 0.0500000007), and `forge/profile.py` uses 0.02 and 0.05. A hit within about a nanometre of the 0.02 m limit, or of the ray's start 0.05 m above the top of the box, can count on one side only. The shared test vectors do not reach it.
+5. Three Playground tests fail in the Unity Editor on `main`, for a reason outside this work: `Blades/Playground/Shell/Cards/HudPanel.cs:117` calls `Destroy` in edit mode. They are not touched by the mesh design and are listed so that nobody takes them for a failure of it.
 
 ## Appendix A · Tasks for agents
 
@@ -451,24 +491,24 @@ One row per task. "Needs" lists tasks that must be done first; tasks with none c
 
 | Task | Lane | What | Main files | Done when | Needs |
 |---|---|---|---|---|---|
-| MQ-D01 | D | Install TripoSG from our own pinned list and run one object through the Forge; correct the README's install line; record versions | `station/forge/requirements-triposg.txt` (new), `station/forge/README.md`, `docs/versions.md` | A GLB from a real photo passes the validator | – |
-| MQ-D02 | D | Adapter: the fallback decoder, the checks for `model_index.json` and `diso`, the model loaded at start, and whatever else the first run shows | `forge/generators/triposg.py`, `forge/service.py` | `GET /health` reports ready; three different photos give three meshes | MQ-D01 |
+| MQ-D01 | D | Install TripoSG from our own pinned list and run one object through the Forge; correct the README's install line; record versions | `station/forge/requirements-triposg.txt` (new), `station/forge/README.md`, `docs/versions.md` | A GLB from a real photo passes the validator. Built so far: the pinned list, the run-book and `tools/first_run.py`; the validator has accepted procedural output only, and `docs/versions.md` is not yet written | – |
+| MQ-D02 | D | Adapter: the fallback decoder, the checks for `model_index.json` and `diso`, the model loaded at start, and whatever else the first run shows | `forge/generators/triposg.py`, `forge/service.py` | `GET /health` reports ready; three different photos give three meshes. Built so far: the adapter, tested with a fake pipeline | MQ-D01 |
 | MQ-D03 | D | Input picture: matting required, cut to the matte, white, padded square | `forge/imaging.py`, `forge/service.py` | A test photo's prepared picture is square with the object centred | – |
-| MQ-D04 | D | Measure and record the output frame | `forge/config.py` | `triposg_up` and `triposg_front` are set from a non-symmetric test object | MQ-D02 |
-| MQ-C01 | C | The object profile in the scan solver | `Scan/Build/ObjectProfile.cs` (new), `Scan/Routes/ScanSolver.cs` | Synthetic rooms give the expected bytes; `roommath.py` agrees | – |
+| MQ-D04 | D | Measure and record the output frame | `forge/config.py` | `triposg_up` and `triposg_front` are set from a non-symmetric test object. Built so far: the two settings (environment variables, defaults `Y` and `unknown`) and the tool that reads the frame | MQ-D02 |
+| MQ-C01 | C | The object profile in the scan solver | `Scan/Build/ObjectProfile.cs` (new), `Scan/Routes/ScanSolver.cs` | Synthetic rooms give the expected bytes. Built instead of "`roommath.py` agrees": the Forge's `forge/profile.py` and the phone's `ObjectProfile` pass the same three test vectors (A, B and C of the shared brief, S3); `roommath.py` has no profile | – |
 | MQ-C02 | C | `profile`, `facing`, `assetHashLight` in the RoomModel, the reader, the writer, the schema, rule R21 | `World/Room/RoomModel.cs`, `RoomModelJson.cs`, `RoomModelValidator.cs`, `roommodel.schema.json`, `tools/rooms/` | Round trip on a room with profiles; fixtures still valid | – |
-| MQ-C03 | C | The facing rule and the quarter-turn normalisation | `Scan/Build/ObjectFacing.cs` (new), `RoomModelBuilder.cs` | Synthetic chair, couch, storage and table cases face as designed | MQ-C01, MQ-C02 |
+| MQ-C03 | C | The facing rule and the quarter-turn normalisation | `Scan/Build/ObjectFacing.cs` (new), `RoomModelBuilder.cs` | Synthetic chair, stool, storage, deep-appliance and table cases face as designed, with the tie rule of §5.2 | MQ-C01, MQ-C02 |
 | MQ-C05 | C | Photo selection prefers views from the front half and from no more than 30° above | `Scan/Photo/PhotoScore.cs` | Of a front and a back view of equal quality, the front one is view 0 | MQ-C03 |
 | MQ-D05 | D | Fitted templates for chair, couch and bed; scan-cut shape | `Telemetry/Assets/FallbackMeshBuilder.cs`, `FittedShapes.cs` (new), `tools/gen_fallback_set.py` | Every category and `unknown` build under 1,500 triangles, no edge over 0.25 m | MQ-C02 |
-| MQ-D06 | D | First shapes shown at once, on the phone and the Spectator | `Telemetry/Assets/AssetClientCore.cs`, `Spectator/SpectatorFurniture.cs` | With the Forge reachable, no object is a box after the room is built | MQ-D05 |
+| MQ-D06 | D | First shapes shown at once, on the phone and the Spectator | `Telemetry/Assets/AssetClientCore.cs`, `Spectator/SpectatorFurniture.cs` | With the Forge reachable, no object that has a template or a usable profile is a box after the room is built | MQ-D05 |
 | MQ-A01 | A, C, D | The triangle rule in all three places, and the validators | `RoomModelValidator.cs`, `forge/budget.py`, `tools/rooms/roommath.py`, `GlbValidator.cs`, `forge/validator.py` | The table of §5.4 from all three; old fixtures regenerate | – |
-| MQ-D07 | D | The fit: the mesh's profile, candidates, choice, report; cleaning time-out 60 s | `forge/cleanup.py`, `forge/profile.py` (new), `forge/models.py`, `forge/config.py` | A test mesh turned by each quarter turn is turned back | MQ-C02 |
+| MQ-D07 | D | The fit: the mesh's profile, candidates, choice, report; cleaning time-out 60 s | `forge/cleanup.py`, `forge/profile.py` (new), `forge/models.py`, `forge/config.py` | A test mesh turned by each quarter turn is turned back. Built so far: `forge/profile.py` with its tests (the mesh's profile, the fit score, the turning); the fit is not yet in clean-up | MQ-C02 |
 | MQ-D08 | D | Attempts on a poor fit | `forge/service.py` | A forced poor fit runs views 1 and 2 and publishes the best | MQ-D07 |
-| MQ-D09 | D | Colour per face | `forge/colour.py` (new), `forge/cleanup.py`, `forge/palette.py` | A two-colour test object gives two cells in the right places | MQ-D07 |
-| MQ-D10 | D | The light copy; `AssetReady` light fields; two downloads | `forge/cleanup.py`, `forge/service.py`, `Link/Messages/JsonMessages.cs`, `AssetClientCore.cs` | Both copies validate; an old reader still shows the full one | MQ-A01 |
+| MQ-D09 | D | Colour per face | `forge/colour.py` (new), `forge/cleanup.py`, `forge/palette.py` | A two-colour test object gives two cells in the right places. Built so far: `forge/colour.py` with its tests, which include a two-colour object; it is not yet in clean-up | MQ-D07 |
+| MQ-D10 | D | The light copy; `AssetReady` light fields; two downloads | `forge/cleanup.py`, `forge/service.py`, `Link/Messages/JsonMessages.cs`, `AssetClientCore.cs` | Both copies validate; an old reader still shows the full one. Built so far: the phone's side (the message fields, the Hub pass-through, the validator levels, the light download) and the Forge's validator and `JobStatus` fields; the Forge does not yet make a light copy | MQ-A01 |
 | MQ-A02 | A, C | Two meshes per object and a level in the room content; each space's level; ladder column; `render.furniture` | `World/Room/IRoomContent.cs`, `Rendering/Room/RoomContent.cs`, `Rendering/Quality/`, the space modules | Entering a light space swaps meshes; the ladder's first step forces light | MQ-D10 |
-| MQ-A03 | A | `budget_room_120k` and the budget tests | `tools/rooms/make_fixtures.py`, `Rendering/Room/RoomBudget.cs`, tests | `RoomBudget.Estimate` gives 246,000 per frame for Home | MQ-A01 |
-| MQ-C04 | C | Build the Swift plugin into the Xcode project; switch the bridge on | `Plugins/iOS/AtlasRoomPlan.swift`, an Editor post-build step, `Scan/Routes/WallBridge.cs`, `ScanSystems.cs` | The app builds; `scan.wallBridge` turns it off | – |
+| MQ-A03 | A | `budget_room_120k` and the budget tests | `tools/rooms/make_fixtures.py`, `Rendering/Room/RoomBudget.cs`, tests | `RoomBudget.Estimate` gives about 246,000 triangles per frame for Home (tested within 5,000 of it, the shell being a few thousand) and 52 draw calls for the 24 stand-ins | MQ-A01 |
+| MQ-C04 | C | Build the Swift plugin into the Xcode project; switch the bridge on | `Plugins/iOS/AtlasRoomPlan.swift`, an Editor post-build step, `Scan/Routes/WallBridge.cs`, `App/Params/AppParams.cs` (`Atlas.Scan` cannot reach the registry, so the parameter is declared there) | The app builds; `scan.wallBridge` turns it off. Built so far: the post-build step, tested headless, and the `UnityFramework` target built from a copy of an earlier export; the app target stopped at storyboards on this Mac (§5.5); the parameter is tested headless | – |
 | MQ-F01 | D | The record and `tools/meshcheck/check.py`; raw generator output kept under debug-keep | `forge/service.py`, `tools/meshcheck/` (new) | The script prints the numbers of M1 and M2 from a record | MQ-D07 |
 | MQ-F02 | Lead | Take the record; write `truth.json`; run M1 to M4; fill `docs/evidence/mesh/` | – | The four checks have a result each | All |
 
