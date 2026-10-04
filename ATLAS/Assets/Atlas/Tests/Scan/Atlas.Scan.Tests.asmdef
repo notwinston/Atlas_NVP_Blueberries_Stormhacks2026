@@ -3,6 +3,10 @@
     "rootNamespace": "Atlas.Scan.Tests",
     "references": [
         "Atlas.Scan",
+        "Atlas.World",
+        "Atlas.Kernel",
+        "Atlas.Link",
+        "Unity.Mathematics",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],
@@ -16,5 +20,6 @@
     "autoReferenced": false,
     "defineConstraints": [
         "UNITY_INCLUDE_TESTS"
-    ]
+    ],
+    "allowUnsafeCode": true
 }

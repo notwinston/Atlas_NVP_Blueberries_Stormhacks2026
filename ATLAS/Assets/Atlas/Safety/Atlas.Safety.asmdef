@@ -2,9 +2,11 @@
     "name": "Atlas.Safety",
     "rootNamespace": "Atlas.Safety",
     "references": [
-        "Atlas.Scan",
+        "Atlas.World",
+        "Unity.InputSystem",
         "Unity.Mathematics",
         "Unity.Burst",
         "Unity.Collections"
-    ]
+    ],
+    "allowUnsafeCode": true
 }

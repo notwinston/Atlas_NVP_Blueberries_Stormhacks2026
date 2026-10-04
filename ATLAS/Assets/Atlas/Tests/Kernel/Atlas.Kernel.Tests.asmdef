@@ -3,6 +3,9 @@
     "rootNamespace": "Atlas.Kernel.Tests",
     "references": [
         "Atlas.Kernel",
+        "Unity.Mathematics",
+        "Unity.Burst",
+        "Unity.Collections",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],
@@ -16,5 +19,6 @@
     "autoReferenced": false,
     "defineConstraints": [
         "UNITY_INCLUDE_TESTS"
-    ]
+    ],
+    "allowUnsafeCode": true
 }

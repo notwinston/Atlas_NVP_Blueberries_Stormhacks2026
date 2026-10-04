@@ -2,9 +2,14 @@
     "name": "Atlas.Telemetry",
     "rootNamespace": "Atlas.Telemetry",
     "references": [
+        "Atlas.Kernel",
         "Atlas.Link",
         "Atlas.World",
         "Unity.Profiling.Core",
-        "glTFast"
+        "glTFast",
+        "Unity.Mathematics",
+        "Unity.Collections",
+        "Unity.TextMeshPro",
+        "Unity.InputSystem"
     ]
 }

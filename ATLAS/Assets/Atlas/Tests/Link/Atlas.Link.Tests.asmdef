@@ -3,6 +3,7 @@
     "rootNamespace": "Atlas.Link.Tests",
     "references": [
         "Atlas.Link",
+        "LiteNetLib",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

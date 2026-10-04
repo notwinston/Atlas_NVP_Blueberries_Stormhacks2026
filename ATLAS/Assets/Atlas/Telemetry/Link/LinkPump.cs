@@ -1,0 +1,525 @@
+using System;
+using System.Text;
+using Atlas.Link;
+using Atlas.World;
+
+namespace Atlas.Telemetry
+{
+    /// <summary>Where the once-per-second telemetry row goes (<c>telemetry.mode</c>, Master Plan section 12.2).</summary>
+    public enum TelemetryMode : byte
+    {
+        /// <summary>To the Station and to the phone's CSV.</summary>
+        Live = 0,
+        /// <summary>To the phone's CSV only.</summary>
+        PhoneCsv = 1,
+        /// <summary>Nowhere; the HUD is forced on.</summary>
+        Hud = 2
+    }
+
+    /// <summary>
+    /// The link driver of the app: step 8 of the frame (Master Plan section 6.3). It owns the
+    /// <see cref="LinkClient"/>, sends the frame's <c>State</c> at step 8a, and at step 8b polls the link, which
+    /// applies received parameter sets to the registry, hands operator commands to <see cref="IOperatorCommands"/>
+    /// and sends what was waiting. While the Station is away it tries again once per second.
+    /// <para>
+    /// Nothing here blocks and the steady frame path allocates nothing. With no Station, or with the link
+    /// switched off, the app runs unchanged (section 7.5, rule 4). Operator commands leave as plain calls on an
+    /// interface of <c>Atlas.World</c>, so nothing downstream, Safety least of all, sees a link type.
+    /// </para>
+    /// </summary>
+    public sealed class LinkPump : IStateSink, IAfterFrameStep
+    {
+        /// <summary>Seconds between connect attempts while the Station is away (Appendix C.7).</summary>
+        public const double RetrySeconds = 1.0;
+        /// <summary>Telemetry rows kept while offline: ten minutes.</summary>
+        public const int RowBacklog = 600;
+
+        const long RetryUs = (long)(RetrySeconds * 1000000.0);
+        const long SecondUs = 1000000;
+        const int SendsPerTick = 16;
+        const byte NoSpace = SpaceIds.NoSpace;
+
+        readonly LinkClient _client;
+        readonly EventLog _events;
+        readonly LogFileWriter _files;
+        readonly ParamRegistry _registry;
+        readonly StringBuilder _csv = new StringBuilder(512);
+        readonly TelemetryMessage[] _rows = new TelemetryMessage[RowBacklog];
+        readonly RoomOutlineMessage _outline = new RoomOutlineMessage();
+        int _rowHead, _rowCount;
+        bool _hasOutline, _outlineSent;
+
+        bool[] _dirty = new bool[64];
+        int _dirtyCount;
+        long _lastParamFlushUs;
+
+        string _host;
+        int _port = LinkProtocol.DefaultPort;
+        bool _started;
+        long _lastKickUs;
+
+        // What step 8a remembers of the previous State, to log the edges.
+        byte _prevBump;
+        int _prevTracking;
+        bool _prevJump, _prevCue;
+        byte _prevSpace = NoSpace;
+        ushort _prevSceneId;
+        int _prevWorldVer = -1;
+        float _p3, _p4;
+
+        // Gathered for the telemetry row of the running second.
+        int _stateSent;
+        byte _bumpMax;
+        ushort _cueCount;
+
+        /// <param name="client">The link client; the driver is its only caller from here on.</param>
+        /// <param name="events">The event log, or null.</param>
+        /// <param name="files">The writer of the perf CSV, or null to keep rows off the disk.</param>
+        public LinkPump(LinkClient client, EventLog events = null, LogFileWriter files = null)
+        {
+            if (client == null) throw new ArgumentNullException("client");
+            _client = client;
+            _events = events;
+            _files = files;
+            _registry = client.Registry;
+            _client.StateChanged += OnLinkStateChanged;
+            if (_registry != null) _registry.Changed += OnParamChanged;
+            if (_events != null) _events.Link = client;
+        }
+
+        public LinkClient Client { get { return _client; } }
+
+        /// <summary>OFFLINE, RESYNC, CONNECTED or DEGRADED.</summary>
+        public LinkState State { get { return _client.State; } }
+
+        /// <summary>The link clock, microseconds.</summary>
+        public long NowUs { get { return _client.NowUs; } }
+
+        /// <summary>True between <see cref="Start()"/> and <see cref="Stop"/>.</summary>
+        public bool IsStarted { get { return _started; } }
+
+        public string Host { get { return _host; } }
+        public int Port { get { return _port; } }
+
+        /// <summary>
+        /// Where operator commands go. While null, commands wait in the link's queue (the newest 32) and can be
+        /// taken with <see cref="TryDequeueCommand"/>.
+        /// </summary>
+        public IOperatorCommands Commands { get; set; }
+
+        public TelemetryMode Mode { get; set; }
+
+        /// <summary>Ticked once per frame when set; <see cref="PairingController"/> sets it itself.</summary>
+        public PairingController Pairing { get; set; }
+
+        /// <summary>Raised at step 8a when <c>State.spaceId</c> changed, with (previous, current); 255 is "no space".</summary>
+        public event Action<byte, byte> SpaceChanged;
+
+        /// <summary>The Bump Guard level of the newest <c>State</c>, 0 to 3.</summary>
+        public int BumpLevel { get { return _prevBump; } }
+
+        /// <summary>Operator commands handed over since start.</summary>
+        public int CommandsApplied { get; private set; }
+
+        /// <summary>Telemetry rows waiting for the link.</summary>
+        public int RowsWaiting { get { return _rowCount; } }
+
+        // ---- lifecycle ---------------------------------------------------------------------------------
+
+        /// <summary>Sets the Station address. A running link drops its peer and connects to the new one at once.</summary>
+        public void SetAddress(string host, int port)
+        {
+            _host = host;
+            _port = port;
+            if (_started)
+            {
+                _client.SetAddress(host, port);
+                _lastKickUs = _client.NowUs;
+            }
+        }
+
+        /// <summary>Starts the link towards the address given to <see cref="SetAddress"/>. False when there is none or the socket cannot open.</summary>
+        public bool Start()
+        {
+            if (_started) return true;
+            if (string.IsNullOrEmpty(_host)) return false;
+            if (!_client.Start(_host, _port)) return false;
+            _started = true;
+            _lastKickUs = _client.NowUs;
+            return true;
+        }
+
+        public bool Start(string host, int port)
+        {
+            _host = host;
+            _port = port;
+            return Start();
+        }
+
+        /// <summary>Says <c>Bye</c> and closes the socket (<c>link.enabled</c> off). The rest of step 8 keeps running.</summary>
+        public void Stop(string reason = "stop")
+        {
+            if (!_started) return;
+            _started = false;
+            _client.Stop(reason);
+        }
+
+        /// <summary>Tries to connect now: the "Reconnect" button, and the return from the background.</summary>
+        public void ReconnectNow()
+        {
+            if (!_started) return;
+            _client.ReconnectNow();
+            _lastKickUs = _client.NowUs;
+        }
+
+        // ---- step 8a -----------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Step 8a: logs the edges of the frame's <c>State</c> (Bump Guard level, tracking, pose jump, space and
+        /// world changes), keeps the second's figures for the telemetry row, and sends the state. Allocates
+        /// nothing unless an edge is logged.
+        /// </summary>
+        public void Send(in StateMessage state)
+        {
+            byte bump = state.BumpLevel;
+            bool cue = state.CueActive;
+            if (bump != _prevBump)
+            {
+                // Every rise of the level starts a cue; so does a cue with no rise (the operator's STOP).
+                if (bump > _prevBump) _cueCount++;
+                if (_events != null) _events.Log("bump.level", "level", bump, "prev", _prevBump);
+                _prevBump = bump;
+            }
+            else if (cue && !_prevCue) _cueCount++;
+            _prevCue = cue;
+            if (bump > _bumpMax) _bumpMax = bump;
+
+            int tracking = state.Tracking;
+            if (tracking != _prevTracking)
+            {
+                if (_events != null)
+                {
+                    if (_prevTracking == 0) _events.Log("tracking.lost", "state", tracking);
+                    else if (tracking == 0) _events.Log("tracking.back");
+                }
+                _prevTracking = tracking;
+            }
+
+            bool jump = state.PoseJumpRejected;
+            if (jump && !_prevJump && _events != null) _events.Log("pose.jump");
+            _prevJump = jump;
+
+            byte space = state.SpaceId;
+            bool spaceChanged = space != _prevSpace;
+            if (spaceChanged || state.WorldVer != _prevWorldVer) OnWorldChanged(in state, spaceChanged);
+            _prevSceneId = state.SceneId;
+            _p3 = state.P3;
+            _p4 = state.P4;
+
+            // Only the walker's app is a source of State; a Spectator or an Editor that watches sends none.
+            if (_started && _client.Role == LinkRole.Phone && _client.SendStateCopy(in state)) _stateSent++;
+        }
+
+        void OnWorldChanged(in StateMessage state, bool spaceChanged)
+        {
+            byte previous = _prevSpace;
+            byte space = state.SpaceId;
+            _prevSpace = space;
+            _prevWorldVer = state.WorldVer;
+            string scene = SceneOf(space);
+            _client.Scene = scene;
+            if (_events != null)
+            {
+                _events.Scene = scene;
+                if (spaceChanged && space != NoSpace) _events.Log("space.entered", JsonValue.Object().Set("from", SceneOf(previous)).Set("to", scene));
+                _events.Log("world", "worldVer", state.WorldVer, "space", space);
+            }
+            if (spaceChanged)
+            {
+                Action<byte, byte> changed = SpaceChanged;
+                if (changed != null) changed(previous, space);
+            }
+        }
+
+        static string SceneOf(byte space)
+        {
+            return space < SpaceIds.Count ? SpaceIds.Code((SpaceId)space) : EventLog.NoScene;
+        }
+
+        // ---- step 8b -----------------------------------------------------------------------------------
+
+        /// <summary>Step 8b. See <see cref="Tick"/>.</summary>
+        public void AfterFrame(in FrameContext frame) { Tick(); }
+
+        /// <summary>
+        /// The frame tail: polls the link (received parameter sets are clamped and applied by the registry inside
+        /// the poll), retries the connection, hands over operator commands, and sends waiting events and rows.
+        /// Never blocks; a quiet tick allocates nothing.
+        /// </summary>
+        public void Tick()
+        {
+            long now = _client.NowUs;
+            if (_started)
+            {
+                // The client's own back-off grows to four seconds; a walker waiting for the Station gets one
+                // attempt per second instead (Appendix C.7).
+                if (_client.State == LinkState.Offline && now - _lastKickUs >= RetryUs)
+                {
+                    _lastKickUs = now;
+                    _client.ReconnectNow();
+                }
+                _client.Poll();
+
+                IOperatorCommands commands = Commands;
+                if (commands != null)
+                {
+                    OperatorCommand command;
+                    while (_client.TryDequeueCommand(out command)) Apply(commands, in command, now);
+                }
+
+                if (_client.IsReady)
+                {
+                    if (_hasOutline && !_outlineSent) _outlineSent = _client.SendRoomOutline(_outline);
+                    if (_events != null) _events.SendQueued(SendsPerTick);
+                    SendWaitingRows(SendsPerTick);
+                }
+            }
+
+            if (_dirtyCount > 0 && now - _lastParamFlushUs >= SecondUs) FlushLocalParams(now);
+
+            PairingController pairing = Pairing;
+            if (pairing != null) pairing.Tick(now, _client.State);
+        }
+
+        // ---- operator commands -------------------------------------------------------------------------
+
+        /// <summary>
+        /// Takes the oldest operator command, for a composition root that applies commands itself instead of
+        /// setting <see cref="Commands"/>. The command is written to the event log here.
+        /// </summary>
+        public bool TryDequeueCommand(out OperatorCommand command)
+        {
+            if (!_client.TryDequeueCommand(out command)) return false;
+            CommandsApplied++;
+            if (_events != null) _events.Log(command.ToEvent(_client.NowUs, _client.Scene));
+            return true;
+        }
+
+        void Apply(IOperatorCommands commands, in OperatorCommand command, long now)
+        {
+            try
+            {
+                switch (command.Kind)
+                {
+                    case OperatorCommandKind.SwitchSpace:
+                        ApplyArgs(command.Args);
+                        if (command.Space >= 0 && command.Space < SpaceIds.Count)
+                            commands.SwitchSpace((SpaceId)command.Space, string.IsNullOrEmpty(command.Variant) ? null : command.Variant);
+                        break;
+                    case OperatorCommandKind.Home: commands.Home(); break;
+                    case OperatorCommandKind.Recentre: commands.Recentre(); break;
+                    case OperatorCommandKind.Quality: commands.SetQuality(command.Tier); break;
+                    case OperatorCommandKind.Cue: commands.Cue(); break;
+                    case OperatorCommandKind.Lock: commands.SetLock(command.On); break;
+                    default: return;
+                }
+            }
+            catch (Exception e)
+            {
+                // A handler that throws must not stop the frame tail or the commands behind it.
+                if (_events != null) _events.LogLine("error", "operator command " + command.Name + ": " + e.Message);
+            }
+            CommandsApplied++;
+            if (_events != null) _events.Log(command.ToEvent(now, _client.Scene));
+        }
+
+        // A SceneCmd may carry parameter values for the space it switches to; they are part of the command, so
+        // they apply under demo lock as the command itself does.
+        void ApplyArgs(JsonValue args)
+        {
+            if (_registry == null || args == null || !args.IsObject) return;
+            for (int i = 0; i < args.Count; i++)
+            {
+                JsonValue v = args[i];
+                if (v.IsNumber) _registry.Set(args.KeyAt(i), v.AsFloat(), ParamSource.Remote);
+                else if (v.IsBool) _registry.Set(args.KeyAt(i), v.AsBool() ? 1f : 0f, ParamSource.Remote);
+            }
+        }
+
+        // ---- parameters --------------------------------------------------------------------------------
+
+        // The link client echoes every applied value to the Console itself. Here the change goes into the
+        // phone's own log: at once when the Station or a preset set it, and at most once per second for a value
+        // that code keeps writing (the slicer's w, for one), so a live parameter cannot flood the file.
+        void OnParamChanged(ParamEntry entry, ParamSource source)
+        {
+            if (_events == null) return;
+            if (source != ParamSource.Local)
+            {
+                _events.LogLocal(LinkEvents.ParamChanged(_client.NowUs, _client.Scene, entry, source));
+                return;
+            }
+            int id = entry.Id;
+            if (id >= _dirty.Length) Array.Resize(ref _dirty, Math.Max(id + 1, _dirty.Length * 2));
+            if (_dirty[id]) return;
+            _dirty[id] = true;
+            _dirtyCount++;
+        }
+
+        void FlushLocalParams(long now)
+        {
+            _lastParamFlushUs = now;
+            for (int id = 0; id < _dirty.Length && _dirtyCount > 0; id++)
+            {
+                if (!_dirty[id]) continue;
+                _dirty[id] = false;
+                _dirtyCount--;
+                ParamEntry entry;
+                if (_registry.TryGet((ushort)id, out entry))
+                    _events.LogLocal(LinkEvents.ParamChanged(now, _client.Scene, entry, ParamSource.Local));
+            }
+        }
+
+        // ---- link state --------------------------------------------------------------------------------
+
+        void OnLinkStateChanged(LinkState previous, LinkState current)
+        {
+            // A new handshake: the Station has forgotten the room.
+            if (current == LinkState.Resync || current == LinkState.Offline) _outlineSent = false;
+            if (_events != null)
+                _events.Log(LinkEvents.Link, JsonValue.Object().Set("state", StateName(current)).Set("prev", StateName(previous)));
+        }
+
+        public static string StateName(LinkState state)
+        {
+            switch (state)
+            {
+                case LinkState.Resync: return "resync";
+                case LinkState.Connected: return "connected";
+                case LinkState.Degraded: return "degraded";
+                default: return "offline";
+            }
+        }
+
+        // ---- telemetry rows ----------------------------------------------------------------------------
+
+        /// <summary>
+        /// Fills the row fields the driver knows (scene, space, link figures, <c>State</c> rate, the second's
+        /// highest Bump Guard level, the cue count, Glued copies) and starts a new second.
+        /// </summary>
+        public void TakeSecond(ref PerfRowContext context)
+        {
+            context.SceneId = _prevSceneId;
+            context.SpaceId = _prevSpace == NoSpace ? (byte)0 : _prevSpace;
+            context.RttMs = (ushort)Clamp(_client.RttMs, 0, ushort.MaxValue);
+            context.LossPermille = (ushort)Clamp(_client.LossPermille, 0, 1000);
+            context.StateHz = (byte)Clamp(_stateSent, 0, 255);
+            context.BumpMax = _bumpMax;
+            context.CueCount = _cueCount;
+            context.Copies = GluedCopies();
+            _stateSent = 0;
+            _bumpMax = _prevBump;
+        }
+
+        // S1 writes its mode to p[3] and its copies per side to p[4]: n * n cells for the torus and the Klein
+        // bottle, 27 for the three-torus.
+        ushort GluedCopies()
+        {
+            if (_prevSpace != (byte)SpaceId.Glued) return 0;
+            int n = (int)_p4;
+            if ((int)_p3 == 2) return 27;
+            return n > 0 && n < 256 ? (ushort)(n * n) : (ushort)0;
+        }
+
+        static int Clamp(int v, int min, int max) { return v < min ? min : v > max ? max : v; }
+
+        /// <summary>
+        /// Takes the row of a completed second: one CSV line for the phone's file and, in live mode, one
+        /// <c>Telemetry</c> message. A row that cannot be sent waits (up to 600) and goes out after the next
+        /// handshake, so the Station's CSV has no hole. Allocates nothing.
+        /// </summary>
+        public void SubmitRow(in TelemetryMessage row)
+        {
+            if (Mode == TelemetryMode.Hud) return;
+            if (_files != null)
+            {
+                _csv.Length = 0;
+                TelemetryCsv.AppendRow(_csv, in row);
+                _files.Append(LogFileWriter.Perf, _csv);
+            }
+            if (Mode != TelemetryMode.Live || !_started || _client.Role != LinkRole.Phone) return;
+            if (_rowCount == 0 && _client.IsReady)
+            {
+                TelemetryMessage copy = row;
+                if (_client.SendTelemetry(ref copy)) return;
+            }
+            if (_rowCount == RowBacklog)
+            {
+                _rowHead = (_rowHead + 1) % RowBacklog;
+                _rowCount--;
+            }
+            _rows[(_rowHead + _rowCount) % RowBacklog] = row;
+            _rowCount++;
+        }
+
+        void SendWaitingRows(int max)
+        {
+            for (int i = 0; i < max && _rowCount > 0; i++)
+            {
+                if (!_client.SendTelemetry(ref _rows[_rowHead])) return;
+                _rowHead = (_rowHead + 1) % RowBacklog;
+                _rowCount--;
+            }
+        }
+
+        /// <summary>A new session: forgets the rows and events of the old one's second and restarts the cue count.</summary>
+        public void ResetSession()
+        {
+            _rowHead = 0;
+            _rowCount = 0;
+            _cueCount = 0;
+            _stateSent = 0;
+            _bumpMax = _prevBump;
+        }
+
+        // ---- room outline ------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Gives the Station the scanned room (floor polygon, wall height, free rectangle, object boxes) so the
+        /// Spectator can draw it. Sent now when the link is up, and again after every handshake. Null clears it.
+        /// </summary>
+        public void SetRoom(RoomModel room)
+        {
+            _outline.Clear();
+            _hasOutline = room != null;
+            _outlineSent = false;
+            if (room == null) return;
+
+            for (int i = 0; i < room.Outline.Length; i++)
+                if (!_outline.AddPoint(room.Outline[i].x, room.Outline[i].y)) break;
+            float height = 0f;
+            for (int i = 0; i < room.Walls.Length; i++)
+                if (room.Walls[i] != null && room.Walls[i].Height > height) height = room.Walls[i].Height;
+            _outline.Height = height > 0f ? height : RoomModel.DefaultWallHeight;
+            // The room frame has the free rectangle at its origin, unrotated (contracts F4).
+            _outline.RectCx = 0f;
+            _outline.RectCz = 0f;
+            _outline.RectW = room.FreeRect.Wf;
+            _outline.RectD = room.FreeRect.Df;
+            _outline.RectYaw = 0f;
+            for (int i = 0; i < room.Objects.Length; i++)
+            {
+                RoomObject o = room.Objects[i];
+                if (o == null) continue;
+                var box = new RoomOutlineBox
+                {
+                    Id = (byte)o.Id, Category = (byte)o.Category,
+                    Cx = o.Base.x, Cz = o.Base.z, W = o.Size.x, D = o.Size.z, H = o.Size.y, Yaw = o.Yaw
+                };
+                if (!_outline.AddBox(in box)) break;
+            }
+            _client.RoomId = room.Id ?? string.Empty;
+            if (_started && _client.IsReady) _outlineSent = _client.SendRoomOutline(_outline);
+        }
+    }
+}

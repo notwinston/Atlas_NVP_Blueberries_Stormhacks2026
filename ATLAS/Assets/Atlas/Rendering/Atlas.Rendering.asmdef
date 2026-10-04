@@ -6,6 +6,10 @@
         "Atlas.World",
         "Unity.RenderPipelines.Core.Runtime",
         "Unity.RenderPipelines.Universal.Runtime",
-        "Unity.Mathematics"
-    ]
+        "Unity.Mathematics",
+        "Unity.Burst",
+        "Unity.Collections",
+        "Unity.RenderPipelines.GPUDriven.Runtime"
+    ],
+    "allowUnsafeCode": true
 }

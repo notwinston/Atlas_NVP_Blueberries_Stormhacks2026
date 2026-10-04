@@ -3,6 +3,9 @@
     "rootNamespace": "Atlas.World.Tests",
     "references": [
         "Atlas.World",
+        "Atlas.Kernel",
+        "Atlas.Link",
+        "Unity.Mathematics",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

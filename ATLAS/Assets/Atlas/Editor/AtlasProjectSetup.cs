@@ -6,13 +6,15 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.InputSystem.XR;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
 
 namespace Atlas.EditorTools
 {
     /// <summary>
-    /// Applies the Project, Player and URP settings of Master Plan Appendix C.4.
-    /// Idempotent: run it from the Atlas menu, or with -executeMethod, after any settings merge.
+    /// Applies the Project, Player and URP settings of Master Plan Appendix C.4 and section 8.2.
+    /// Idempotent: run it from the Atlas menu, or with
+    /// -executeMethod Atlas.EditorTools.AtlasProjectSetup.Apply, after any settings merge.
     /// </summary>
     public static class AtlasProjectSetup
     {
@@ -32,6 +34,7 @@ namespace Atlas.EditorTools
 
             ApplyPlayerSettings();
             ApplyUrpSettings();
+            ApplyLayers();
             EnsureBootScene();
 
             AssetDatabase.SaveAssets();
@@ -77,28 +80,16 @@ namespace Atlas.EditorTools
                 AssetDatabase.CopyAsset("Assets/Settings/URP-Performant.asset", UrpAssetPath);
             }
 
-            var renderer = AssetDatabase.LoadMainAssetAtPath(UrpRendererPath);
-            var r = new SerializedObject(renderer);
-            r.FindProperty("m_RenderingMode").intValue = 0; // Forward
-            r.FindProperty("m_DepthPrimingMode").intValue = 0; // Disabled
-            r.FindProperty("postProcessData").objectReferenceValue = null;
-            r.ApplyModifiedPropertiesWithoutUndo();
+            var renderer = AssetDatabase.LoadAssetAtPath<UniversalRendererData>(UrpRendererPath);
+            var urp = AssetDatabase.LoadAssetAtPath<UniversalRenderPipelineAsset>(UrpAssetPath);
+            if (renderer == null || urp == null)
+            {
+                Debug.LogError("Atlas: the URP asset or its renderer is missing under " + SettingsDir + ".");
+                return;
+            }
 
-            var urp = (RenderPipelineAsset)AssetDatabase.LoadMainAssetAtPath(UrpAssetPath);
-            var a = new SerializedObject(urp);
-            a.FindProperty("m_RendererDataList").GetArrayElementAtIndex(0).objectReferenceValue = renderer;
-            a.FindProperty("m_SupportsHDR").boolValue = false;
-            a.FindProperty("m_RequireDepthTexture").boolValue = false;
-            a.FindProperty("m_RequireOpaqueTexture").boolValue = false;
-            a.FindProperty("m_MSAA").intValue = 4;
-            a.FindProperty("m_RenderScale").floatValue = 0.8f;
-            a.FindProperty("m_UpscalingFilter").intValue = 0; // Auto, never STP
-            a.FindProperty("m_MainLightShadowsSupported").boolValue = false;
-            a.FindProperty("m_AdditionalLightsRenderingMode").intValue = 0; // Disabled
-            a.FindProperty("m_AdditionalLightShadowsSupported").boolValue = false;
-            a.FindProperty("m_UseSRPBatcher").boolValue = true;
-            a.FindProperty("m_GPUResidentDrawerMode").intValue = 0; // Disabled
-            a.ApplyModifiedPropertiesWithoutUndo();
+            ConfigureRenderer(renderer);
+            ConfigureUrpAsset(urp, renderer);
 
             GraphicsSettings.defaultRenderPipeline = urp;
 
@@ -111,6 +102,100 @@ namespace Atlas.EditorTools
                 level.FindPropertyRelative("customRenderPipeline").objectReferenceValue = urp;
             }
             quality.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // The one renderer both eye cameras, the Screen camera and the hand-mode AR camera share.
+        static void ConfigureRenderer(UniversalRendererData renderer)
+        {
+            renderer.renderingMode = RenderingMode.Forward;
+            renderer.depthPrimingMode = DepthPrimingMode.Disabled;
+            // "Always" (the default) gives every camera an intermediate colour texture as soon as any feature
+            // is active, which costs a full-screen copy per eye and defeats the on-tile MSAA resolve.
+            renderer.intermediateTextureMode = IntermediateTextureMode.Auto;
+            // No post-process data: URP then creates no post-processing pass at all.
+            renderer.postProcessData = null;
+
+            var r = new SerializedObject(renderer);
+            // An override here would replace the stencil block of every shader, portals included.
+            SetBool(r, "m_DefaultStencilState.overrideStencilState", false);
+            r.ApplyModifiedPropertiesWithoutUndo();
+
+            // The AR background feature stays: the hand-mode AR camera draws the camera image through this
+            // renderer. It enqueues its pass only for a camera with an enabled ARCameraBackground, so with
+            // intermediate textures on Auto the eye cameras and the Screen camera carry nothing from it.
+
+            EditorUtility.SetDirty(renderer);
+        }
+
+        static void ConfigureUrpAsset(UniversalRenderPipelineAsset urp, UniversalRendererData renderer)
+        {
+            urp.supportsHDR = false;
+            urp.supportsCameraDepthTexture = false;
+            urp.supportsCameraOpaqueTexture = false;
+            // Must stay above 1: with MSAA disabled here URP ignores the eye texture's own sample count.
+            urp.msaaSampleCount = 4;
+            // The eye-texture size carries the render scale. Any other value here shrinks the viewport inside
+            // the eye texture of a camera that has a target texture.
+            urp.renderScale = 1f;
+            urp.upscalingFilter = UpscalingFilterSelection.Auto;   // never STP or FSR
+            urp.useSRPBatcher = true;
+            urp.supportsDynamicBatching = false;
+            urp.useAdaptivePerformance = false;                    // the thermal ladder owns quality
+            urp.gpuResidentDrawerMode = GPUResidentDrawerMode.Disabled;
+            urp.storeActionsOptimization = StoreActionsOptimization.Auto;
+
+            // These have no public setter. m_AnyShadowsSupported is the Editor-only mirror the internal
+            // setters keep in step; it drives shader-keyword filtering, so it is written too.
+            var a = new SerializedObject(urp);
+            var renderers = a.FindProperty("m_RendererDataList");
+            if (renderers.arraySize < 1)
+                renderers.arraySize = 1;
+            renderers.GetArrayElementAtIndex(0).objectReferenceValue = renderer;
+            SetInt(a, "m_DefaultRendererIndex", 0);
+            SetInt(a, "m_MainLightRenderingMode", (int)LightRenderingMode.Disabled);
+            SetInt(a, "m_AdditionalLightsRenderingMode", (int)LightRenderingMode.Disabled);
+            SetBool(a, "m_MainLightShadowsSupported", false);
+            SetBool(a, "m_AdditionalLightShadowsSupported", false);
+            SetBool(a, "m_AnyShadowsSupported", false);
+            SetBool(a, "m_SoftShadowsSupported", false);
+            a.ApplyModifiedPropertiesWithoutUndo();
+
+            EditorUtility.SetDirty(urp);
+        }
+
+        static void SetBool(SerializedObject target, string property, bool value)
+        {
+            SerializedProperty p = target.FindProperty(property);
+            if (p != null) p.boolValue = value;
+            else Debug.LogWarning("Atlas: serialized property '" + property + "' not found on " + target.targetObject.name + ".");
+        }
+
+        static void SetInt(SerializedObject target, string property, int value)
+        {
+            SerializedProperty p = target.FindProperty(property);
+            if (p != null) p.intValue = value;
+            else Debug.LogWarning("Atlas: serialized property '" + property + "' not found on " + target.targetObject.name + ".");
+        }
+
+        // Layer names of the layer table (lane A contract section 12.1). Code uses the numbers.
+        static void ApplyLayers()
+        {
+            var tags = new SerializedObject(AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/TagManager.asset")[0]);
+            SerializedProperty layers = tags.FindProperty("layers");
+            if (layers == null)
+                return;
+            SetLayer(layers, 6, "AtlasPortalMask");
+            SetLayer(layers, 7, "AtlasHud");
+            for (int i = 1; i <= 15; i++)
+                SetLayer(layers, 7 + i, "AtlasRoom" + i.ToString("00"));
+            SetLayer(layers, 23, "AtlasSpectator");
+            tags.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        static void SetLayer(SerializedProperty layers, int index, string name)
+        {
+            if (index < layers.arraySize)
+                layers.GetArrayElementAtIndex(index).stringValue = name;
         }
 
         static void EnsureBootScene()

@@ -1,3 +1,3 @@
 using System.Runtime.CompilerServices;
 
-[assembly: InternalsVisibleTo("Atlas.Spaces.Home.Tests")]
+[assembly: InternalsVisibleTo("Atlas.Spaces.Tests")]

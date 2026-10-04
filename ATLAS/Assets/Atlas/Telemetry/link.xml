@@ -1,0 +1,6 @@
+<linker>
+  <!-- Created by name in TelemetryInstaller: nothing else references the type, so stripping would remove it. -->
+  <assembly fullname="Atlas.Link">
+    <type fullname="Atlas.Link.LiteNetTransport" preserve="all"/>
+  </assembly>
+</linker>

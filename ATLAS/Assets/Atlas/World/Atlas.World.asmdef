@@ -3,6 +3,7 @@
     "rootNamespace": "Atlas.World",
     "references": [
         "Atlas.Kernel",
+        "Atlas.Link",
         "Unity.Mathematics"
     ]
 }

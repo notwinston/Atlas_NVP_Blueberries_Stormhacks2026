@@ -1,0 +1,20 @@
+{
+    "name": "Atlas.Scan.ARKit",
+    "rootNamespace": "Atlas.Scan.ARKit",
+    "references": [
+        "Atlas.Kernel",
+        "Atlas.World",
+        "Atlas.Scan",
+        "Unity.XR.ARFoundation",
+        "Unity.XR.ARSubsystems",
+        "Unity.XR.CoreUtils",
+        "Unity.XR.ARKit",
+        "Unity.Mathematics",
+        "Unity.Collections"
+    ],
+    "allowUnsafeCode": true,
+    "includePlatforms": [
+        "Editor",
+        "iOS"
+    ]
+}

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ATLAS Hub</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; margin: 0; background: #101418; color: #e8edf2; }
+  main { max-width: 46rem; margin: 0 auto; padding: 1.5rem; }
+  h1 { font-size: 1.3rem; margin: 0 0 1rem; }
+  h2 { font-size: 1rem; margin: 1.5rem 0 .5rem; color: #93a1b0; font-weight: 600; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: .3rem .6rem .3rem 0; border-bottom: 1px solid #232c36; }
+  th { color: #93a1b0; font-weight: 500; width: 11rem; }
+  .dot { display: inline-block; width: .7rem; height: .7rem; border-radius: 50%; margin-right: .5rem; background: #6b7785; }
+  .connected { background: #3fb950; } .degraded, .resync { background: #d29922; } .offline { background: #6b7785; }
+  button { font: inherit; color: inherit; background: #1c232b; border: 1px solid #36424f; border-radius: 4px; padding: .35rem .8rem; margin: 0 .4rem .4rem 0; cursor: pointer; }
+  button:hover { background: #26303a; }
+  button.stop { background: #8e1519; border-color: #c93c40; font-weight: 700; }
+  pre { background: #0b0e11; padding: .75rem; border-radius: 4px; height: 12rem; overflow: auto; font: 12px/1.4 ui-monospace, Consolas, monospace; margin: 0; }
+  a { color: #7cc4ff; }
+  .banner { background: #8e1519; padding: .5rem .75rem; border-radius: 4px; margin-bottom: 1rem; display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>ATLAS Hub</h1>
+  <div class="banner" id="keep">Forge debug mode: crops are kept on the Station.</div>
+  <table>
+    <tr><th>Phone</th><td><span class="dot" id="dot"></span><span id="phone">offline</span></td></tr>
+    <tr><th>Device</th><td id="device">–</td></tr>
+    <tr><th>Round trip, loss</th><td id="rtt">–</td></tr>
+    <tr><th>State</th><td id="state">–</td></tr>
+    <tr><th>Frame rate, thermal</th><td id="perf">–</td></tr>
+    <tr><th>Spectators</th><td id="spectators">0</td></tr>
+    <tr><th>Forge</th><td id="forge">–</td></tr>
+    <tr><th>Demo lock</th><td id="lock">off</td></tr>
+    <tr><th>Session</th><td id="session">–</td></tr>
+    <tr><th>This page</th><td id="socket">connecting…</td></tr>
+  </table>
+
+  <h2>Operator</h2>
+  <div>
+    <button class="stop" data-op="cue">STOP</button>
+    <button data-op="home">Home</button>
+    <button data-op="recentre">Recentre</button>
+    <button data-lock="1">Lock</button>
+    <button data-lock="0">Unlock</button>
+  </div>
+
+  <h2>Events</h2>
+  <pre id="events"></pre>
+
+  <p><a href="/pair">Pair a phone</a> · <a id="perf-link" href="#">perf.csv</a> · <a id="events-link" href="#">events.jsonl</a> · <a id="state-link" href="#">state.bin</a></p>
+</main>
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var socket = null, retryMs = 500;
+
+  function showLink(s) {
+    var p = s.phone || {};
+    $("dot").className = "dot " + (p.state || "offline");
+    $("phone").textContent = p.state || "offline";
+    $("device").textContent = p.device ? p.device + (p.build ? " (" + p.build + ")" : "") : "–";
+    $("rtt").textContent = p.state && p.state !== "offline" ? p.rttMs + " ms, " + p.loss.toFixed(1) + " %" : "–";
+    $("state").textContent = (p.stateHz || 0).toFixed(1) + " Hz, " + (p.states || 0) + " received, " + (p.lost || 0) + " lost";
+    $("spectators").textContent = s.spectators;
+    var f = s.forge || {};
+    $("forge").textContent = f.up ? "up, queue " + f.queue : "not reachable";
+    $("keep").style.display = f.debugKeep ? "block" : "none";
+    $("lock").textContent = s.demoLock ? "on" : "off";
+    $("session").textContent = s.sessionId;
+    $("perf-link").href = "/logs/" + s.sessionId + "/perf.csv";
+    $("events-link").href = "/logs/" + s.sessionId + "/events.jsonl";
+    $("state-link").href = "/logs/" + s.sessionId + "/state.bin";
+  }
+
+  function addEvent(m) {
+    var pre = $("events");
+    var line = (m.scene || "") + " " + (m.ev || m.t) + " " + JSON.stringify(m.data || {});
+    pre.textContent = (pre.textContent + line + "\n").split("\n").slice(-200).join("\n");
+    pre.scrollTop = pre.scrollHeight;
+  }
+
+  function connect() {
+    socket = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+    socket.onopen = function () { retryMs = 500; $("socket").textContent = "connected to the Hub"; };
+    socket.onmessage = function (e) {
+      var m;
+      try { m = JSON.parse(e.data); } catch (x) { return; }
+      if (m.t === "link") showLink(m);
+      else if (m.t === "telemetry") $("perf").textContent = m.fps.toFixed(1) + " fps, p95 " + m.p95.toFixed(1) + " ms, thermal " + m.thermal;
+      else if (m.t === "event" || m.t === "job" || m.t === "error") addEvent(m);
+      else if (m.t === "log") addEvent({ scene: "phone", ev: m.level, data: { msg: m.msg } });
+    };
+    socket.onclose = function () {
+      $("socket").textContent = "Hub not reachable, retrying…";
+      setTimeout(connect, retryMs);
+      retryMs = Math.min(retryMs * 2, 4000);
+    };
+  }
+
+  function send(message) {
+    if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+  }
+
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("button");
+    if (!b) return;
+    if (b.dataset.op) send({ t: "op", cmd: b.dataset.op });
+    else if (b.dataset.lock) send({ t: "op", cmd: "lock", args: { on: b.dataset.lock === "1" } });
+  });
+
+  connect();
+})();
+</script>
+</body>
+</html>

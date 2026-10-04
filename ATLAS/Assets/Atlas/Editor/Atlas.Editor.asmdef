@@ -2,7 +2,24 @@
     "name": "Atlas.Editor",
     "rootNamespace": "Atlas.EditorTools",
     "references": [
-        "Unity.InputSystem"
+        "Atlas.Kernel",
+        "Atlas.Link",
+        "Atlas.World",
+        "Atlas.Rendering",
+        "Atlas.Scan",
+        "Atlas.Safety",
+        "Atlas.Input",
+        "Atlas.Telemetry",
+        "Atlas.App",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.XR.ARFoundation",
+        "Unity.XR.ARSubsystems",
+        "Unity.XR.CoreUtils",
+        "Unity.XR.Management",
+        "Unity.InputSystem",
+        "Unity.Mathematics",
+        "Unity.RenderPipelines.GPUDriven.Runtime"
     ],
     "includePlatforms": [
         "Editor"

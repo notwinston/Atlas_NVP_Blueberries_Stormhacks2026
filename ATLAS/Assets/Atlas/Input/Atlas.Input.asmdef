@@ -2,6 +2,7 @@
     "name": "Atlas.Input",
     "rootNamespace": "Atlas.Input",
     "references": [
-        "Unity.InputSystem"
+        "Unity.InputSystem",
+        "Unity.Mathematics"
     ]
 }

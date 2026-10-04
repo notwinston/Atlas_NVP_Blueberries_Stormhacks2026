@@ -7,7 +7,7 @@ namespace Atlas.EditorTools
 {
     /// <summary>
     /// Batch-mode iOS build: exports the Xcode project to the folder given by -buildOutput.
-    /// <c>unity build --target iOS --execute-method Atlas.EditorTools.AtlasBuild.IOS -o Build/iOS</c>
+    /// Called by <c>tools/build_ios.sh</c> with <c>-executeMethod Atlas.EditorTools.AtlasBuild.IOS -buildOutput Build/iOS</c>.
     /// </summary>
     public static class AtlasBuild
     {
@@ -15,6 +15,10 @@ namespace Atlas.EditorTools
         {
             var args = Environment.GetCommandLineArgs();
             var output = args[Array.IndexOf(args, "-buildOutput") + 1];
+
+            // tools/build_ios.sh passes -atlasDevelopment for a development build; the default is release,
+            // which is what every published number comes from (Master Plan §11).
+            EditorUserBuildSettings.development = Array.IndexOf(args, "-atlasDevelopment") >= 0;
 
             var options = BuildOptions.None;
             // Append mode keeps the existing Xcode project, so Xcode rebuilds incrementally (Master Plan C.8).

@@ -3,9 +3,15 @@
     "rootNamespace": "Atlas.Spaces.Home",
     "references": [
         "Atlas.Kernel",
+        "Atlas.Link",
         "Atlas.World",
         "Atlas.Rendering",
         "Atlas.Input",
-        "Atlas.Telemetry"
-    ]
+        "Atlas.Telemetry",
+        "Unity.Mathematics",
+        "Unity.Burst",
+        "Unity.Collections"
+    ],
+    "allowUnsafeCode": true,
+    "_tests": "Atlas.Spaces.Tests"
 }

@@ -1,0 +1,24 @@
+{
+    "name": "Atlas.Telemetry.Tests",
+    "rootNamespace": "Atlas.Telemetry.Tests",
+    "references": [
+        "Atlas.Telemetry",
+        "Atlas.Link",
+        "Atlas.World",
+        "Atlas.Kernel",
+        "Unity.Mathematics",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ]
+}

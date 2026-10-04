@@ -2,16 +2,21 @@
     "name": "Atlas.Spectator",
     "rootNamespace": "Atlas.Spectator",
     "references": [
-        "Atlas.Rendering",
-        "Atlas.World",
+        "Atlas.Kernel",
         "Atlas.Link",
+        "Atlas.World",
+        "Atlas.Rendering",
+        "Atlas.Telemetry",
         "Atlas.Spaces.Home",
         "Atlas.Spaces.Glued",
         "Atlas.Spaces.Portal",
         "Atlas.Spaces.Slicer",
         "Atlas.Spaces.CurvedWalk",
         "Atlas.Spaces.AlignedCells",
-        "Atlas.Spaces.SmallPlanet"
+        "Atlas.Spaces.SmallPlanet",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.Mathematics"
     ],
     "includePlatforms": [
         "Editor",
