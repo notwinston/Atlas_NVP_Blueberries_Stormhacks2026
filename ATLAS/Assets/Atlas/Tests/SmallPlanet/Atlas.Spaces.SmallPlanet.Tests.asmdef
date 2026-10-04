@@ -1,0 +1,23 @@
+{
+    "name": "Atlas.Spaces.SmallPlanet.Tests",
+    "rootNamespace": "Atlas.Spaces.SmallPlanet.Tests",
+    "references": [
+        "Atlas.Kernel",
+        "Atlas.Rendering",
+        "Atlas.Spaces.SmallPlanet",
+        "Unity.Mathematics",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ]
+}

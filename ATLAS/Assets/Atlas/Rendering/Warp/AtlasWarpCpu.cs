@@ -37,7 +37,8 @@ namespace Atlas.Rendering
         public static float2 LogS2(float3 p)
         {
             float s = math.length(p.xy);
-            return s > 1e-6f ? p.xy * (math.atan2(s, p.z) / s) : p.xy;
+            if (s > 1e-6f) return p.xy * (math.atan2(s, p.z) / s);
+            return p.z < 0f ? new float2(3.14159265f, 0f) : p.xy; // A.2 at the cut point: distance pi, as Geometry2.Log
         }
 
         // Master Plan §4.6 / §8.3
