@@ -210,10 +210,14 @@ namespace Atlas.App
 
         // ---- scan, input ----------------------------------------------------------------------------------
 
+        /// <summary>scan.wallBridge, a kill switch: the RoomPlan wall bridge (route 4) may run. Off is the outline's walls as they were.</summary>
+        public const string ScanWallBridge = "scan.wallBridge";
+
         public static void DeclareScan(ParamRegistry registry, ScanSettings settings)
         {
             registry.DeclareInt(ScanRoute, "scan", 1, 4, 3, v => settings.Route = v);
             registry.DeclareBool(TeamPrescan, "scan", false, v => settings.TeamPrescan = v);
+            registry.DeclareBool(ScanWallBridge, "scan", true, Atlas.Scan.WallBridge.Apply);
         }
 
         public static void DeclareInput(ParamRegistry registry, IAtlasInput input)
