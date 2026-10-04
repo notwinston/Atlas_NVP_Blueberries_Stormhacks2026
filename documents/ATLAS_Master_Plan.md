@@ -1161,7 +1161,7 @@ Licence rules: Asset Store packs never enter the repository; CC-BY assets and an
 | S2 Curved Walk, ρ = 3 | ≤ 210 | ≤ 250k | Up to 71 tiles drawn, plus the room |
 | S3 Aligned Cells | ≤ 170 | ≤ 200k | Up to 57 cell instances; furniture drawn once |
 | S4 Small Planet | ≤ 70 | ≤ 190k | Six tiles plus the room |
-| S5 Impossible Rooms | ≤ 60 | ≤ 80k | Two rooms through one portal |
+| S5 Impossible Rooms | ≤ 60 | ≤ 150k | Two rooms through one portal, plus the room's content (Home shell and furniture, 63,000 per eye) |
 | S6 Slicer | ≤ 70 | ≤ 160k | Home plus the dynamic cross-section |
 
 `budget_room` is the performance fixture frozen with the contracts at G0 (§4.3, task `P1-X02`): a 4 × 5 m room with twelve stand-in objects of exactly 5,000 triangles each and no edge over 0.25 m, which is the full furniture load of §8.4 (60,000 triangles). Budgets are measured on it; the three sample rooms stay for functional tests. In Glued the room is drawn once, among the copies of the cell. In Aligned Cells an instance is one draw call (the flat tile shell and its props merged), and each piece of furniture is drawn once per eye, however many instances of its cell are drawn (§4.7).
@@ -1194,7 +1194,7 @@ Counts per eye (derived by enumeration, same script):
 | 3 (default) | 45 (40 to 50 elsewhere in the tile) | 104 to 119 | at most 59 | at most 71 | 142 |
 | 3.5 (high tier) | 81 | 179 to 197 | at most 94 | at most 106 | 212 |
 
-Looking down draws more tiles than looking ahead, because the floor near the feet fills the view. The figure marks the level-gaze worst cases. A tile shell is one draw call per eye, so the default costs at most 142 draw calls per frame, inside the 150 budgeted for tile shells (the dashed line in the figure, per eye; task `P1-B06`). The high tier can reach 212, over that budget: it is only for a cool phone and for video capture (§8.6). It is still below the solid line, the must of 300 draw calls per frame for everything that is drawn.
+Looking down draws more tiles than looking ahead, because the floor near the feet fills the view. The figure marks the level-gaze worst cases. A tile shell is one draw call per eye, so the default costs at most 142 draw calls per frame, inside the 150 budgeted for tile shells (the dashed line in the figure, drawn at 75 per eye because the figure counts per eye; task `P1-B06`). The high tier can reach 212, over that budget: it is only for a cool phone and for video capture (§8.6). It is still below the solid line, the must of 300 draw calls per frame (150 per eye, as the figure draws it) for everything that is drawn.
 
 In Glued the fog is fully opaque at the distance up to which every cell is certain to be drawn: (n − 1)/2 cells for an n × n lattice round the walker's current cell, so 2 cells at 5 × 5 and 1 cell at 3 × 3. It starts one cell nearer (half a cell at 3 × 3). The end of the lattice is therefore never seen. The vertical period of T³ is not fogged, so the copy above the walker stays visible.
 
@@ -1306,7 +1306,7 @@ The lane owner decides inside the lane. Anything that touches a contract (§6.4)
 
 **The build seat (one Mac).**
 
-1. Lane A's first jobs are the build chain (`P1-A02`, `P1-A13`) and the stereo rig (`P1-A03`, `P1-A04`). They take priority over every other lane-A task until G1 passes. Editor-only lane-A tasks (`P1-A06`, `P1-A12`) run alongside them as the graph in §9.5.5 allows.
+1. Lane A's first jobs are the build chain (`P1-A02`, `P1-A13`) and the URP settings and the stereo rig (`P1-A03`, `P1-A04`). They take priority over every other lane-A task until G1 passes. Editor-only lane-A task `P1-A06` and the Editor part of `P1-A12` run alongside them as the graph in §9.5.5 allows.
 2. Everyone runs the Unity Editor on their own machine. Native code is wrapped so the Editor and the Station build compile without it.
 3. Device builds go out as a build train: one integration build at every gate, plus short on-request slots from a visible queue (who, branch, what is tested).
 4. Prefer iteration that needs no rebuild: live tuning from the Console, replay of recorded RoomModels and pose logs in the Editor, kernel and graph logic as EditMode tests.
@@ -1314,7 +1314,7 @@ The lane owner decides inside the lane. Anything that touches a contract (§6.4)
 
 **The two phones.**
 
-1. Phone A is the reference device for every published number. Phone B is lane C's working device (every one of lane C's Phase-1 tasks needs a phone), the hot-swap spare, and the second walker in Phase 3.
+1. Phone A is the reference device for every published number. Phone B is lane C's working device (every one of lane C's Phase-1 tasks except the Editor-only FloorScan core, `P1-C15`, needs a phone), the hot-swap spare, and the second walker in Phase 3.
 2. Hand-held before head-mounted: scan, link and input are debugged with the phone in the hand; the headset is for acceptance.
 3. Record once, replay many times: the first good scan and a few walks are saved and replayed in the Editor by every lane.
 4. A soak leaves a phone hot. Soaks are scheduled, not squeezed between someone else's measurements, and the thermal state is noted at the start of every measurement.
@@ -1967,15 +1967,15 @@ Colours: green lane A, purple lane B, orange lane C, blue lane D, grey shared. D
 
 | ID | Task | Depends on | Output | Acceptance test | Runs on |
 |---|---|---|---|---|---|
-| `P1-C01` | **AR session and Editor simulation** | `P1-A02` | Lowest-resolution 60 Hz video format; environment depth through `AROcclusionManager` (mode Fastest, temporal smoothing off, human stencil and human depth off), read with `TryAcquireEnvironmentDepthCpuImage` (256 × 192); meshing and plane detection on only during the scan; XR Simulation environments; pose-log and RoomModel replay in the Editor | The session holds 60 Hz on the phone and the depth image is non-null at the chosen video format; a recorded walk drives the rig in the Editor; the log confirms meshing and planes are off after the scan | Editor, phone in hand |
+| `P1-C01` | **AR session and Editor simulation** | `P1-A02` | Lowest-resolution 60 Hz video format; environment depth through `AROcclusionManager` (mode Fastest, temporal smoothing off, human stencil and human depth off), read with `TryAcquireEnvironmentDepthCpuImage` (256 × 192); meshing and plane detection on only during the scan; XR Simulation environments; pose-log and RoomModel replay in the Editor | The session holds 60 Hz on the phone and the depth image is non-null at the chosen video format; a recorded walk drives the rig in the Editor | Editor, phone in hand |
 | `P1-C02` | **Scan route 1: manual outline** | `P1-C01` | Tap or walk the floor corners to make the floor polygon | Polygon within 5 cm of a tape measure in three rooms | phone in hand |
 | `P1-C03` | **Scan route 2: automatic FloorScan on the phone** | `P1-C01`, `P1-C15` | The classified LiDAR mesh and the planes of a live scan fed into the FloorScan core of `P1-C15`, with a progress view of the floor found so far | On the phone the free rectangle is within 10 cm of a tape measure and scan-to-walkable takes ≤ 90 s | phone in hand |
 | `P1-C04` | **Object boxes** | `P1-C01` | RoomPlan furniture boxes through `ARBoundingBoxManager` (category, size, pose), merged with the FloorScan obstacles in one coordinate frame | Boxes overlay the mesh to ≤ 10 cm; in three test rooms every piece of furniture wider than 0.4 m has a box (proposed) | phone in hand |
 | `P1-C05` | **Swift RoomPlan bridge for walls, doors and windows (Extended)** | `P1-C01` | Native plugin using `RoomCaptureSession(arSession:)`; walls, doors, windows and openings as JSON in session coordinates; AR configuration re-applied afterwards | Wall positions within 3 cm of the mesh-derived ones; scene depth is available again after capture | phone in hand |
-| `P1-C06` | **RoomModel and the loop-fit** | `P1-C02`, `P1-C03`, `P1-X02` | RoomModel JSON from either scan route: polygon, distance field, free rectangle, lap square s, L and R from the loop-fit rule, cell grids for S1 and S3, object list, anchor; outline confirmation in hand; save and load | Validates against the schema; a manual-outline scan and an automatic scan of the same room give free rectangles within 10 cm of each other; a room with less than 1.5 × 1.5 m of free floor selects standing mode | Editor, phone in hand |
+| `P1-C06` | **RoomModel and the loop-fit** | `P1-C02`, `P1-C03`, `P1-X02` | RoomModel JSON from either scan route: polygon, distance field, free rectangle, lap square s, L and R from the loop-fit rule, cell grids for S1 and S3, object list, anchor; outline confirmation in hand; save and load | Validates against the schema; a manual-outline scan and an automatic scan of the same room give free rectangles within 10 cm of each other; a room with less than 1.5 × 1.5 m of free floor selects standing mode; the log confirms meshing and planes are off after the scan | Editor, phone in hand |
 | `P1-C07` | **Home rebuild S0** | `P1-C06`, `P1-A06` | Floor, walls and door openings as 0.25 m-grid meshes in the palette, registered at the anchor; a placeholder box per object, tinted by category, on an object component that later takes a generated mesh | In the headset a virtual wall is within 5 cm of the real wall at three touch points (should: 3 cm); Home on `budget_room` costs ≤ 60 draw calls and ≤ 130k triangles per frame | phone in headset |
-| `P1-C08` | **Object photo capture** | `P1-C04`, `P1-X02` | For each object box, one to three key frames chosen by projected area, centredness, sharpness and spread of view angle; cropped and JPEG-encoded off the main thread; handed to the asset client | Every box that has a candidate frame under the rule of §7.4 gets at least one crop; boxes with none are reported and take the fallback mesh; capture adds < 2 ms per frame; nothing is written to disk | phone in hand |
-| `P1-C09` | **Bump Guard** | `P1-C06`, `P1-C01`, `P1-C14` | The logic of §4.10: static clearance from the distance field; a persistent dynamic layer stamped from live LiDAR depth (Burst); straight-path prediction over 0.4 s and 0.8 s; live depth alone while tracking is not Normal; a check of the static map against live depth; a level and a direction passed to `BumpCue`. Thresholds and the depth rate are constants in code, not in the parameter registry | Scripted approaches at 0.5 and 1.0 m/s to a wall, to a chair and to a 0.45 m stool placed after the scan, with the walker looking level: warning ≥ 0.6 s before predicted contact in 20 of 20 trials; during a 5-minute lap of the lap square: no STRONG cue and no WARN on the straight sides, corner WARNs counted and reported; ≤ 0.3 ms per frame; identical with the Station unplugged | Editor, phone in headset |
+| `P1-C08` | **Object photo capture** | `P1-C04`, `P1-X02` | For each object box, one to three key frames chosen by projected area, centredness, sharpness and spread of view angle; cropped and JPEG-encoded off the main thread; handed to the asset client | Every box that has a candidate frame under the rule of §7.4 gets at least one crop; boxes with none are reported (they take the built-in fallback mesh in `P1-D12`); capture adds < 2 ms per frame; nothing is written to disk | phone in hand |
+| `P1-C09` | **Bump Guard** | `P1-C06`, `P1-C01`, `P1-C14` | The logic of §4.10: static clearance from the distance field; a persistent dynamic layer stamped from live LiDAR depth (Burst); straight-path prediction over 0.4 s and 0.8 s; live depth alone while tracking is not Normal; a check of the static map against live depth; a level and a direction passed to `BumpCue`. Thresholds and the depth rate are constants in code, not in the parameter registry | Scripted approaches at 0.5 and 1.0 m/s to a wall, to a chair and to a 0.45 m stool placed after the scan, with the walker looking level: warning ≥ 0.6 s before predicted contact in 20 of 20 trials; during a 5-minute lap of the lap square: at most 2 STRONG cues or straight-side WARNs (should: none), corner WARNs counted and reported; ≤ 0.3 ms per frame; identical with the Station unplugged | Editor, phone in headset |
 | `P1-C10` | **Input and twins** | `P1-A04`, `P1-A08` | Gamepad through the Input System, gaze reticle with 600–800 ms dwell, headset lever tap; one action map | Every SpaceLab action can be done with the gamepad alone and with gaze dwell alone | Editor, phone in headset |
 | `P1-C11` | **Pose pipeline** | `P1-A04` | `TrackedPoseDriver` on Update only; jumps over 0.2 m per frame rejected for geometry while safety keeps the raw pose; tracking-state events; gyro rotation prediction behind a switch | A 0.5 m jump injected in replay is absent from the geometry pose stream and present in the safety pose stream; loss of tracking raises the tracking-lost event within 0.5 s | Editor, phone in headset |
 | `P1-C12` | **Onboarding in hand** | `P1-C06`, `P1-C07`, `P1-D11` | Permissions (camera, Local Network), pairing, scan route, outline confirmation, headset prompt | Three first-time users reach Home in the headset with at most three prompts each | phone in hand, phone in headset |
@@ -2256,7 +2256,6 @@ flowchart LR
   G8{{"G8 · Playground run"}}
   G7 --> A01
   G7 --> C01
-  G7 --> C02
   G7 --> C12
   G7 --> C15
   A01 --> A02
@@ -2265,6 +2264,7 @@ flowchart LR
   A02 --> A04
   A03 --> C11
   A04 --> C10
+  C01 --> C02
   C01 --> C03
   C01 --> C06
   C01 --> C07
@@ -2976,7 +2976,7 @@ Files live under `Assets/Atlas/Blades/Playground/Exhibits/` and `Assets/Atlas/Bl
 | P2-A03 | Exhibit equation sources | A | P2-C12, P2-C15, P2-A01, P2-C06 | `IEquationSource` for S1, S5, S6 | Card values equal logged values to 3 significant figures | Editor |
 | P2-A04 | Look polish | A | P2-C12, P2-C13, P2-C14, P2-C15, P2-C16, P2-A01, P2-A02 | Kerb and post meshes, fog tints, emissive signs, audio cues | Frame p95 ≤ 17.5 ms, ≤ 300 draw calls, ≤ 500k triangles in every beat | Phone in headset, Station |
 | P2-C01 | Director and beats | C | G7, P1-D01 | `PlaygroundDirector.cs`, `Beats.asset`, `pg.beat` | All 10 beats advance by condition and by `SceneCmd`; 10 events in `events.jsonl` | Editor, Station |
-| P2-C02 | Scan-to-Home | C | P1-C06, P1-D10 | Beats 1–3; placeholder → mesh swap | Every object box shows a placeholder or a mesh (100%); a swap moves the box centre < 0.05 m | Phone in hand, Station |
+| P2-C02 | Scan-to-Home | C | P2-C01, P1-C06, P1-D10 | Beats 1–3; placeholder → mesh swap | Every object box shows a placeholder or a mesh (100%); a swap moves the box centre < 0.05 m | Phone in hand, Station |
 | P2-C03 | Centre mark and dial hand-off | C | P2-C01, P1-B09, P1-B11 | Floor disc, standing lock | Dial ignored above 0.1 m/s in 10 of 10 tries; q = 3…6 each load | Phone in headset |
 | P2-C04 | Guided 3-4-5 walk | C | P2-C03, P1-B09 | Beat wiring of the `P1-B09` loop markers and read-outs, floor arrows, `walk.*` events | Closure < 0.25 m at q = 3, 4, 5; 90° ± 5° per lap at q = 5 | Phone in headset |
 | P2-C05 | Mode compare | C | P2-C04, P1-B06, P1-B10 | Mode chip, mini-map reveal after lap 1, home beacon | Switch keeps the tile id; beacon distance matches the kernel within 0.1 m | Phone in headset |
@@ -3506,7 +3506,6 @@ Captured by `AtlasPerfProbe` (3,600-frame ring buffer, one CSV row per second, s
 **G0 Contracts frozen** (present: all four lanes)
 - [ ] RoomModel fields, the `Atlas.Link` schema (Appendix B), parameter registry ids and the look-shader property list are merged and tagged; the three sample rooms and the performance fixture `budget_room` are in the repository and validate against the RoomModel schema.
 - [ ] Assembly definitions exist; the assembly-reference half of `Safety_Independence` is green (the pose-jump half is checked at G5).
-- [ ] Both phones report LiDAR; rear camera and LiDAR are unobstructed in the headset.
 
 **G1 First light** (present: A, C, D)
 - [ ] Stereo rig, empty scene, phone A: 60 fps on the Metal HUD; CPU main ≤ 3 ms, GPU ≤ 2 ms (R5 §E3).
@@ -3514,6 +3513,7 @@ Captured by `AtlasPerfProbe` (3,600-frame ring buffer, one CSV row per second, s
 - [ ] Lowest-resolution 60 Hz ARKit configuration shown in the start-up log; the environment depth image is non-null at the chosen video format.
 - [ ] The phone pairs with the Hub; `State` packets from the phone appear in the Hub log, and the dashboard shows one telemetry row per second.
 - [ ] One command installs the current `main` on a phone, and every engineer has installed a build.
+- [ ] Both phones report LiDAR (`P1-X04`); rear camera and LiDAR are unobstructed in the headset.
 
 **G2 Curved-walk spike** (present: B, C, three walkers from the team, a spotter)
 - [ ] Safety for the spike is in place, because Bump Guard does not exist yet: the walkers are team members only, the floor is cleared, the lap square is marked on the real floor for the spotter (a test aid, not part of the product), and a spotter stays within arm's reach throughout.
@@ -3543,6 +3543,8 @@ Captured by `AtlasPerfProbe` (3,600-frame ring buffer, one CSV row per second, s
 - [ ] Static-map error after the 5-minute lap is ≤ 0.10 m at three points.
 - [ ] The pose-jump half of `Safety_Independence` is green.
 - [ ] Bump Guard behaves identically with the Station switched off.
+- [ ] Input and pose (`P1-C10`, `P1-C11`): every SpaceLab action can be done with the gamepad alone and with gaze dwell alone; a 0.5 m jump injected in replay is absent from the geometry pose stream and present in the safety pose stream; loss of tracking raises the tracking-lost event within 0.5 s.
+- [ ] Onboarding in hand (`P1-C12`): three first-time users reach Home in the headset with at most three prompts each.
 
 **G6 Station link, four functions** (present: D plus one engineer from each other lane)
 - [ ] Every test in the table of §7.6 passes.
@@ -3552,6 +3554,7 @@ Captured by `AtlasPerfProbe` (3,600-frame ring buffer, one CSV row per second, s
 - [ ] Scan and asset round trip, in a room with at least four object boxes: every box with a candidate frame is photographed, generated by the Forge, returned and placed (at most 20 generated meshes per room, largest boxes first); asset rows at "must"; a placeholder is shown until each mesh arrives.
 - [ ] Fallback set (`P1-D12`): with the Forge stopped before the scan, every box holds a built-in fallback mesh within 10 s of entering Home (proposed); after a Forge restart each is replaced by its generated mesh.
 - [ ] With the Station unreachable, a parameter from the kill-switch list of §12.4 is changed from the on-device menu and the change is in the phone's log.
+- [ ] Flat-twin mini-map (`P1-D07`): in replay the map shows the same tile-id sequence as the log; it costs ≤ 0.3 ms on the phone.
 - [ ] Router unplugged for 10 s: OFFLINE within 3.5 s, CONNECTED within 5 s of return, parameters restored, frame time unchanged (R4).
 
 **G7 Phase-1 exit** (present: all four lanes)
@@ -3646,7 +3649,7 @@ Captured by `AtlasPerfProbe` (3,600-frame ring buffer, one CSV row per second, s
 Set-up: the build under test processes depth at the rate that ships (never below 15 Hz), and that rate is recorded. The vertical field of view of the depth image, with the phone in the headset, is measured and recorded.
 
 1. Scanned room with one wall and one scanned table, plus one chair and one stool 0.45 m high placed after the scan (visible only to live LiDAR).
-2. A walker in the headset, looking level and not at the floor, with a spotter, makes 20 approaches, five to each of the four obstacles: head-on and at 45°, each at about 0.5 and 1.0 m/s, and a second head-on approach at 1.0 m/s.
+2. A walker in the headset, looking level and not at the floor, with a spotter, makes 20 approaches, five to each of the four obstacles: head-on and at 45°, each at about 0.5 and 1.0 m/s, and a second head-on approach at 1.0 m/s. Every approach starts at least 3 m from the obstacle and reaches it within 30 s, because a level view from 1.6 m first sees the top of a 0.45 m stool from about 2.6 m.
 3. The walker stops at the cue. The log gives the lead distance (from the head to the obstacle when the cue starts; the obstacle's position is taken with a tape measure) and the lead time to predicted contact. The distance at which the walker came to rest is measured with the tape and recorded beside them.
 4. One run of five minutes lapping the lap square (0.5 m from the walls) counts STRONG cues anywhere and WARN cues on the straight sides, and separately the WARN cues at the corners. A WARN is a corner cue when the head is within 0.5 m of a lap corner as the cue starts (at 1.0 m/s a corner WARN starts 0.40 m before the corner; derived); every other WARN is on a straight side. Corner cues are reported, not judged (open item 19 in §14).
 5. After the lap, repeat the three-point wall touch of the G5 checklist and record the static-map error: how far the edge of the distance field lies from each touched point on the real wall, after allowing for the one-cell (5 cm) inset of that edge.
@@ -3691,12 +3694,12 @@ Wherever possible a fallback is a parameter change, not a code change. Parameter
 | **Performance and heat** | | | | | | |
 | 11 | Thermal "Serious": Unity caps at 30 fps unless the Player Setting is off (R5) | Graphics 25% | M / H | Thermal state in telemetry; G4 soak | Unity ≥ 6000.3.21f1; thermal ladder acts at "Fair"; dark palette; meshing off after the scan | Lower rungs (§12.2); swap to phone B |
 | 12 | LiDAR depth stays on while walking; heat cost not published (R1) | Heat against safety | M / M | G5 depth on/off comparison: frame-time p95 rise > 1.0 ms; G4 soak: time-to-Fair with depth on against off | Budgets are measured with depth on; the G4 soak is run once more with depth off, on a recorded pose track with nobody in the headset, to measure the difference (`P1-A14`) | Processing fewer depth frames saves CPU only (the rate is a code constant, lowered in a rebuild and never below 15 Hz, §4.10); for heat, start the thermal ladder one rung lower. Depth is never switched off while someone walks |
-| 13 | Two-camera rig is CPU-bound; the tile centres within ρ number about 5(cosh ρ − 1), and more tiles than that are drawn | Graphics: > 300 draw calls | M / H | G4: draw calls, render-thread ms | Fog fully opaque at ρ = 3; 45 tile centres lie within ρ = 3 and at most 71 tiles are drawn (draw rule of §8.5); levels of detail | ρ 2.5 (25 tile centres, about 34 tiles drawn) → 2 (13 centres, about 22 drawn); `RenderMeshInstanced` for shells. If the view-cone test is not built: cull centres at ρ = 3 and make the fog opaque at ρ = 2.15 |
+| 13 | Two-camera rig is CPU-bound; the tile centres within ρ number about 5(cosh ρ − 1), and more tiles than that are drawn | Graphics: > 300 draw calls | M / H | G4: draw calls, render-thread ms | Fog fully opaque at ρ = 3; 45 tile centres lie within ρ = 3 and at most 71 tiles are drawn (draw rule of §8.5); levels of detail | ρ 2.5 (25 tile centres, at most 39 tiles drawn with a level gaze and 52 at any pitch) → 2 (13 centres, at most 26 level and 38 at any pitch); `RenderMeshInstanced` for shells. If the view-cone test is not built: cull centres at ρ = 3 and make the fog opaque at ρ = 2.15 |
 | 14 | HyperEngine's warp shader uses MaterialPropertyBlocks and instanced properties: not SRP-Batcher compatible as written (R3) | Graphics: batching lost | H / M | Frame Debugger at G3 reports "not compatible" | Port moves the tile anchor into `UnityPerMaterial`; one pooled material per tile | Instanced variant of the same shader |
 | **Scan and tracking** | | | | | | |
 | 15 | RoomPlan through AR Foundation gives furniture boxes only (R1) | UX: scan flow | H / M | G5: no wall data from the route in use | Ranked scan routes; walls from planes and classified mesh | `scan.route` → manual corner taps |
 | 16 | Tracking drift or loss inside a lens headset; iOS 26.4 LiDAR drift report, said fixed in 26.6.1 (R1; re-checked under open item 3 of §14) | Safety; closure error | M / H | G2: closure error ≥ 0.25 m. G5: static-map error after the 5-minute lap > 0.10 m, or 20 m loop drift ≥ 0.40 m (§11.2) | iOS version recorded at set-up; headset exposes cameras and LiDAR; while tracking is not Normal, Bump Guard uses live depth alone and raises "stand still" at 0.5 s; a static map that disagrees with live depth by more than 0.15 m for 2 s raises the "rescan" icon (§4.10) | Rescan; team pre-scan with saved ARWorldMap (D21); update iOS |
-| 17 | Phone B has no LiDAR or is slower (open item 2, §14) | No swap phone | L / M | Set-up checklist; G4 on phone B | LiDAR on both phones verified at G0 (`P1-X01`); budgets measured on both phones | Phone B never walks; it takes object photos only |
+| 17 | Phone B has no LiDAR or is slower (open item 2, §14) | No swap phone | L / M | Set-up checklist; G4 on phone B | LiDAR on both phones verified at G1 (`P1-X04`); budgets measured on both phones | Phone B never walks; it takes object photos only |
 | **Link and Station** | | | | | | |
 | 18 | LiteNetLib 2.1.4 unverified on Unity 6.3 + IL2CPP + iOS 26 (R4) | Blocks G6 | M / H | G1 link smoke test | `Atlas.Link` hides the transport behind one interface | Raw UDP with the same `State` packing |
 | 19 | LiteNetLib needs Wi-Fi even in development (`iproxy` forwards TCP only) (R4) | Process | H / L | First paired session | Own router; QR pairing to a known IP | Editor client on the PC for link work |
@@ -3971,7 +3974,7 @@ Things only the team can decide or check. None of them blocks the start; each na
 | # | Item | Why it matters | Settle by |
 |---|---|---|---|
 | 1 | **Headset model and its lens numbers** (distortion coefficients, lens separation, screen-to-lens distance); check the fit with both phones and with a glasses wearer | The lens blit (`P1-A05`) needs them. Without them straight lines bow | G4 |
-| 2 | **Both phones really have LiDAR** (15 Pro Max and 14 Pro Max, not Plus models), and the headset leaves the rear camera and LiDAR unobstructed | Scanning and Bump Guard depend on it | G0 |
+| 2 | **Both phones really have LiDAR** (15 Pro Max and 14 Pro Max, not Plus models), and the headset leaves the rear camera and LiDAR unobstructed | Scanning and Bump Guard depend on it | G1 |
 | 3 | **iOS version on both phones.** A LiDAR tracking-drift regression was reported for one recent iOS release and reported fixed in a later one (R1; re-read the thread). Run the 20 m loop drift test on the installed version | Drift moves the static map under Bump Guard | G5 |
 | 4 | **Unity patch and Xcode**: Unity ≥ 6000.3.21f1, Xcode 26 on the Mac | Thermal frame-rate setting; ARKit plugin | G0 |
 | 5 | **How outside walkers are supervised.** Bump Guard is a warning and a haptic by decision. This plan recommends a cleared floor, a confirmed scan and a human spotter whenever someone outside the team wears the headset | Safety of people who do not know the room | G7 |
@@ -4501,7 +4504,7 @@ Order of authority: the team lead's decisions (§2 of this plan) > Build Pipelin
 - **Robustness rules:** Spec §6.8 and Brief §3.4, rules R1–R5 and R7 only. They apply to the marker cube (Spec §7.1) and to any later hand input. R6 (vignette during world motion) and R8 (Safe Harbour) are superseded (D.1, rows Comfort and Safety).
 - **Architecture rules:** Spec §3.4, for the principle that the phone decides everything within a frame and never waits for the Station; and the rule that safety never references the link (Spec §3.2). The Spec's assembly map (§3.2), frame loop (§3.3) and interfaces (§3.5) are superseded by §6.2, §6.3 and §6.5 of this plan.
 - **Depth-sector job:** Spec §7.3 (seven sectors across ±35° of the view direction, on the 256 × 192 depth image), as a Bump Guard input only. The Spec's 10 cm occupancy grid, its distances and hysteresis, person detection and the state machine are superseded by §4.2 and §4.10 of this plan (D.1, rows Safety and Depth after set-up).
-- **Router and Wi-Fi set-up:** Spec §10.1. **Signing:** Spec §2.8, Appendix E.
+- **Router and Wi-Fi set-up:** Spec §10.1. **Signing:** Spec §2.8 and Spec App. E.
 - **Evaluation instruments:** Brief §8, Spec §13. **Prior art:** Brief §12.
 - **Consent, FMS and SEQ wording; booth-sign text and exclusion list:** Brief §8.1, §9.9. On the sign, "inside a taped 3×3 m square" becomes "in the room you scanned", and the data line also carries the hosted-fallback disclosure of §7.4. The spotter briefing is the one in §13.2 of this plan.
 

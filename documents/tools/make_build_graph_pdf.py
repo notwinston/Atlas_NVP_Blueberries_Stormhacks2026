@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 """Build documents/ATLAS_Build_Graph.pdf from documents/ATLAS_Master_Plan.md.
 
-The PDF is the build graph for people: each box is one human-sized piece of work
-(an "area"), not a single task. The areas are listed in build_graph_areas.md next
-to this script (or in a plan section whose heading contains "Area map"). Everything
-else is read from the plan at run time: task rows, dependencies, gates, diagrams.
+The PDF is the build graph for people: each box is one work area (a human-sized piece
+of work such as "implement hyperbolic terrain generation"), not a single task.
+Everything is read from the plan at run time: the work areas (tables headed
+"Area | Owner | Tasks inside | ..."), the task rows and their dependencies, the gates.
+From those the script works out which area starts after which, what an area needs
+from another lane, what it hands over and which gate it feeds.
 
 Run from the repository root:
 
-    python3 documents/tools/make_build_graph_pdf.py            # area map only
-    python3 documents/tools/make_build_graph_pdf.py --detail   # plus task-level appendix
+    python3 documents/tools/make_build_graph_pdf.py            # area level, for people
+    python3 documents/tools/make_build_graph_pdf.py --detail   # plus the task-level appendix
 
-Options: --plan FILE, --areas FILE, --out FILE, --build-dir DIR (intermediate files;
-default is a folder in the system temp directory, never inside the repository).
+Options: --plan FILE, --out FILE, --build-dir DIR (intermediate files; the default is a
+folder in the system temp directory, never inside the repository).
 
 Needs:
   - Python 3.9 or newer, standard library only.
@@ -42,7 +44,6 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_PLAN = REPO / "documents" / "ATLAS_Master_Plan.md"
-DEFAULT_AREAS = Path(__file__).resolve().with_name("build_graph_areas.md")
 DEFAULT_OUT = REPO / "documents" / "ATLAS_Build_Graph.pdf"
 
 ID_RE = re.compile(r"\bP(\d)-([A-DXG])(\d{1,2})\b")
@@ -466,6 +467,31 @@ def parse_mermaid(src: str) -> MGraph:
     return g
 
 
+def shorten_labels(src: str) -> str:
+    """Long labels make a diagram too wide to read on a page: keep a node's first line and
+    drop the bracketed description of a subgraph title. The full text stays in the plan."""
+    def node(m):
+        label = m.group(2)
+        if len(label) > 70 and re.search(r"<br\s*/?>", label):
+            label = re.split(r"<br\s*/?>", label)[0]
+        return m.group(1) + label + m.group(3)
+
+    def sub(m):
+        title = m.group(2)
+        if len(title) > 60:
+            title = re.sub(r"\s*\((?:[^()]|\([^()]*\))*\)\s*$", "", title)
+        return m.group(1) + title + m.group(3)
+
+    out = []
+    for line in src.split("\n"):
+        if re.match(r"^\s*subgraph\b", line):
+            line = re.sub(r'^(\s*subgraph\s+\w+\s*\[\s*")(.*)("\s*\]\s*)$', sub, line)
+        else:
+            line = re.sub(r'([\[{(]")([^"]*)("[\]})])', node, line)
+        out.append(line)
+    return "\n".join(out)
+
+
 def mm_label(text: str) -> str:
     return text.replace('"', "#quot;")
 
@@ -644,7 +670,7 @@ def build_phase_graph(phase: int, tasks: dict[str, Task], diagrams: list[MGraph]
             if src in pg.tasks:
                 pg.deps.setdefault(v, set()).add(src)
             elif re.fullmatch(r"G\d{1,2}", u) and g.is_gate(u) and u != v:
-                pg.deps.setdefault(v, set())
+                pg.deps.setdefault(v, set()).add(u)   # a gate that needs another gate
                 pg.deps.setdefault(u, set())
     for n in list(pg.deps):
         pg.ancestors(n)
@@ -661,96 +687,90 @@ class Area:
         self.tasks: list[str] = []
         self.tag = ""
         self.key = ""
+        self.start = False
 
 
-def read_area_map(sec_root: Section, source: str) -> list[tuple[Area, list[tuple[str, str]]]]:
-    out = []
-    for ph in sec_root.walk():
-        m = re.match(r"^Phase\s+(\d+)\b", ph.name)
-        if not m:
-            continue
-        phase = int(m.group(1))
-        for ln in ph.children:
-            m2 = re.match(r"^Lane\s+([A-D])\b", ln.name)
-            lane = m2.group(1) if m2 else ("X" if re.match(r"^(All|Shared|Everyone)", ln.name, re.I) else None)
-            if lane is None:
-                warn(f"{source} line {ln.line}: heading '{ln.title}' is neither 'Lane A..D' nor 'All hands'; skipped")
+def phase_of(sec: Section):
+    while sec is not None:
+        m = re.search(r"\bPhase\s+(\d+)\b", sec.name)
+        if m:
+            return int(m.group(1))
+        sec = sec.parent
+    return None
+
+
+def read_plan_areas(root: Section, tasks: dict[str, Task], graphs: dict[int, "PhaseGraph"]):
+    """Work areas as the plan defines them: tables headed 'Area | Owner | Tasks inside | ...'."""
+    areas: dict[int, list[Area]] = {ph: [] for ph in graphs}
+    sources: list[str] = []
+    for sec in root.walk():
+        for b in sec.blocks:
+            if b.kind != "table":
                 continue
-            for a in ln.children:
-                delivers, listed = "", []
-                for b in a.blocks:
-                    if b.kind == "para" and not delivers:
-                        delivers = re.sub(r"^Delivers:\s*", "", b.text, flags=re.I)
-                    elif b.kind == "list":
-                        for text, _ in b.items:
-                            m3 = re.match(r"^`?(P\d-[A-DXG]\d{1,2})`?\s*(.*)$", text)
-                            if m3:
-                                listed.append((m3.group(1), m3.group(2).strip()))
-                            else:
-                                warn(f"{source} line {b.line}: cannot read a task id in '{text}'")
-                out.append((Area(phase, lane, a.title, delivers), listed))
-    return out
-
-
-def assign_areas(defs, tasks: dict[str, Task], graphs: dict[int, PhaseGraph], source: str) -> dict[int, list[Area]]:
-    areas: dict[int, list[Area]] = {}
-    by_title = {(t.phase, norm(t.title)): t for t in tasks.values()}
-    for area, listed in defs:
-        areas.setdefault(area.phase, []).append(area)
-        for tid, title in listed:
-            t = tasks.get(tid)
-            if t is None or t.phase != area.phase:
-                t2 = by_title.get((area.phase, norm(title))) if title else None
-                if t2 is None:
-                    warn(f"{source}: {tid} ({title}) under '{area.name}' is not a task in the plan; left out")
-                    continue
-                warn(f"{source}: {tid} ({title}) is now {t2.id} in the plan; update the area map")
-                t = t2
-            elif title and norm(title) != norm(t.title) and norm(title) not in norm(t.title) and norm(t.title) not in norm(title):
-                warn(f"{source}: {tid} is listed as '{title}' but the plan now calls it '{t.title}'; "
-                     f"check that it still belongs under '{area.name}'")
-            if t.lane == "G":
+            hdr = [plain(h).lower() for h in b.header]
+            ti = next((i for i, h in enumerate(hdr) if h.startswith("tasks")), None)
+            if not hdr or not hdr[0].startswith("area") or ti is None:
                 continue
-            if t.area is not None:
-                warn(f"{source}: {t.id} is listed under two areas; kept under '{t.area.name}'")
+            oi = next((i for i, h in enumerate(hdr) if h.startswith("owner") or h == "lane"), None)
+            phase = phase_of(sec)
+            if phase not in graphs:
+                warn(f"Area table at line {b.line} is not inside a 'Phase N' section with tasks; ignored")
                 continue
-            t.area = area
-            area.tasks.append(t.id)
-    # plan tasks that the area map does not mention: place them with their nearest neighbours
+            sources.append(sec.ref())
+            for r in b.rows:
+                m = re.match(r"^\*\*(.+?)\*\*\s*(?:<br\s*/?>\s*(.*))?$", r[0].strip())
+                name, delivers = (m.group(1), m.group(2) or "") if m else (plain(r[0]), "")
+                name = re.sub(r"^[A-DX]\d{1,2}\s*·\s*", "", plain(name))
+                owner = plain(r[oi]) if oi is not None and oi < len(r) else ""
+                ml = re.search(r"\bLane\s+([A-D])\b", owner)
+                area = Area(phase, ml.group(1) if ml else "X", name, delivers)
+                for mt in re.finditer(r"\b(?:P(\d)-)?([A-DX])(\d{1,2})\b", plain(r[ti]) if ti < len(r) else ""):
+                    tid = f"P{mt.group(1) or phase}-{mt.group(2)}{mt.group(3)}"
+                    t = tasks.get(tid)
+                    if t is None or t.phase != phase or t.lane == "G":
+                        warn(f"Area '{name}' (line {b.line}) lists {tid}, which is not a task of Phase {phase}")
+                    elif t.area is not None:
+                        warn(f"{tid} is listed under two areas: '{t.area.name}' and '{name}'; the first is used")
+                    else:
+                        t.area = area
+                        area.tasks.append(tid)
+                if not ml and area.tasks:
+                    lanes = [tasks[x].lane for x in area.tasks]
+                    area.lane = max(set(lanes), key=lanes.count)
+                areas[phase].append(area)
     for phase, pg in graphs.items():
-        loose = [t for t in pg.tasks.values() if t.area is None]
-        for t in sorted(loose, key=lambda t: (t.lane, t.num)):
-            cands = [a for a in areas.get(phase, []) if a.lane == t.lane and a.tasks]
-            best = None
-            if cands:
-                def links(a):
-                    inside = set(a.tasks)
-                    n = len(pg.deps.get(t.id, set()) & inside)
-                    n += sum(1 for x in inside if t.id in pg.deps.get(x, set()))
-                    near = min(abs(tasks[x].num - t.num) for x in inside)
-                    return (n, -near)
-                best = max(cands, key=links)
-            if best is None:
-                lane_name = "all hands" if t.lane == "X" else f"lane {t.lane}"
-                best = Area(phase, t.lane, f"Other work for {lane_name}", "Tasks of the plan that the area map does not list yet.")
-                areas.setdefault(phase, []).append(best)
-            t.area = best
-            best.tasks.append(t.id)
-            warn(f"{t.id} ({t.title}) is in the plan but not in the area map; placed under "
-                 f"'{best.name}'. Add it to {source}.")
+        loose = sorted((t for t in pg.tasks.values() if t.area is None), key=lambda t: (t.lane != "X", t.lane, t.num))
+        if loose and not areas[phase]:
+            warn(f"Phase {phase} has no area table in the plan; its tasks are shown as one area per lane")
+            for lane in sorted({t.lane for t in loose}):
+                a = Area(phase, lane, "All hands" if lane == "X" else f"Lane {lane} in this phase", "")
+                for t in loose:
+                    if t.lane == lane:
+                        t.area = a
+                        a.tasks.append(t.id)
+                areas[phase].append(a)
+        elif loose:
+            # the plan keeps set-up and contract tasks outside the lane areas: they form the start
+            late = [t.id for t in loose if any(d in pg.tasks and tasks[d].area is not None for d in pg.deps.get(t.id, ()))]
+            if late:
+                warn(f"Phase {phase}: {', '.join(late)} come after lane work but are in no area table; "
+                     f"they are shown under 'Start'. Add them to an area in the plan.")
+            a = Area(phase, "X", "The start: set-up and contracts", "; ".join(t.title for t in loose) + ".")
+            a.start = True
+            for t in loose:
+                t.area = a
+                a.tasks.append(t.id)
+            areas[phase].append(a)
     for phase, lst in areas.items():
         lst[:] = [a for a in lst if a.tasks]
         lst.sort(key=lambda a: "XABCD".index(a.lane))
         count: dict[str, int] = {}
         for a in lst:
             count[a.lane] = count.get(a.lane, 0) + 1
-            a.tag = ("All" if a.lane == "X" else a.lane) + "·" + str(count[a.lane])
+            a.tag = "All" if a.lane == "X" else f"{a.lane}{count[a.lane]}"
             a.key = f"p{phase}{a.lane}{count[a.lane]}"
-            a.tasks.sort(key=lambda x: (tasks[x].lane, tasks[x].num))
-        for a in lst:
-            if a.lane == "X" and count["X"] == 1:
-                a.tag = "All"
-    return areas
+            a.tasks.sort(key=lambda x: (tasks[x].lane != "X", tasks[x].lane, tasks[x].num))
+    return areas, sorted(set(sources))
 
 
 class AreaGraph:
@@ -783,7 +803,9 @@ class AreaGraph:
             blocks = all((pg.ancestors(m) & src) for m in members_y)
             (self.solid if blocks else self.dashed).add((x, y))
         self.solid_r = {(x, y) for (x, y) in self.solid if not self._path(x, y, self.solid, skip=(x, y))}
-        self.dashed_r = {(x, y) for (x, y) in self.dashed if not self._path(x, y, self.solid)}
+        # a dashed edge is left out when the same need already follows from other edges
+        both = self.solid | self.dashed
+        self.dashed_r = {(x, y) for (x, y) in self.dashed if not self._path(x, y, both, skip=(x, y))}
         # step of an area: the first step in which at least one of its tasks can begin.
         # A task sits one step after the latest area or gate it waits for.
         entry, depth = set(self.entry), {}
@@ -1204,7 +1226,6 @@ def area_table_html(ag: AreaGraph, lane: str) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Build the ATLAS build graph PDF from the master plan.")
     ap.add_argument("--plan", type=Path, default=DEFAULT_PLAN)
-    ap.add_argument("--areas", type=Path, default=DEFAULT_AREAS)
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
     ap.add_argument("--build-dir", type=Path,
                     default=Path(os.environ.get("ATLAS_PDF_BUILD", Path(tempfile.gettempdir()) / "atlas_build_graph_pdf")))
@@ -1311,30 +1332,34 @@ def main() -> None:
 
     # phase diagrams, phase graphs, areas
     phase_diagrams: dict[int, list[MGraph]] = {}
+    plan_area_diagram: dict[int, tuple[Block, str, str]] = {}   # block, sentence before it, legend after it
     for ph, sec in phases.items():
         phase_diagrams[ph] = []
-        for b in sec.all_blocks():
-            if b.kind == "code" and b.lang == "mermaid":
+        for sub in sec.walk():
+            for i, b in enumerate(sub.blocks):
+                if b.kind != "code" or b.lang != "mermaid":
+                    continue
                 try:
-                    phase_diagrams[ph].append(parse_mermaid(b.text))
+                    g = parse_mermaid(b.text)
                 except MermaidError as e:
                     warn(f"Diagram at line {b.line} could not be read for gate inputs: {e}")
+                    continue
+                phase_diagrams[ph].append(g)
+                # a diagram whose boxes are not task ids is the plan's picture of the work areas
+                boxes = [n for n in g.nodes if not g.is_gate(n)]
+                if ph not in plan_area_diagram and len(boxes) >= 2 and not any(re.fullmatch(r"[A-DX]\d{2}", n) for n in boxes):
+                    is_text = lambda x: x is not None and x.kind == "para" and not re.fullmatch(r"\*\*[^*]+\*\*", x.text)
+                    before = sub.blocks[i - 1] if i > 0 else None
+                    after = sub.blocks[i + 1] if i + 1 < len(sub.blocks) else None
+                    plan_area_diagram[ph] = (b, before.text if is_text(before) else "",
+                                             after.text if is_text(after) and len(after.text) < 300 else "")
     graphs = {ph: build_phase_graph(ph, tasks, phase_diagrams.get(ph, [])) for ph in sorted(raw_counts)}
     unresolved = [(a, b) for pg in graphs.values() for (a, b) in pg.unresolved]
     for a, b in unresolved:
         warn(f"{a} depends on {b}, which is not a task row in the plan")
 
-    area_sec = find_section(root, r"\bArea map\b", "", deep=True, required=False)
-    if area_sec is not None:
-        defs, area_source = read_area_map(area_sec, args.plan.name), f"{args.plan.name} ({area_sec.title})"
-    else:
-        if not args.areas.exists():
-            fail(f"No area map: the plan has no 'Area map' section and {args.areas} does not exist.")
-        defs = read_area_map(build_sections(parse_blocks(args.areas.read_text(encoding="utf-8").split("\n"))), args.areas.name)
-        area_source = args.areas.name
-    if not defs:
-        fail(f"The area map in {area_source} lists no areas (expected '## Phase N', '### Lane X', '#### name').")
-    areas = assign_areas(defs, tasks, graphs, area_source)
+    areas, area_refs = read_plan_areas(root, tasks, graphs)
+    area_source = ", ".join(area_refs) if area_refs else "no area tables: one area per lane"
     agraphs = {ph: AreaGraph(graphs[ph], areas.get(ph, []), tasks) for ph in graphs}
 
     # ---- figures
@@ -1345,13 +1370,17 @@ def main() -> None:
         figs.append(f_gates)
     f_phase = {}
     for ph, ag in agraphs.items():
-        f_phase[ph] = Figure(f"areas-phase{ph}", phase_graph_source(ag, gate_names, palette))
+        if ph in plan_area_diagram:   # the plan draws the areas itself: use its diagram
+            blk = plan_area_diagram[ph][0]
+            f_phase[ph] = Figure(f"plan-areas-phase{ph}", shorten_labels(blk.text), font_px=24, wrap_px=200, line=blk.line)
+        else:
+            f_phase[ph] = Figure(f"areas-phase{ph}", phase_graph_source(ag, gate_names, palette))
         figs.append(f_phase[ph])
     detail_figs: dict[int, Figure] = {}
     if args.detail:
         for b in bp.all_blocks():
             if b.kind == "code" and b.lang == "mermaid" and b is not gates_mmd:
-                detail_figs[id(b)] = Figure(f"plan-l{b.line}", b.text, font_px=24, wrap_px=180, line=b.line)
+                detail_figs[id(b)] = Figure(f"plan-l{b.line}", shorten_labels(b.text), font_px=24, wrap_px=200, line=b.line)
                 figs.append(detail_figs[id(b)])
     print(f"Rendering {len(figs)} diagrams with Mermaid ...", flush=True)
     render_figures(figs, build)
@@ -1380,17 +1409,17 @@ def main() -> None:
 about the size of “implement hyperbolic terrain generation”, not a single task. For every phase it shows the
 areas of each lane, which of them can start at the same time, which one waits for another, what is handed
 from one person to the next, and the gate each area feeds.</p>
-<p>The areas are listed in <code>{esc(area_source)}</code>. Everything else on these pages is read from
-<code>documents/{esc(args.plan.name)}</code> when the PDF is built: the tasks inside each area, their
-dependencies and the gates. The tasks themselves, with their outputs and acceptance tests, stay in the plan
-(§9 and §10) for the coding agents. Work is ordered by dependencies and gates only.</p>
+<p>Everything on these pages is read from <code>documents/{esc(args.plan.name)}</code> when the PDF is built.
+The work areas are the ones the plan defines ({esc(area_source)}); who waits for whom is worked out from the
+dependencies of the tasks inside each area. The tasks themselves, with their outputs and acceptance tests,
+stay in the plan (§9 and §10) for the coding agents. Work is ordered by dependencies and gates only.</p>
 <p class="kicker" style="margin-top:6mm">How to read an area</p>
 <ul>
 <li><b>Starts after</b> (on the boards: <b>after</b>): nothing inside the area can begin until the named area or gate is done.</li>
 <li><b>Also needs</b> (<b>needs</b>): the area can start, but one part of it waits for something from another area.</li>
 <li><b>Feeds</b>: the gates at which the area's work is checked.</li>
 <li><b>Hands over to</b>: what another lane is waiting for from this area. These are the moments to talk.</li>
-<li>A tag such as <span class="tag lB">B·2</span> is lane B, second area of that phase. Task ids such as
+<li>A tag such as <span class="tag lB">B2</span> is lane B, second area of that phase. Task ids such as
 <code>P1-B04</code> (phase 1, lane B, number 04) only point into the plan. Gates are G0 to G{gmax}.</li>
 </ul>
 <p class="note">Generated {today.day} {today:%B %Y} from {esc(args.plan.name)} (plan last modified {stamp}).</p>
@@ -1399,8 +1428,7 @@ dependencies and the gates. The tasks themselves, with their outputs and accepta
 <div class="legend">{lane_rows}
 <span class="sw lX"></span><span><b>All hands</b> · shared work</span>
 <span class="sw hex"></span><span><b>Gate</b> · where the lanes meet and a check is passed</span>
-<span class="ln"></span><span><b>Solid arrow</b> · starts after</span>
-<span class="ln dash"></span><span><b>Dashed arrow</b> · also needs, before it can finish</span>
+<span class="ln"></span><span><b>Arrow</b> · the area at its head needs something from the area at its tail</span>
 </div>
 <p class="kicker">Contents</p>
 {toc_slot}
@@ -1448,11 +1476,10 @@ dependencies and the gates. The tasks themselves, with their outputs and accepta
         if sec is not None:
             intro = []
             for b in sec.blocks:
-                if b.kind == "code" and b.lang == "mermaid":
+                if (b.kind == "code" and b.lang == "mermaid") or (
+                        b.kind == "para" and re.fullmatch(r"\*\*[^*]+\*\*", b.text)):
                     break
                 intro.append(b)
-            while intro and intro[-1].kind == "para" and re.fullmatch(r"\*\*[^*]+\*\*", intro[-1].text):
-                intro.pop()
             if intro:
                 plan_notes = f'<div class="quoted">{blocks_html(intro)}</div>'
         n_tasks = len(ag.pg.tasks)
@@ -1471,25 +1498,33 @@ dependencies and the gates. The tasks themselves, with their outputs and accepta
         html_parts.append(
             f'<p class="intro">{opens}{len(ag.areas)} areas cover the {n_tasks} tasks of this phase. Across a row: areas that '
             f'can be worked on at the same point. Down a column: one person’s order. An area sits in the first step in '
-            f'which part of it can begin.</p>')
+            f'which part of it can begin; it is finished only when everything under “after” and “needs” has arrived.</p>')
         html_parts.append(board_html(ag, lane_names))
         doc.add(pp, "".join(html_parts), new_page=True)
 
         fig = f_phase[ph]
-        size, w, h, pt = place(fig, reserve_mm=24)
-        fp = doc.page(sid, header, size)
-        cap = ("Solid arrow: starts after. Dashed arrow: also needs, before it can finish. Colours are the lanes. "
-               "A dark hexagon is a gate that areas wait for; the other gates are named in “feeds”. "
-               "An arrow that is implied by two others is left out.")
-        doc.add(fp, doc.heading(2, sid + "-2", f"{sec_no}.2", "The area graph") + figure_html(doc, fig, size, w, h, pt, cap),
-                new_page=True)
+        if ph in plan_area_diagram:
+            blk, before, after = plan_area_diagram[ph]
+            lead_in = f"<p>{inline(before)}</p>" if before else ""
+            size, w, h, pt = place(fig, reserve_mm=26 + (8 if before else 0))
+            cap = (inline(after) + " " if after else "") + ("Drawn from the plan’s diagram; each box shows the name of the "
+                                                             "area, and what it covers is in the tables that follow.")
+            graph_html = (doc.heading(2, sid + "-2", f"{sec_no}.2", "The work areas, as the plan draws them", blk.sec.ref())
+                          + lead_in + figure_html(doc, fig, size, w, h, pt, cap))
+        else:
+            size, w, h, pt = place(fig, reserve_mm=24)
+            cap = ("Solid arrow: starts after. Dashed arrow: also needs, before it can finish. Colours are the lanes. "
+                   "A dark hexagon is a gate that areas wait for; the other gates are named in “feeds”. "
+                   "An arrow that is implied by two others is left out.")
+            graph_html = doc.heading(2, sid + "-2", f"{sec_no}.2", "The area graph") + figure_html(doc, fig, size, w, h, pt, cap)
+        doc.add(doc.page(sid, header, size), graph_html, new_page=True)
 
         parts = [doc.heading(2, sid + "-3", f"{sec_no}.3", "The areas, lane by lane")]
         for l in "XABCD":
             if not any(a.lane == l for a in ag.areas):
                 continue
             name = "All hands" if l == "X" else f"Lane {l} · {lane_names.get(l, '')}"
-            parts.append(f'<div class="keep"><h3>{esc(name)}</h3>' + area_table_html(ag, l) + "</div>")
+            parts.append(f"<h3>{esc(name)}</h3>" + area_table_html(ag, l))
         doc.add(pp, "".join(parts), new_page=True)
 
         gate_list = sorted({int(g[1:]) for g in ag.gates} | {g for g, p in gate_phase.items() if p == ph})
@@ -1529,8 +1564,9 @@ dependencies and the gates. The tasks themselves, with their outputs and accepta
         header = "Appendix · Task-level detail for agents"
         pd = doc.page(sid, header)
         doc.add(pd, doc.heading(1, sid, "A", "Task-level detail for agents")
-                + '<p class="lead">The pages that follow are the plan’s own task diagrams and task tables, unchanged. '
-                  'Output and Acceptance test are binding as written.</p>', new_page=True)
+                + '<p class="lead">The pages that follow are the plan’s own task diagrams and task tables. The tables '
+                  'are unchanged: Output and Acceptance test are binding as written. In the diagrams a long label is cut '
+                  'to its first line so that the graph fits a page; the full text is in the plan.</p>', new_page=True)
 
         TASK_W = {"id": 7, "title": 12, "lane": 4, "deps": 9, "output": 29, "accept": 29, "runs": 9}
 
@@ -1540,7 +1576,7 @@ dependencies and the gates. The tasks themselves, with their outputs and accepta
 
         def fig_page(b: Block, lead_in: list[str], caption: str) -> None:
             fig = detail_figs[id(b)]
-            size, w, h, pt = place(fig, reserve_mm=14 + 10 * len(lead_in) + (8 if caption else 0))
+            size, w, h, pt = place(fig, reserve_mm=14 + 10 * len(lead_in) + (8 if caption else 0), sizes=("A4", "A3", "A2"))
             fp = doc.page(sid, header, size)
             doc.add(fp, "".join(lead_in) + figure_html(doc, fig, size, w, h, pt, caption), new_page=True)
 
@@ -1661,7 +1697,7 @@ dependencies and the gates. The tasks themselves, with their outputs and accepta
         m = re.search(r"^Pages:\s+(\d+)", r.stdout, re.M)
         npages = f"{m.group(1)} pages, " if m else ""
     print(f"\nWrote {args.out} ({npages}{args.out.stat().st_size / 1024:.0f} kB)")
-    print(f"Plan: {args.plan} (modified {stamp}); area map: {area_source}")
+    print(f"Plan: {args.plan} (modified {stamp}); work areas from: {area_source}")
     for ph in sorted(graphs):
         pg, ag = graphs[ph], agraphs[ph]
         edges = sum(len(d) for d in pg.deps.values())
