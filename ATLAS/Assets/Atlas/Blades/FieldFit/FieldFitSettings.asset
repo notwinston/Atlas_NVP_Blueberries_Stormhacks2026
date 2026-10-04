@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 590a2dbf59f9d4ee081bf1dbb3fb5322, type: 3}
+  m_Name: FieldFitSettings
+  m_EditorClassIdentifier: 
+  blitShader: {fileID: 4800000, guid: a314673266048448893a165e10571956, type: 3}
+  fieldLossMask: {fileID: 0}
+  maskHalfWidthDeg: 30
+  centreEyeSource: 0

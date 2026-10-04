@@ -1,0 +1,5 @@
+P3-B03 LensOff_DiffersFromOrdinaryBlit_Under1Px (CPU mirror of FieldFitBlit; identity and D_test; None, no mask, no badge)
+max_displacement_px=0.5386
+interior_pixels=3165860
+exterior_pixels=827166
+limit_px=1
