@@ -1,3 +1,4 @@
+using Atlas.World;
 using Unity.Mathematics;
 
 namespace Atlas.App.Menu
@@ -140,6 +141,26 @@ namespace Atlas.App.Menu
             if (target < Minus) return new float2(RowHalfWidth, RowHalfHeight);
             if (target == Minus || target == Plus) return new float2(StepHalfWidth, StepHalfHeight);
             return new float2(ChipHalfWidth, ChipHalfHeight);
+        }
+
+        // ---- within reach of the hands (documents/ATLAS_Hands_Design.md section 6.1) -----------------------
+        // In a hands session the panel and the chip stand at these places about the near anchor, in the anchor's
+        // frame, and everything above is multiplied by the layout's scale: at 0.75 the panel is 0.525 by 0.375 m
+        // and a row 3 cm tall on a 3.15 cm pitch.
+
+        /// <summary>The open panel's place within reach: the anchor itself.</summary>
+        public const ReachSlot PanelSlot = ReachSlot.MenuPanel;
+        /// <summary>The place within reach of the chip that opens the menu.</summary>
+        public const ReachSlot ChipSlot = ReachSlot.MenuChip;
+
+        /// <summary>
+        /// Half size of a target within reach: the usual one times the scale, and nothing under 3 cm across, so
+        /// the "-" and "+" of the focused row, 2.7 cm tall at the usual scale, are as tall as the row.
+        /// </summary>
+        public static float2 NearTargetHalfSize(int target, float scale)
+        {
+            float2 half = TargetHalfSize(target);
+            return new float2(ReachSlots.TargetHalf(half.x, scale), ReachSlots.TargetHalf(half.y, scale));
         }
     }
 }
