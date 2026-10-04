@@ -17,6 +17,17 @@ namespace Atlas.Kernel
         public static Iso2 Object(double2 positionXZm, double yawUnityRad, double kappa, double lengthScaleM)
             => Iso2.Boost(positionXZm / Scale(kappa, lengthScaleM), kappa) * Iso2.Rot(-yawUnityRad);
 
+        /// <summary>
+        /// The same object laid out by the exp map about origin (room metres) instead of the room centre:
+        /// Boost(origin / l) * Boost((position - origin) / l) * Rot(-yaw). Seen from a walker registered at origin, its
+        /// distance and bearing are the real ones. Flat, it is Object exactly.
+        /// </summary>
+        public static Iso2 ObjectAbout(double2 originXZm, double2 positionXZm, double yawUnityRad, double kappa, double lengthScaleM)
+        {
+            double l = Scale(kappa, lengthScaleM);
+            return Iso2.Boost(originXZm / l, kappa) * Iso2.Boost((positionXZm - originXZm) / l, kappa) * Iso2.Rot(-yawUnityRad);
+        }
+
         /// <summary>The lap flag, c0 = (-s/2, -s/2), first heading +x (MP §3.3, §4.4, A.4): Boost(c0 / l, kappa).</summary>
         public static Iso2 LapFlag(double sideM, double kappa, double lengthScaleM)
             => Iso2.Boost(new double2(-sideM / 2, -sideM / 2) / Scale(kappa, lengthScaleM), kappa);

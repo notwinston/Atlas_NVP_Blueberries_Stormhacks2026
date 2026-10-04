@@ -26,6 +26,12 @@ namespace Atlas.Rendering
         }
 
         public IRoomContent Room => room;
+        /// <summary>
+        /// The floor point (room metres) the furniture is laid out about by the exp map. Zero is the room centre, as the
+        /// shell. The Small Planet sets the head's floor point at entry, so every object is at its real distance and bearing
+        /// from the walker standing there, wherever in the room that is.
+        /// </summary>
+        public double2 ObjectOrigin { get; set; }
         /// <summary>The warp mode at kappa > 0: spherical (2), or S3 (3) for the Small Planet's planet.view3d.</summary>
         public float SphericalMode { get; set; } = AtlasWarpCpu.ModeSpherical;
         public int ObjectCount => room.ObjectCount;
@@ -65,7 +71,7 @@ namespace Atlas.Rendering
                 RoomObject o = view.Data;
                 Material material = view.Material;
                 material.SetFloat(AtlasShaderIDs.WarpMode, mode);
-                material.SetMatrix(AtlasShaderIDs.Anchor, ObjectAnchor(a0, o, kappa, lengthScaleM));
+                material.SetMatrix(AtlasShaderIDs.Anchor, ObjectAnchor(a0, o, kappa, lengthScaleM, ObjectOrigin));
                 AtlasWarpBounds.Apply(view.Renderer);
             }
         }
@@ -77,6 +83,14 @@ namespace Atlas.Rendering
         public static Matrix4x4 ObjectAnchor(in Iso2 shellAnchor, RoomObject o, double kappa, double lengthScaleM)
         {
             Iso2 a = shellAnchor * TileZeroPlacement.Object(new double2(o.Base.x, o.Base.z), o.Yaw, kappa, lengthScaleM);
+            return WarpAnchor.ToMatrix(a, o.Base.y);
+        }
+
+        /// <summary>As ObjectAnchor, with the object laid out about origin (room metres) instead of the room centre.</summary>
+        public static Matrix4x4 ObjectAnchor(in Iso2 shellAnchor, RoomObject o, double kappa, double lengthScaleM, double2 origin)
+        {
+            if (origin.x == 0 && origin.y == 0) return ObjectAnchor(shellAnchor, o, kappa, lengthScaleM);
+            Iso2 a = shellAnchor * TileZeroPlacement.ObjectAbout(origin, new double2(o.Base.x, o.Base.z), o.Yaw, kappa, lengthScaleM);
             return WarpAnchor.ToMatrix(a, o.Base.y);
         }
 

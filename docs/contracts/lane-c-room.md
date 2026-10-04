@@ -2513,7 +2513,7 @@ other space, until the full copies are measured in those spaces (check M3 of the
 | S1 Glued | `Kerbs` | hidden (the cell's floor grid is drawn) | shown, once | Light | The room is not repeated |
 | S2 Curved Walk | `Full`, then `Kerbs` (kerb height 0.9 m) when curvature turns on | hidden once tile zero's shell is drawn | shown, each with its own anchor | Full | The room drifts off the real one. `CurvedRoomView` (`Rendering/Tiles/`) drives `IRoomContent`: kappa 0 = warp off, floor shown, walls `Full`; otherwise `FloorVisible = false`, `SetWallMode(Kerbs, 0)`, the shell material gets `_WarpMode` and the anchor inverse(U)·F[0], each object's material the anchor inverse(U)·F[0]·`TileZeroPlacement.Object(Base.xz, Yaw, κ, L)`, renderers 1000 m `localBounds`; it owns no mesh, material or object and `Dispose` only takes the warp off |
 | S3 Aligned Cells | `Full` | hidden | shown, once per eye, unclipped | Light | Registered. `AlignedCellsRoomView` (`Spaces/AlignedCells/`) |
-| S4 Small Planet | `Kerbs` | hidden | shown, each with its own anchor | Light | `CurvedRoomView` on the sphere |
+| S4 Small Planet | `Kerbs` | hidden | shown, each with its own anchor, laid out about the head's floor point at entry (`CurvedRoomView.ObjectOrigin`) | Light | `CurvedRoomView` on the sphere |
 | S5 Impossible Rooms | `Full` | shown | shown | Light | `PortalRenderer` treats `Root` as room 0 and listens to `ObjectChanged` |
 | S6 Slicer | `Full` | shown | shown | Light | The object floats in the room |
 
