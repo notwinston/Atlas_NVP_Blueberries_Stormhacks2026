@@ -1,0 +1,12 @@
+
+Aborting batchmode due to failure:
+Scripts have compiler errors.
+
+unity exit code: 1
+Assets/Atlas/Tests/Tiles/TileDrawRuleTests.cs(113,39): error CS0246: The type or namespace name 'TileViewCone' could not be found (are you missing a using directive or an assembly reference?)
+Assets/Atlas/Tests/Tiles/TileDrawRuleTests.cs(38,31): error CS0246: The type or namespace name 'TileViewCone' could not be found (are you missing a using directive or an assembly reference?)
+Assets/Atlas/Tests/Tiles/TileLodTests.cs(62,34): error CS0246: The type or namespace name 'TileSelection' could not be found (are you missing a using directive or an assembly reference?)
+Assets/Atlas/Tests/Tiles/TileRendererTests.cs(19,24): error CS0246: The type or namespace name 'TileRenderer' could not be found (are you missing a using directive or an assembly reference?)
+Assets/Atlas/Tests/Tiles/TileTestPoses.cs(91,23): error CS0246: The type or namespace name 'TileViewCone' could not be found (are you missing a using directive or an assembly reference?)
+
+results: /private/tmp/claude-501/-Users-lucas-Developer-StormHacks-2026-Blueberries/1f5dd69c-395d-49f7-a84f-71990036bc33/scratchpad/wt/P1-B06-red.xml  log: /private/tmp/claude-501/-Users-lucas-Developer-StormHacks-2026-Blueberries/1f5dd69c-395d-49f7-a84f-71990036bc33/scratchpad/wt/P1-B06-red.log

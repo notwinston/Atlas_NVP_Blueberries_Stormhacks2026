@@ -1,0 +1,10 @@
+[P1-B06 T2] L=1.41: max drawn any pitch 66, level 57, violations 0, literal-rule floor 0 post 271
+[P1-B06 T3] L=1.88448095321655 samples=1005 evals=4200 crossings=8 max drawn gaze=56 any=63 violations=0 outOfTile=0
+[P1-B06 T4] crossings 26, GC delta 0 B, crossing-frame KernelStep+Upload median 0.289 ms p95 0.936 ms max 0.948 ms
+[P1-B06 T5] q=5 rho=3: drawn 111, triangles per eye 33152, both eyes 66304
+[P1-B06 T5] q=5 rho=3.5: drawn 128, triangles per eye 28456, both eyes 56912
+[P1-B06 T5] q=6 rho=3: drawn 94, triangles per eye 29848, both eyes 59696
+[P1-B06 T5] q=6 rho=3.5: drawn 128, triangles per eye 27624, both eyes 55248
+L=1.885: max drawn any pitch 60, level 56, violations 0, literal-rule floor 0 post 142
+L=2.83: max drawn any pitch 58, level 57, violations 0, literal-rule floor 0 post 48
+T5 note: never-cull cone at rho 3.5 saturates the 128-slot pool (Overflow counts the rest); with a real view cone drawn <= 106 (MP 8.5).
