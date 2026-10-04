@@ -38,7 +38,9 @@ namespace Atlas.Spaces.Tests
                 if (module.PanelText != null)
                 {
                     StringAssert.Contains("TESSERACT", module.PanelText);
-                    StringAssert.Contains("slice: octahedron, 8 faces", module.PanelText);
+                    StringAssert.Contains("Octahedron", module.PanelText);
+                    StringAssert.Contains("8 faces", module.PanelText);
+                    Assert.That(module.Strip.KindCount, Is.EqualTo(3), "tetrahedron, truncated tetrahedron, octahedron");
                     StringAssert.Contains("Step 1 of 5", module.PanelText);
                 }
 

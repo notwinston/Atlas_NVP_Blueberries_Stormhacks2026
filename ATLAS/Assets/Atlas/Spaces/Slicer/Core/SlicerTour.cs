@@ -174,10 +174,10 @@ namespace Atlas.Spaces.Slicer
                     return "Walk along the line on the floor to push the tesseract through our space. " +
                            "Watch the slice: tetrahedron, truncated tetrahedron, octahedron. (Or: left stick up/down, or look at w+ / w-.)";
                 case SlicerTask.Shadow:
-                    return "Stand still and look down: the ghost is the tesseract's shadow, all of it at once. (Or: X, or look at 'shadow'.)";
+                    return "Stand still and look down: the ghost is the body's shadow, all of it at once. (Or: X, or look at 'shadow'.)";
                 case SlicerTask.Rotate:
                     return "Turn it in a plane that contains w: look at a turn handle (XW, YW, ZW). " +
-                           "The slice changes shape, the tesseract does not. (Or: sticks and triggers.)";
+                           "The slice changes shape, the body does not. (Or: sticks and triggers.)";
                 case SlicerTask.Cell5:
                     return "Next body: the 5-cell, the 4D tetrahedron. Look at 'next body' (or Y), then walk the line.";
                 case SlicerTask.Cell16:

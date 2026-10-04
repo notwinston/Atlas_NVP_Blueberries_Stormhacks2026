@@ -49,6 +49,7 @@ namespace Atlas.Spaces.Slicer
         Transform m_BarMarker, m_LaneMarker;
 
         readonly GazeTargetId[] m_Gaze = new GazeTargetId[GazeCount];
+        readonly int[] m_GazeButton = new int[GazeCount];      // the button each gaze target belongs to
         int m_GazeCount;
 
         JobHandle m_SliceHandle, m_ShadowHandle;
@@ -62,10 +63,12 @@ namespace Atlas.Spaces.Slicer
         // The toybox (tasks P2-A01, P2-A02): the slice's name, the look-down shadow, the guided steps, the events and the panel.
         SlicerToyboxParams m_Toybox;
         readonly SlicerSection m_Section = new SlicerSection();
+        readonly SlicerShapeStrip m_Strip = new SlicerShapeStrip();
         readonly LookDownShadow m_Look = new LookDownShadow();
         readonly SlicerTour m_Tour = new SlicerTour();
         SlicerEvents m_EventRules = new SlicerEvents(null);
         SlicerPanel m_Panel;
+        SlicerButtons m_Buttons;
         SectionInfo m_SectionInfo;
         bool m_SectionValid;
         float m_NamedOffset, m_NamedTilt;
@@ -100,7 +103,9 @@ namespace Atlas.Spaces.Slicer
         /// <summary>The view on screen: the shadow view, or a look-down peek, shows the shadow.</summary>
         public SlicerView ShownView { get { return m_View; } }
         /// <summary>The panel's text, or null when the build has no TextMeshPro resources.</summary>
-        public string PanelText { get { return m_Panel != null && m_Panel.HasText ? m_Panel.Text.text : null; } }
+        public string PanelText { get { return m_Panel != null && m_Panel.HasText ? m_Panel.CardText : null; } }
+        /// <summary>The shapes along w on the info card.</summary>
+        public SlicerShapeStrip Strip { get { return m_Strip; } }
 
         /// <summary>The factory given to SpaceRegistry: a new object named like the scene, with the module.</summary>
         public static ISpaceModule Create()
@@ -146,6 +151,7 @@ namespace Atlas.Spaces.Slicer
             m_ShadowRenderer = CreateRenderer("Shadow", m_ShadowMaterial, out m_ShadowFilter);
             BuildFixtures();
             m_Panel = new SlicerPanel(transform, in m_Layout, m_FixtureMaterial);
+            m_Buttons = new SlicerButtons(transform, in m_Layout, m_FixtureMaterial);
             Bind(m_Params.ObjectValue);
         }
 
@@ -167,6 +173,7 @@ namespace Atlas.Spaces.Slicer
             m_EventRules.Reset();
             m_SectionValid = false;
             if (m_Panel != null) m_Panel.SetVisible(true);
+            if (m_Buttons != null) m_Buttons.SetVisible(true);
             RegisterGaze();
             m_Entered = true;
         }
@@ -190,12 +197,12 @@ namespace Atlas.Spaces.Slicer
                     if (m_Input.Pressed(AtlasAction.Primary))
                     {
                         m_Params.SetObject(SlicerObjects.Next(m_Params.ObjectValue));
-                        if (m_Panel != null) m_Panel.Flash(SlicerPanel.NextLabel);
+                        if (m_Buttons != null) m_Buttons.Flash(SlicerButtons.Next);
                     }
                     if (m_Input.Pressed(AtlasAction.Secondary))
                     {
                         m_Params.SetView(m_Params.ViewValue == SlicerView.Slice ? SlicerView.Shadow : SlicerView.Slice);
-                        if (m_Panel != null) m_Panel.Flash(SlicerPanel.ShadowLabel);
+                        if (m_Buttons != null) m_Buttons.Flash(SlicerButtons.Shadow);
                         if (!m_Look.Peeking) m_EventRules.Shadow(m_Params.ViewValue == SlicerView.Shadow, false);
                     }
                 }
@@ -254,6 +261,7 @@ namespace Atlas.Spaces.Slicer
             SlicerSource source = m_Mirrored || m_Params == null ? SlicerSource.Live : m_Params.SourceValue;
             float offset = m_Controller.CutOffset(source);
             var turns = new float3(m_Controller.Xw, m_Controller.Yw, m_Controller.Zw);
+            if (m_Section.Body == body) m_Strip.Update(m_Section, turns.x, turns.y, turns.z, tilt);
             if (m_SectionValid && offset == m_NamedOffset && tilt == m_NamedTilt && turns.Equals(m_NamedTurns) && m_Section.Body == body) return;
             m_SectionInfo = m_Section.Name(turns.x, turns.y, turns.z, offset, tilt);
             m_SectionValid = true;
@@ -316,9 +324,28 @@ namespace Atlas.Spaces.Slicer
                     Body = Body, Section = m_SectionInfo, W = m_Controller.W,
                     Xw = m_Controller.Xw, Yw = m_Controller.Yw, Zw = m_Controller.Zw,
                     View = m_Mirrored || m_Params == null ? m_View : m_Params.ViewValue, Peeking = m_Look.Peeking,
-                    Task = m_Tour.Task, ShowTour = !m_Mirrored && (m_Toybox == null || m_Toybox.TourShown),
+                    Task = m_Tour.Task, ShowTour = !m_Mirrored && (m_Toybox == null || m_Toybox.TourShown), Strip = m_Strip,
                 };
-                m_Panel.Update(in state, frame.HeadPosition, m_Active, frame.DeltaTime);
+                m_Panel.Update(in state, frame.HeadPosition);
+            }
+            if (m_Buttons != null && m_Controller != null)
+            {
+                int focused = -1;
+                float progress = 0f;
+                if (m_Input != null && !m_Mirrored)
+                {
+                    GazeState gaze = m_Input.Gaze;
+                    for (int i = 0; i < m_GazeCount; i++)
+                    {
+                        if (!m_Gaze[i].Equals(gaze.Focused)) continue;
+                        focused = m_GazeButton[i];
+                        progress = gaze.Progress;
+                        break;
+                    }
+                }
+                bool shadow = (m_Mirrored || m_Params == null ? m_View : m_Params.ViewValue) == SlicerView.Shadow;
+                m_Buttons.Update(frame.HeadPosition, m_Mirrored ? 0 : m_Active, focused, progress,
+                                 new float3(m_Controller.Xw, m_Controller.Yw, m_Controller.Zw), shadow, frame.DeltaTime);
             }
         }
 
@@ -377,6 +404,7 @@ namespace Atlas.Spaces.Slicer
 
             m_Buffers = new SlicerBuffers(body);
             m_Section.Bind(body);
+            m_Strip.Invalidate();
             m_SectionValid = false;
             m_SliceMesh = AtlasMesh.CreateDynamic("Slicer Slice", m_Buffers.SliceCapacity, m_Buffers.SliceCapacity);
             m_ShadowMesh = AtlasMesh.CreateDynamic("Slicer Shadow", m_Buffers.ShadowCapacity, m_Buffers.ShadowCapacity);
@@ -526,26 +554,28 @@ namespace Atlas.Spaces.Slicer
             float radius = SlicerLayout.HandleRadius;
 
             // The cut: the two ends of the bar are the twin of the stick.
-            AddGaze(GazeTarget.HoldAxis(AtlasAxis.LeftY, +1f, m_Layout.CutHandle(+1), radius), "slicer.w+");
-            AddGaze(GazeTarget.HoldAxis(AtlasAxis.LeftY, -1f, m_Layout.CutHandle(-1), radius), "slicer.w-");
+            AddGaze(GazeTarget.HoldAxis(AtlasAxis.LeftY, +1f, m_Layout.CutHandle(+1), radius), "slicer.w+", 0);
+            AddGaze(GazeTarget.HoldAxis(AtlasAxis.LeftY, -1f, m_Layout.CutHandle(-1), radius), "slicer.w-", 1);
             // The turns: one pair of handles per plane.
-            AddGaze(GazeTarget.HoldAxis(AtlasAxis.LeftX, +1f, m_Layout.TurnHandle(0, +1), radius), "slicer.xw+");
-            AddGaze(GazeTarget.HoldAxis(AtlasAxis.LeftX, -1f, m_Layout.TurnHandle(0, -1), radius), "slicer.xw-");
-            AddGaze(GazeTarget.HoldAxis(AtlasAxis.RightY, +1f, m_Layout.TurnHandle(1, +1), radius), "slicer.yw+");
-            AddGaze(GazeTarget.HoldAxis(AtlasAxis.RightY, -1f, m_Layout.TurnHandle(1, -1), radius), "slicer.yw-");
-            AddGaze(GazeTarget.HoldAxis(AtlasAxis.Twist, +1f, m_Layout.TurnHandle(2, +1), radius), "slicer.zw+");
-            AddGaze(GazeTarget.HoldAxis(AtlasAxis.Twist, -1f, m_Layout.TurnHandle(2, -1), radius), "slicer.zw-");
+            AddGaze(GazeTarget.HoldAxis(AtlasAxis.LeftX, +1f, m_Layout.TurnHandle(0, +1), radius), "slicer.xw+", 3);
+            AddGaze(GazeTarget.HoldAxis(AtlasAxis.LeftX, -1f, m_Layout.TurnHandle(0, -1), radius), "slicer.xw-", 2);
+            AddGaze(GazeTarget.HoldAxis(AtlasAxis.RightY, +1f, m_Layout.TurnHandle(1, +1), radius), "slicer.yw+", 5);
+            AddGaze(GazeTarget.HoldAxis(AtlasAxis.RightY, -1f, m_Layout.TurnHandle(1, -1), radius), "slicer.yw-", 4);
+            AddGaze(GazeTarget.HoldAxis(AtlasAxis.Twist, +1f, m_Layout.TurnHandle(2, +1), radius), "slicer.zw+", 7);
+            AddGaze(GazeTarget.HoldAxis(AtlasAxis.Twist, -1f, m_Layout.TurnHandle(2, -1), radius), "slicer.zw-", 6);
             // Next body, and shadow on and off: the two chips beside the bar. The shadow is not put on
             // looking down, because a walker on the lane looks at the floor all the time.
-            AddGaze(GazeTarget.World(AtlasAction.Primary, m_Layout.NextObjectChip, radius), "slicer.next");
-            AddGaze(GazeTarget.World(AtlasAction.Secondary, m_Layout.ViewChip, radius), "slicer.shadow");
+            AddGaze(GazeTarget.World(AtlasAction.Primary, m_Layout.NextObjectChip, radius), "slicer.next", SlicerButtons.Next);
+            AddGaze(GazeTarget.World(AtlasAction.Secondary, m_Layout.ViewChip, radius), "slicer.shadow", SlicerButtons.Shadow);
         }
 
-        void AddGaze(GazeTarget target, string label)
+        void AddGaze(GazeTarget target, string label, int button)
         {
             target.Label = label;
             GazeTargetId id = m_Input.RegisterGazeTarget(in target);
-            if (id.IsValid && m_GazeCount < m_Gaze.Length) m_Gaze[m_GazeCount++] = id;
+            if (!id.IsValid || m_GazeCount >= m_Gaze.Length) return;
+            m_GazeButton[m_GazeCount] = button;
+            m_Gaze[m_GazeCount++] = id;
         }
 
         void UnregisterGaze()
@@ -563,6 +593,8 @@ namespace Atlas.Spaces.Slicer
             UnregisterGaze();
             if (m_Panel != null) m_Panel.Dispose();
             m_Panel = null;
+            if (m_Buttons != null) m_Buttons.Dispose();
+            m_Buttons = null;
             if (m_Buffers != null)
             {
                 m_Buffers.Dispose();

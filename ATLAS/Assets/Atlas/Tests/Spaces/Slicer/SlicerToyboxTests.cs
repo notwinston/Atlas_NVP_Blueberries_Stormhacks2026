@@ -162,12 +162,91 @@ namespace Atlas.Spaces.Tests
                 W = 0f, Xw = math.radians(15f), View = SlicerView.Slice, Task = SlicerTask.PushThrough, ShowTour = true,
             };
             SlicerReadout.Build(sb, in s);
-            string text = sb.ToString();
-            StringAssert.StartsWith("TESSERACT  (1 of 6)", text);
-            StringAssert.Contains("slice: octahedron, 8 faces", text);
-            StringAssert.Contains("w +0.00  [----------|----------]", text);
-            StringAssert.Contains("XW 15°   YW 0°   ZW 0°", text);
-            StringAssert.Contains("Step 1 of 5: Walk along the line", text);
+            string text = Plain(sb.ToString());
+            StringAssert.StartsWith("TESSERACT    1 of 6\nthe 4D cube", text);
+            StringAssert.Contains("SLICE\nOctahedron\n8 faces:  8 triangles", text);
+            StringAssert.Contains("w +0.00     XW 15°   YW 0°   ZW 0°", text);
+            StringAssert.Contains("Step 1 of 5   Walk along the line", text);
+            StringAssert.Contains(SlicerReadout.ShapeColour(SectionShape.Octahedron) + "Octahedron", sb.ToString(),
+                                  "the slice's name in its strip colour");
+
+            // The faces of a mixed slice, and the strip's legend in the order met along w.
+            s.Section = new SectionInfo { Shape = SectionShape.TruncatedTetrahedron, Faces = 8, Triangles = 4, Hexagons = 4 };
+            var strip = new SlicerShapeStrip();
+            var section = new SlicerSection();
+            section.Bind(SlicerObject.Tesseract);
+            strip.Update(section, 0f, 0f, 0f, 0f);
+            s.Strip = strip;
+            SlicerReadout.Build(sb, in s);
+            text = Plain(sb.ToString());
+            StringAssert.Contains("8 faces:  4 triangles + 4 hexagons", text);
+            StringAssert.Contains("tetrahedron  ·  truncated tetrahedron  ·  octahedron", text);
+        }
+
+        // The text without its rich-text tags.
+        static string Plain(string rich)
+        {
+            return System.Text.RegularExpressions.Regex.Replace(rich, "<[^>]*>", "");
+        }
+
+        [Test]
+        public void Buttons_FaceTheWalker_AndKeepTheirIconsInsideTheTile()
+        {
+            float2 half = SlicerButtonShapes.TileHalf;
+            foreach (SlicerIcon icon in new[] { SlicerIcon.Up, SlicerIcon.Down, SlicerIcon.TurnPlus, SlicerIcon.TurnMinus })
+            {
+                var b = new Atlas.Rendering.AtlasMeshBuilder(64, 128);
+                SlicerButtonShapes.AddTile(b, half, Atlas.Rendering.AtlasPalette.DoorFrame);
+                int tileTriangles = b.TriangleCount;
+                SlicerButtonShapes.AddIcon(b, icon, 0.056f, Atlas.Rendering.AtlasPalette.Reticle);
+                Assert.That(b.TriangleCount, Is.GreaterThan(tileTriangles), icon + " draws something");
+                for (int t = 0; t < b.TriangleCount; t++)
+                {
+                    float3 p0 = b.Vertices[b.Indices[3 * t]].Position, p1 = b.Vertices[b.Indices[3 * t + 1]].Position,
+                           p2 = b.Vertices[b.Indices[3 * t + 2]].Position;
+                    float turn = (p1.x - p0.x) * (p2.y - p0.y) - (p1.y - p0.y) * (p2.x - p0.x);
+                    Assert.That(turn, Is.LessThan(0f), icon + ": every triangle clockwise as seen from -z, the walker's side");
+                }
+                Assert.That(b.BoundsMax.x, Is.LessThanOrEqualTo(half.x + 1e-6f));
+                Assert.That(b.BoundsMax.y, Is.LessThanOrEqualTo(half.y + 1e-6f));
+                Assert.That(b.BoundsMin.y, Is.GreaterThanOrEqualTo(-half.y - 1e-6f));
+            }
+
+            // The ring lies outside the tile and behind it; the dwell bar fits along the tile's foot.
+            var ring = new Atlas.Rendering.AtlasMeshBuilder(16, 32);
+            SlicerButtonShapes.AddRing(ring, half, Atlas.Rendering.AtlasPalette.Beacon);
+            Assert.That(ring.BoundsMax.x, Is.GreaterThan(half.x));
+            Assert.That(ring.BoundsMin.z, Is.GreaterThan(0f));
+            float3 start = SlicerButtonShapes.BarOrigin(half);
+            Assert.That(start.x + SlicerButtonShapes.BarLength(half), Is.EqualTo(-start.x).Within(1e-6f));
+            // A turn button is within its gaze handle's reach.
+            Assert.That(math.length(half), Is.LessThan(SlicerLayout.HandleRadius));
+        }
+
+        [Test]
+        public void Strip_NamesTheShapesAlongW_AndChangesOnlyWithTheTurns()
+        {
+            var section = new SlicerSection();
+            section.Bind(SlicerObject.Tesseract);
+            var strip = new SlicerShapeStrip();
+            Assert.IsTrue(strip.Update(section, 0f, 0f, 0f, 0f));
+            int version = strip.Version;
+            // The corner-first tesseract: tetrahedra near the corners, octahedron in the middle, nothing beyond.
+            Assert.AreEqual(SectionShape.None, strip[0]);
+            Assert.AreEqual(SectionShape.None, strip[SlicerShapeStrip.Samples - 1]);
+            Assert.AreEqual(SectionShape.Tetrahedron, strip.Kind(0));
+            Assert.AreEqual(3, strip.KindCount);
+            Assert.IsFalse(strip.Update(section, 0.001f, 0f, 0f, 0f), "a turn under half a degree leaves the strip");
+            Assert.AreEqual(version, strip.Version);
+            strip.Update(section, math.radians(30f), 0f, 0f, 0f);
+            Assert.AreNotEqual(version, strip.Version, "a 30 degree turn changes the shapes met");
+            Assert.AreEqual(0f, SlicerShapeStrip.Along(-SlicerObjects.CutRange));
+            Assert.AreEqual(0.5f, SlicerShapeStrip.Along(0f), 1e-6f);
+
+            section.Bind(SlicerObject.Ball);
+            strip.Update(section, 0f, 0f, 0f, 0f);
+            Assert.AreEqual(1, strip.KindCount);
+            Assert.AreEqual(SectionShape.Sphere, strip.Kind(0));
         }
 
         [Test]
@@ -190,7 +269,7 @@ namespace Atlas.Spaces.Tests
             {
                 var s = new SlicerReadoutState { Body = SlicerObject.Ball, Section = new SectionInfo { Shape = shape, Faces = 11 } };
                 SlicerReadout.Build(sb, in s);
-                StringAssert.Contains("slice: ", sb.ToString());
+                StringAssert.Contains("SLICE", sb.ToString());
             }
             Assert.AreEqual("4D ball", SlicerReadout.BodyName(SlicerObject.Ball));
         }
