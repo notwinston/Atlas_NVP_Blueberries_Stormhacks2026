@@ -213,6 +213,9 @@ namespace Atlas.World
             if (v.TryGet("profile", out optional) && !optional.IsNull)
             {
                 string text = Str(v, "profile", path + ".profile");
+                foreach (char c in text)
+                    if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '+' || c == '/' || c == '='))
+                        throw new RoomModelFormatException(path + ".profile: not standard base64");
                 try { obj.Profile = Convert.FromBase64String(text); }
                 catch (FormatException) { throw new RoomModelFormatException(path + ".profile: not standard base64"); }
             }
