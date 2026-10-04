@@ -49,5 +49,12 @@ __pycache__/
 *.pyc
 .venv/
 
+# .NET build output (Hub, ReplayPhone, headless harness)
+**/[Bb]in/
+
+# Python and Node tool caches
+.pytest_cache/
+node_modules/
+
 # Local Claude Docker setup
 Claude_Docker/

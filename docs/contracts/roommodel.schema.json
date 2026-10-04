@@ -1,0 +1,368 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:atlas:contracts:roommodel:1",
+  "title": "ATLAS RoomModel, version 1",
+  "description": "The scanned room as every space reads it (Master Plan section 4.3; contract page lane-c-room.md). Lengths are metres and angles are radians. Floor points are [x, z] in the room frame: origin at the centre of the free rectangle on the floor, +X along its short side Wf, +Z along its long side Df, +Y up, left-handed. Rules that a schema cannot express (the distance field against its own sign, the walkable polygon against the field, the loop-fit and the cell grids) are checked by tools/rooms/validate_room.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version", "id", "createdUtc", "anchor", "outline", "sdf", "walkable", "freeRect", "lapSquare",
+    "curvature", "cells", "standing", "walls", "objects", "quality"
+  ],
+  "properties": {
+    "version": {
+      "description": "Schema version. A reader rejects any other value.",
+      "const": 1
+    },
+    "id": {
+      "description": "Room id. File names are room_<id>.json and room_<id>.worldmap; fixtures use their file name without the extension.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_]{1,40}$"
+    },
+    "createdUtc": {
+      "description": "When the scan was confirmed, ISO 8601, UTC, to the second.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "anchor": {
+      "description": "Pose of the room frame in the AR session frame when the room was saved. The ARAnchor sits at the centre of the free rectangle, on the floor, with its axes along the room axes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "position", "yaw"],
+      "properties": {
+        "id": {
+          "description": "The ARAnchor's trackable id as two 16-digit upper-case hexadecimal numbers joined by a hyphen; empty for fixtures and for rooms with no anchor.",
+          "type": "string",
+          "pattern": "^$|^[0-9A-F]{16}-[0-9A-F]{16}$"
+        },
+        "position": {
+          "description": "Anchor position [x, y, z] in the AR session frame, metres. y is the floor height.",
+          "$ref": "#/$defs/vec3"
+        },
+        "yaw": {
+          "description": "Rotation of the room frame about +Y in the AR session frame, radians, in (-pi/2, pi/2].",
+          "type": "number",
+          "exclusiveMinimum": -1.5707964,
+          "maximum": 1.5707964
+        }
+      }
+    },
+    "outline": {
+      "description": "The floor outline the walker confirmed, wall to wall: a simple polygon, counter-clockwise seen from above (+X right, +Z up the page), not repeated at the end.",
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 255,
+      "items": { "$ref": "#/$defs/point" }
+    },
+    "sdf": {
+      "description": "Signed distance to the edge of the free floor, sampled at cell centres. Positive inside the free floor. It reads 0.05 m less than the true distance to a wall or obstacle.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cell", "width", "height", "originX", "originZ", "data"],
+      "properties": {
+        "cell": {
+          "description": "Cell size, metres. Always 0.05.",
+          "const": 0.05
+        },
+        "width": {
+          "description": "Cells along +X.",
+          "type": "integer",
+          "minimum": 12,
+          "maximum": 400
+        },
+        "height": {
+          "description": "Cells along +Z.",
+          "type": "integer",
+          "minimum": 12,
+          "maximum": 400
+        },
+        "originX": {
+          "description": "x of the low corner of cell (0, 0), metres; a multiple of 0.025.",
+          "type": "number",
+          "minimum": -20,
+          "maximum": 20
+        },
+        "originZ": {
+          "description": "z of the low corner of cell (0, 0), metres; a multiple of 0.025.",
+          "type": "number",
+          "minimum": -20,
+          "maximum": 20
+        },
+        "data": {
+          "description": "width x height signed 16-bit little-endian integers, millimetres, row-major with row 0 at the lowest z (index = j * width + i), base64 with padding.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]+={0,2}$"
+        }
+      }
+    },
+    "walkable": {
+      "description": "Boundary of WALK: the connected part of {sdf > 0.25 m} that contains the origin, traced along cell edges. Everything inside is at least 0.30 m from every wall and obstacle.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outer", "holes"],
+      "properties": {
+        "outer": {
+          "description": "Outer ring, counter-clockwise.",
+          "$ref": "#/$defs/ring"
+        },
+        "holes": {
+          "description": "Holes (furniture), each clockwise.",
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/ring" }
+        }
+      }
+    },
+    "freeRect": {
+      "description": "The free rectangle, centred on the origin, sides along X and Z; already 0.30 m inside walls and furniture.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wf", "df"],
+      "properties": {
+        "wf": {
+          "description": "Side along X, metres: the short side.",
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 20
+        },
+        "df": {
+          "description": "Side along Z, metres: the long side (df >= wf).",
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 20
+        }
+      }
+    },
+    "lapSquare": {
+      "description": "The lap square, centred on the origin, sides along X and Z.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["side"],
+      "properties": {
+        "side": {
+          "description": "s = clamp(wf - 0.4, 1.0, 3.2), metres.",
+          "type": "number",
+          "minimum": 1.0,
+          "maximum": 3.2
+        }
+      }
+    },
+    "curvature": {
+      "description": "Curvature radii from the loop-fit rule, and the comfort floors in force when the room was built.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["l5", "l6", "r3", "floorL", "floorR"],
+      "properties": {
+        "l5": {
+          "description": "L for q = 5: s / 1.0612750619050357, metres.",
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "l6": {
+          "description": "L for q = 6: s / 1.3169578969248166, metres.",
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "r3": {
+          "description": "R for q = 3: 2 s / pi, metres.",
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "floorL": {
+          "description": "Comfort floor for L, metres. Provisional value 1.4 until gate G2.",
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 5
+        },
+        "floorR": {
+          "description": "Comfort floor for R, metres. Provisional value 1.2 until gate G2.",
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 5
+        }
+      }
+    },
+    "cells": {
+      "description": "Cell grids cut from the free rectangle, both centred on the origin.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["glued", "aligned"],
+      "properties": {
+        "glued": {
+          "description": "Glued cell (S1): nx x nz cells of sizeX x sizeZ fill the free rectangle exactly.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["nx", "nz", "sizeX", "sizeZ"],
+          "properties": {
+            "nx": { "type": "integer", "minimum": 1, "maximum": 16 },
+            "nz": { "type": "integer", "minimum": 1, "maximum": 16 },
+            "sizeX": { "type": "number", "exclusiveMinimum": 0 },
+            "sizeZ": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        "aligned": {
+          "description": "Aligned Cells (S3): n square cells of side g along X and m along Z.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["n", "m", "g"],
+          "properties": {
+            "n": { "type": "integer", "minimum": 2, "maximum": 16 },
+            "m": { "type": "integer", "minimum": 2, "maximum": 32 },
+            "g": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        }
+      }
+    },
+    "standing": {
+      "description": "True when wf < 1.5 m: standing mode.",
+      "type": "boolean"
+    },
+    "walls": {
+      "description": "Wall segments. Each lies on an edge of the outline and runs the same way, so the room is on its left.",
+      "type": "array",
+      "maxItems": 255,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["a", "b", "height", "openings"],
+        "properties": {
+          "a": { "$ref": "#/$defs/point" },
+          "b": { "$ref": "#/$defs/point" },
+          "height": {
+            "description": "Wall height above the floor, metres.",
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 6
+          },
+          "openings": {
+            "description": "Doors, windows and open passages, where known.",
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "offset", "width", "bottom", "top"],
+              "properties": {
+                "kind": { "enum": ["door", "window", "opening"] },
+                "offset": {
+                  "description": "Distance from a to the near edge of the opening, along the wall, metres.",
+                  "type": "number",
+                  "minimum": 0
+                },
+                "width": { "type": "number", "minimum": 0.1 },
+                "bottom": {
+                  "description": "Height of the lower edge above the floor, metres.",
+                  "type": "number",
+                  "minimum": 0
+                },
+                "top": {
+                  "description": "Height of the upper edge above the floor, metres.",
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "objects": {
+      "description": "Scanned objects (furniture). At most 64; the largest are kept.",
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "category", "base", "size", "yaw", "mesh", "assetHash", "triTarget"],
+        "properties": {
+          "id": {
+            "description": "Object id, unique in the room; the link calls it boxId.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 255
+          },
+          "category": {
+            "enum": [
+              "unknown", "couch", "table", "bed", "lamp", "plant", "screen", "storage", "bathtub",
+              "chair", "dishwasher", "fireplace", "oven", "refrigerator", "sink", "stairs", "stove",
+              "toilet", "washerDryer", "keyboard", "mouse", "laptop", "other"
+            ]
+          },
+          "base": {
+            "description": "Centre of the box's base [x, y, z], room frame, metres. This is the origin of the object's mesh.",
+            "$ref": "#/$defs/vec3"
+          },
+          "size": {
+            "description": "Full size [w, h, d]: w along the box's local X, h up, d along its local Z, metres.",
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": { "type": "number", "minimum": 0.02, "maximum": 6 }
+          },
+          "yaw": {
+            "description": "Rotation about +Y, radians, in (-pi, pi]; Unity's sense (positive turns +Z towards +X).",
+            "type": "number",
+            "exclusiveMinimum": -3.1415928,
+            "maximum": 3.1415928
+          },
+          "mesh": {
+            "description": "What is drawn for the object. standIn is used by the budget_room fixture only.",
+            "enum": ["placeholder", "requested", "ready", "builtIn", "standIn"]
+          },
+          "assetHash": {
+            "description": "SHA-256 of the generated GLB, 64 lower-case hexadecimal digits, when mesh is ready; otherwise empty.",
+            "type": "string",
+            "pattern": "^$|^[0-9a-f]{64}$"
+          },
+          "triTarget": {
+            "description": "Triangle target sent with the Forge job: clamp(60000 / n, 3000, 5000) for the n objects that receive meshes; 0 for an object that stays a placeholder box.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5000
+          }
+        }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unknownShare", "route"],
+      "properties": {
+        "unknownShare": {
+          "description": "Share of the cells inside the outline that were never seen (neither floor nor obstacle).",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "route": {
+          "description": "Highest scan route that succeeded: 1 manual outline, 2 FloorScan, 3 object boxes, 4 wall bridge; 0 for a fixture.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4
+        }
+      }
+    }
+  },
+  "$defs": {
+    "point": {
+      "description": "A floor point [x, z], metres.",
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "type": "number", "minimum": -20, "maximum": 20 }
+    },
+    "vec3": {
+      "description": "[x, y, z], metres.",
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "type": "number", "minimum": -100, "maximum": 100 }
+    },
+    "ring": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4096,
+      "items": { "$ref": "#/$defs/point" }
+    }
+  }
+}

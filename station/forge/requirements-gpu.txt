@@ -1,0 +1,11 @@
+# Station only: the real generator and background removal. Install after requirements.lock.
+#
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+#   pip install -r requirements-gpu.txt
+#   pip install -r <TripoSG checkout>/requirements.txt
+#
+# PyTorch must be >= 2.7 with the cu128 wheels (the RTX 5070 needs CUDA 12.8). These pins
+# are not locked here because they were never installed on the machine the Forge was
+# written on; record the installed versions and the TripoSG commit in docs/versions.md.
+rembg[gpu]
+huggingface_hub

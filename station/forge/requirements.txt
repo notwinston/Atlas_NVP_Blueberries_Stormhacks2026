@@ -1,0 +1,12 @@
+# The Forge service (Master Plan Appendix C.2). Exact versions are in requirements.lock.
+fastapi
+uvicorn[standard]
+pydantic>=2
+python-multipart
+numpy
+pillow
+trimesh
+fast-simplification
+# tests
+pytest
+httpx
