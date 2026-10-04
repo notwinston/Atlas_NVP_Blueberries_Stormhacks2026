@@ -70,7 +70,8 @@ namespace Atlas.App.Menu
         readonly TextMesh _title, _names, _values;
         readonly Quaternion _chipFacing;
         // Every text of the panel and of the chip: what changes material when the menu comes within reach.
-        readonly MeshRenderer[] _texts = new MeshRenderer[6];
+        // Names, Values, Title, Close, Apply, Rescan and the chip's Label.
+        readonly MeshRenderer[] _texts = new MeshRenderer[7];
         readonly Font _font;
         readonly int _hudLayer;
         int _textCount;
