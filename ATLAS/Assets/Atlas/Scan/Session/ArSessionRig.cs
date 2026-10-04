@@ -73,6 +73,7 @@ namespace Atlas.Scan
                     if (Occlusion == null) Occlusion = cameraObject.AddComponent<AROcclusionManager>();
                     if (Driver == null) Driver = AddPoseDriver(cameraObject);
                 }
+                if (Camera != null) ArBackgroundOrientation.Attach(Camera, trackedCamera);
                 if (Driver != null)
                 {
                     // One pose sample per frame feeds the kernel and both eyes (decision D8).
