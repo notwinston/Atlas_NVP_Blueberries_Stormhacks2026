@@ -5,6 +5,7 @@ using Atlas.Link;
 using Atlas.Rendering;
 using Atlas.Spaces.Glued;
 using Atlas.Spaces.Portal;
+using Atlas.Spaces.Slicer;
 using Atlas.World;
 using UnityEngine;
 
@@ -22,6 +23,8 @@ namespace Atlas.Blades.Playground.Shell
         [SerializeField] PlaygroundBeatTable m_Beats;
         [SerializeField] GluedExhibit m_Glued;
         [SerializeField] RoomsExhibit m_Rooms;
+        // Lane A's Slicer toybox (P2-A01) is engine-free and needs no scene object: it follows the S6 space once entered.
+        readonly ToyboxExhibit m_Toybox = new ToyboxExhibit();
 
         PlaygroundShell m_Shell;
         ISpaceHost m_Host;
@@ -60,6 +63,8 @@ namespace Atlas.Blades.Playground.Shell
 
             if (m_Glued != null) m_Shell.Exhibits.Register(ExhibitId.Glued, new GluedExhibitLink(m_Glued));
             if (m_Rooms != null) m_Shell.Exhibits.Register(ExhibitId.ImpossibleRooms, new RoomsExhibitLink(m_Rooms));
+            m_Shell.Exhibits.Register(ExhibitId.Slicer, new ToyboxExhibitLink(m_Toybox));
+            EquationSources.Register(new SlicerEquationSource(m_Toybox));
 
             if (parts.Input != null)
             {
@@ -119,12 +124,19 @@ namespace Atlas.Blades.Playground.Shell
                 if (space != null) m_Rooms.Bind(space, m_Host.Room, m_Params);
                 m_Shell.OnExhibitReady();
             }
+            else if (id == SpaceId.Slicer)
+            {
+                SlicerSpace space = m_Host.Module as SlicerSpace;
+                if (space != null) m_Toybox.Bind(space);
+                m_Shell.OnExhibitReady();
+            }
         }
 
         void OnSpaceExited(SpaceId id)
         {
             if (id == SpaceId.Glued && m_Glued != null) m_Glued.Unbind();
             else if (id == SpaceId.Portal && m_Rooms != null) m_Rooms.Unbind();
+            else if (id == SpaceId.Slicer) m_Toybox.Unbind();
         }
 
         void OnRoomChanged(RoomModel room)

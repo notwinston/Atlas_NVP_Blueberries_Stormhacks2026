@@ -23,7 +23,7 @@ namespace Atlas.Spaces.Slicer
     /// rules, <see cref="SlicerMeshKernel"/> makes the vertices, and the two Burst jobs run them into meshes
     /// with fixed native buffers. Nothing is cut while neither the cut nor the body moves.
     /// </remarks>
-    public sealed class SlicerSpace : MonoBehaviour, ISpaceModule, ISpaceStateReader, IUploadStep
+    public sealed class SlicerSpace : MonoBehaviour, ISpaceModule, ISpaceStateReader, IUploadStep, ISlicerReadings
     {
         /// <summary>Opacity of the shadow: dithered, so the slice shows through it.</summary>
         const float ShadowOpacity = 0.3f;
@@ -59,6 +59,19 @@ namespace Atlas.Spaces.Slicer
         float m_SlicedOffset, m_SlicedTilt;
         float4x4 m_SlicedRotation, m_ShadowRotation;
 
+        // The toybox (tasks P2-A01, P2-A02): the slice's name, the look-down shadow, the guided steps, the events and the panel.
+        SlicerToyboxParams m_Toybox;
+        readonly SlicerSection m_Section = new SlicerSection();
+        readonly LookDownShadow m_Look = new LookDownShadow();
+        readonly SlicerTour m_Tour = new SlicerTour();
+        SlicerEvents m_EventRules = new SlicerEvents(null);
+        SlicerPanel m_Panel;
+        SectionInfo m_SectionInfo;
+        bool m_SectionValid;
+        float m_NamedOffset, m_NamedTilt;
+        float3 m_NamedTurns;
+        int m_Active;
+
         SlicerView m_View;
         bool m_Entered;
         bool m_Mirrored;
@@ -74,6 +87,20 @@ namespace Atlas.Spaces.Slicer
         public SlicerObject Body { get { return m_Buffers != null ? m_Buffers.Body : SlicerObject.Tesseract; } }
         /// <summary>Triangles of the cross-section last uploaded.</summary>
         public int SliceTriangles { get; private set; }
+        /// <summary>What the slice on screen is (task P2-A02).</summary>
+        public SectionInfo Section { get { return m_SectionInfo; } }
+        public float W { get { return m_Controller != null ? m_Controller.W : 0f; } }
+        public float Xw { get { return m_Controller != null ? m_Controller.Xw : 0f; } }
+        public float Yw { get { return m_Controller != null ? m_Controller.Yw : 0f; } }
+        public float Zw { get { return m_Controller != null ? m_Controller.Zw : 0f; } }
+        /// <summary>The guided steps (task P2-A01).</summary>
+        public SlicerTour Tour { get { return m_Tour; } }
+        /// <summary>True while the shadow is shown because the walker looks down.</summary>
+        public bool PeekingShadow { get { return m_Look.Peeking; } }
+        /// <summary>The view on screen: the shadow view, or a look-down peek, shows the shadow.</summary>
+        public SlicerView ShownView { get { return m_View; } }
+        /// <summary>The panel's text, or null when the build has no TextMeshPro resources.</summary>
+        public string PanelText { get { return m_Panel != null && m_Panel.HasText ? m_Panel.Text.text : null; } }
 
         /// <summary>The factory given to SpaceRegistry: a new object named like the scene, with the module.</summary>
         public static ISpaceModule Create()
@@ -86,6 +113,7 @@ namespace Atlas.Spaces.Slicer
         public static void DeclareParams(ParamRegistry registry)
         {
             SlicerParams.Declare(registry);
+            SlicerToyboxParams.Declare(registry);
         }
 
         public void Configure(RoomModel room, ParamRegistry registry)
@@ -93,6 +121,7 @@ namespace Atlas.Spaces.Slicer
             Release(true);
 
             m_Params = SlicerParams.Declare(registry);
+            m_Toybox = SlicerToyboxParams.Declare(registry);
             m_Layout = SlicerLayout.FromRoom(room.FreeRect.Wf, room.FreeRect.Df, room.Standing);
             m_Controller = new SlicerController(in m_Layout);
 
@@ -100,6 +129,7 @@ namespace Atlas.Spaces.Slicer
             AtlasServices.TryGet(out m_Input);
             AtlasServices.TryGet(out m_Host);
             AtlasServices.TryGet(out m_Events);
+            m_EventRules = new SlicerEvents(m_Events);
 
             if (m_Pool != null)
             {
@@ -115,6 +145,7 @@ namespace Atlas.Spaces.Slicer
             m_SliceRenderer = CreateRenderer("Slice", m_SliceMaterial, out m_SliceFilter);
             m_ShadowRenderer = CreateRenderer("Shadow", m_ShadowMaterial, out m_ShadowFilter);
             BuildFixtures();
+            m_Panel = new SlicerPanel(transform, in m_Layout, m_FixtureMaterial);
             Bind(m_Params.ObjectValue);
         }
 
@@ -131,6 +162,11 @@ namespace Atlas.Spaces.Slicer
             m_SliceValid = false;
             m_ShadowValid = false;
             m_Mirrored = false;
+            m_Look.Reset();
+            m_Tour.Restart();
+            m_EventRules.Reset();
+            m_SectionValid = false;
+            if (m_Panel != null) m_Panel.SetVisible(true);
             RegisterGaze();
             m_Entered = true;
         }
@@ -151,9 +187,17 @@ namespace Atlas.Spaces.Slicer
             {
                 if (m_Input != null)
                 {
-                    if (m_Input.Pressed(AtlasAction.Primary)) m_Params.SetObject(SlicerObjects.Next(m_Params.ObjectValue));
+                    if (m_Input.Pressed(AtlasAction.Primary))
+                    {
+                        m_Params.SetObject(SlicerObjects.Next(m_Params.ObjectValue));
+                        if (m_Panel != null) m_Panel.Flash(SlicerPanel.NextLabel);
+                    }
                     if (m_Input.Pressed(AtlasAction.Secondary))
+                    {
                         m_Params.SetView(m_Params.ViewValue == SlicerView.Slice ? SlicerView.Shadow : SlicerView.Slice);
+                        if (m_Panel != null) m_Panel.Flash(SlicerPanel.ShadowLabel);
+                        if (!m_Look.Peeking) m_EventRules.Shadow(m_Params.ViewValue == SlicerView.Shadow, false);
+                    }
                 }
 
                 m_Params.TakeOutsideChanges(m_Controller);
@@ -174,11 +218,65 @@ namespace Atlas.Spaces.Slicer
                 m_View = m_Params.ViewValue;
                 tilt = m_Params.TiltRadians;
                 if (body != Body) ChangeBody(body);
+
+                // Looking down while standing still shows the shadow for as long as the walker looks (task P2-A02).
+                bool lookDown = m_Toybox == null || m_Toybox.LookDownEnabled;
+                if (m_Look.Step(frame.HeadPosition, frame.HeadRotation, frame.DeltaTime, lookDown) && m_View == SlicerView.Slice)
+                    m_EventRules.Shadow(m_Look.Peeking, true);
+                if (m_Look.Peeking) m_View = SlicerView.Shadow;
+                m_Active = ActiveLabels(in input);
             }
 
             if (m_Buffers == null) return;
+            NameSection(body, tilt);
+            if (!m_Mirrored)
+            {
+                if (m_Toybox == null || m_Toybox.TourShown)
+                {
+                    var step = new SlicerTourInput
+                    {
+                        Body = body, Section = m_SectionInfo.Shape, W = m_Controller.W,
+                        Xw = m_Controller.Xw, Yw = m_Controller.Yw, Zw = m_Controller.Zw,
+                        ShadowShown = m_View == SlicerView.Shadow, DeltaTime = frame.DeltaTime,
+                    };
+                    if (m_Tour.Step(in step)) m_EventRules.Task(m_Tour.Task);
+                }
+                m_EventRules.Step(frame.Time, m_Controller.W, m_Controller.Xw, m_Controller.Yw, m_Controller.Zw, in m_SectionInfo, body);
+            }
             ScheduleJobs(body, tilt);
             MoveMarkers();
+        }
+
+        // The slice's name, from the body's own structure (task P2-A02). Recomputed only when the cut or the turns moved: a few
+        // microseconds for the largest polytope, nothing for the smooth bodies, no allocation.
+        void NameSection(SlicerObject body, float tilt)
+        {
+            SlicerSource source = m_Mirrored || m_Params == null ? SlicerSource.Live : m_Params.SourceValue;
+            float offset = m_Controller.CutOffset(source);
+            var turns = new float3(m_Controller.Xw, m_Controller.Yw, m_Controller.Zw);
+            if (m_SectionValid && offset == m_NamedOffset && tilt == m_NamedTilt && turns.Equals(m_NamedTurns) && m_Section.Body == body) return;
+            m_SectionInfo = m_Section.Name(turns.x, turns.y, turns.z, offset, tilt);
+            m_SectionValid = true;
+            m_NamedOffset = offset;
+            m_NamedTilt = tilt;
+            m_NamedTurns = turns;
+        }
+
+        // One bit per panel label whose control acts this frame: a stick, or a dwell on its gaze handle (the same axes).
+        static int ActiveLabels(in SlicerInput input)
+        {
+            int bits = 0;
+            bits |= Bit(input.AxisW, 0, 1);
+            bits |= Bit(input.AxisXw, 3, 2);
+            bits |= Bit(input.AxisYw, 5, 4);
+            bits |= Bit(input.AxisZw, 7, 6);
+            return bits;
+        }
+
+        static int Bit(float axis, int plusLabel, int minusLabel)
+        {
+            float a = SlicerController.DeadZone(axis);
+            return a > 0f ? 1 << plusLabel : a < 0f ? 1 << minusLabel : 0;
         }
 
         /// <summary>Step 6: takes this frame's jobs and uploads what they made. No allocation.</summary>
@@ -210,6 +308,17 @@ namespace Atlas.Spaces.Slicer
             {
                 bool show = m_View == SlicerView.Shadow && m_ShadowValid;
                 if (m_ShadowRenderer.enabled != show) m_ShadowRenderer.enabled = show;
+            }
+            if (m_Panel != null && m_Controller != null)
+            {
+                var state = new SlicerReadoutState
+                {
+                    Body = Body, Section = m_SectionInfo, W = m_Controller.W,
+                    Xw = m_Controller.Xw, Yw = m_Controller.Yw, Zw = m_Controller.Zw,
+                    View = m_Mirrored || m_Params == null ? m_View : m_Params.ViewValue, Peeking = m_Look.Peeking,
+                    Task = m_Tour.Task, ShowTour = !m_Mirrored && (m_Toybox == null || m_Toybox.TourShown),
+                };
+                m_Panel.Update(in state, frame.HeadPosition, m_Active, frame.DeltaTime);
             }
         }
 
@@ -254,6 +363,7 @@ namespace Atlas.Spaces.Slicer
         void ChangeBody(SlicerObject body)
         {
             Bind(body);
+            m_SectionValid = false;
             if (m_Host != null) m_Host.BumpWorldVersion();
             if (m_Events != null) m_Events.Log("slicer.object", "object", SlicerObjects.Name(body));
         }
@@ -266,6 +376,8 @@ namespace Atlas.Spaces.Slicer
             DestroyAny(m_ShadowMesh);
 
             m_Buffers = new SlicerBuffers(body);
+            m_Section.Bind(body);
+            m_SectionValid = false;
             m_SliceMesh = AtlasMesh.CreateDynamic("Slicer Slice", m_Buffers.SliceCapacity, m_Buffers.SliceCapacity);
             m_ShadowMesh = AtlasMesh.CreateDynamic("Slicer Shadow", m_Buffers.ShadowCapacity, m_Buffers.ShadowCapacity);
             if (m_SliceFilter != null) m_SliceFilter.sharedMesh = m_SliceMesh;
@@ -449,6 +561,8 @@ namespace Atlas.Spaces.Slicer
         {
             CompleteJobs();
             UnregisterGaze();
+            if (m_Panel != null) m_Panel.Dispose();
+            m_Panel = null;
             if (m_Buffers != null)
             {
                 m_Buffers.Dispose();
