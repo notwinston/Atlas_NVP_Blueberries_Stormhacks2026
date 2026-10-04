@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Atlas.Link;
@@ -111,14 +112,24 @@ namespace Atlas.Station.Tests
                 await t.PostJson("/internal/job",
                     "{\"jobId\":\"j1\",\"roomId\":\"r1\",\"boxId\":3,\"sha256\":\"abc123\",\"url\":\"/assets/abc123.glb\",\"bytes\":1000,\"tris\":3000}", 204);
 
-                Wait.Until(() => phone.Jobs.Count == 2 && spectator.Jobs.Count == 2, "the job messages to be relayed");
+                // An unacknowledged AssetReady is sent again, so a message may arrive twice: wait for both to be
+                // there, not for a count of two, and assert the order of first arrivals.
+                string[] expected = { "status:j1:running", "ready:j1:abc123" };
+                Wait.Until(() => HasAll(phone, expected) && HasAll(spectator, expected), "the job messages to be relayed");
                 Assert.That((await t.GetJson("/api/session"))["phone"].GetString("state"), Is.EqualTo("connected"));
-                Assert.That(Wait.Drain(phone.Jobs), Is.EqualTo(new[] { "status:j1:running", "ready:j1:abc123" }));
-                Assert.That(Wait.Drain(spectator.Jobs), Is.EqualTo(new[] { "status:j1:running", "ready:j1:abc123" }));
+                Assert.That(Wait.Drain(phone.Jobs).Distinct(), Is.EqualTo(expected));
+                Assert.That(Wait.Drain(spectator.Jobs).Distinct(), Is.EqualTo(expected));
 
                 await t.PostJson("/internal/job", "{\"state\":\"running\"}", 400);
                 await t.PostJson("/internal/job", "not json", 400);
             }
+        }
+
+        static bool HasAll(TestClient client, string[] expected)
+        {
+            string[] got = client.Jobs.ToArray();
+            foreach (string e in expected) if (System.Array.IndexOf(got, e) < 0) return false;
+            return true;
         }
 
         // A message may arrive more than once (an unacknowledged AssetReady is sent again), so look by job.
