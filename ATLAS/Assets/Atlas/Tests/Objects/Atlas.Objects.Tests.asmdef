@@ -1,0 +1,25 @@
+{
+    "name": "Atlas.Objects.Tests",
+    "rootNamespace": "Atlas.Objects.Tests",
+    "references": [
+        "Atlas.Objects",
+        "Atlas.World",
+        "Atlas.Kernel",
+        "Atlas.Link",
+        "Atlas.Scan",
+        "Unity.Mathematics",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ]
+}

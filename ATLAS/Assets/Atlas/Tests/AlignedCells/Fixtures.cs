@@ -138,6 +138,8 @@ namespace Atlas.Spaces.AlignedCells.Tests
         public bool SetGeneratedLightMesh(int objectId, UnityEngine.Mesh mesh, string assetHashLight) => false;
         public bool SetBuiltInMesh(int objectId, UnityEngine.Mesh sharedMesh, UnityEngine.Vector3 scale, float fadeSeconds = 0.3f)
             => Swap(objectId, MeshState.BuiltIn, "");
+        public bool SetOnPhoneMesh(int objectId, UnityEngine.Mesh mesh, MeshState state, float fadeSeconds = 0.3f)
+            => Swap(objectId, state, "");
         bool Swap(int objectId, MeshState state, string hash)
         {
             View v = views.Find(x => x.ObjectId == objectId);

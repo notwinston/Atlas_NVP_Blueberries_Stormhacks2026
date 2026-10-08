@@ -401,9 +401,9 @@ namespace Atlas.World.Lint
 
         // ---- 9. room content (§11.1 "every scan box has a generated mesh, a fallback mesh or a placeholder") ----
         /// <summary>
-        /// A box is covered when it has a generated mesh (Ready, with its asset hash), a fallback (BuiltIn, StandIn) or a
-        /// placeholder (Placeholder, or Requested: the placeholder stands while the Forge works), and a size a placeholder box
-        /// can be built from.
+        /// A box is covered when it has a generated mesh (Ready, with its asset hash), a mesh built on the phone (Matched: a
+        /// matched prop; ScanCut: cut out of the scanned mesh), a fallback (BuiltIn, StandIn) or a placeholder (Placeholder,
+        /// or Requested: the placeholder stands while the Forge works), and a size a placeholder box can be built from.
         /// </summary>
         public static void CheckRoomContent(RoomModel room, WorldLintReport rep)
         {
@@ -422,6 +422,7 @@ namespace Atlas.World.Lint
             switch (o.Mesh)
             {
                 case MeshState.Placeholder: case MeshState.Requested: case MeshState.BuiltIn: case MeshState.StandIn: return true;
+                case MeshState.Matched: case MeshState.ScanCut: return true;
                 case MeshState.Ready: return !string.IsNullOrEmpty(o.AssetHash);
                 default: return false;
             }

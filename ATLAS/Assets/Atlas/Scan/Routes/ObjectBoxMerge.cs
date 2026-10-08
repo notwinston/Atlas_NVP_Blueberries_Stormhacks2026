@@ -6,7 +6,7 @@ using Unity.Mathematics;
 
 namespace Atlas.Scan
 {
-    /// <summary>One furniture box as the AR provider reports it: a pose at the centre of the box, in the AR session frame.</summary>
+    /// <summary>One furniture box as the AR provider (RoomPlan) reports it: a pose at the centre of the box, in the AR session frame.</summary>
     public struct ScannedBox
     {
         /// <summary>Centre of the box, metres.</summary>
@@ -14,10 +14,12 @@ namespace Atlas.Scan
         public quaternion Rotation;
         /// <summary>Full size along the box's own X, Y and Z, metres.</summary>
         public float3 Size;
-        /// <summary>The bits of AR Foundation's BoundingBoxClassifications.</summary>
+        /// <summary>The bits of AR Foundation's BoundingBoxClassifications (ObjectBoxMerge.ClassBitsOf gives them for a category).</summary>
         public uint ClassBits;
         /// <summary>A number that tells the boxes of one scan apart.</summary>
         public int SourceId;
+        /// <summary>RoomPlan's attribute strings, verbatim; null or empty for none.</summary>
+        public string[] Tags;
     }
 
     /// <summary>
@@ -36,10 +38,23 @@ namespace Atlas.Scan
         public const float MinSide = 0.02f, MaxSide = 6f;
 
         /// <summary>
+        /// The BoundingBoxClassifications bits that ObjectCategories.FromBoundingBoxBits turns back into category:
+        /// 0 for Unknown, bit (value - 1) for Couch to Laptop, bit 31 for Other (and anything undefined). A RoomPlan
+        /// object's category (ObjectCategories.FromRoomPlan) goes into a ScannedBox this way.
+        /// </summary>
+        public static uint ClassBitsOf(ObjectCategory category)
+        {
+            int value = (int)category;
+            if (value == (int)ObjectCategory.Unknown) return 0u;
+            if (value >= 1 && value <= 21) return 1u << (value - 1);
+            return 1u << 31;
+        }
+
+        /// <summary>
         /// A provider box as an upright obstacle box in the same frame: the base is the centre of its
         /// underside, the yaw is the heading of its forward axis, the category is the contract's
-        /// (ObjectCategories.FromBoundingBoxBits). False for a box with a side that is not finite or not
-        /// between 0.02 and 6 m.
+        /// (ObjectCategories.FromBoundingBoxBits), the tags are the box's (never null). False for a box with a side
+        /// that is not finite or not between 0.02 and 6 m.
         /// </summary>
         public static bool TryConvert(in ScannedBox box, out ObstacleBox result)
         {
@@ -55,13 +70,15 @@ namespace Atlas.Scan
                 Category = (int)ObjectCategories.FromBoundingBoxBits(box.ClassBits),
                 SourceId = box.SourceId,
                 FromScan = false,
+                Tags = box.Tags ?? Array.Empty<string>(),
             };
             return true;
         }
 
         /// <summary>
         /// Every usable box of a scan, converted, with repeats of the same piece of furniture removed (the
-        /// larger one stays). The order of the input is kept.
+        /// larger one stays, and takes the category and tags of the other when it has none). The order of the
+        /// input is kept.
         /// </summary>
         public static ObstacleBox[] Merge(ScannedBox[] boxes, int count)
         {
@@ -76,14 +93,16 @@ namespace Atlas.Scan
                 if (twin < 0) merged.Add(box);
                 else if (Volume(box) > Volume(merged[twin]))
                 {
-                    // The larger report wins, but a category is never lost to an unclassified repeat.
+                    // The larger report wins, but a category or tags are never lost to a repeat without them.
                     if (box.Category == 0) box.Category = merged[twin].Category;
+                    if (box.Tags.Length == 0) box.Tags = merged[twin].Tags;
                     merged[twin] = box;
                 }
-                else if (merged[twin].Category == 0 && box.Category != 0)
+                else
                 {
                     ObstacleBox kept = merged[twin];
-                    kept.Category = box.Category;
+                    if (kept.Category == 0 && box.Category != 0) kept.Category = box.Category;
+                    if (kept.Tags.Length == 0 && box.Tags.Length != 0) kept.Tags = box.Tags;
                     merged[twin] = kept;
                 }
             }

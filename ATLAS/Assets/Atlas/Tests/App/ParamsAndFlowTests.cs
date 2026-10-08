@@ -184,6 +184,7 @@ namespace Atlas.App.Tests
             };
             for (int i = 0; i < mine.Length; i++) Assert.That(registry.Find(mine[i]), Is.Not.Null, mine[i]);
             Assert.That(registry[0].Name, Is.EqualTo("space.id"), "wire id 0");
+            Assert.That(registry.Find("forge.backend").Int, Is.EqualTo(3), "standalone phone: forge.backend defaults to off");
 
             // The owning space declares the same name with the same kind and keeps the value.
             registry.Set("slicer.source", 2f);

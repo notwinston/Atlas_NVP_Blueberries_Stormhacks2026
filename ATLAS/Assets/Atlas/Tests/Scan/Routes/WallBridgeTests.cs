@@ -7,9 +7,10 @@ using Unity.Mathematics;
 namespace Atlas.Scan.Tests.Routes
 {
     /// <summary>
-    /// Route 4: the walls file of the RoomPlan bridge is read, and its walls, doors and windows are laid onto
-    /// the walls of a scanned room. With no file, or one that does not fit the room, the room keeps the walls
-    /// of its outline.
+    /// Route 4: the atlas.room/1 file of the scan's RoomPlan session is read, and its walls, doors and windows are
+    /// laid onto the walls of a scanned room when scan.wallBridge is on. With no file, or one that does not fit the
+    /// room, the room keeps the walls of its outline. The session itself (RoomPlanSession) runs for the boxes
+    /// whatever the switch says.
     /// </summary>
     public class WallBridgeTests
     {
@@ -19,7 +20,7 @@ namespace Atlas.Scan.Tests.Routes
         // in the middle of the room. A door in the south wall, a window in the east wall, and an opening at
         // the east end of the north wall that runs 0.2 m past the corner.
         const string RoomFile =
-            "{\"schema\":\"atlas.walls/1\"," +
+            "{\"schema\":\"atlas.room/1\"," +
             "\"walls\":[" +
             "{\"c\":[2,1.25,0],\"x\":[1,0,0],\"w\":4,\"h\":2.5}," +
             "{\"c\":[4.02,1.25,-1.5],\"x\":[0,0,-1],\"w\":3,\"h\":2.5}," +
@@ -31,14 +32,29 @@ namespace Atlas.Scan.Tests.Routes
 
         // The same three walls a metre to the side and turned by 30 degrees: another room.
         const string OtherRoomFile =
-            "{\"schema\":\"atlas.walls/1\"," +
+            "{\"schema\":\"atlas.room/1\"," +
             "\"walls\":[" +
             "{\"c\":[3,1.25,1],\"x\":[0.866,0,0.5],\"w\":4,\"h\":2.5}," +
             "{\"c\":[5,1.25,-1.5],\"x\":[0.5,0,-0.866],\"w\":3,\"h\":2.5}]," +
             "\"doors\":[{\"c\":[1,1,0],\"x\":[1,0,0],\"w\":0.9,\"h\":2}]," +
             "\"windows\":[],\"openings\":[]}";
 
-        const string EmptyRoomFile = "{\"schema\":\"atlas.walls/1\",\"walls\":[],\"doors\":[],\"windows\":[],\"openings\":[]}";
+        const string EmptyRoomFile = "{\"schema\":\"atlas.room/1\",\"walls\":[],\"doors\":[],\"windows\":[],\"openings\":[]}";
+
+        // The surfaces of a file in the order WallBridgeMerge reads them: walls, doors, windows, openings.
+        static bool TryParse(string file, out BridgeSurface[] surfaces, out int skipped)
+        {
+            RoomPlanCapture capture;
+            bool ok = RoomPlanJson.TryRead(file, out capture);
+            var all = new List<BridgeSurface>();
+            all.AddRange(capture.Walls);
+            all.AddRange(capture.Doors);
+            all.AddRange(capture.Windows);
+            all.AddRange(capture.Openings);
+            surfaces = all.ToArray();
+            skipped = capture.Skipped;
+            return ok;
+        }
 
         static RoomModel Room()
         {
@@ -79,9 +95,7 @@ namespace Atlas.Scan.Tests.Routes
         {
             BridgeSurface[] surfaces;
             int skipped;
-            string error;
-            Assert.That(WallBridgeJson.TryParse(RoomFile, out surfaces, out skipped, out error), Is.True, error);
-            Assert.That(error, Is.Null);
+            Assert.That(TryParse(RoomFile, out surfaces, out skipped), Is.True);
             Assert.That(skipped, Is.EqualTo(0));
             Assert.That(surfaces.Length, Is.EqualTo(7));
             var kinds = new List<BridgeSurfaceKind>();
@@ -104,9 +118,8 @@ namespace Atlas.Scan.Tests.Routes
         {
             BridgeSurface[] surfaces;
             int skipped;
-            string error;
-            string file = "{\"schema\":\"atlas.walls/1\",\"walls\":[{\"c\":[0,1,0],\"x\":[0.6,0.02,-1.6],\"w\":2,\"h\":2,\"extra\":true}]}";
-            Assert.That(WallBridgeJson.TryParse(file, out surfaces, out skipped, out error), Is.True, error);
+            string file = "{\"schema\":\"atlas.room/1\",\"walls\":[{\"c\":[0,1,0],\"x\":[0.6,0.02,-1.6],\"w\":2,\"h\":2,\"extra\":true}]}";
+            Assert.That(TryParse(file, out surfaces, out skipped), Is.True);
             Assert.That(surfaces.Length, Is.EqualTo(1));
             Assert.That(math.length(surfaces[0].Along), Is.EqualTo(1f).Within(1e-6f));
             Assert.That(surfaces[0].Along.y, Is.GreaterThan(0f));
@@ -125,27 +138,24 @@ namespace Atlas.Scan.Tests.Routes
         {
             BridgeSurface[] surfaces;
             int skipped;
-            string error;
-            string file = "{\"schema\":\"atlas.walls/1\",\"walls\":[" + surface + ",{\"c\":[0,1,0],\"x\":[1,0,0],\"w\":2,\"h\":2}]}";
-            Assert.That(WallBridgeJson.TryParse(file, out surfaces, out skipped, out error), Is.True, error);
+            string file = "{\"schema\":\"atlas.room/1\",\"walls\":[" + surface + ",{\"c\":[0,1,0],\"x\":[1,0,0],\"w\":2,\"h\":2}]}";
+            Assert.That(TryParse(file, out surfaces, out skipped), Is.True);
             Assert.That(surfaces.Length, Is.EqualTo(1));
             Assert.That(skipped, Is.EqualTo(1));
         }
 
         [TestCase(null)]
         [TestCase("")]
-        [TestCase("{\"schema\":\"atlas.walls/1\",\"walls\":[")]
+        [TestCase("{\"schema\":\"atlas.room/1\",\"walls\":[")]
         [TestCase("[]")]
         [TestCase("{}")]
-        [TestCase("{\"schema\":\"atlas.walls/2\",\"walls\":[]}")]
-        [TestCase("{\"schema\":\"atlas.walls/1\",\"walls\":{}}")]
+        [TestCase("{\"schema\":\"atlas.walls/1\",\"walls\":[]}")]
+        [TestCase("{\"schema\":\"atlas.room/1\",\"walls\":{}}")]
         public void Parse_RefusesAFileItCannotRead(string file)
         {
             BridgeSurface[] surfaces;
             int skipped;
-            string error;
-            Assert.That(WallBridgeJson.TryParse(file, out surfaces, out skipped, out error), Is.False);
-            Assert.That(error, Is.Not.Null.And.Not.Empty);
+            Assert.That(TryParse(file, out surfaces, out skipped), Is.False);
             Assert.That(surfaces, Is.Empty);
         }
 
@@ -154,10 +164,9 @@ namespace Atlas.Scan.Tests.Routes
         {
             BridgeSurface[] surfaces;
             int skipped;
-            string error;
-            Assert.That(WallBridgeJson.TryParse(EmptyRoomFile, out surfaces, out skipped, out error), Is.True, error);
+            Assert.That(TryParse(EmptyRoomFile, out surfaces, out skipped), Is.True);
             Assert.That(surfaces, Is.Empty);
-            Assert.That(WallBridgeJson.TryParse("{\"schema\":\"atlas.walls/1\"}", out surfaces, out skipped, out error), Is.True, error);
+            Assert.That(TryParse("{\"schema\":\"atlas.room/1\"}", out surfaces, out skipped), Is.True);
             Assert.That(surfaces, Is.Empty);
         }
 
@@ -244,8 +253,7 @@ namespace Atlas.Scan.Tests.Routes
 
             BridgeSurface[] surfaces;
             int skipped;
-            string error;
-            Assert.That(WallBridgeJson.TryParse(RoomFile, out surfaces, out skipped, out error), Is.True, error);
+            Assert.That(TryParse(RoomFile, out surfaces, out skipped), Is.True);
             for (int k = 0; k < surfaces.Length; k++)
             {
                 float2 c = ScanTestRooms.Moved(surfaces[k].Centre.xz, angle, shift);
@@ -306,7 +314,7 @@ namespace Atlas.Scan.Tests.Routes
         {
             RoomModel room = Room();
             // The south wall 5 cm outside the outline: merged all the same, and counted.
-            string file = "{\"schema\":\"atlas.walls/1\",\"walls\":[{\"c\":[2,1.25,0.05],\"x\":[1,0,0],\"w\":4,\"h\":2.5}]}";
+            string file = "{\"schema\":\"atlas.room/1\",\"walls\":[{\"c\":[2,1.25,0.05],\"x\":[1,0,0],\"w\":4,\"h\":2.5}]}";
             WallBridgeReport report = WallBridgeMerge.Merge(room, file);
             Assert.That(report.Merged, Is.EqualTo(1));
             Assert.That(report.OffLine, Is.EqualTo(1));
@@ -318,7 +326,7 @@ namespace Atlas.Scan.Tests.Routes
         public void Merge_KeepsTheOutlineHeight_WhenOnlyTheFootOfAWallWasSeen()
         {
             RoomModel room = Room();
-            string file = "{\"schema\":\"atlas.walls/1\",\"walls\":[{\"c\":[2,0.6,0],\"x\":[1,0,0],\"w\":4,\"h\":1.2}]," +
+            string file = "{\"schema\":\"atlas.room/1\",\"walls\":[{\"c\":[2,0.6,0],\"x\":[1,0,0],\"w\":4,\"h\":1.2}]," +
                           "\"doors\":[{\"c\":[1,1.5,0],\"x\":[1,0,0],\"w\":0.9,\"h\":3}]}";
             WallBridgeReport report = WallBridgeMerge.Merge(room, file);
             Assert.That(report.Merged, Is.EqualTo(1));
@@ -334,7 +342,7 @@ namespace Atlas.Scan.Tests.Routes
         public void Merge_SeparatesOpeningsThatRunIntoEachOther_AndDropsWhatHasNoWall()
         {
             RoomModel room = Room();
-            string file = "{\"schema\":\"atlas.walls/1\",\"walls\":[{\"c\":[2,1.25,0],\"x\":[1,0,0],\"w\":4,\"h\":2.5}]," +
+            string file = "{\"schema\":\"atlas.room/1\",\"walls\":[{\"c\":[2,1.25,0],\"x\":[1,0,0],\"w\":4,\"h\":2.5}]," +
                           // Two doors that share 0.2 m, and a third wholly inside the first.
                           "\"doors\":[{\"c\":[1,1,0],\"x\":[1,0,0],\"w\":1,\"h\":2},{\"c\":[1.8,1,0],\"x\":[1,0,0],\"w\":1,\"h\":2}," +
                           "{\"c\":[1,1,0],\"x\":[1,0,0],\"w\":0.5,\"h\":2}]," +
@@ -362,7 +370,7 @@ namespace Atlas.Scan.Tests.Routes
             var doors = new List<string>();
             for (int k = 0; k < 20; k++)
                 doors.Add("{\"c\":[" + (0.1 + 0.19 * k).ToString(System.Globalization.CultureInfo.InvariantCulture) + ",1,0],\"x\":[1,0,0],\"w\":0.15,\"h\":2}");
-            string file = "{\"schema\":\"atlas.walls/1\",\"walls\":[{\"c\":[2,1.25,0],\"x\":[1,0,0],\"w\":4,\"h\":2.5}],\"doors\":[" +
+            string file = "{\"schema\":\"atlas.room/1\",\"walls\":[{\"c\":[2,1.25,0],\"x\":[1,0,0],\"w\":4,\"h\":2.5}],\"doors\":[" +
                           string.Join(",", doors) + "]}";
             WallBridgeReport report = WallBridgeMerge.Merge(room, file);
             Assert.That(report.Openings, Is.EqualTo(WallBridgeMerge.MaxOpeningsPerWall));
@@ -371,17 +379,21 @@ namespace Atlas.Scan.Tests.Routes
             Assert.That(RoomModelJson.Read(RoomModelJson.Write(room)).Walls.Length, Is.EqualTo(room.Walls.Length));
         }
 
-        // ---- one scan's capture ---------------------------------------------------------------------------
+        // ---- one scan's RoomPlan session ------------------------------------------------------------------
 
-        sealed class FakeBridge : IWallBridge
+        // The room file with one chair and an instruction: what the plugin writes during a sweep.
+        const string FurnishedFile =
+            "{\"schema\":\"atlas.room/1\",\"walls\":[{\"c\":[2,1.25,0],\"x\":[1,0,0],\"w\":4,\"h\":2.5}]," +
+            "\"objects\":[{\"id\":\"A\",\"cat\":\"chair\",\"c\":[1,0.45,-1],\"x\":[1,0,0],\"z\":[0,0,1],\"d\":[0.5,0.9,0.5]," +
+            "\"conf\":\"high\",\"attrs\":[\"dining\"]}],\"instruction\":\"slowDown\"}";
+
+        sealed class FakePlugin : IRoomPlanCapture
         {
             public readonly List<string> Calls = new List<string>();
             public bool CanStart = true, IsAvailable = true;
-            public int AvailableAsked;
             public string Json = RoomFile;
 
-            public string Name { get { return "fake"; } }
-            public bool Available { get { AvailableAsked++; return IsAvailable; } }
+            public bool Available { get { return IsAvailable; } }
             public bool Start(IntPtr nativeSession) { Calls.Add("start"); return CanStart; }
             public string TakeJson() { Calls.Add("take"); return Json; }
             public void Stop() { Calls.Add("stop"); }
@@ -390,190 +402,206 @@ namespace Atlas.Scan.Tests.Routes
         static readonly IntPtr Session = new IntPtr(1);
 
         [TearDown]
-        public void RestoreTheBridge()
+        public void RestoreThePlugin()
         {
-            WallBridge.Register(null);
-            WallBridge.Enabled = false;
+            RoomPlanPlugin.Register(null);
+            WallBridge.Enabled = true;
         }
 
         [Test]
-        public void Bridge_IsNeutralAndOff_UntilRegisteredAndEnabled()
+        public void Plugin_IsNeutral_UntilRegistered_AndTheSwitchIsOnByDefault()
         {
-            Assert.That(WallBridge.Enabled, Is.False);
-            Assert.That(WallBridge.Current, Is.Not.Null);
-            Assert.That(WallBridge.Current.Available, Is.False);
-            Assert.That(WallBridge.Current.Start(Session), Is.False);
-            Assert.That(WallBridge.Current.TakeJson(), Is.EqualTo(""));
+            Assert.That(WallBridge.Enabled, Is.True, "scan.wallBridge defaults to on (D13)");
+            Assert.That(RoomPlanPlugin.Current, Is.Not.Null);
+            Assert.That(RoomPlanPlugin.Current.Available, Is.False);
+            Assert.That(RoomPlanPlugin.Current.Start(Session), Is.False);
+            Assert.That(RoomPlanPlugin.Current.TakeJson(), Is.EqualTo(""));
 
-            // No bridge: a scan's calls do nothing and the room keeps the walls of its outline.
-            WallBridge.Enabled = true;
-            var capture = new WallBridgeCapture();
-            Assert.That(capture.Begin(Session), Is.False);
-            capture.End();
+            // No plugin: a scan's calls do nothing and the room keeps the walls of its outline.
+            var session = new RoomPlanSession();
+            Assert.That(session.Begin(Session), Is.False);
+            Assert.That(session.Refresh().Objects, Is.Empty);
+            session.End();
             RoomModel room = Room();
             RoomWall[] before = room.Walls;
-            Assert.That(capture.Apply(room).Tried, Is.False);
+            Assert.That(session.ApplyWalls(room).Tried, Is.False);
             Assert.That(room.Walls, Is.SameAs(before));
         }
 
         [Test]
-        public void Capture_DoesNotStart_WhenRouteFourIsOff()
+        public void Session_DoesNotStart_WithoutASessionOrWhereRoomPlanIsMissing()
         {
-            var bridge = new FakeBridge();
-            WallBridge.Register(bridge);
-            var capture = new WallBridgeCapture();
-            Assert.That(capture.Begin(Session), Is.False);
-            Assert.That(capture.Running, Is.False);
-            RoomModel room = Room();
-            RoomWall[] before = room.Walls;
-            Assert.That(capture.Apply(room).Tried, Is.False);
-            Assert.That(room.Walls, Is.SameAs(before));
-            Assert.That(bridge.Calls, Is.Empty);
+            var plugin = new FakePlugin();
+            RoomPlanPlugin.Register(plugin);
+            var session = new RoomPlanSession();
+            Assert.That(session.Begin(IntPtr.Zero), Is.False);
+            Assert.That(session.Begin((ArSessionRig)null), Is.False);
+            plugin.IsAvailable = false;
+            Assert.That(session.Begin(Session), Is.False);
+            Assert.That(plugin.Calls, Is.Empty);
+            plugin.IsAvailable = true;
+            plugin.CanStart = false;
+            Assert.That(session.Begin(Session), Is.False);
+            Assert.That(session.Running, Is.False);
+            Assert.That(plugin.Calls, Is.EqualTo(new[] { "start" }));
         }
 
         [Test]
-        public void Capture_DoesNotStart_WithoutASessionOrWhereRoomPlanIsMissing()
+        public void Session_ReadsObjectsAndTheInstruction_WhileItRuns()
         {
-            var bridge = new FakeBridge();
-            WallBridge.Register(bridge);
-            WallBridge.Enabled = true;
-            var capture = new WallBridgeCapture();
-            Assert.That(capture.Begin(IntPtr.Zero), Is.False);
-            Assert.That(capture.Begin((ArSessionRig)null), Is.False);
-            bridge.IsAvailable = false;
-            Assert.That(capture.Begin(Session), Is.False);
-            Assert.That(bridge.Calls, Is.Empty);
-            bridge.IsAvailable = true;
-            bridge.CanStart = false;
-            Assert.That(capture.Begin(Session), Is.False);
-            Assert.That(capture.Running, Is.False);
-            Assert.That(bridge.Calls, Is.EqualTo(new[] { "start" }));
+            var plugin = new FakePlugin { Json = "" };
+            RoomPlanPlugin.Register(plugin);
+            var session = new RoomPlanSession();
+            Assert.That(session.Begin(Session), Is.True);
+            Assert.That(session.Refresh().Objects, Is.Empty, "nothing seen yet");
+            Assert.That(session.Latest.Instruction, Is.EqualTo(""));
+
+            plugin.Json = FurnishedFile;
+            RoomPlanCapture seen = session.Refresh();
+            Assert.That(seen.Objects.Length, Is.EqualTo(1));
+            Assert.That(seen.Objects[0].Category, Is.EqualTo("chair"));
+            Assert.That(seen.Objects[0].Attributes, Is.EqualTo(new[] { "dining" }));
+            Assert.That(seen.Instruction, Is.EqualTo("slowDown"));
+            Assert.That(RoomPlanPlugin.Hint(seen.Instruction), Is.EqualTo(ScanHint.SlowDown));
+
+            // The same text again is not read again.
+            Assert.That(session.Refresh(), Is.SameAs(seen));
+
+            // A file that cannot be read leaves the last one standing.
+            plugin.Json = "{\"schema\":\"atlas.room/1\",\"objects\":{}}";
+            Assert.That(session.Refresh(), Is.SameAs(seen));
+            Assert.That(session.Latest.Objects.Length, Is.EqualTo(1));
         }
 
         [Test]
-        public void Capture_ReadsTheWallsBeforeItStops_AndMergesThemOnce()
+        public void Session_ReadsTheWallsBeforeItStops_AndMergesThemOnce()
         {
-            var bridge = new FakeBridge();
-            WallBridge.Register(bridge);
-            WallBridge.Enabled = true;
-            var capture = new WallBridgeCapture();
-            Assert.That(capture.Begin(Session), Is.True);
-            Assert.That(capture.Running, Is.True);
-            capture.End();
-            capture.End();
-            Assert.That(capture.Running, Is.False);
-            Assert.That(bridge.Calls, Is.EqualTo(new[] { "start", "take", "stop" }));
+            var plugin = new FakePlugin();
+            RoomPlanPlugin.Register(plugin);
+            var session = new RoomPlanSession();
+            Assert.That(session.Begin(Session), Is.True);
+            Assert.That(session.Running, Is.True);
+            session.End();
+            session.End();
+            Assert.That(session.Running, Is.False);
+            Assert.That(session.Refresh().Walls.Length, Is.EqualTo(4), "kept after the end, not taken again");
+            Assert.That(plugin.Calls, Is.EqualTo(new[] { "start", "take", "stop" }));
 
             RoomModel room = Room();
-            WallBridgeReport report = capture.Apply(room);
+            WallBridgeReport report = session.ApplyWalls(room);
             Assert.That(report.Merged, Is.EqualTo(3));
             Assert.That(room.Quality.Route, Is.EqualTo(ScanRoute.WallBridge));
 
             // What was seen belongs to that one room.
+            Assert.That(session.Latest.Walls, Is.Empty);
             RoomModel next = Room();
-            Assert.That(capture.Apply(next).Tried, Is.False);
+            Assert.That(session.ApplyWalls(next).Tried, Is.False);
             Assert.That(next.Quality.Route, Is.EqualTo(ScanRoute.ManualOutline));
         }
 
         [Test]
-        public void Capture_EndsARunningCapture_WhenTheRoomIsConfirmed()
+        public void Session_EndsARunningCapture_WhenTheRoomIsConfirmed()
         {
-            var bridge = new FakeBridge();
-            WallBridge.Register(bridge);
-            WallBridge.Enabled = true;
-            var capture = new WallBridgeCapture();
-            capture.Begin(Session);
+            var plugin = new FakePlugin();
+            RoomPlanPlugin.Register(plugin);
+            var session = new RoomPlanSession();
+            session.Begin(Session);
             RoomModel room = Room();
-            Assert.That(capture.Apply(room).Merged, Is.EqualTo(3));
-            Assert.That(bridge.Calls, Is.EqualTo(new[] { "start", "take", "stop" }));
+            Assert.That(session.ApplyWalls(room).Merged, Is.EqualTo(3));
+            Assert.That(plugin.Calls, Is.EqualTo(new[] { "start", "take", "stop" }));
         }
 
         [Test]
-        public void Capture_ForgetsTheLastScan_WhenTheNextOneStarts()
+        public void Session_ForgetsTheLastScan_WhenTheNextOneStarts()
         {
-            var bridge = new FakeBridge();
-            WallBridge.Register(bridge);
-            WallBridge.Enabled = true;
-            var capture = new WallBridgeCapture();
-            capture.Begin(Session);
-            capture.End();                              // a scan that was cancelled: its walls were never applied
-            Assert.That(capture.Begin((ArSessionRig)null), Is.False);   // the next scan runs with no capture
+            var plugin = new FakePlugin();
+            RoomPlanPlugin.Register(plugin);
+            var session = new RoomPlanSession();
+            session.Begin(Session);
+            session.End();                              // a scan that was cancelled: its walls were never applied
+            Assert.That(session.Begin((ArSessionRig)null), Is.False);   // the next scan runs with no capture
+            Assert.That(session.Latest.Walls, Is.Empty);
             RoomModel room = Room();
             RoomWall[] before = room.Walls;
-            Assert.That(capture.Apply(room).Tried, Is.False);
+            Assert.That(session.ApplyWalls(room).Tried, Is.False);
             Assert.That(room.Walls, Is.SameAs(before));
+        }
+
+        [Test]
+        public void Session_ReportsAFileItCannotRead_AndLeavesTheRoomAlone()
+        {
+            var plugin = new FakePlugin { Json = "not json" };
+            RoomPlanPlugin.Register(plugin);
+            var session = new RoomPlanSession();
+            session.Begin(Session);
+            RoomModel room = Room();
+            RoomWall[] before = room.Walls;
+            WallBridgeReport report = session.ApplyWalls(room);
+            Assert.That(report.Tried, Is.True);
+            Assert.That(report.Error, Is.Not.Null);
+            Assert.That(room.Walls, Is.SameAs(before));
+            Assert.That(report.Text, Does.Contain("not readable"));
         }
 
         // ---- the switch: scan.wallBridge -----------------------------------------------------------------------
 
         [Test]
-        public void Switch_Off_NeverAsksTheBridge_AndTheWallsAreAsToday()
+        public void Switch_Off_StillRunsTheSessionForBoxes_ButTheWallsAreAsToday()
         {
-            var bridge = new FakeBridge();
-            WallBridge.Register(bridge);
+            var plugin = new FakePlugin();
+            RoomPlanPlugin.Register(plugin);
             WallBridge.Apply(false);
             Assert.That(WallBridge.Enabled, Is.False);
-            Assert.That(bridge.AvailableAsked, Is.EqualTo(0));
 
-            var capture = new WallBridgeCapture();
-            Assert.That(capture.Begin(Session), Is.False);
-            capture.End();
+            var session = new RoomPlanSession();
+            Assert.That(session.Begin(Session), Is.True, "boxes come from the same session (D13)");
+            session.End();
             RoomModel room = Room();
             RoomWall[] before = room.Walls;
-            Assert.That(capture.Apply(room).Tried, Is.False);
+            Assert.That(session.ApplyWalls(room).Tried, Is.False);
             Assert.That(room.Walls, Is.SameAs(before));
             Assert.That(room.Quality.Route, Is.EqualTo(ScanRoute.ManualOutline));
-            Assert.That(bridge.Calls, Is.Empty);
         }
 
         [Test]
-        public void Switch_On_WithAnAvailableBridge_BeginsEndsAndMerges()
+        public void Switch_On_BeginsEndsAndMerges()
         {
-            var bridge = new FakeBridge();
-            WallBridge.Register(bridge);
+            var plugin = new FakePlugin();
+            RoomPlanPlugin.Register(plugin);
             WallBridge.Apply(true);
             Assert.That(WallBridge.Enabled, Is.True);
 
-            var capture = new WallBridgeCapture();
-            Assert.That(capture.Begin(Session), Is.True);
-            capture.End();
-            Assert.That(bridge.Calls, Is.EqualTo(new[] { "start", "take", "stop" }));
+            var session = new RoomPlanSession();
+            Assert.That(session.Begin(Session), Is.True);
+            session.End();
+            Assert.That(plugin.Calls, Is.EqualTo(new[] { "start", "take", "stop" }));
             RoomModel room = Room();
-            WallBridgeReport report = capture.Apply(room);
+            WallBridgeReport report = session.ApplyWalls(room);
             Assert.That(report.Merged, Is.EqualTo(3));
             Assert.That(room.Quality.Route, Is.EqualTo(ScanRoute.WallBridge));
         }
 
         [Test]
-        public void Switch_On_WithABridgeThatIsNotAvailable_ChangesNothing()
+        public void Switch_FollowsTheParameterAlone()
         {
-            var bridge = new FakeBridge { IsAvailable = false };
-            WallBridge.Register(bridge);
-            WallBridge.Apply(true);
-            Assert.That(WallBridge.Enabled, Is.False);
-
-            var capture = new WallBridgeCapture();
-            Assert.That(capture.Begin(Session), Is.False);
-            RoomModel room = Room();
-            RoomWall[] before = room.Walls;
-            Assert.That(capture.Apply(room).Tried, Is.False);
-            Assert.That(room.Walls, Is.SameAs(before));
-            Assert.That(room.Quality.Route, Is.EqualTo(ScanRoute.ManualOutline));
-            Assert.That(bridge.Calls, Is.Empty);
-        }
-
-        [Test]
-        public void Switch_On_WithNoBridgeRegistered_StaysOff_AndTurningItOffAgainWorks()
-        {
-            WallBridge.Apply(true);
-            Assert.That(WallBridge.Enabled, Is.False);
-
-            var bridge = new FakeBridge();
-            WallBridge.Register(bridge);
-            WallBridge.Apply(true);
-            Assert.That(WallBridge.Enabled, Is.True);
             WallBridge.Apply(false);
             Assert.That(WallBridge.Enabled, Is.False);
+            WallBridge.Apply(true);
+            Assert.That(WallBridge.Enabled, Is.True, "with no plugin registered as well: the capture decides whether there is anything to merge");
+        }
+
+        [TestCase("turnOnLight", ScanHint.TurnOnLight)]
+        [TestCase("slowDown", ScanHint.SlowDown)]
+        [TestCase("moveAwayFromWall", ScanHint.MoveAwayFromWall)]
+        [TestCase("moveCloseToWall", ScanHint.MoveCloseToWall)]
+        [TestCase("normal", ScanHint.None)]
+        [TestCase("lowTexture", ScanHint.None)]
+        [TestCase("", ScanHint.None)]
+        [TestCase(null, ScanHint.None)]
+        [TestCase("somethingNew", ScanHint.None)]
+        public void Hint_FromRoomPlansInstruction(string instruction, ScanHint expected)
+        {
+            Assert.That(RoomPlanPlugin.Hint(instruction), Is.EqualTo(expected));
         }
     }
 }

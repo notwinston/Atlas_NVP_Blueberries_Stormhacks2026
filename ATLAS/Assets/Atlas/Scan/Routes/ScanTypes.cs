@@ -152,3 +152,36 @@ namespace Atlas.Scan
         Transform ResultAnchor { get; }
     }
 }
+
+namespace Atlas.Scan
+{
+    /// <summary>The scanned LiDAR mesh of a snapshot carried into a room's frame (standalone-phone plan section 6.1, D8). Engine-free.</summary>
+    public static class ScanMeshes
+    {
+        /// <summary>
+        /// The scanned mesh of a snapshot (session frame) as a ScanMesh in the room frame of anchor: a point p
+        /// becomes RotateY(-anchor.Yaw) * (p - anchor.Position), the inverse of the pose that places the room
+        /// (RoomFrame.SessionToRoom), so the floor is at y = 0. The indices are passed on as they are (the
+        /// snapshot's arrays are never written); the vertices and the classes are new arrays. Null when the
+        /// snapshot is null or holds no scanned mesh (none, or triangles laid over planes).
+        /// </summary>
+        public static ScanMesh ToRoomFrame(ScanSnapshot scan, RoomAnchor anchor)
+        {
+            if (scan == null || !scan.HasScannedMesh) return null;
+            float3 shift;
+            quaternion turn;
+            RoomFrame.SessionToRoom(anchor.Position, quaternion.RotateY(anchor.Yaw), out shift, out turn);
+            float3[] session = scan.Vertices;
+            var vertices = new float3[session.Length];
+            for (int k = 0; k < session.Length; k++) vertices[k] = shift + math.mul(turn, session[k]);
+            byte[] classes = null;
+            Grid.SurfaceClass[] given = scan.Classes;
+            if (given != null && given.Length == scan.TriangleCount)
+            {
+                classes = new byte[given.Length];
+                for (int t = 0; t < given.Length; t++) classes[t] = (byte)given[t];
+            }
+            return new ScanMesh(vertices, scan.Indices, classes);
+        }
+    }
+}

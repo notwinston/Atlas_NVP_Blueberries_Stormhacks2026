@@ -75,8 +75,6 @@ namespace Atlas.App.Onboarding
         /// <summary>The Editor and development builds may take a fixture room with one click (contract README F9).</summary>
         public bool SamplesAllowed { get; set; }
         public IEventLog Events { get; set; }
-        /// <summary>The TripoSG switch; null when the build has none, and the switch is not offered.</summary>
-        public IOnboardingForge Forge { get; set; }
 
         public ICameraPermission Camera { get { return _camera; } }
         public IStationPairing Station { get { return _station; } }
@@ -100,7 +98,7 @@ namespace Atlas.App.Onboarding
         {
             if (!Apply(action)) return false;
             if (action != OnboardingAction.AddCorner && action != OnboardingAction.UndoCorner &&
-                action != OnboardingAction.Adjust && action != OnboardingAction.ToggleForge) PromptsAnswered++;
+                action != OnboardingAction.Adjust) PromptsAnswered++;
             Touch();
             return true;
         }
@@ -285,24 +283,8 @@ namespace Atlas.App.Onboarding
                     if (Step != OnboardingStep.Headset) return false;
                     EnterHeadset();
                     return true;
-
-                case OnboardingAction.ToggleForge:
-                    return ToggleForge();
             }
             return false;
-        }
-
-        // Offered on the screens before and during the sweep, while the objects' photos are still to be sent.
-        bool ToggleForge()
-        {
-            IOnboardingForge forge = Forge;
-            if (forge == null || !forge.Available) return false;
-            if (Step != OnboardingStep.Welcome && Step != OnboardingStep.Room && Step != OnboardingStep.Sweep) return false;
-            bool enabled = !forge.Enabled;
-            forge.SetEnabled(enabled);
-            IEventLog events = Events;
-            if (events != null) events.Log("onboarding.forge", "triposg", enabled ? "on" : "off");
-            return true;
         }
 
         bool EndSweep()

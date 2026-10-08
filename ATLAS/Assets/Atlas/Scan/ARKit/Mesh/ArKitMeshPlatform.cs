@@ -7,8 +7,8 @@ using UnityEngine.XR.ARSubsystems;
 namespace Atlas.Scan.ARKit
 {
     /// <summary>
-    /// The ARKit side of the scan routes (Master Plan section 4.2): per-face classes of the LiDAR mesh and
-    /// the RoomPlan capture behind the furniture boxes. Registers itself before the first scene loads;
+    /// The ARKit side of the scan routes (Master Plan section 4.2): per-face classes of the LiDAR mesh. The
+    /// furniture boxes come from the RoomPlan plugin (ArKitRoomPlan). Registers itself before the first scene loads;
     /// nothing references this assembly (contract README F1).
     /// <para>The mesh classes come through ARKitMeshSubsystemExtensions, which is marked obsolete but is the
     /// only route on Unity 6000.3: the XRMeshSubsystem replacement exists from 6000.4.</para>
@@ -62,33 +62,21 @@ namespace Atlas.Scan.ARKit
         }
 #pragma warning restore CS0618
 
+        // The RoomPlan capture is no longer Unity's RoomPlanBoundingBoxSubsystem: the scan's one RoomPlan session is
+        // the Swift plugin (ArKitRoomPlan, standalone-phone plan D2), and a second RoomCaptureSession on the same
+        // ARSession crashed the scan on the device. These members of IArMeshPlatform start nothing.
+
         public bool StartRoomCapture(XRBoundingBoxSubsystem boxes)
         {
-            // Off the device the subsystem is XR Simulation's (or none) and the cast gives null.
-            var roomPlan = boxes as RoomPlanBoundingBoxSubsystem;
-            if (roomPlan == null) return false;
-            if (!roomPlan.SetupRoomCapture()) return false;
-            roomPlan.StartRoomCapture();
-            return true;
+            return false;
         }
 
         public void StopRoomCapture(XRBoundingBoxSubsystem boxes)
         {
-            var roomPlan = boxes as RoomPlanBoundingBoxSubsystem;
-            if (roomPlan != null && roomPlan.IsRoomCapturing()) roomPlan.StopRoomCapture();
         }
 
         public ScanHint RoomCaptureHint(XRBoundingBoxSubsystem boxes)
         {
-            var roomPlan = boxes as RoomPlanBoundingBoxSubsystem;
-            if (roomPlan == null || !roomPlan.IsRoomCapturing()) return ScanHint.None;
-            XRBoundingBoxInstructions instruction;
-            roomPlan.GetRoomCaptureInstruction(out instruction);
-            // One line is shown: the instruction that matters most to the scan comes first.
-            if ((instruction & XRBoundingBoxInstructions.TurnOnLight) != 0) return ScanHint.TurnOnLight;
-            if ((instruction & XRBoundingBoxInstructions.SlowDown) != 0) return ScanHint.SlowDown;
-            if ((instruction & XRBoundingBoxInstructions.MoveAwayFromWall) != 0) return ScanHint.MoveAwayFromWall;
-            if ((instruction & XRBoundingBoxInstructions.MoveCloseToWall) != 0) return ScanHint.MoveCloseToWall;
             return ScanHint.None;
         }
     }

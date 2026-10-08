@@ -55,8 +55,6 @@ namespace Atlas.App.Onboarding
             {
                 // A fixture room with one click, where there is nobody to protect from it (contract README F9).
                 SamplesAllowed = Application.isEditor || Debug.isDebugBuild,
-                // TripoSG on the Station for the scanned objects, or built-in meshes: a switch on the screens.
-                Forge = new ForgeSwitch(app.Registry, app.Assets != null),
             };
             IEventLog events;
             if (AtlasServices.TryGet(out events)) Flow.Events = events;

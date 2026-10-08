@@ -6,8 +6,10 @@ namespace Atlas.World
     /// <summary>Highest scan route that produced the room (Master Plan section 4.2). Values are the JSON values.</summary>
     public enum ScanRoute : byte { Fixture = 0, ManualOutline = 1, FloorScan = 2, ObjectBoxes = 3, WallBridge = 4 }
 
-    /// <summary>What is drawn for an object. JSON names: placeholder, requested, ready, builtIn, standIn.</summary>
-    public enum MeshState : byte { Placeholder = 0, Requested = 1, Ready = 2, BuiltIn = 3, StandIn = 4 }
+    /// <summary>What is drawn for an object. JSON names: placeholder, requested, ready, builtIn, standIn, matched,
+    /// scanCut. Matched: an artist-made prop chosen, scaled and coloured on the phone (RoomObject.Prop and PropCells
+    /// say which and how). ScanCut: the object's own triangles cut out of the scanned LiDAR mesh, which is not saved.</summary>
+    public enum MeshState : byte { Placeholder = 0, Requested = 1, Ready = 2, BuiltIn = 3, StandIn = 4, Matched = 5, ScanCut = 6 }
 
     /// <summary>Which rule decided an object's front (mesh design section 5.2). JSON names: box, profile, table, clearance.</summary>
     public enum ObjectFacingRule : byte { Box = 0, Profile = 1, Table = 2, Clearance = 3 }
@@ -139,6 +141,21 @@ namespace Atlas.World
         public ObjectFacingRule Facing;
         /// <summary>SHA-256 of the light copy of the generated GLB, or "".</summary>
         public string AssetHashLight = "";
+        /// <summary>RoomPlan attribute strings, verbatim (e.g. from String(describing:)). Never null; may be empty.
+        /// Not part of the geometry hash. A file holds at most MaxTags of them, each at most MaxTagLength characters:
+        /// RoomModelJson.Write leaves out any other.</summary>
+        public string[] Tags = Array.Empty<string>();
+        /// <summary>"" or a prop id from the prop manifest (at most MaxPropLength characters). Set with Mesh = Matched.
+        /// Not part of the geometry hash.</summary>
+        public string Prop = "";
+        /// <summary>null, or one palette cell (64..127) per colour slot of Prop, in manifest slot order (at most
+        /// MaxPropCells). Not part of the geometry hash.</summary>
+        public byte[] PropCells;
+
+        /// <summary>Limits of the optional keys tags, prop and propCells of a RoomModel file.</summary>
+        public const int MaxTags = 16, MaxTagLength = 48, MaxPropLength = 64, MaxPropCells = 8;
+        /// <summary>The object colours of the palette: a prop cell lies in FirstPropCell..LastPropCell.</summary>
+        public const int FirstPropCell = 64, LastPropCell = 127;
 
         public float Volume { get { return Size.x * Size.y * Size.z; } }
         public quaternion Rotation { get { return quaternion.RotateY(Yaw); } }
@@ -206,7 +223,7 @@ namespace Atlas.World
 
     /// <summary>
     /// The scanned room (Master Plan section 4.3). Treated as immutable once built, with one exception:
-    /// Objects[k].Mesh and .AssetHash change when furniture arrives. No UnityEngine type.
+    /// Objects[k].Mesh and .AssetHash (and .Prop and .PropCells) change when furniture arrives. No UnityEngine type.
     /// World space is the room frame: origin at the centre of the free rectangle on the floor, +X along Wf,
     /// +Z along Df, +Y up; floor points are float2 (x, z).
     /// </summary>

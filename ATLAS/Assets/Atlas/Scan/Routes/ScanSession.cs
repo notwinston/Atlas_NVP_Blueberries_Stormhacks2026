@@ -11,16 +11,19 @@ namespace Atlas.Scan
     /// <summary>
     /// The scan as onboarding drives it (contract section 10; Master Plan section 4.2, tasks P1-C02 to
     /// P1-C06), phone in the hand: sweep, outline review, confirm. The state machine is ScanFlow; this class
-    /// connects it to the AR session: it switches the scan features on and off, feeds the sensors' snapshot
-    /// to the routes, ray-casts corner taps to the floor and creates the room's anchor.
+    /// connects it to the AR session: it switches the scan features on and off, runs the scan's one RoomPlan
+    /// session (standalone-phone plan D2: furniture boxes, coaching, walls), feeds the sensors' snapshot to the
+    /// routes, ray-casts corner taps to the floor, creates the room's anchor and hands the scanned mesh of a
+    /// confirmed room to the scan mesh sink.
     /// <para>In the Editor the same calls work with no phone (contract README F9): with XR Simulation the
-    /// room comes from the simulated planes and boxes, with no AR provider from corners tapped or walked,
+    /// room comes from the simulated planes (there is no RoomPlan, so no boxes), with no AR provider from
+    /// corners tapped or walked,
     /// and UseFixture or UseRoom skips the scan altogether.</para>
     /// </summary>
     public sealed class ScanSession : IScanSession
     {
         const string LogPrefix = "Atlas: ";
-        // After RoomPlan capture starts the depth image is watched this long; if it stays away the boxes go.
+        // After the RoomPlan capture starts the depth image is watched this long; if it stays away the capture goes.
         const float DepthCheckSeconds = 2f;
         const float HintInterval = 0.25f;
 
@@ -30,12 +33,16 @@ namespace Atlas.Scan
         readonly ScanSensors _sensors;
         readonly List<ARRaycastHit> _hits = new List<ARRaycastHit>(16);
         readonly ScanPhotoDriver _photos;
-        readonly WallBridgeCapture _wallBridge = new WallBridgeCapture();
+        readonly RoomPlanSession _roomPlan = new RoomPlanSession();
+        IScanMeshSink _scanMeshSink = new NullScanMeshSink();
 
         bool _featuresOn, _meshOn, _boxesOn, _capturing, _classesAsked;
         bool _depthBefore;
         float _depthMissing, _hintTimer;
         GameObject _anchorObject;
+        // The newest snapshot the sensors gave: at Finalise, the one the sweep ended with.
+        ScanSnapshot _lastSnapshot;
+        string _lastRoomPlanLine = "";
 
         /// <summary>rig and pose come from the pose systems (ArPoseSystems.Rig and .Pipeline). Neither is searched for.</summary>
         public ScanSession(ArSessionRig rig, IPosePipeline pose) : this(rig, pose, null) { }
@@ -52,8 +59,8 @@ namespace Atlas.Scan
             _pose = pose;
             Photos = photos;
             _photos = new ScanPhotoDriver(photos);
-            _sensors = new ScanSensors(rig);
-            _flow = new ScanFlow(_sensors.Capture);
+            _sensors = new ScanSensors(rig, _roomPlan);
+            _flow = new ScanFlow(CaptureSnapshot);
             _flow.StateChanged += OnFlowState;
         }
 
@@ -69,6 +76,21 @@ namespace Atlas.Scan
         /// </summary>
         public IAfterFrameStep PhotoDelivery { get { return _photos; } }
 
+        /// <summary>
+        /// Where the scanned LiDAR mesh of a finished room goes (standalone-phone plan D8, D10), in the room frame:
+        /// once per room, before the photo sink's BeginRoom. A confirmed scan with no scanned mesh, and a room
+        /// from a fixture or a file, give null. Never null; setting null puts back the NullScanMeshSink. The
+        /// composition root sets it through ScanSystems.ScanMeshSink.
+        /// </summary>
+        public IScanMeshSink ScanMeshSink
+        {
+            get { return _scanMeshSink; }
+            set { _scanMeshSink = value ?? new NullScanMeshSink(); }
+        }
+
+        /// <summary>The scan's RoomPlan session: what it saw last (Latest), whether it runs.</summary>
+        public RoomPlanSession RoomPlan { get { return _roomPlan; } }
+
         public ScanState State { get { return _flow.State; } }
         public ScanFailure Failure { get { return _flow.Failure; } }
         public ScanProgress Progress { get { return _flow.Progress; } }
@@ -80,10 +102,13 @@ namespace Atlas.Scan
             get { return _rig.HasAr && _rig.Backend == XrBackend.ARKit && _rig.Meshes != null; }
         }
 
-        /// <summary>Furniture boxes exist here: RoomPlan on the phone, simulated boxes in XR Simulation.</summary>
+        /// <summary>
+        /// Furniture boxes exist here: the RoomPlan plugin on an ARKit session with LiDAR. False in the Editor and
+        /// in XR Simulation, which have no RoomPlan.
+        /// </summary>
         public bool BoxesAvailable
         {
-            get { return _rig.HasAr && _rig.Boxes != null && _rig.Boxes.subsystem != null; }
+            get { return _rig.HasAr && _rig.Backend == XrBackend.ARKit && RoomPlanPlugin.Current.Available; }
         }
 
         public OutlineProposal Proposal { get { return _flow.Proposal; } }
@@ -226,6 +251,9 @@ namespace Atlas.Scan
             ReleaseAnchor();
             // Crops of an earlier scan still waiting belong to the room this one replaces.
             _photos.Drop();
+            _lastSnapshot = null;
+            // A room from a file or a fixture has no scanned mesh; the sink hears it before the room is the result.
+            if (room != null) _scanMeshSink.SetScanMesh(room.Id, null);
             _flow.UseRoom(room);
         }
 
@@ -258,9 +286,11 @@ namespace Atlas.Scan
                     break;
                 case ScanState.Idle:
                     StopFeatures("cancelled");
+                    _lastSnapshot = null;
                     break;
                 case ScanState.Failed:
                     StopFeatures("failed (" + _flow.Failure + ")");
+                    _lastSnapshot = null;
                     break;
                 case ScanState.Done:
                     StopFeatures("done");
@@ -274,26 +304,23 @@ namespace Atlas.Scan
         {
             ScanOptions options = _flow.Options;
             _meshOn = options.UseMesh && MeshAvailable;
-            _boxesOn = options.UseBoxes && _rig.HasAr && _rig.Boxes != null;
+            _boxesOn = options.UseBoxes && BoxesAvailable;
             _depthBefore = _pose.Sensors.HasDepth;
-            _rig.SetScanFeatures(true, _meshOn, _boxesOn);
+            _rig.SetScanFeatures(true, _meshOn);
             _featuresOn = true;
             _classesAsked = false;
-            _capturing = false;
             _depthMissing = 0f;
             _hintTimer = 0f;
+            _lastSnapshot = null;
+            _lastRoomPlanLine = "";
             _sensors.Start();
-            if (_boxesOn)
-            {
-                // RoomPlan produces boxes only while a capture runs. XR Simulation needs none.
-                _capturing = ArMeshPlatform.Current.StartRoomCapture(_rig.Boxes.subsystem);
-                // Starting a capture can replace the session's configuration: ask for depth again.
-                _rig.ApplyDepth();
-            }
-            // Route 4 rides on the furniture capture; where it is off or absent this only forgets the last scan's walls.
-            _wallBridge.Begin(_capturing ? _rig : null);
+            // The one RoomPlan session of the scan (D2): boxes, coaching and walls. Where boxes are off or there is
+            // no RoomPlan this only forgets what the last scan's session saw.
+            _capturing = _roomPlan.Begin(_boxesOn ? _rig : null);
+            // Starting a capture replaces the session's configuration: ask for depth again.
+            if (_capturing) _rig.ApplyDepth();
             Debug.Log(LogPrefix + "scan started: mesh " + (_meshOn ? "on" : "off") + ", boxes " + (_boxesOn ? "on" : "off") +
-                      (_capturing ? " (RoomPlan capture)" : ""));
+                      (_capturing ? " (RoomPlan capture)" : _boxesOn ? " (the RoomPlan capture did not start)" : ""));
         }
 
         void WatchProvider(float deltaTime)
@@ -310,10 +337,10 @@ namespace Atlas.Scan
             if (_hintTimer >= HintInterval)
             {
                 _hintTimer = 0f;
-                _flow.ExternalHint = platform.RoomCaptureHint(_rig.Boxes.subsystem);
+                _flow.ExternalHint = RoomPlanPlugin.Hint(_roomPlan.Refresh().Instruction);
             }
             // Bump Guard needs the depth image back after the scan. If the capture took it away and it has
-            // not returned in two seconds, this scan goes on without boxes (route 2).
+            // not returned in two seconds, this scan goes on without the capture: no boxes (route 2).
             if (!_depthBefore || _depthMissing < 0f) return;
             if (_pose.Sensors.HasDepth)
             {
@@ -325,18 +352,47 @@ namespace Atlas.Scan
             _depthMissing = -1f;
             StopCapture();
             _boxesOn = false;
-            if (_rig.Boxes != null) _rig.Boxes.enabled = false;
             Debug.LogWarning(LogPrefix + "depth did not return with RoomPlan capture running: boxes off for this scan");
         }
 
+        // Ends the RoomPlan session; what it saw stays for the walls at Finalise (RoomPlanSession.ApplyWalls).
         void StopCapture()
         {
             if (!_capturing) return;
             _capturing = false;
             _flow.ExternalHint = ScanHint.None;
-            if (_rig.Boxes != null) ArMeshPlatform.Current.StopRoomCapture(_rig.Boxes.subsystem);
-            _wallBridge.End();
+            _roomPlan.End();
             _rig.ApplyDepth();
+        }
+
+        // The sensors' snapshot for the flow. The newest is kept for Finalise (its mesh goes to the scan mesh
+        // sink), and while RoomPlan runs one line is logged whenever what it reports changes (spike S1).
+        ScanSnapshot CaptureSnapshot()
+        {
+            ScanSnapshot snapshot = _sensors.Capture();
+            _lastSnapshot = snapshot;
+            if (_capturing) LogRoomPlan(snapshot);
+            return snapshot;
+        }
+
+        void LogRoomPlan(ScanSnapshot snapshot)
+        {
+            RoomPlanCapture seen = _roomPlan.Latest;
+            var line = new System.Text.StringBuilder(128);
+            line.Append("RoomPlan: ").Append(seen.Objects.Length).Append(" objects, ").Append(seen.Walls.Length)
+                .Append(" walls, ").Append(seen.Doors.Length).Append(" doors, ").Append(seen.Windows.Length)
+                .Append(" windows, ").Append(seen.Openings.Length).Append(" openings, depth ")
+                .Append(_pose.Sensors.HasDepth ? "present" : "missing");
+            for (int k = 0; k < seen.Objects.Length; k++)
+            {
+                line.Append(k == 0 ? "; " : ", ").Append(seen.Objects[k].Category);
+                string[] attributes = seen.Objects[k].Attributes;
+                if (attributes.Length > 0) line.Append(" [").Append(string.Join(", ", attributes)).Append(']');
+            }
+            string text = line.ToString();
+            if (text == _lastRoomPlanLine) return;
+            _lastRoomPlanLine = text;
+            Debug.Log(LogPrefix + text + "; mesh " + (snapshot.HasScannedMesh ? snapshot.TriangleCount : 0) + " triangles");
         }
 
         void StopFeatures(string why)
@@ -355,9 +411,15 @@ namespace Atlas.Scan
         void Finalise()
         {
             RoomModel room = _flow.Proposal.Preview;
-            // Route 4: RoomPlan's wall heights, doors and windows onto the outline's walls, when a capture ran.
-            WallBridgeReport bridge = _wallBridge.Apply(room);
+            // Route 4: RoomPlan's wall heights, doors and windows onto the outline's walls, when a capture ran and
+            // scan.wallBridge is on.
+            WallBridgeReport bridge = _roomPlan.ApplyWalls(room);
             if (bridge.Tried) Debug.Log(LogPrefix + bridge.Text);
+            // The scanned mesh in the room frame, before the photo sink hears of the room (at Done, below).
+            ScanMesh mesh = ScanMeshes.ToRoomFrame(_lastSnapshot, room.Anchor);
+            _lastSnapshot = null;
+            _scanMeshSink.SetScanMesh(room.Id, mesh);
+            Debug.Log(LogPrefix + "scan mesh for room " + room.Id + ": " + (mesh != null ? mesh.TriangleCount + " triangles" : "none"));
             ReleaseAnchor();
             string anchorId;
             ResultAnchor = CreateAnchor(room, out anchorId);

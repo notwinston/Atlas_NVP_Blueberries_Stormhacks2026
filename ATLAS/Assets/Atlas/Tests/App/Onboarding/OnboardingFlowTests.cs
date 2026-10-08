@@ -770,7 +770,7 @@ namespace Atlas.App.Tests.Onboarding
             rig.Flow.Begin();
             OnboardingScreen screen = rig.Show();
             Assert.That(screen.Body, Does.Contain("Clear the floor").And.Contain("level floor").And.Contain("spotter"));
-            Assert.That(screen.ButtonCount, Is.EqualTo(2), "Start and the TripoSG switch");
+            Assert.That(screen.ButtonCount, Is.EqualTo(1), "Start only");
             Assert.That(screen.PrimaryAction, Is.EqualTo(OnboardingAction.Start));
         }
 
@@ -827,77 +827,6 @@ namespace Atlas.App.Tests.Onboarding
             Assert.That(primaries, Is.LessThanOrEqualTo(1), step + ": one way on");
             foreach (char c in screen.Title + screen.Body) Assert.That(c, Is.LessThan((char)127), step);
             Assert.That(OnboardingScreens.StepName(rig.Flow.Step), Is.Not.EqualTo("unknown"));
-        }
-
-        // ---- the TripoSG switch -------------------------------------------------------------------------------
-
-        [Test]
-        public void ForgeSwitch_IsOffered_BeforeAndDuringTheSweep_AndIsNotAQuestion()
-        {
-            var rig = new Rig();
-            rig.Flow.Begin();
-            Assert.That(rig.Show().Offers(OnboardingAction.ToggleForge), Is.True, "on the welcome screen");
-            Assert.That(ButtonLabel(rig.Screen, OnboardingAction.ToggleForge), Is.EqualTo("TripoSG objects: on"));
-
-            rig.Press(OnboardingAction.ToggleForge);
-            Assert.That(rig.Forge.Enabled, Is.False);
-            Assert.That(ButtonLabel(rig.Show(), OnboardingAction.ToggleForge), Is.EqualTo("TripoSG objects: off"));
-            Assert.That(rig.Flow.Step, Is.EqualTo(OnboardingStep.Welcome), "the switch leaves the step alone");
-            Assert.That(rig.Flow.PromptsAnswered, Is.EqualTo(0), "the switch is not a question");
-            Assert.That(rig.Events.Has("onboarding.forge triposg=off"), Is.True);
-
-            rig.ToRoomStep();
-            Assert.That(rig.Flow.Step, Is.EqualTo(OnboardingStep.Sweep));
-            rig.Press(OnboardingAction.ToggleForge);
-            Assert.That(rig.Forge.Enabled, Is.True, "on again during the sweep");
-            rig.Scan.FindFloor();
-            rig.Frames();
-            rig.Press(OnboardingAction.DoneSweeping);
-            rig.Frames();
-            Assert.That(rig.Flow.Step, Is.EqualTo(OnboardingStep.Confirm));
-            Assert.That(rig.Show().Offers(OnboardingAction.ToggleForge), Is.False, "not once the scan is finished");
-        }
-
-        [Test]
-        public void ForgeSwitch_IsOffered_OnTheRoomChoice_AndRefusedLater()
-        {
-            var rig = new Rig();
-            rig.Rooms.HasSavedRoom = true;
-            rig.ToRoomStep();
-            Assert.That(rig.Flow.Step, Is.EqualTo(OnboardingStep.Room));
-            Assert.That(rig.Show().Offers(OnboardingAction.ToggleForge), Is.True);
-
-            rig = new Rig();
-            rig.ToHeadsetPrompt();
-            Assert.That(rig.Flow.Do(OnboardingAction.ToggleForge), Is.False);
-            Assert.That(rig.Forge.Sets, Is.EqualTo(0));
-        }
-
-        [Test]
-        public void ForgeSwitch_IsHidden_WithoutAnAssetClient()
-        {
-            var rig = new Rig();
-            rig.Forge.Available = false;
-            rig.Flow.Begin();
-            Assert.That(rig.Show().Offers(OnboardingAction.ToggleForge), Is.False);
-            Assert.That(rig.Flow.Do(OnboardingAction.ToggleForge), Is.False);
-        }
-
-        [Test]
-        public void ForgeSwitch_FlipsForgeBackend_BetweenLocalAndOff()
-        {
-            var registry = new ParamRegistry();
-            Assert.That(new ForgeSwitch(registry, true).Available, Is.False, "no forge.backend declared");
-            ParamEntry backend = registry.DeclareEnum("forge.backend", "forge", new[] { "local", "hosted", "cache", "off" }, 0);
-            var forge = new ForgeSwitch(registry, true);
-            Assert.That(forge.Available, Is.True);
-            Assert.That(forge.Enabled, Is.True);
-            forge.SetEnabled(false);
-            Assert.That(backend.Int, Is.EqualTo(3));
-            Assert.That(forge.Enabled, Is.False);
-            forge.SetEnabled(true);
-            Assert.That(backend.Int, Is.EqualTo(0));
-            Assert.That(new ForgeSwitch(registry, false).Available, Is.False, "no asset client");
         }
 
         static string ButtonLabel(OnboardingScreen screen, OnboardingAction action)

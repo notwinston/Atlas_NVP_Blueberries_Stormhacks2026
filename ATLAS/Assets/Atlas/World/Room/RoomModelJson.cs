@@ -24,7 +24,7 @@ namespace Atlas.World
         public const int MaxFileBytes = 300 * 1000;
 
         static readonly string[] s_facingNames = { "box", "profile", "table", "clearance" };
-        static readonly string[] s_meshNames = { "placeholder", "requested", "ready", "builtIn", "standIn" };
+        static readonly string[] s_meshNames = { "placeholder", "requested", "ready", "builtIn", "standIn", "matched", "scanCut" };
         static readonly string[] s_openingNames = { "door", "window", "opening" };
         static readonly byte[] s_hashMagic = Encoding.ASCII.GetBytes("ATLAS-ROOM-1");
 
@@ -218,6 +218,41 @@ namespace Atlas.World
                         throw new RoomModelFormatException(path + ".profile: not standard base64");
                 try { obj.Profile = Convert.FromBase64String(text); }
                 catch (FormatException) { throw new RoomModelFormatException(path + ".profile: not standard base64"); }
+            }
+            if (v.TryGet("tags", out optional) && !optional.IsNull)
+            {
+                JsonValue tags = Arr(v, "tags", path + ".tags", RoomObject.MaxTags);
+                obj.Tags = new string[tags.Count];
+                for (int k = 0; k < tags.Count; k++)
+                {
+                    string p = path + ".tags[" + Text(k) + "]";
+                    if (!tags[k].IsString) throw new RoomModelFormatException(p + ": expected a string");
+                    string tag = tags[k].AsString();
+                    if (tag.Length > RoomObject.MaxTagLength)
+                        throw new RoomModelFormatException(p + ": longer than " + Text(RoomObject.MaxTagLength) + " characters");
+                    obj.Tags[k] = tag;
+                }
+            }
+            if (v.TryGet("prop", out optional) && !optional.IsNull)
+            {
+                obj.Prop = Str(v, "prop", path + ".prop");
+                if (obj.Prop.Length > RoomObject.MaxPropLength)
+                    throw new RoomModelFormatException(path + ".prop: longer than " + Text(RoomObject.MaxPropLength) + " characters");
+            }
+            if (v.TryGet("propCells", out optional) && !optional.IsNull)
+            {
+                JsonValue cells = Arr(v, "propCells", path + ".propCells", RoomObject.MaxPropCells);
+                if (cells.Count == 0) throw new RoomModelFormatException(path + ".propCells: needs 1 to " + Text(RoomObject.MaxPropCells) + " cells");
+                obj.PropCells = new byte[cells.Count];
+                for (int k = 0; k < cells.Count; k++)
+                {
+                    string p = path + ".propCells[" + Text(k) + "]";
+                    JsonValue c = cells[k];
+                    if (!c.IsNumber || c.AsDouble() != Math.Floor(c.AsDouble())) throw new RoomModelFormatException(p + ": expected an integer");
+                    double d = c.AsDouble();
+                    if (d < RoomObject.FirstPropCell || d > RoomObject.LastPropCell) throw new RoomModelFormatException(p + ": out of range");
+                    obj.PropCells[k] = (byte)d;
+                }
             }
             return obj;
         }
@@ -493,10 +528,42 @@ namespace Atlas.World
                 sb.Append(", \"facing\": \"").Append(s_facingNames[(int)obj.Facing]).Append('"');
             if (obj.Profile != null)
                 sb.Append(", \"profile\": \"").Append(Convert.ToBase64String(obj.Profile)).Append('"');
+            WriteTags(sb, obj.Tags);
+            if (!string.IsNullOrEmpty(obj.Prop))
+            {
+                sb.Append(", \"prop\": "); Quoted(sb, obj.Prop);
+            }
+            if (obj.PropCells != null && obj.PropCells.Length > 0)
+            {
+                sb.Append(", \"propCells\": [");
+                for (int k = 0; k < obj.PropCells.Length; k++)
+                {
+                    if (k > 0) sb.Append(", ");
+                    sb.Append(Text(obj.PropCells[k]));
+                }
+                sb.Append(']');
+            }
             sb.Append('}');
         }
 
-        /// <summary>JSON name of a mesh state: placeholder, requested, ready, builtIn, standIn.</summary>
+        // RoomPlan's attribute strings come from outside: a file keeps the first MaxTags that are at most
+        // MaxTagLength characters long, so that what is written always reads back. Nothing is written when none is.
+        static void WriteTags(StringBuilder sb, string[] tags)
+        {
+            if (tags == null) return;
+            int written = 0;
+            for (int k = 0; k < tags.Length && written < RoomObject.MaxTags; k++)
+            {
+                string tag = tags[k];
+                if (tag == null || tag.Length > RoomObject.MaxTagLength) continue;
+                sb.Append(written == 0 ? ", \"tags\": [" : ", ");
+                Quoted(sb, tag);
+                written++;
+            }
+            if (written > 0) sb.Append(']');
+        }
+
+        /// <summary>JSON name of a mesh state: placeholder, requested, ready, builtIn, standIn, matched, scanCut.</summary>
         public static string MeshStateName(MeshState state)
         {
             int i = (int)state;

@@ -82,7 +82,9 @@ ALLOWED = {
     "Atlas.Scan.ARKit": ["Atlas.Kernel", "Atlas.World", "Atlas.Scan"],
     "Atlas.Safety": ["Atlas.World"],
     "Atlas.Input": [],
-    "Atlas.Telemetry": ["Atlas.Kernel", "Atlas.Link", "Atlas.World"],
+    # Engine-free object code: prop matching, fitting, colouring, LiDAR cut-out (standalone-phone plan D14).
+    "Atlas.Objects": ["Atlas.Kernel", "Atlas.World"],
+    "Atlas.Telemetry": ["Atlas.Kernel", "Atlas.Link", "Atlas.World", "Atlas.Objects"],
     # Tracked hands (documents/ATLAS_Hands_Design.md 3.2). Link for parameter types only, as a space.
     "Atlas.Hands": ["Atlas.Kernel", "Atlas.Link", "Atlas.World", "Atlas.Rendering", "Atlas.Input"],
     "Atlas.Hands.ARKit": ["Atlas.Kernel", "Atlas.World", "Atlas.Hands"],

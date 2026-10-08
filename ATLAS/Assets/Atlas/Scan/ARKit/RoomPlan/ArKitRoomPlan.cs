@@ -8,21 +8,19 @@ using UnityEngine;
 namespace Atlas.Scan.ARKit
 {
     /// <summary>
-    /// The ARKit side of scan route 4 (Master Plan section 4.2, task P1-C05): a RoomPlan capture on the
-    /// running ARSession through Assets/Plugins/iOS/AtlasRoomPlan.swift, read as the walls file of
-    /// Atlas.World.WallBridgeJson. Registers itself before the first scene loads; nothing references this
+    /// The ARKit side of the scan's one RoomPlan session (standalone-phone plan D2): a RoomCaptureSession on the
+    /// running ARSession through Assets/Plugins/iOS/AtlasRoomPlan.swift, read as the atlas.room/1 file of
+    /// Atlas.World.RoomPlanJson. Registers itself before the first scene loads; nothing references this
     /// assembly (contract README F1). In the Editor every call does nothing and <see cref="Available"/> is
     /// false (contracts F9).
     /// </summary>
-    public sealed class ArKitWallBridge : IWallBridge
+    public sealed class ArKitRoomPlan : IRoomPlanCapture
     {
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         static void RegisterAtStartUp()
         {
-            WallBridge.Register(new ArKitWallBridge());
+            RoomPlanPlugin.Register(new ArKitRoomPlan());
         }
-
-        public string Name { get { return "RoomPlan"; } }
 
 #if UNITY_IOS && !UNITY_EDITOR
         [DllImport("__Internal")] static extern int AtlasRoomPlanSupported();
@@ -38,7 +36,8 @@ namespace Atlas.Scan.ARKit
             public IntPtr Session;      // ARSession*
         }
 
-        byte[] _buffer = new byte[16 * 1024];
+        // Objects make the file larger than the walls alone did: 64 KiB holds a furnished room.
+        byte[] _buffer = new byte[64 * 1024];
 
         public bool Available { get { return AtlasRoomPlanSupported() != 0; } }
 
@@ -58,7 +57,7 @@ namespace Atlas.Scan.ARKit
                 fixed (byte* buffer = _buffer) length = AtlasRoomPlanCopyJson(buffer, _buffer.Length);
                 if (length <= 0) return "";
                 if (length <= _buffer.Length) return Encoding.UTF8.GetString(_buffer, 0, length);
-                _buffer = new byte[length + 4096];
+                _buffer = new byte[length + 16 * 1024];
             }
             return "";
         }

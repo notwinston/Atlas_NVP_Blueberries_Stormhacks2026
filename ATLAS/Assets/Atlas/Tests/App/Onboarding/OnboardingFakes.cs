@@ -234,19 +234,6 @@ namespace Atlas.App.Tests.Onboarding
         }
     }
 
-    sealed class FakeForge : IOnboardingForge
-    {
-        public bool Available { get; set; } = true;
-        public bool Enabled { get; set; } = true;
-        public int Sets;
-
-        public void SetEnabled(bool enabled)
-        {
-            Sets++;
-            Enabled = enabled;
-        }
-    }
-
     /// <summary>The flow with all five fakes, and the walker's hands.</summary>
     sealed class Rig
     {
@@ -257,7 +244,6 @@ namespace Atlas.App.Tests.Onboarding
         public readonly FakeScan Scan = new FakeScan();
         public readonly FakeRooms Rooms;
         public readonly FakeHeadset Headset = new FakeHeadset();
-        public readonly FakeForge Forge = new FakeForge();
         public readonly FakeEvents Events = new FakeEvents();
         public readonly OnboardingFlow Flow;
         public readonly OnboardingScreen Screen = new OnboardingScreen();
@@ -266,7 +252,7 @@ namespace Atlas.App.Tests.Onboarding
         public Rig()
         {
             Rooms = new FakeRooms(Scan);
-            Flow = new OnboardingFlow(Camera, Station, Scan, Rooms, Headset) { Events = Events, Forge = Forge };
+            Flow = new OnboardingFlow(Camera, Station, Scan, Rooms, Headset) { Events = Events };
         }
 
         public void Frames(int count = 1)

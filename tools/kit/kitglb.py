@@ -36,6 +36,9 @@ BUDGETS = {"landmark": 1500, "avatar": 600, "duck": 2500}
 WELD_TOLERANCE = 1e-5
 # A normal whose length is further than this from 1 is refused.
 NORMAL_TOLERANCE = 1e-3
+# The longest edge a prop may have (check_piece's check_edges), metres: the asset contract's edge rule, so the
+# warp bends every face smoothly (station/forge/forge/budget.py MAX_EDGE_METRES; standalone-phone plan D6).
+MAX_EDGE_METRES = 0.25
 
 # AtlasShading: the one fixed diagram light, baked into the shade as the Forge and the generators bake it.
 LIGHT_DIRECTION = tuple(c / math.sqrt(0.35 ** 2 + 0.85 ** 2 + 0.40 ** 2) for c in (0.35, 0.85, 0.40))
@@ -135,10 +138,13 @@ def blender_triangle(a, b, c):
 
 # ---- Checks ------------------------------------------------------------------------------------------------
 
-def check_piece(name: str, piece: Piece, max_triangles: int) -> None:
+def check_piece(name: str, piece: Piece, max_triangles: int, check_edges: bool = False) -> None:
     """Raises ValueError naming the piece when it cannot ship: empty, arrays of different lengths, over
     budget, an index out of range, a normal that is not unit length, or an open edge. Corners split for flat
-    normals or palette seams are welded on position (WELD_TOLERANCE) before edges are counted."""
+    normals or palette seams are welded on position (WELD_TOLERANCE) before edges are counted.
+
+    With ``check_edges`` (props, tools/props/check.py) an edge longer than MAX_EDGE_METRES is refused too.
+    The kit pieces do not use it: they are drawn in one space and need no edge rule."""
     count = len(piece.positions)
     if count == 0 or not piece.indices:
         raise ValueError(f"{name}: the piece is empty")
@@ -157,6 +163,15 @@ def check_piece(name: str, piece: Piece, max_triangles: int) -> None:
         length = math.sqrt(sum(c * c for c in n))
         if abs(length - 1.0) > NORMAL_TOLERANCE:
             raise ValueError(f"{name}: normal {k} is not unit length ({length:.4f})")
+    if check_edges:
+        for k in range(0, len(piece.indices), 3):
+            corners = [piece.positions[i] for i in piece.indices[k:k + 3]]
+            for e in range(3):
+                a, b = corners[e], corners[(e + 1) % 3]
+                length = math.sqrt(sum((a[i] - b[i]) ** 2 for i in range(3)))
+                if length > MAX_EDGE_METRES:
+                    raise ValueError(f"{name}: triangle {k // 3} has an edge of {length:.4f} m, over the "
+                                     f"{MAX_EDGE_METRES} m edge rule (near {tuple(round(c, 4) for c in a)})")
 
     welded = _weld(piece.positions, WELD_TOLERANCE)
     uses: dict[tuple[int, int], int] = {}

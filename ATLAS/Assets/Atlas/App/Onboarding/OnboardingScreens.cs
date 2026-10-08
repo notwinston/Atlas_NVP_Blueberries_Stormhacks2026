@@ -122,7 +122,6 @@ namespace Atlas.App.Onboarding
                 "- One level floor: no steps, no ramps.\n" +
                 "- Not on the team? A spotter stays with you while you walk.";
             screen.Add("Start", OnboardingAction.Start, true);
-            ForgeSwitch(flow, screen);
             if (flow.SamplesAllowed) screen.Add("Sample room (no scan)", OnboardingAction.UseSampleRoom);
         }
 
@@ -180,7 +179,6 @@ namespace Atlas.App.Onboarding
             screen.Add("Scan this room", OnboardingAction.ScanAutomatic, !saved && !failed);
             // After a scan that failed, the outline by hand is the way that always works.
             screen.Add("Outline by hand", OnboardingAction.ScanManual, failed);
-            ForgeSwitch(flow, screen);
             if (flow.Room != null) screen.Add("Back", OnboardingAction.Back);
             if (flow.SamplesAllowed) screen.Add("Sample room (no scan)", OnboardingAction.UseSampleRoom);
         }
@@ -254,16 +252,7 @@ namespace Atlas.App.Onboarding
             {
                 screen.Add("Outline by hand", OnboardingAction.ScanManual);
             }
-            ForgeSwitch(flow, screen);
             screen.Add("Back", OnboardingAction.Back);
-        }
-
-        // The TripoSG switch, where the objects are about to be scanned. Its label says the state it is in.
-        static void ForgeSwitch(OnboardingFlow flow, OnboardingScreen screen)
-        {
-            IOnboardingForge forge = flow.Forge;
-            if (forge == null || !forge.Available) return;
-            screen.Add(forge.Enabled ? "TripoSG objects: on" : "TripoSG objects: off", OnboardingAction.ToggleForge);
         }
 
         static void Confirm(OnboardingFlow flow, OnboardingScreen screen, StringBuilder text)

@@ -425,6 +425,17 @@ namespace Atlas.Rendering.Room
             return true;
         }
 
+        public bool SetOnPhoneMesh(int objectId, Mesh mesh, MeshState state, float fadeSeconds = 0.3f)
+        {
+            if (state != MeshState.Matched && state != MeshState.ScanCut) return false;
+            int index = IndexOf(objectId);
+            if (index < 0 || mesh == null) return false;
+            // The generated-mesh path: owned here, cross-faded, one swap begun per frame. No light copy goes with it,
+            // so the full copy is drawn at both furniture levels (DrawsLight falls back to it): one mesh, both levels.
+            Enqueue(index, mesh, true, state, "", Vector3.one, fadeSeconds);
+            return true;
+        }
+
         /// <summary>
         /// As SetGeneratedMesh, from mesh data in the shared vertex format and the object's local frame (origin
         /// at the centre of the base of its box, metres). The mesh made from it is owned here.

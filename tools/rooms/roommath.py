@@ -68,7 +68,7 @@ CATEGORIES = [
     "toilet", "washerDryer", "keyboard", "mouse", "laptop", "other",
 ]
 PALETTE_CATEGORY_BASE = 32  # palette cell of category c is 32 + c (lane A's palette layout)
-MESH_STATES = ["placeholder", "requested", "ready", "builtIn", "standIn"]
+MESH_STATES = ["placeholder", "requested", "ready", "builtIn", "standIn", "matched", "scanCut"]
 OPENING_KINDS = ["door", "window", "opening"]
 
 

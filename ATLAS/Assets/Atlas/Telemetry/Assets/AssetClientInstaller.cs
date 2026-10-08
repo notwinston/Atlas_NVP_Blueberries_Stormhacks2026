@@ -22,10 +22,14 @@ namespace Atlas.Telemetry
             AssetClientCore.BackendLocal, AssetClientCore.BackendHosted, AssetClientCore.BackendCache, AssetClientCore.BackendOff
         };
 
+        /// <summary>forge.backend's default: <c>off</c>, the on-phone path (standalone-phone plan D3). AppParams declares the same.</summary>
+        public const int DefaultBackend = 3;
+
         /// <summary>
-        /// Creates the client, publishes it as <see cref="IObjectPhotoSink"/> and as <see cref="AssetClient"/>,
-        /// declares <c>forge.backend</c>, and once <c>AtlasServices.Booted</c> is raised follows the room
-        /// content and adds itself to step 8b of the frame loop. Returns null in the Spectator, which shows
+        /// Creates the client with the Forge's round trip and the on-phone path, publishes it as
+        /// <see cref="IObjectPhotoSink"/> and as <see cref="AssetClient"/>, declares <c>forge.backend</c> (default off),
+        /// and once <c>AtlasServices.Booted</c> is raised follows the room content and adds itself to step 8b of the
+        /// frame loop. Returns null in the Spectator, which shows
         /// the room as the phone reports it and asks the Forge for nothing.
         /// </summary>
         public static AssetClient Install(AtlasBootContext boot, AtlasTelemetry telemetry)
@@ -39,9 +43,16 @@ namespace Atlas.Telemetry
             FallbackSet fallback = FallbackSet.Load(ReadFallbackResource);
             if (fallback.LastError != null) telemetry.Events.LogLine("warn", "assets: " + fallback.LastError, false);
 
+            // The prop library of the on-phone path (standalone-phone plan section 6.3). A missing or partial library
+            // is not fatal: an object with no prop of its category keeps its first shape.
+            PropSet props = PropSet.Load(ReadPropResource);
+            if (props.Error != null) telemetry.Events.LogLine("warn", "assets: " + props.Error, false);
+
             var transport = new UnityForgeTransport();
-            AssetClient client = AssetClient.Create(transport, cache, new ThreadPoolAssetWorker(), fallback, telemetry.Events);
+            AssetClient client = AssetClient.Create(transport, cache, new ThreadPoolAssetWorker(), fallback, telemetry.Events, props);
             AssetClientCore core = client.Core;
+            // The Station is optional (plan D3): with nothing declared, the phone builds its objects itself.
+            core.Backend = s_backends[DefaultBackend];
 
             // The link: job news in, acknowledgements out. Without a Station the client polls the Forge itself.
             LinkClient link = telemetry.Link;
@@ -59,13 +70,14 @@ namespace Atlas.Telemetry
                 core.ForgeUrl = ForgeUrl(link != null ? link.Welcome : null, pairing);
             }
 
-            // forge.backend (section 1.4, id 45): what is sent in meta.backend; `off` sends nothing at all.
+            // forge.backend (section 1.4, id 45): what is sent in meta.backend; `off` sends nothing at all and the
+            // objects are built on the phone (standalone-phone plan section 6.5).
             ParamRegistry registry = telemetry.Params ?? boot.Params;
             if (registry != null)
             {
                 ParamEntry backend;
                 if (!registry.TryGet(ParamForgeBackend, out backend))
-                    backend = registry.DeclareEnum(ParamForgeBackend, "forge", s_backends, 0);
+                    backend = registry.DeclareEnum(ParamForgeBackend, "forge", s_backends, DefaultBackend);
                 core.Backend = s_backends[Mathf.Clamp(backend.Int, 0, s_backends.Length - 1)];
                 registry.Changed += (entry, source) =>
                 {
@@ -97,6 +109,16 @@ namespace Atlas.Telemetry
             if (pairing != null && !string.IsNullOrEmpty(pairing.Host))
                 return "http://" + pairing.Host + ":" + ForgePort.ToString(System.Globalization.CultureInfo.InvariantCulture);
             return string.Empty;
+        }
+
+        // "manifest" and "<id>.glb": the prop library (Resources/AtlasProps), read once at install.
+        static byte[] ReadPropResource(string name)
+        {
+            var asset = Resources.Load<TextAsset>(PropSet.ResourceFolder + "/" + name);
+            if (asset == null) return null;
+            byte[] bytes = asset.bytes;
+            Resources.UnloadAsset(asset);
+            return bytes;
         }
 
         // "manifest" and "<category>.glb": the files tools/gen_fallback_set.py writes next to this assembly.

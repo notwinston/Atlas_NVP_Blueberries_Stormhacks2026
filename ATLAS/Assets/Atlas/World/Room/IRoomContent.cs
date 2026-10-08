@@ -109,6 +109,16 @@ namespace Atlas.World
         /// </summary>
         bool SetBuiltInMesh(int objectId, Mesh sharedMesh, Vector3 scale, float fadeSeconds = 0.3f);
 
+        /// <summary>
+        /// The on-phone object builder's call when a mesh built on the phone takes the object's place: a matched prop
+        /// (state Matched) or the object cut out of the scanned mesh (state ScanCut). The mesh is box-local (origin at
+        /// the centre of the base, metres) with its scale baked in. The room content takes ownership of it and destroys
+        /// it when it is replaced or on Clear, as for SetGeneratedMesh. Cross-fades from what is shown over
+        /// fadeSeconds, then sets Data.Mesh = state and clears Data.AssetHash and Data.AssetHashLight. The same mesh
+        /// serves both furniture levels. False when the id is unknown, the mesh is null or the state is another one.
+        /// </summary>
+        bool SetOnPhoneMesh(int objectId, Mesh mesh, MeshState state, float fadeSeconds = 0.3f);
+
         /// <summary>After Build.</summary>
         event Action<RoomModel> Built;
         /// <summary>Object id, after a state or a mesh change.</summary>

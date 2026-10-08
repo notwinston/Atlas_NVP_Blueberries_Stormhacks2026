@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Atlas.Scan.Grid;
+using Atlas.World;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
@@ -12,8 +13,8 @@ namespace Atlas.Scan
     /// <summary>
     /// What the AR managers hold during a scan, copied into plain arrays in the AR session frame (Master Plan
     /// section 4.2): the LiDAR mesh with a class per face (route 2), the planes for the floor height, the
-    /// wall directions and the wall height, and the furniture boxes (route 3). A thin adapter: every rule
-    /// lives in the engine-free cores it feeds.
+    /// wall directions and the wall height, and the furniture boxes of the scan's RoomPlan session (route 3,
+    /// standalone-phone plan D2). A thin adapter: every rule lives in the engine-free cores it feeds.
     /// <para>Each mesh is read once when it changes and kept; a snapshot joins the kept copies. Where a mesh
     /// has no usable face classes, its faces are classed by their geometry. With no scanned mesh at all
     /// (XR Simulation, a phone without LiDAR) the detected planes are laid out as triangles instead, so the
@@ -41,12 +42,18 @@ namespace Atlas.Scan
         readonly List<float3> _planeVertices = new List<float3>(256);
         readonly List<int> _planeIndices = new List<int>(512);
         readonly List<SurfaceClass> _planeClasses = new List<SurfaceClass>(256);
+        readonly RoomPlanSession _roomPlan;
         ScannedBox[] _boxes = new ScannedBox[32];
         bool _listening;
 
-        public ScanSensors(ArSessionRig rig)
+        /// <summary>The sensors with no RoomPlan session: no furniture boxes.</summary>
+        public ScanSensors(ArSessionRig rig) : this(rig, null) { }
+
+        /// <summary>roomPlan is the scan's RoomPlan session, whose objects become the boxes while it runs. Null: no boxes.</summary>
+        public ScanSensors(ArSessionRig rig, RoomPlanSession roomPlan)
         {
             _rig = rig;
+            _roomPlan = roomPlan;
         }
 
         /// <summary>Meshes with faces that had no class array matching them at the last snapshot.</summary>
@@ -346,24 +353,32 @@ namespace Atlas.Scan
 
         // ---- boxes ----------------------------------------------------------------------------------------
 
+        // The objects of the RoomPlan session while it runs, from the newest file it has. Once the capture has been
+        // stopped (the depth watchdog, ScanSession) the scan goes on without boxes.
         void ReadBoxes(ScanSnapshot snapshot)
         {
-            ARBoundingBoxManager manager = _rig.Boxes;
-            if (manager == null || !manager.enabled) return;
-            int count = 0;
-            foreach (ARBoundingBox box in manager.trackables)
+            if (_roomPlan == null || !_roomPlan.Running) return;
+            RoomPlanObject[] objects = _roomPlan.Refresh().Objects;
+            int count = objects.Length;
+            if (count == 0) return;
+            if (_boxes.Length < count) _boxes = new ScannedBox[Math.Max(count, 2 * _boxes.Length)];
+            for (int k = 0; k < count; k++) _boxes[k] = ToScannedBox(in objects[k], k + 1);
+            snapshot.Boxes = ObjectBoxMerge.Merge(_boxes, count);
+        }
+
+        /// <summary>
+        /// A RoomPlan object (session frame) as a provider box: its category through ObjectCategories.FromRoomPlan,
+        /// its attributes as the tags. sourceId tells the boxes of one snapshot apart.
+        /// </summary>
+        public static ScannedBox ToScannedBox(in RoomPlanObject obj, int sourceId)
+        {
+            return new ScannedBox
             {
-                if (box == null || box.trackingState == UnityEngine.XR.ARSubsystems.TrackingState.None) continue;
-                if (count == _boxes.Length) Array.Resize(ref _boxes, 2 * count);
-                Pose pose = box.pose;        // session frame, at the centre of the box
-                _boxes[count] = new ScannedBox
-                {
-                    Centre = pose.position, Rotation = pose.rotation, Size = box.size,
-                    ClassBits = (uint)box.classifications, SourceId = count + 1,
-                };
-                count++;
-            }
-            if (count > 0) snapshot.Boxes = ObjectBoxMerge.Merge(_boxes, count);
+                Centre = obj.Centre, Rotation = obj.Rotation, Size = obj.Size,
+                ClassBits = ObjectBoxMerge.ClassBitsOf(ObjectCategories.FromRoomPlan(obj.Category)),
+                SourceId = sourceId,
+                Tags = obj.Attributes,
+            };
         }
     }
 }

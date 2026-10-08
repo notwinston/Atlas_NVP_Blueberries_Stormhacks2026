@@ -224,6 +224,8 @@ namespace Atlas.Scan
                 Yaw = StoredYaw(box.Yaw),
                 Mesh = MeshState.Placeholder,
                 AssetHash = "",
+                // RoomPlan's attribute strings, as the box brought them (the array is shared, never written).
+                Tags = box.Tags != null && box.Tags.Length > 0 ? box.Tags : Array.Empty<string>(),
             };
             return true;
         }

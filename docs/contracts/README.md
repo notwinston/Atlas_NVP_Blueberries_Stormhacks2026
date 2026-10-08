@@ -21,7 +21,7 @@ the contract.
 
 ### F1 · Assemblies and what each may reference
 
-Master Plan §6.2, with six clarifications marked ◆.
+Master Plan §6.2, with seven clarifications marked ◆.
 
 | Assembly | Lane | May reference (Atlas assemblies) | Notes |
 |---|---|---|---|
@@ -33,7 +33,8 @@ Master Plan §6.2, with six clarifications marked ◆.
 | `Atlas.Scan.ARKit` | C | Kernel, World, Scan | ◆ Editor and iOS only, because `Unity.XR.ARKit` exists only there. Holds everything that needs an ARKit type (world map save and relocalise, mesh face classification, ARKit session configuration) behind interfaces declared in `Atlas.Scan`, and registers itself at start-up. Nothing references it |
 | `Atlas.Safety` | C | World | RoomModel types only. **Never Link or Telemetry**, and no source file uses a type from either |
 | `Atlas.Input` | C | none | Input System only |
-| `Atlas.Telemetry` | D | Kernel, Link, World | Parameter binding, perf probe, HUD, event log, asset client, link client glue, flat-twin map. ◆ Kernel is added to the §6.2 row for the vertex format (`AtlasVertex`) used by the built-in fallback meshes |
+| `Atlas.Objects` | D | Kernel, World | ◆ Not in §6.2 (standalone-phone experiment, plan D14). The engine-free object code: prop matching, fitting and colouring, mesh operations and the LiDAR cut-out. Uses no `UnityEngine` type, so it runs in headless tests. Referenced by `Atlas.Telemetry` |
+| `Atlas.Telemetry` | D | Kernel, Link, World, Objects | Parameter binding, perf probe, HUD, event log, asset client, link client glue, flat-twin map. ◆ Kernel is added to the §6.2 row for the vertex format (`AtlasVertex`) used by the built-in fallback meshes. Objects is added for the on-phone object builder (standalone-phone plan D14) |
 | `Atlas.Hands` | lead | Kernel, Link, World, Rendering, Input | Tracked hands (`documents/ATLAS_Hands_Design.md`). From Link: parameter types only, as a space. Engine-free core, the hand mesh, the sources. Compiles on every platform; referenced by `Atlas.App` only |
 | `Atlas.Hands.ARKit` | lead | Kernel, World, Hands | Editor and iOS only. The phone's hand source over the native plugin `AtlasHands.swift`. Registers itself at start-up; nothing references it |
 | `Atlas.App` | A | Kernel, Link, World, Rendering, Scan, Safety, Input, Telemetry, Hands | ◆ Link is added to the §6.2 row: `ISpaceModule` carries `ParamRegistry` and `StateMessage`, so the caller needs the reference. ◆ Also holds the on-device menu (`App/Menu/`, lane D files) and onboarding (`App/Onboarding/`, lane C files), which need Input, Scan and Telemetry together |

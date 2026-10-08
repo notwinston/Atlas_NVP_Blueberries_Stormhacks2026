@@ -306,8 +306,8 @@
             "maximum": 3.1415928
           },
           "mesh": {
-            "description": "What is drawn for the object. standIn is used by the budget_room fixture only.",
-            "enum": ["placeholder", "requested", "ready", "builtIn", "standIn"]
+            "description": "What is drawn for the object. standIn is used by the budget_room fixture only. matched: an artist-made prop chosen, scaled and coloured on the phone (prop and propCells say which and how). scanCut: the object's own triangles cut out of the scanned LiDAR mesh, which is not saved, so a saved scanCut object reloads as a first shape.",
+            "enum": ["placeholder", "requested", "ready", "builtIn", "standIn", "matched", "scanCut"]
           },
           "assetHash": {
             "description": "SHA-256 of the generated GLB, 64 lower-case hexadecimal digits, when mesh is ready; otherwise empty.",
@@ -333,6 +333,24 @@
             "description": "Optional. The object profile, 16 x 16 cells of one byte, index = j * 16 + i, in standard base64 with padding. Rule R21: it decodes to exactly 256 bytes (344 characters).",
             "type": "string",
             "pattern": "^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+          },
+          "tags": {
+            "description": "Optional. RoomPlan's attribute strings for the object, verbatim; absent when there is none. Not part of the geometry hash.",
+            "type": "array",
+            "maxItems": 16,
+            "items": { "type": "string", "maxLength": 48 }
+          },
+          "prop": {
+            "description": "Optional. The id of the matched prop in the prop manifest (Telemetry/Resources/AtlasProps/manifest.json); absent when there is none. Set with mesh matched. Not part of the geometry hash.",
+            "type": "string",
+            "maxLength": 64
+          },
+          "propCells": {
+            "description": "Optional. One object palette cell (64 to 127) per colour slot of the prop, in the manifest's slot order; absent when there is none. Not part of the geometry hash.",
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "items": { "type": "integer", "minimum": 64, "maximum": 127 }
           }
         }
       }

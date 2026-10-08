@@ -342,9 +342,18 @@ namespace Atlas.App
             Assets = AssetClientInstaller.Install(boot, TelemetrySystems);
             // The scan's object photos go to it (lane C contract, section 14.1). With no asset client, to a
             // sink published some other way, else to the one that only counts: no crop leaves the phone.
+            // The asset client serves each room with the Forge's round trip, or builds its objects on the phone when
+            // forge.backend is off (the default; standalone-phone plan section 6.5): it chooses per room.
             IObjectPhotoSink photoSink = Assets;
             if (photoSink == null) AtlasServices.TryGet(out photoSink);
             ScanSystems.Photos.Sink = photoSink;
+            if (Assets != null)
+            {
+                // The scanned LiDAR mesh goes to it too: unknown objects and poor matches are cut out of it (D8).
+                ScanSystems.ScanMeshSink = Assets;
+                // Once the props are placed, a kept room is written again with them.
+                Assets.ObjectsSettled += OnObjectsSettled;
+            }
             IEventLog events;
             AtlasServices.TryGet(out events);
             IPerfSource perf;
@@ -492,6 +501,14 @@ namespace Atlas.App
         {
             if (!Flow.OwnsFlow || !ScanSettings.TeamPrescan || room.Quality.Route == ScanRoute.Fixture) return;
             ScanSystems.SaveResult();
+        }
+
+        // A kept room (a team pre-scan, saved at its hand-over) is saved again once its objects have their props, so
+        // that it reloads with the same props, cells and orientations (plan section 6.5). Any other room stays unsaved.
+        void OnObjectsSettled(RoomModel room)
+        {
+            if (room == null || !ScanSettings.TeamPrescan || room.Quality.Route == ScanRoute.Fixture) return;
+            ScanSystems.Rooms.SaveIfKept(room);
         }
 
         // One pooled instance for a head-locked user (reticle, cue): no fog, and it ignores the world fade.

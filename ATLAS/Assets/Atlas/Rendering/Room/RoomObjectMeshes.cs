@@ -45,7 +45,7 @@ namespace Atlas.Rendering.Room
         }
 
         /// <summary>Appends what Build draws for the object: the stand-in when its state is StandIn, the
-        /// placeholder box otherwise.</summary>
+        /// placeholder box otherwise (a Ready, Matched or ScanCut object shows its box until its mesh is placed again).</summary>
         public static void Initial(RoomObject obj, AtlasMeshBuilder data)
         {
             if (obj == null) throw new ArgumentNullException(nameof(obj));
@@ -55,7 +55,8 @@ namespace Atlas.Rendering.Room
 
         /// <summary>
         /// Triangles the object costs in the state its RoomModel entry gives: the box for Placeholder and
-        /// Requested, 5,000 for StandIn, and the upper bounds for Ready (its triangle target) and BuiltIn.
+        /// Requested, 5,000 for StandIn, and the upper bounds for Ready, Matched and ScanCut (the triangle target, or
+        /// the furniture maximum when it has none) and BuiltIn.
         /// </summary>
         public static int Triangles(RoomObject obj)
         {
@@ -63,7 +64,9 @@ namespace Atlas.Rendering.Room
             switch (obj.Mesh)
             {
                 case MeshState.StandIn: return StandInMeshBuilder.Triangles;
-                case MeshState.Ready: return obj.TriTarget > 0 ? obj.TriTarget : AtlasMeshBudget.FurnitureMax;
+                case MeshState.Ready:
+                case MeshState.Matched:
+                case MeshState.ScanCut: return obj.TriTarget > 0 ? obj.TriTarget : AtlasMeshBudget.FurnitureMax;
                 case MeshState.BuiltIn: return BuiltInMaxTriangles;
                 default: return PlaceholderTriangles(obj);
             }
@@ -101,7 +104,8 @@ namespace Atlas.Rendering.Room
 
         /// <summary>
         /// As <see cref="Triangles(RoomObject)"/> at a furniture level. A generated object (state Ready) costs its
-        /// full target at Full and lightTarget at Light; a placeholder, a stand-in and a built-in mesh cost the same at both.
+        /// full target at Full and lightTarget at Light; a placeholder, a stand-in, a built-in mesh and an on-phone mesh
+        /// (Matched, ScanCut: one mesh serves both levels) cost the same at both.
         /// </summary>
         public static int Triangles(RoomObject obj, FurnitureLevel level, int lightTarget)
         {

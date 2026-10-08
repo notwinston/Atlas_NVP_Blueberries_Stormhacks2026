@@ -143,6 +143,26 @@ namespace Atlas.Scan
             Task.Run((Action)WriteQueued);
         }
 
+        /// <summary>True when the room is kept on the phone: room_id.json exists or a write of it is queued.</summary>
+        public bool IsKept(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return false;
+            lock (_gate) if (_pending.ContainsKey(id)) return true;
+            return Exists(id);
+        }
+
+        /// <summary>
+        /// Saves a kept room again (IsKept), as Save does, so that its file follows what was placed after it was first
+        /// written: the matched props and their cells (standalone-phone plan section 6.5). A room that was never
+        /// saved stays unsaved. False when nothing was queued.
+        /// </summary>
+        public bool SaveIfKept(RoomModel room)
+        {
+            if (room == null || !IsKept(room.Id)) return false;
+            Save(room);
+            return true;
+        }
+
         /// <summary>Writes room_id.json before returning. For tools and tests; the app uses Save.</summary>
         public void SaveNow(RoomModel room)
         {

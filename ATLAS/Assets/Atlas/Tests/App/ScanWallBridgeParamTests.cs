@@ -6,14 +6,16 @@ using NUnit.Framework;
 
 namespace Atlas.App.Tests
 {
-    /// <summary>scan.wallBridge, the kill switch of route 4: it drives WallBridge.Enabled together with the bridge's own Available.</summary>
+    /// <summary>
+    /// scan.wallBridge (standalone-phone plan D13): it decides whether the walls of the scan's one RoomPlan session
+    /// are merged into the room (WallBridge.Enabled). The RoomPlan session itself does not depend on it.
+    /// </summary>
     public class ScanWallBridgeParamTests
     {
-        sealed class Bridge : IWallBridge
+        sealed class Plugin : IRoomPlanCapture
         {
             public bool IsAvailable = true;
             public int AvailableAsked;
-            public string Name { get { return "fake"; } }
             public bool Available { get { AvailableAsked++; return IsAvailable; } }
             public bool Start(IntPtr nativeSession) { return true; }
             public string TakeJson() { return ""; }
@@ -21,55 +23,56 @@ namespace Atlas.App.Tests
         }
 
         [TearDown]
-        public void RestoreTheBridge()
+        public void RestoreThePlugin()
         {
-            WallBridge.Register(null);
-            WallBridge.Enabled = false;
+            RoomPlanPlugin.Register(null);
+            WallBridge.Enabled = true;
         }
 
         [Test]
-        public void Parameter_IsABoolDeclaredOffInGroupScan_AfterTheTeamPrescanOne()
+        public void Parameter_IsABoolDeclaredOnInGroupScan_AfterTheTeamPrescanOne()
         {
             var registry = new ParamRegistry();
             AppParams.DeclareScan(registry, new ScanSettings());
             ParamEntry entry = registry.Find(AppParams.ScanWallBridge);
             Assert.That(AppParams.ScanWallBridge, Is.EqualTo("scan.wallBridge"));
             Assert.That(entry, Is.Not.Null);
-            Assert.That(entry.Bool, Is.False, "off by default: a second RoomPlan capture crashed the scan on the device");
+            Assert.That(entry.Bool, Is.True, "on by default: the walls come from the scan's one RoomPlan session (D13)");
             Assert.That(entry.Id, Is.EqualTo(registry.Find(AppParams.TeamPrescan).Id + 1));
         }
 
         [Test]
-        public void Parameter_SwitchesTheBridgeOnAndOff_WhenTheBridgeIsAvailable()
+        public void Parameter_SwitchesTheWallMergeOnAndOff()
         {
-            var bridge = new Bridge();
-            WallBridge.Register(bridge);
+            var plugin = new Plugin();
+            RoomPlanPlugin.Register(plugin);
+            WallBridge.Enabled = false;
             var registry = new ParamRegistry();
             AppParams.DeclareScan(registry, new ScanSettings());
             registry.PushAll();
-            Assert.That(WallBridge.Enabled, Is.False, "default off");
+            Assert.That(WallBridge.Enabled, Is.True, "default on");
 
-            int asked = bridge.AvailableAsked;
-            registry.Set(AppParams.ScanWallBridge, 1f);
-            Assert.That(WallBridge.Enabled, Is.True);
-            Assert.That(bridge.AvailableAsked, Is.GreaterThan(asked));
             registry.Set(AppParams.ScanWallBridge, 0f);
             Assert.That(WallBridge.Enabled, Is.False);
+            registry.Set(AppParams.ScanWallBridge, 1f);
+            Assert.That(WallBridge.Enabled, Is.True);
+            Assert.That(plugin.AvailableAsked, Is.EqualTo(0), "the switch never asks the plugin: availability decides whether a capture runs");
         }
 
         [Test]
-        public void Parameter_LeavesTheBridgeOff_WhereItIsNotAvailable()
+        public void Parameter_DoesNotDependOnThePlugin()
         {
-            WallBridge.Register(new Bridge { IsAvailable = false });
+            RoomPlanPlugin.Register(new Plugin { IsAvailable = false });
             var registry = new ParamRegistry();
             AppParams.DeclareScan(registry, new ScanSettings());
             registry.PushAll();
-            Assert.That(WallBridge.Enabled, Is.False);
+            Assert.That(WallBridge.Enabled, Is.True);
 
-            WallBridge.Register(null);
+            RoomPlanPlugin.Register(null);
             registry.Set(AppParams.ScanWallBridge, 0f);
+            Assert.That(WallBridge.Enabled, Is.False);
             registry.Set(AppParams.ScanWallBridge, 1f);
-            Assert.That(WallBridge.Enabled, Is.False, "no bridge registered");
+            Assert.That(WallBridge.Enabled, Is.True, "no plugin registered: nothing will be captured, so nothing is merged");
         }
     }
 }

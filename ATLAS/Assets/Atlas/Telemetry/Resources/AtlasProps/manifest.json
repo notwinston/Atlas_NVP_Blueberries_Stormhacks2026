@@ -1,0 +1,1079 @@
+{
+  "schema": "atlas.props/1",
+  "props": [
+    {
+      "id": "bathtub_kenney_01",
+      "category": "bathtub",
+      "tags": [],
+      "size": [
+        1.7,
+        0.58,
+        0.8
+      ],
+      "triangles": 2436,
+      "sha256": "39adecc1cf462f660ced602b20c4079acb6fd3a7cddc2f097eacfabc6c94729d",
+      "slots": [
+        {
+          "name": "metalLight",
+          "cell": 127
+        },
+        {
+          "name": "metalDark",
+          "cell": 125
+        }
+      ],
+      "profile": "1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXJhnV1dXV1dXWZ1dXV1dXVazc3Nzc3Nzc3N6PV1dXVqjc3Nzc3Nzc3Nzdg1dXV1Xw3Nzc3Nzc3Nzc3N8DV7dVfNzc3Nzc3Nzc3Nzej1f3/UDc3Nzc3Nzc3Nzc3ltX9/1A3Nzc3Nzc3Nzc3N5bV7dVfNzc3Nzc3Nzc3Nzej1dXVfDc3Nzc3Nzc3Nzc3wNXV1ao3Nzc3Nzc3Nzc3YNXV1dXVazc3Nzc3Nzc3N6PV1dXV1cmGdXV1dXV1dZnV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1Q==",
+      "source": "Kenney Furniture Kit 2.0 / bathtub.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "bed_kenney_single",
+      "category": "bed",
+      "tags": [
+        "single"
+      ],
+      "size": [
+        0.95,
+        0.55,
+        1.95
+      ],
+      "triangles": 2068,
+      "sha256": "721a950bf39a9b5ef7300f98874919df5fece26dc8896defdc2a21378130d6f5",
+      "slots": [
+        {
+          "name": "wood",
+          "cell": 127
+        },
+        {
+          "name": "carpet",
+          "cell": 124
+        },
+        {
+          "name": "carpetWhite",
+          "cell": 125
+        },
+        {
+          "name": "metal",
+          "cell": 114
+        }
+      ],
+      "profile": "//////////////////////////////////////////9VmZm3vr6+vr6+vr61mZlVVZmZsbi4uLi4uLi4r5mZVbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxqaqqqqqqqqqqqqqqqqqqqamqqqqqqqqqqqqqqqqqqqmpqqqqqqqqqqqqqqqqqqqpqaqqqqqqqqqqqqqqqqqqqamqqqqqqqqqqqqqqqqqqqmpqqqqqqqqqqqqqqqqqqqpqaqqqqqqqqqqqqqqqqqqqamqqqqqqqqqqqqqqqqqqqmpqqqqqqqqqqqqqqqqqqqpqaqqqqqqqqqqqqqqqqqqqQ==",
+      "source": "Kenney Furniture Kit 2.0 / bedSingle.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "bed_kenney_double",
+      "category": "bed",
+      "tags": [
+        "double"
+      ],
+      "size": [
+        1.6,
+        0.6,
+        1.95
+      ],
+      "triangles": 1216,
+      "sha256": "eff926e83baa9be43bc83541bcc9d72b2376569ec6a3e2f42cde7eb33c70758e",
+      "slots": [
+        {
+          "name": "wood",
+          "cell": 127
+        },
+        {
+          "name": "carpetWhite",
+          "cell": 124
+        },
+        {
+          "name": "carpet",
+          "cell": 126
+        },
+        {
+          "name": "metal",
+          "cell": 125
+        }
+      ],
+      "profile": "//////////////////////////////////////////+Zq7y8u7u+t7e+u7u8vKuZmae5uri4ua+vubi4urmnmZmhpKSkpKSkpKSkpKSkoZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmQ==",
+      "source": "Kenney Furniture Kit 2.0 / bedDouble.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "chair_kenney_dining",
+      "category": "chair",
+      "tags": [
+        "dining"
+      ],
+      "size": [
+        0.44,
+        0.9,
+        0.46
+      ],
+      "triangles": 450,
+      "sha256": "84c32bda10e99e93370e7ea728a32d7d3d681f08dea0bab6156ef04b4723f072",
+      "slots": [
+        {
+          "name": "wood",
+          "cell": 127
+        }
+      ],
+      "profile": "////////////////////////////////////////////////////////////////goKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgg==",
+      "source": "Kenney Furniture Kit 2.0 / chair.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "chair_kenney_swivel",
+      "category": "chair",
+      "tags": [
+        "swivel"
+      ],
+      "size": [
+        0.6,
+        0.95,
+        0.58
+      ],
+      "triangles": 822,
+      "sha256": "a7b396197421bbf44f01484772e1eece590005554343b7f5751c71f55b14a216",
+      "slots": [
+        {
+          "name": "carpet",
+          "cell": 124
+        },
+        {
+          "name": "metalMedium",
+          "cell": 125
+        }
+      ],
+      "profile": "APD5//////////////nwAIrw+f/////////////58IqR8Pn/////////////+fCRlJRiYmJiYmJiYmJiYmKUlJSUYmJiYmJiYmJiYmJilJSUlGJiYmJiYmJiYmJiYpSUkpJiYmJiYmJiYmJiYmKSkpGRYmJiYmJiYmJiYmJikZGQkGJiYmJiYmJiYmJiYpCQj49iYmJiYmJiYmJiYmKPj42NYmJiYmJiYmJiYmJijY2MjGJiYmJiYmJiYmJiYoyMiIhiYmJiYmJiYmJiYmKIiH5+YmJiYmJiYmJiYmJifn4AAGJiYmJiYmJiYmJiYgAAAABiYmJiYmJiYmJiYmIAAA==",
+      "source": "Kenney Furniture Kit 2.0 / chairDesk.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "chair_kenney_stool",
+      "category": "chair",
+      "tags": [
+        "stool"
+      ],
+      "size": [
+        0.38,
+        0.7,
+        0.38
+      ],
+      "triangles": 334,
+      "sha256": "6f5ab0e3ddb250127add1a5d8f8a0dac057c1c067f209759e81bfadf054af906",
+      "slots": [
+        {
+          "name": "wood",
+          "cell": 127
+        },
+        {
+          "name": "carpet",
+          "cell": 124
+        }
+      ],
+      "profile": "AAAA6/z8/Pz8/Pz86wAAAAAAAPn///////////kAAAAAAOv/////////////6wAAAAD5//////////////kAAADr////////////////6wAA+f////////////////kA6///////////////////6/n///////////////////n5///////////////////56///////////////////6wD5////////////////+QAA6////////////////+sAAAD5//////////////kAAAAA6//////////////rAAAAAAD5///////////5AAAAAAAA6/z8/Pz8/Pz86wAAAA==",
+      "source": "Kenney Furniture Kit 2.0 / stoolBar.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "chair_kenney_armchair",
+      "category": "chair",
+      "tags": [
+        "arm"
+      ],
+      "size": [
+        0.8,
+        0.95,
+        1.05
+      ],
+      "triangles": 668,
+      "sha256": "b4b858127f6519ffc30574a05535e24bc17080bb7c79c9a91e859280ed91b301",
+      "slots": [
+        {
+          "name": "carpet",
+          "cell": 124
+        },
+        {
+          "name": "wood",
+          "cell": 127
+        },
+        {
+          "name": "metal",
+          "cell": 125
+        }
+      ],
+      "profile": "AAD7//////////////sAAJaW+//////////////7lpaWlujo6Ojo6Ojo6Ojo6JaWlpapqampqampqampqamWlpaWll1dXV1dXV1dXV2WlpaWlpZdXV1dXV1dXV1dlpaWlpaWXV1dXV1dXV1dXZaWlpaWll1dXV1dXV1dXV2WlpaWlpZdXV1dXV1dXV1dlpaWlpaWXV1dXV1dXV1dXZaWlo2NjV1dXV1dXV1dXV2NjY0AAAA5OTk5OTk5OTk5AAAAAAAANzc3Nzc3Nzc3NwAAAAAAADIyMjIyMjIyMjIAAAAAAAAuLi4uLi4uLi4uAAAAAAAAKSkpKSkpKSkpKQAAAA==",
+      "source": "Kenney Furniture Kit 2.0 / loungeChairRelax.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "oven_kenney_range",
+      "category": "oven",
+      "tags": [],
+      "size": [
+        0.62,
+        0.9,
+        0.62
+      ],
+      "triangles": 1302,
+      "sha256": "83b48c6c093b9bb699d9493090d7957672a4c2e756ca4f53acad53b380750ddf",
+      "slots": [
+        {
+          "name": "metalDark",
+          "cell": 125
+        },
+        {
+          "name": "wood",
+          "cell": 127
+        },
+        {
+          "name": "metal",
+          "cell": 124
+        },
+        {
+          "name": "carpetWhite",
+          "cell": 114
+        }
+      ],
+      "profile": "/////////////////////+7w8PDw8PDw8PDw8PDw8O7u8fHx8fHx8fHx8fHx8fHu7vHx8fHx8fHx8fHx8fHx7u7x8fHx8fHx8fHx8fHx8e7u8fHx8fHx8fHx8fHx8fHu7vHx8fHx8fHx8fHx8fHx7u7x8fHx8fHx8fHx8fHx8e7u8fHx8fHx8fHx8fHx8fHu7vHx8fHx8fHx8fHx8fHx7u7x8fHx8fHx8fHx8fHx8e7u8fHx8fHx8fHx8fHx8fHu7vHx8fHx8fHx8fHx8fHx7u7x8fHx8fHx8fHx8fHx8e7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7g==",
+      "source": "Kenney Furniture Kit 2.0 / kitchenStoveElectric.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "refrigerator_kenney_standard",
+      "category": "refrigerator",
+      "tags": [],
+      "size": [
+        0.6,
+        1.7,
+        0.65
+      ],
+      "triangles": 1952,
+      "sha256": "2ff80808795b40515fc473df75693aac40f6994f1c9f09617d5f8d64dd4b24c3",
+      "slots": [
+        {
+          "name": "metalLight",
+          "cell": 127
+        },
+        {
+          "name": "glass",
+          "cell": 124
+        },
+        {
+          "name": "metalDark",
+          "cell": 125
+        }
+      ],
+      "profile": "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////APj4+Pj4+Pj4+Pj4+Pj4AA==",
+      "source": "Kenney Furniture Kit 2.0 / kitchenFridge.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "refrigerator_kenney_builtin",
+      "category": "refrigerator",
+      "tags": [],
+      "size": [
+        0.6,
+        1.8,
+        0.65
+      ],
+      "triangles": 2182,
+      "sha256": "14b1838f934d8aa44450fb3baf8849e86190d27c98794a92db4489307b309bf5",
+      "slots": [
+        {
+          "name": "metalLight",
+          "cell": 127
+        },
+        {
+          "name": "wood",
+          "cell": 124
+        },
+        {
+          "name": "glass",
+          "cell": 125
+        },
+        {
+          "name": "woodDark",
+          "cell": 126
+        }
+      ],
+      "profile": "/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////w==",
+      "source": "Kenney Furniture Kit 2.0 / kitchenFridgeBuiltIn.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "refrigerator_kenney_small",
+      "category": "refrigerator",
+      "tags": [],
+      "size": [
+        0.55,
+        0.85,
+        0.55
+      ],
+      "triangles": 698,
+      "sha256": "43a48bb1d97f86c89a68415e5a32254f7e57bc81a12eb74a549c5ea3cd110daf",
+      "slots": [
+        {
+          "name": "metalLight",
+          "cell": 127
+        },
+        {
+          "name": "glass",
+          "cell": 124
+        },
+        {
+          "name": "metalDark",
+          "cell": 125
+        }
+      ],
+      "profile": "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////APT09PT09PT09PT09PT0AA==",
+      "source": "Kenney Furniture Kit 2.0 / kitchenFridgeSmall.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "sink_kenney_kitchen",
+      "category": "sink",
+      "tags": [],
+      "size": [
+        0.7,
+        0.9,
+        0.62
+      ],
+      "triangles": 1296,
+      "sha256": "c6e673bc14ec189be4a14135adc64819797cd1e8c04eb7de8139c57e6bbf09f9",
+      "slots": [
+        {
+          "name": "wood",
+          "cell": 127
+        },
+        {
+          "name": "metal",
+          "cell": 124
+        },
+        {
+          "name": "woodDark",
+          "cell": 126
+        },
+        {
+          "name": "metalDark",
+          "cell": 125
+        }
+      ],
+      "profile": "6urq6urq6urq6urq6urq6tvb29vb29vb29vb29vb29vb29vb29vv/v7v29vb29vb29vb29vb2///29vb29vb29vb29vb29v//9vb29vb29vb27Onp6en//+np6ens9vb29uzp6enp/b2p6enp7Pb29vbs6enp6enp6enp6ez29vb27Onp6enp6enp6ens9vb29uzp6enp6enp6enp7Pb29vbs6enp6enp6enp6ez29vb27Onp6enp6enp6ens9vb29vb29vb29vb29vb29vb29vb29vb29vb29vb29vb29vb29vb29vb29vb29vb29vb29vb29vb29vb29vb29vb2w==",
+      "source": "Kenney Furniture Kit 2.0 / kitchenSink.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "sink_kenney_bathroom",
+      "category": "sink",
+      "tags": [],
+      "size": [
+        0.55,
+        0.85,
+        0.45
+      ],
+      "triangles": 633,
+      "sha256": "bfaa938f1f28961ac3d145e37dd5164a471174d6553c055790465d7b4c39a61e",
+      "slots": [
+        {
+          "name": "_defaultMat",
+          "cell": 127
+        }
+      ],
+      "profile": "6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo39/f39/f8f7+8d/f39/f39/f39/f3/H///Hf39/f39/f39/f39/f///f39/f39/f393Nzc3Nzf//zc3Nzc3d39/dxb+/v7///7+/v7/F3d/f3cW/v7+//v6/v7+/xd3f393Fv7+/v/f3v7+/v8Xd39/dyb+/v7+/v7+/v7/J3d/f39XMxcC/v7+/wMXN1d/f39/f2dLNycjIys3S2d/f3wDf39/f2tbV1dfa39/f3wAAAN/f39/f39/f39/f3wAAAAAAAN/f39/f39/fAAAAAA==",
+      "source": "Kenney Furniture Kit 2.0 / bathroomSink.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "sink_kenney_vanity",
+      "category": "sink",
+      "tags": [],
+      "size": [
+        0.6,
+        0.85,
+        0.45
+      ],
+      "triangles": 434,
+      "sha256": "ed3dfb6b013a82f21b7fd88550a9c6745543c51881f886e45a3e90901e06b848",
+      "slots": [
+        {
+          "name": "carpetWhite",
+          "cell": 127
+        },
+        {
+          "name": "metalDark",
+          "cell": 125
+        }
+      ],
+      "profile": "4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODy/v7y4ODg4ODg4ODg4ODg8v//8uDg4ODg4ODgx8bGxsb//8bGxsbH4ODg4MfGxsbG///GxsbGx+Dg4ODHxsbGxv//xsbGxsfg4ODgx8bGxsb+/sbGxsbH4ODg4MfGxsbGxsbGxsbGx+Dg4ODHxsbGxsbGxsbGxsfg4ODgx8bGxsbGxsbGxsbH4ODg4MfGxsbGxsbGxsbGx+Dg4ODHxsbGxsbGxsbGxsfg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4A==",
+      "source": "Kenney Furniture Kit 2.0 / bathroomSinkSquare.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "couch_kenney_straight",
+      "category": "couch",
+      "tags": [
+        "straight"
+      ],
+      "size": [
+        2.0,
+        0.85,
+        0.9
+      ],
+      "triangles": 1408,
+      "sha256": "edcbae3e7f9e806b4986dc43781ce84e42d65fa2fde26dc99ebeef61b8b16112",
+      "slots": [
+        {
+          "name": "carpet",
+          "cell": 124
+        },
+        {
+          "name": "wood",
+          "cell": 127
+        }
+      ],
+      "profile": "zf//////////////////zc3//////////////////83N///////////////////Nzf//////////////////zc3NgICAgICAgICAgICAzc3NzYCAgICAgICAgICAgM3Nzc2AgICAgICAgICAgIDNzc3NgICAgICAgICAgICAzc3NzYCAgICAgICAgICAgM3Nzc2AgICAgICAgICAgIDNzc3NgICAgICAgICAgICAzc3NzYCAgICAgICAgICAgM3Nzc2AgICAgICAgICAgIDNzc3NgICAgICAgICAgICAzc3FxYCAgICAgICAgICAgMXFAICAgICAgICAgICAgICAAA==",
+      "source": "Kenney Furniture Kit 2.0 / loungeSofa.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "couch_kenney_corner",
+      "category": "couch",
+      "tags": [
+        "corner"
+      ],
+      "size": [
+        2.0,
+        0.85,
+        2.0
+      ],
+      "triangles": 2232,
+      "sha256": "1e2a73613857c4936bebd8160761c033978a93458bd3695ddcf0f7e14bd3fb98",
+      "slots": [
+        {
+          "name": "carpet",
+          "cell": 124
+        },
+        {
+          "name": "wood",
+          "cell": 127
+        }
+      ],
+      "profile": "////////////////////zf///////////////////83//4CAgICAgICAgICAgM3N//+AgICAgICAgICAgIDNzf//gICAgICAgICAgICAzc3//4CAgICAgICAgICAgM3N//+AgICAgICAgICAgIC7u///gICAgIAAAAAAAAAAAAD//4CAgICAAAAAAAAAAAAA//+AgICAgAAAAAAAAAAAAP//gICAgIAAAAAAAAAAAAD//4CAgICAAAAAAAAAAAAA//+AgICAgAAAAAAAAAAAAP//gICAgIAAAAAAAAAAAAD//83Nzc27AAAAAAAAAAAAzc3Nzc3NuwAAAAAAAAAAAA==",
+      "source": "Kenney Furniture Kit 2.0 / loungeSofaCorner.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "couch_kenney_chaise",
+      "category": "couch",
+      "tags": [
+        "chaise"
+      ],
+      "size": [
+        2.2,
+        0.85,
+        1.7
+      ],
+      "triangles": 1946,
+      "sha256": "2e9425b0f136c2ae4cea0f4c342bc7d3e8b825964a1e4d20e8851e998581fa04",
+      "slots": [
+        {
+          "name": "carpet",
+          "cell": 124
+        },
+        {
+          "name": "wood",
+          "cell": 127
+        }
+      ],
+      "profile": "zf//////////////////zc3//////////////////83NzYCAgICAgICAgICAgM3Nzc2AgICAgICAgICAgIDNzc3NgICAgICAgICAgICAzc3NzYCAgICAgICAgICAgM3Nzc2AgICAgICAgICAgIDNzcHBgICAgICAgICAgICAwcEAgICAgICAgIAAAAAAAAAAAICAgICAgICAAAAAAAAAAACAgICAgICAgAAAAAAAAAAAgICAgICAgIAAAAAAAAAAAICAgICAgICAAAAAAAAAAACAgICAgICAgAAAAAAAAAAAgICAgICAgIAAAAAAAAAAAICAgICAgICAAAAAAAAAAA==",
+      "source": "Kenney Furniture Kit 2.0 / loungeSofaLong.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "couch_kenney_design",
+      "category": "couch",
+      "tags": [
+        "straight"
+      ],
+      "size": [
+        2.1,
+        0.8,
+        0.85
+      ],
+      "triangles": 1336,
+      "sha256": "652cc6285bfa2279aa0ce5cd0520660cdda64e6780b36a85a7b80cd8083ba831",
+      "slots": [
+        {
+          "name": "carpetBlue",
+          "cell": 125
+        },
+        {
+          "name": "metal",
+          "cell": 127
+        }
+      ],
+      "profile": "0tL////////////////S0tLS////////////////0tLS0v///////////////9LS0tL////////////////S0tLS0svLy8vLy8vLy8vS0tLS0tKTk5OTk5OTk5OT0tLS0tLSk5OTk5OTk5OTk9LS0tLS0pOTk5OTk5OTk5PS0tLS0tKTk5OTk5OTk5OT0tLS0tLSk5OTk5OTk5OTk9LS0tLS0pOTk5OTk5OTk5PS0tLS0tKTk5OTk5OTk5OT0tLS0tLSk5OTk5OTk5OTk9LS0tLS0pOTk5OTk5OTk5PS0tLS0tKTk5OTk5OTk5OT0tLSAACTk5OTk5OTk5OTk5MAAA==",
+      "source": "Kenney Furniture Kit 2.0 / loungeDesignSofa.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "stairs_kenney_closed",
+      "category": "stairs",
+      "tags": [],
+      "size": [
+        1.0,
+        2.6,
+        3.4
+      ],
+      "triangles": 1990,
+      "sha256": "89a52bc02103d972513267cb58a0a29d03872e8ae538d5586aae004856ca9356",
+      "slots": [
+        {
+          "name": "wood",
+          "cell": 127
+        },
+        {
+          "name": "woodDark",
+          "cell": 124
+        }
+      ],
+      "profile": "///////////////////////////////////////////o6Ojo6Ojo6Ojo6Ojo6Ojo0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dG5ubm5ubm5ubm5ubm5ubm5oqKioqKioqKioqKioqKioouLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLdHR0dHR0dHR0dHR0dHR0dF1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dRkZGRkZGRkZGRkZGRkZGRi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uFxcXFxcXFxcXFxcXFxcXFw==",
+      "source": "Kenney Furniture Kit 2.0 / stairs.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "stairs_kenney_corner",
+      "category": "stairs",
+      "tags": [],
+      "size": [
+        2.4,
+        2.6,
+        2.6
+      ],
+      "triangles": 2440,
+      "sha256": "b47b5cab8fa3b1f1e9e3741868193c776d084583092189dcd6aca5f9c4a15464",
+      "slots": [
+        {
+          "name": "wood",
+          "cell": 127
+        },
+        {
+          "name": "woodDark",
+          "cell": 124
+        }
+      ],
+      "profile": "oqKioqKioqK5udHR6Oj//6KioqKioqKiubnR0ejo//+ioqKioqKiorm50dHo6P//oqKioqKioqK5udHR6Oj//6KioqKioqKiubnR0ejo//+ioqKioqKiorm50dHo6P//oqKioqKioqK5udHR6Oj//4uLi4uLi4uLiwAAAAAAAACLi4uLi4uLi4sAAAAAAAAAdHR0dHR0dHR0AAAAAAAAAF1dXV1dXV1dXQAAAAAAAABdXV1dXV1dXV0AAAAAAAAARkZGRkZGRkZGAAAAAAAAAC4uLi4uLi4uLgAAAAAAAAAuLi4uLi4uLi4AAAAAAAAAFxcXFxcXFxcXAAAAAAAAAA==",
+      "source": "Kenney Furniture Kit 2.0 / stairsCorner.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "storage_kenney_low_shelf",
+      "category": "storage",
+      "tags": [
+        "shelf"
+      ],
+      "size": [
+        0.8,
+        0.9,
+        0.35
+      ],
+      "triangles": 940,
+      "sha256": "c4599829093f55f099517a6e5563355fd3f8d127fac0914f0ec0aaf58bbda6ab",
+      "slots": [
+        {
+          "name": "wood",
+          "cell": 127
+        }
+      ],
+      "profile": "//8AAAAAAAAAAAAAAAD/////7Ozs7Ozs7Ozs7Ozs/////+zs7Ozs7Ozs7Ozs7P//AOzs7Ozs7Ozs7Ozs7OzsAADs7Ozs7Ozs7Ozs7Ozs7AAA7Ozs7Ozs7Ozs7Ozs7OwAAOzs7Ozs7Ozs7Ozs7OzsAADs7Ozs7Ozs7Ozs7Ozs7AAA7Ozs7Ozs7Ozs7Ozs7OwAAOzs7Ozs7Ozs7Ozs7OzsAADs7Ozs7Ozs7Ozs7Ozs7AAA7Ozs7Ozs7Ozs7Ozs7OwAAOzs7Ozs7Ozs7Ozs7OzsAP//7Ozs7Ozs7Ozs7Ozs/////+zs7Ozs7Ozs7Ozs7P////8AAAAAAAAAAAAAAAD//w==",
+      "source": "Kenney Furniture Kit 2.0 / bookcaseOpenLow.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "storage_kenney_wide_shelf",
+      "category": "storage",
+      "tags": [
+        "shelf"
+      ],
+      "size": [
+        1.0,
+        1.0,
+        0.32
+      ],
+      "triangles": 2110,
+      "sha256": "2af8dbe565fb3d496007880e3291960d6672da918597cd5570630ad5ed8c5645",
+      "slots": [
+        {
+          "name": "wood",
+          "cell": 127
+        }
+      ],
+      "profile": "/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////w==",
+      "source": "Kenney Furniture Kit 2.0 / bookcaseClosedWide.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "storage_kenney_bookcase",
+      "category": "storage",
+      "tags": [
+        "cabinet"
+      ],
+      "size": [
+        0.65,
+        1.45,
+        0.32
+      ],
+      "triangles": 2406,
+      "sha256": "fb3803cb99c75d5cdce422bfe8735c581664e2dbe25e07fab3bf286de3622d28",
+      "slots": [
+        {
+          "name": "wood",
+          "cell": 127
+        }
+      ],
+      "profile": "/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////w==",
+      "source": "Kenney Furniture Kit 2.0 / bookcaseClosed.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "storage_kenney_sideboard",
+      "category": "storage",
+      "tags": [
+        "dresser"
+      ],
+      "size": [
+        1.6,
+        0.62,
+        0.45
+      ],
+      "triangles": 1358,
+      "sha256": "87dc32e2fec91efb5587688e3b29592989a6aec148cb74284295a9773286bb1d",
+      "slots": [
+        {
+          "name": "wood",
+          "cell": 127
+        }
+      ],
+      "profile": "/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////w==",
+      "source": "Kenney Furniture Kit 2.0 / cabinetTelevision.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "storage_kenney_counter",
+      "category": "storage",
+      "tags": [
+        "cabinet"
+      ],
+      "size": [
+        0.62,
+        0.9,
+        0.62
+      ],
+      "triangles": 976,
+      "sha256": "c2a759facc85f1e3b63702ce81cb004b3c990f40feae20d17b92a71f534845dd",
+      "slots": [
+        {
+          "name": "wood",
+          "cell": 127
+        },
+        {
+          "name": "metal",
+          "cell": 124
+        },
+        {
+          "name": "woodDark",
+          "cell": 126
+        }
+      ],
+      "profile": "/////////////////////+7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7g==",
+      "source": "Kenney Furniture Kit 2.0 / kitchenCabinet.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "stove_kenney_gas",
+      "category": "stove",
+      "tags": [],
+      "size": [
+        0.64,
+        0.9,
+        0.64
+      ],
+      "triangles": 1928,
+      "sha256": "a3beee08f61381f4c05f2490155a20d8ae3728c9f814902343bee5b10dabd43a",
+      "slots": [
+        {
+          "name": "metalDark",
+          "cell": 125
+        },
+        {
+          "name": "wood",
+          "cell": 127
+        },
+        {
+          "name": "metal",
+          "cell": 124
+        },
+        {
+          "name": "carpetWhite",
+          "cell": 114
+        }
+      ],
+      "profile": "/////////////////////+7w8PDw8PDw8PDw8PDw8O7u+fn5+fn5+fn5+fn5+fnu7vn09Pn59Pn59Pn59PT57u75+ff5+fn5+fn5+ff5+e7u+fT3+fn0+fn0+fn39Pnu7vn5+fn5+fn5+fn5+fn57u75+fn5+fn5+fn5+fn5+e7u+fT0+fn0+fn0+fn09Pnu7vn5+fn5+fn5+fn5+fn57u759PT59/T5+fT3+fT0+e7u+fn5+fn5+fn5+fn5+fnu7vHx9/H38fPz8ffx9/Hx7u7x8ffx9/Hx8fH38ffx8e7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7g==",
+      "source": "Kenney Furniture Kit 2.0 / kitchenStove.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "stove_kenney_electric",
+      "category": "stove",
+      "tags": [],
+      "size": [
+        0.62,
+        0.9,
+        0.62
+      ],
+      "triangles": 1302,
+      "sha256": "83b48c6c093b9bb699d9493090d7957672a4c2e756ca4f53acad53b380750ddf",
+      "slots": [
+        {
+          "name": "metalDark",
+          "cell": 125
+        },
+        {
+          "name": "wood",
+          "cell": 127
+        },
+        {
+          "name": "metal",
+          "cell": 124
+        },
+        {
+          "name": "carpetWhite",
+          "cell": 114
+        }
+      ],
+      "profile": "/////////////////////+7w8PDw8PDw8PDw8PDw8O7u8fHx8fHx8fHx8fHx8fHu7vHx8fHx8fHx8fHx8fHx7u7x8fHx8fHx8fHx8fHx8e7u8fHx8fHx8fHx8fHx8fHu7vHx8fHx8fHx8fHx8fHx7u7x8fHx8fHx8fHx8fHx8e7u8fHx8fHx8fHx8fHx8fHu7vHx8fHx8fHx8fHx8fHx7u7x8fHx8fHx8fHx8fHx8e7u8fHx8fHx8fHx8fHx8fHu7vHx8fHx8fHx8fHx8fHx7u7x8fHx8fHx8fHx8fHx8e7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7g==",
+      "source": "Kenney Furniture Kit 2.0 / kitchenStoveElectric.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "table_kenney_rect",
+      "category": "table",
+      "tags": [
+        "rectangular"
+      ],
+      "size": [
+        1.6,
+        0.75,
+        0.9
+      ],
+      "triangles": 1132,
+      "sha256": "9fce830d73f5977b3c6ab4dabf7b47994f0134158ad40347b21d37dff7f71d8d",
+      "slots": [
+        {
+          "name": "wood",
+          "cell": 127
+        }
+      ],
+      "profile": "/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////w==",
+      "source": "Kenney Furniture Kit 2.0 / table.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "table_kenney_round",
+      "category": "table",
+      "tags": [
+        "circular",
+        "oval"
+      ],
+      "size": [
+        1.2,
+        0.75,
+        1.3
+      ],
+      "triangles": 570,
+      "sha256": "eb5d7e3750be40f6952cb5b28d0fb335307ba64554f95bddfbf1f295f3c73393",
+      "slots": [
+        {
+          "name": "wood",
+          "cell": 127
+        }
+      ],
+      "profile": "AAAAAAAA/////wAAAAAAAAAAAAD//////////wAAAAAAAP///////////////wAA/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////wAA////////////////AAAAAAAA//////////8AAAAAAAAAAAAA/////wAAAAAAAA==",
+      "source": "Kenney Furniture Kit 2.0 / tableRound.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "table_kenney_coffee",
+      "category": "table",
+      "tags": [
+        "rectangular"
+      ],
+      "size": [
+        1.1,
+        0.42,
+        0.65
+      ],
+      "triangles": 766,
+      "sha256": "674c4a1a31907d2fb23a34f1cfd266e2608f40201da5dcfc8f53a68014f052d5",
+      "slots": [
+        {
+          "name": "wood",
+          "cell": 127
+        }
+      ],
+      "profile": "/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////w==",
+      "source": "Kenney Furniture Kit 2.0 / tableCoffee.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "table_kenney_desk",
+      "category": "table",
+      "tags": [
+        "rectangular"
+      ],
+      "size": [
+        1.4,
+        0.75,
+        0.7
+      ],
+      "triangles": 1686,
+      "sha256": "729f6169deac6bff0a8ee86b995442a89049fb9c6c0550eba672e0421b9a077a",
+      "slots": [
+        {
+          "name": "wood",
+          "cell": 127
+        },
+        {
+          "name": "metal",
+          "cell": 124
+        }
+      ],
+      "profile": "/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////w==",
+      "source": "Kenney Furniture Kit 2.0 / desk.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "screen_kenney_modern",
+      "category": "screen",
+      "tags": [],
+      "size": [
+        1.1,
+        0.7,
+        0.22
+      ],
+      "triangles": 750,
+      "sha256": "d35b9be93f59388896939f6bff09d9601f7d895bc381a287f0dd40a98bce2905",
+      "slots": [
+        {
+          "name": "metalDark",
+          "cell": 125
+        },
+        {
+          "name": "metal",
+          "cell": 127
+        }
+      ],
+      "profile": "AAAAAAwMDAwMDAwMAAAAAAAAAAAMDAwMDAwMDAAAAAAAAAAADAwMDAwMDAwAAAAAAAAAAAwMDH5+DAwMAAAAAAAAAAAMDAyDgwwMDAAAAAAAAAAADAwMhYUMDAwAAAAAAAAAAAwMDIWFDAwMAAAAAP//////////////////////////////////////////////////////////////////////////////////////////////////////////AAAAAAwMDAwMDAwMAAAAAAAAAAAMDAwMDAwMDAAAAAAAAAAACwsLCwsLCwsAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+      "source": "Kenney Furniture Kit 2.0 / televisionModern.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "screen_kenney_vintage",
+      "category": "screen",
+      "tags": [],
+      "size": [
+        0.55,
+        0.45,
+        0.45
+      ],
+      "triangles": 526,
+      "sha256": "bd10789cde18cf597e43f8d531e5082293b53f095aff32f736dca071868d45c7",
+      "slots": [
+        {
+          "name": "wood",
+          "cell": 127
+        },
+        {
+          "name": "metalDark",
+          "cell": 125
+        },
+        {
+          "name": "metal",
+          "cell": 124
+        },
+        {
+          "name": "metalMedium",
+          "cell": 118
+        }
+      ],
+      "profile": "AAAAAAAA29vb2wAAAAAAAAAAANvb29vb29vb29sAAAAAANvb29vb29vb29vb2wAAAADb29vb29vb29vb29sAAP///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////w==",
+      "source": "Kenney Furniture Kit 2.0 / televisionVintage.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "screen_kenney_monitor",
+      "category": "screen",
+      "tags": [],
+      "size": [
+        0.55,
+        0.45,
+        0.2
+      ],
+      "triangles": 324,
+      "sha256": "dea11f5a57336d723b9c6f09ae9b1d463a737fba547b40df05cffe9fa01b4a6d",
+      "slots": [
+        {
+          "name": "metalDark",
+          "cell": 125
+        },
+        {
+          "name": "metal",
+          "cell": 127
+        }
+      ],
+      "profile": "AAAAAAAPDw8PDw8AAAAAAAAAAAAADw8PDw8PAAAAAAD8/Pz8/Pz8/Pz8/Pz8/Pz8/f39/f39/f39/f39/f39/f7+/v7+/v7+/v7+/v7+/v7/////////////////////9dra2tra2tra2tra2tra9c2ysrKysrKysrKysrKyss2lioqKioqKioqKioqKioqlfWJiYmJiYmJiYmJiYmJifVU6Ojo6Ojo6Ojo6Ojo6OlUtLS0tLS0tLS0tLS0tLS0tAAAAAAAPDw8PDw8AAAAAAAAAAAAADw8PDw8PAAAAAAAAAAAAAA0NDQ0NDQAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+      "source": "Kenney Furniture Kit 2.0 / computerScreen.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "toilet_kenney_round",
+      "category": "toilet",
+      "tags": [],
+      "size": [
+        0.4,
+        0.75,
+        0.7
+      ],
+      "triangles": 418,
+      "sha256": "489f43e699b5adf0b616e3eb5fd50e2c3d6c3b51037fc5a7642cea7e0eefa266",
+      "slots": [
+        {
+          "name": "carpetWhite",
+          "cell": 127
+        },
+        {
+          "name": "metalDark",
+          "cell": 125
+        }
+      ],
+      "profile": "////////////////////////////////////////////////////////////////AAAAgYGBgYGBgYGBgQAAAAAAAIGLjIyMjIyMi4EAAAAAAIGCjIyMjIyMjIyCgQAAAACBjIyMjIyMjIyMjIEAAACBiIyMjIyMjIyMjIyIgQCBgYyMjIyMjIyMjIyMjIGBgYuMjIyMjIyMjIyMjIyLgYGDjIyMjIyMjIyMjIyMg4EAgYyMjIyMjIyMjIyMjIEAAIGBjIyMjIyMjIyMjIGBAAAAgYaMjIyMjIyMjIaBAAAAAACBjIyMjIyMjIyBAAAAAAAAgYGBgYGBgYGBgQAAAA==",
+      "source": "Kenney Furniture Kit 2.0 / toilet.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "toilet_kenney_square",
+      "category": "toilet",
+      "tags": [],
+      "size": [
+        0.4,
+        0.75,
+        0.65
+      ],
+      "triangles": 394,
+      "sha256": "a4b6ae7a3f6bb9695b5eb4dd9c9d193da9b9c758ee6c328e3ebc3372750fa129",
+      "slots": [
+        {
+          "name": "carpetWhite",
+          "cell": 127
+        }
+      ],
+      "profile": "/////////////////////////////////////////////////////////////////////////////////////wAAgYGBgYGBgYGBgYGBAAAAgYGLjIyMjIyMjIyLgYEAAIGBjIyMjIyMjIyMjIGBAACBgYyMjIyMjIyMjIyBgQAAgYGMjIyMjIyMjIyMgYEAAIGBjIyMjIyMjIyMjIGBAACBgYyMjIyMjIyMjIyBgQAAgYGMjIyMjIyMjIyMgYEAAIGBjIyMjIyMjIyMjIGBAACBgYyMjIyMjIyMjIyBgQAAgYGMjIyMjIyMjIyMgYEAAACBgYGBgYGBgYGBgYEAAA==",
+      "source": "Kenney Furniture Kit 2.0 / toiletSquare.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "washerdryer_kenney_washer",
+      "category": "washerDryer",
+      "tags": [],
+      "size": [
+        0.6,
+        0.85,
+        0.62
+      ],
+      "triangles": 1298,
+      "sha256": "ec6a8894badd6a769ee3ad6726d38f1056a97f43de1bc64953129378aaf81b91",
+      "slots": [
+        {
+          "name": "metalLight",
+          "cell": 127
+        },
+        {
+          "name": "metalMedium",
+          "cell": 125
+        },
+        {
+          "name": "metal",
+          "cell": 124
+        },
+        {
+          "name": "metalDark",
+          "cell": 111
+        }
+      ],
+      "profile": "///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////Z2dnZ2dnZ2dnZ2dnZ2dnZAAAAnKu1ury8urWrnAAAAA==",
+      "source": "Kenney Furniture Kit 2.0 / washer.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "washerdryer_kenney_dryer",
+      "category": "washerDryer",
+      "tags": [],
+      "size": [
+        0.6,
+        0.85,
+        0.62
+      ],
+      "triangles": 878,
+      "sha256": "86f4a04970c328c311d6208a7e803936d608b478cc7d3ba10ea9ce79d80c2636",
+      "slots": [
+        {
+          "name": "metalLight",
+          "cell": 127
+        },
+        {
+          "name": "metalMedium",
+          "cell": 125
+        },
+        {
+          "name": "metalDark",
+          "cell": 111
+        }
+      ],
+      "profile": "///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////u7u7u7u7u7u7u7u7u7u7uAADBwcHBwcHBwcHBwcEAAA==",
+      "source": "Kenney Furniture Kit 2.0 / dryer.glb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "washerdryer_kenney_stacked",
+      "category": "washerDryer",
+      "tags": [],
+      "size": [
+        0.6,
+        1.75,
+        0.62
+      ],
+      "triangles": 2312,
+      "sha256": "c9ee3f936fc6fb2212107e332dd2ff8ce2a7ffba9b5d6093998836d41c317fec",
+      "slots": [
+        {
+          "name": "metalLight",
+          "cell": 127
+        },
+        {
+          "name": "metalMedium",
+          "cell": 125
+        },
+        {
+          "name": "metal",
+          "cell": 124
+        },
+        {
+          "name": "metalDark",
+          "cell": 111
+        }
+      ],
+      "profile": "///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////s7Ozs7Ozs7Ozs7Ozs7OzsAADKylZaXV5eXVpWTgAAAA==",
+      "source": "Kenney Furniture Kit 2.0 / washerDryerStacked.glb",
+      "licence": "CC0-1.0"
+    }
+  ]
+}

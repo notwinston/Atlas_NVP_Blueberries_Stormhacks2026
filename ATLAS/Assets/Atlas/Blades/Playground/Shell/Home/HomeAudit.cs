@@ -14,7 +14,7 @@ namespace Atlas.Blades.Playground.Shell
         public int Drawn;
         /// <summary>Of those, how many show a placeholder box (state Placeholder or Requested).</summary>
         public int Placeholders;
-        /// <summary>Of those, how many show a mesh (state Ready, BuiltIn or StandIn).</summary>
+        /// <summary>Of those, how many show a mesh (state Ready, BuiltIn, StandIn, Matched or ScanCut).</summary>
         public int Meshes;
 
         /// <summary>Drawn over Objects; 1 for a room with no objects.</summary>
@@ -55,6 +55,8 @@ namespace Atlas.Blades.Playground.Shell
                     case MeshState.Ready:
                     case MeshState.BuiltIn:
                     case MeshState.StandIn:
+                    case MeshState.Matched:
+                    case MeshState.ScanCut:
                         result.Drawn++;
                         result.Meshes++;
                         break;
@@ -151,7 +153,8 @@ namespace Atlas.Blades.Playground.Shell
             IRoomObjectView view;
             if (!m_Content.TryGetObject(objectId, out view) || view == null) return;
             // A change of state that draws no mesh moves nothing: only a mesh is a swap.
-            if (view.Shown != MeshState.Ready && view.Shown != MeshState.BuiltIn && view.Shown != MeshState.StandIn) return;
+            if (view.Shown != MeshState.Ready && view.Shown != MeshState.BuiltIn && view.Shown != MeshState.StandIn &&
+                view.Shown != MeshState.Matched && view.Shown != MeshState.ScanCut) return;
             UnityEngine.Vector3 p = view.Transform.position;
             m_Monitor.Observe(view.Data, new float3(p.x, p.y, p.z));
         }

@@ -50,6 +50,33 @@ namespace Atlas.World
             return i < Count ? i : 0;
         }
 
+        // RoomPlan's CapturedRoom.Object.Category names and the category each one is. Two names differ from ours.
+        static readonly string[] s_roomPlanNames =
+        {
+            "bathtub", "bed", "chair", "dishwasher", "fireplace", "oven", "refrigerator", "sink", "sofa", "stairs",
+            "storage", "stove", "table", "television", "toilet", "washerDryer"
+        };
+
+        static readonly ObjectCategory[] s_roomPlanCategories =
+        {
+            ObjectCategory.Bathtub, ObjectCategory.Bed, ObjectCategory.Chair, ObjectCategory.Dishwasher,
+            ObjectCategory.Fireplace, ObjectCategory.Oven, ObjectCategory.Refrigerator, ObjectCategory.Sink,
+            ObjectCategory.Couch, ObjectCategory.Stairs, ObjectCategory.Storage, ObjectCategory.Stove,
+            ObjectCategory.Table, ObjectCategory.Screen, ObjectCategory.Toilet, ObjectCategory.WasherDryer
+        };
+
+        /// <summary>From the name of a RoomPlan CapturedRoom.Object.Category, as the RoomPlan plugin writes it:
+        /// bathtub, bed, chair, dishwasher, fireplace, oven, refrigerator, sink, sofa (Couch), stairs, storage, stove,
+        /// table, television (Screen), toilet, washerDryer. Case is ignored. Anything else, null included, gives Other.</summary>
+        public static ObjectCategory FromRoomPlan(string category)
+        {
+            if (category == null) return ObjectCategory.Other;
+            for (int i = 0; i < s_roomPlanNames.Length; i++)
+                if (string.Equals(s_roomPlanNames[i], category, System.StringComparison.OrdinalIgnoreCase))
+                    return s_roomPlanCategories[i];
+            return ObjectCategory.Other;
+        }
+
         /// <summary>From the bits of AR Foundation's BoundingBoxClassifications, passed as uint so that this
         /// assembly needs no AR type: 0 gives Unknown; the lowest set bit k in 0..20 gives the value k + 1;
         /// bit 31 alone gives Other.</summary>

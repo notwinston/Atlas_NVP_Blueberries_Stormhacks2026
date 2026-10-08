@@ -11,8 +11,10 @@ namespace Atlas.Scan
     /// The AR session's configuration (Master Plan section 8.2, Appendix C.4, decision D19; task P1-C01).
     /// It is given the AR Session and the XR Origin by the composition root and never searches the scene.
     /// Always: the lowest-resolution 60 Hz video format, LiDAR depth for Bump Guard, no light estimation, a
-    /// frame rate the frame loop owns, one pose sample per frame. Only during a scan: meshing, planes, boxes
-    /// and ray-casts. With no AR provider running (the Editor without XR Simulation, Windows) every call is
+    /// frame rate the frame loop owns, one pose sample per frame. Only during a scan: meshing, planes and
+    /// ray-casts. Furniture boxes do not come through AR Foundation: the scan's one RoomPlan session is the
+    /// Swift plugin (RoomPlanSession, standalone-phone plan D2), so no ARBoundingBoxManager is created or
+    /// enabled, and one the scene brings is kept off. With no AR provider running (the Editor without XR Simulation, Windows) every call is
     /// accepted and does nothing.
     /// </summary>
     public sealed class ArSessionRig
@@ -27,6 +29,7 @@ namespace Atlas.Scan
         string _videoFormat = "none";
         bool _noFormatLogged;
         bool _trackingLogged;
+        ARBoundingBoxManager _sceneBoxes;
 
         /// <summary>Either argument may be null (the Station): the rig is then neutral.</summary>
         public ArSessionRig(XROrigin origin, ARSession session)
@@ -50,13 +53,13 @@ namespace Atlas.Scan
                 Planes = originObject.GetComponent<ARPlaneManager>();
                 Raycasts = originObject.GetComponent<ARRaycastManager>();
                 Anchors = originObject.GetComponent<ARAnchorManager>();
-                Boxes = originObject.GetComponent<ARBoundingBoxManager>();
+                // Only to keep it off: a running RoomPlanBoundingBoxSubsystem would be a second RoomPlan session.
+                _sceneBoxes = originObject.GetComponent<ARBoundingBoxManager>();
                 if (_hasAr)
                 {
                     if (Planes == null) Planes = originObject.AddComponent<ARPlaneManager>();
                     if (Raycasts == null) Raycasts = originObject.AddComponent<ARRaycastManager>();
                     if (Anchors == null) Anchors = originObject.AddComponent<ARAnchorManager>();
-                    if (Boxes == null) Boxes = originObject.AddComponent<ARBoundingBoxManager>();
                     Anchors.enabled = true;
                     Meshes = CreateMeshManager(origin.transform);
                 }
@@ -102,7 +105,6 @@ namespace Atlas.Scan
         public ARPlaneManager Planes { get; private set; }
         /// <summary>On a child of the XR Origin. Null with no AR provider.</summary>
         public ARMeshManager Meshes { get; private set; }
-        public ARBoundingBoxManager Boxes { get; private set; }
         public ARRaycastManager Raycasts { get; private set; }
         /// <summary>The tracked camera's pose driver, on Update only.</summary>
         public UnityEngine.InputSystem.XR.TrackedPoseDriver Driver { get; private set; }
@@ -173,11 +175,11 @@ namespace Atlas.Scan
         }
 
         /// <summary>
-        /// Meshing, planes, boxes and ray-casts on for a scan, or off when it ends (confirm, cancel, failure).
-        /// mesh and boxes let a scan leave out a route. Face classification and the RoomPlan capture are
-        /// started by the scan session through its platform interface once the managers are on.
+        /// Meshing, planes and ray-casts on for a scan, or off when it ends (confirm, cancel, failure). mesh lets
+        /// a scan leave out route 2. Face classification and the RoomPlan capture are started by the scan
+        /// session once the managers are on.
         /// </summary>
-        public void SetScanFeatures(bool on, bool mesh = true, bool boxes = true)
+        public void SetScanFeatures(bool on, bool mesh = true)
         {
             if (!_hasAr)
             {
@@ -193,16 +195,16 @@ namespace Atlas.Scan
                 }
                 if (Raycasts != null) Raycasts.enabled = true;
                 if (Meshes != null) Meshes.enabled = mesh;
-                if (Boxes != null) Boxes.enabled = boxes;
                 ScanFeaturesOn = true;
-                Debug.Log(LogPrefix + "scan features on: " + (mesh ? "meshing, " : "") + "planes" + (boxes ? ", boxes" : ""));
+                Debug.Log(LogPrefix + "scan features on: " + (mesh ? "meshing, " : "") + "planes");
                 return;
             }
 
             bool wasOn = ScanFeaturesOn;
             DisableScanManagers();
             ScanFeaturesOn = false;
-            // Meshing and plane detection are a major source of heat: this line is what gate G5 looks for.
+            // Meshing and plane detection are a major source of heat: this line is what gate G5 looks for (its
+            // text is unchanged; "boxes" now means the RoomPlan capture, which the scan session stops first).
             if (wasOn) Debug.Log(LogPrefix + "scan features off: meshing, planes, boxes");
         }
 
@@ -230,7 +232,7 @@ namespace Atlas.Scan
                 Planes.enabled = false;
             }
             if (Raycasts != null) Raycasts.enabled = false;
-            if (Boxes != null) Boxes.enabled = false;
+            if (_sceneBoxes != null) _sceneBoxes.enabled = false;
             if (Meshes != null)
             {
                 Meshes.enabled = false;

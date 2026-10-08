@@ -76,6 +76,7 @@ namespace Atlas.Blades.Playground.Tests.ShellFlow
             public bool IsMeshDrawn(UnityEngine.Mesh mesh) { return false; }
             public bool SetGeneratedLightMesh(int objectId, UnityEngine.Mesh mesh, string assetHashLight) { return false; }
             public bool SetBuiltInMesh(int objectId, UnityEngine.Mesh sharedMesh, UnityEngine.Vector3 scale, float fadeSeconds = 0.3f) { return false; }
+            public bool SetOnPhoneMesh(int objectId, UnityEngine.Mesh mesh, MeshState state, float fadeSeconds = 0.3f) { return false; }
             public event Action<RoomModel> Built;
             public event Action<int> ObjectChanged;
         }

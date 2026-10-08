@@ -36,6 +36,15 @@ namespace Atlas.Telemetry
         bool PlaceGeneratedLight(int objectId, MeshData mesh, string sha256);
         /// <summary>The built-in mesh at the box's size. The data is only valid during the call.</summary>
         bool PlaceBuiltIn(int objectId, MeshData mesh);
+
+        /// <summary>
+        /// A mesh built on the phone (standalone-phone plan section 6.5): a matched prop (state Matched) or the object
+        /// cut out of the scanned mesh (state ScanCut), box-local with its scale baked in. Sets the object's Prop and
+        /// PropCells: the prop id and its cells for Matched, "" and null for ScanCut. The data is only valid during
+        /// the call. False when the object or its view is unknown or cannot take it.
+        /// </summary>
+        /// <remarks>A room view that shows no on-phone mesh (the Spectator, the Forge's tests) keeps this default.</remarks>
+        bool PlaceOnPhone(int objectId, MeshData mesh, MeshState state, string prop, byte[] propCells) { return false; }
     }
 
     /// <summary>The GLB cache, keyed by SHA-256. Called on the worker thread.</summary>

@@ -53,6 +53,9 @@ namespace Atlas.Scan.Grid
         public int SourceId;
         /// <summary>True when the box was made from an obstacle blob of the grid, false when it was supplied.</summary>
         public bool FromScan;
+        /// <summary>Attribute strings given by the source of the box (RoomPlan), verbatim; null or empty for none
+        /// (boxes found by the scan). They go to RoomObject.Tags.</summary>
+        public string[] Tags;
     }
 
     /// <summary>

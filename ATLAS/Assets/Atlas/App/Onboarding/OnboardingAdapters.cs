@@ -84,45 +84,6 @@ namespace Atlas.App.Onboarding
         }
     }
 
-    /// <summary>
-    /// The TripoSG switch over the parameter forge.backend, which the asset client follows: on is <c>local</c>
-    /// (the Station's own generator), off is <c>off</c> (built-in meshes, no photo leaves the phone). Engine-free.
-    /// </summary>
-    public sealed class ForgeSwitch : IOnboardingForge
-    {
-        // forge.backend's choices, in AssetClientInstaller's order: local, hosted, cache, off.
-        const int BackendLocal = 0, BackendOff = 3;
-
-        readonly ParamRegistry _registry;
-        readonly bool _hasClient;
-
-        /// <summary>hasClient: the build sends object photos at all (no asset client in the Spectator).</summary>
-        public ForgeSwitch(ParamRegistry registry, bool hasClient)
-        {
-            _registry = registry;
-            _hasClient = hasClient;
-        }
-
-        ParamEntry Entry { get { return _registry != null ? _registry.Find(AssetClientInstaller.ParamForgeBackend) : null; } }
-
-        public bool Available { get { return _hasClient && Entry != null; } }
-
-        public bool Enabled
-        {
-            get
-            {
-                ParamEntry entry = Entry;
-                return entry != null && entry.Int != BackendOff;
-            }
-        }
-
-        public void SetEnabled(bool enabled)
-        {
-            ParamEntry entry = Entry;
-            if (entry != null) entry.Set(enabled ? BackendLocal : BackendOff);
-        }
-    }
-
     /// <summary>The scan session behind onboarding's interface, with the routes the scan parameters allow.</summary>
     sealed class SessionScan : IOnboardingScan
     {

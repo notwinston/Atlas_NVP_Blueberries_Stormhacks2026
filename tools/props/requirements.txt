@@ -1,0 +1,6 @@
+# The prop tools (tools/props/README.md): profile_tool.py, check.py and reference.py.
+# numpy is the one the Forge pins (station/forge/requirements.lock), because reference.py imports the Forge's
+# profile.py and cleanup.py and its vectors must come out the same as on the Station.
+numpy==2.4.6
+# tools/props/test_props.py
+pytest==9.1.1

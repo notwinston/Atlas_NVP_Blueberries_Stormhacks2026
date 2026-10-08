@@ -60,6 +60,11 @@ namespace Atlas.Spaces.Tests.Home
                 Calls.Add("SetBuiltInMesh");
                 return false;
             }
+            public bool SetOnPhoneMesh(int objectId, UnityEngine.Mesh mesh, MeshState state, float fadeSeconds = 0.3f)
+            {
+                Calls.Add("SetOnPhoneMesh");
+                return false;
+            }
 #pragma warning disable 67
             public event Action<RoomModel> Built;
             public event Action<int> ObjectChanged;

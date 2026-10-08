@@ -46,8 +46,8 @@ namespace Atlas.Scan
     }
 
     /// <summary>
-    /// Scan route 4 (Master Plan section 4.2, task P1-C05): the walls, doors and windows of a RoomPlan capture
-    /// laid onto the walls a room already has. The room's walls stay where the confirmed outline puts them
+    /// Scan route 4 (Master Plan section 4.2, task P1-C05; standalone-phone plan D13): the walls, doors and
+    /// windows of the scan's RoomPlan session laid onto the walls a room already has. The room's walls stay where the confirmed outline puts them
     /// (RoomModel rule R14); a wall that a RoomPlan wall lies on takes that wall's height and the openings
     /// found in it. With no capture, or none that fits, the room is left exactly as it was. Engine-free.
     /// </summary>
@@ -67,24 +67,42 @@ namespace Atlas.Scan
         public const int MaxOpeningsPerWall = 16;
 
         /// <summary>
-        /// Parses a capture (WallBridgeJson) and merges it. Text that is empty gives Tried false; text that
-        /// cannot be read gives Error. Either way the room is untouched.
+        /// Reads a capture (an atlas.room/1 file, RoomPlanJson) and merges it. Text that is empty gives Tried
+        /// false; text that cannot be read gives Error. Either way the room is untouched.
         /// </summary>
         public static WallBridgeReport Merge(RoomModel room, string json)
         {
             var report = new WallBridgeReport();
             if (string.IsNullOrEmpty(json)) return report;
             report.Tried = true;
-            BridgeSurface[] surfaces;
-            int skipped;
-            string error;
-            if (!WallBridgeJson.TryParse(json, out surfaces, out skipped, out error))
+            RoomPlanCapture capture;
+            if (!RoomPlanJson.TryRead(json, out capture))
             {
-                report.Error = error ?? "unreadable";
+                report.Error = "not an atlas.room/1 file";
                 return report;
             }
+            return Merge(room, capture);
+        }
+
+        /// <summary>
+        /// The walls, doors, windows and openings of a capture that was read (RoomPlanJson), merged as below.
+        /// Skipped is the capture's count of surfaces and objects it left out. A null capture changes nothing.
+        /// </summary>
+        public static WallBridgeReport Merge(RoomModel room, RoomPlanCapture capture)
+        {
+            if (room == null) throw new ArgumentNullException(nameof(room));
+            if (capture == null) return new WallBridgeReport { Tried = true };
+            var surfaces = new BridgeSurface[capture.Walls.Length + capture.Doors.Length + capture.Windows.Length + capture.Openings.Length];
+            int n = 0;
+            Array.Copy(capture.Walls, 0, surfaces, n, capture.Walls.Length);
+            n += capture.Walls.Length;
+            Array.Copy(capture.Doors, 0, surfaces, n, capture.Doors.Length);
+            n += capture.Doors.Length;
+            Array.Copy(capture.Windows, 0, surfaces, n, capture.Windows.Length);
+            n += capture.Windows.Length;
+            Array.Copy(capture.Openings, 0, surfaces, n, capture.Openings.Length);
             WallBridgeReport merged = Merge(room, surfaces);
-            merged.Skipped = skipped;
+            merged.Skipped = capture.Skipped;
             return merged;
         }
 

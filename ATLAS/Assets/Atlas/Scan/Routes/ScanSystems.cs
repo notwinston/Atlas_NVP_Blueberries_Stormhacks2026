@@ -6,8 +6,8 @@ using UnityEngine;
 namespace Atlas.Scan
 {
     /// <summary>
-    /// The scan session, its object photo capture, the room store and the world map store, built on the pose
-    /// systems and published for onboarding (contract README F3, lane C section 14.1). The composition root
+    /// The scan session, its object photo capture, its scan mesh sink, the room store and the world map store,
+    /// built on the pose systems and published for onboarding (contract README F3, lane C section 14.1). The composition root
     /// creates one after ArPoseSystems.
     /// </summary>
     public sealed class ScanSystems
@@ -25,6 +25,17 @@ namespace Atlas.Scan
         /// calls its Tick every frame while it is Busy.
         /// </summary>
         public WorldMapStore WorldMaps { get; private set; }
+
+        /// <summary>
+        /// Where the scanned LiDAR mesh of each finished room goes, in the room frame (standalone-phone plan D8,
+        /// D10): called on the main thread once per room, before the photo sink's BeginRoom; null for a room with
+        /// no scanned mesh. NullScanMeshSink until the composition root sets one; setting null puts it back.
+        /// </summary>
+        public IScanMeshSink ScanMeshSink
+        {
+            get { return Session.ScanMeshSink; }
+            set { Session.ScanMeshSink = value; }
+        }
 
         ScanSystems() { }
 

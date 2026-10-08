@@ -1,0 +1,9 @@
+{
+    "name": "Atlas.Objects",
+    "rootNamespace": "Atlas.Objects",
+    "references": [
+        "Atlas.Kernel",
+        "Atlas.World",
+        "Unity.Mathematics"
+    ]
+}

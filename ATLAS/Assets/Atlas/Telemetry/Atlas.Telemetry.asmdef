@@ -5,6 +5,7 @@
         "Atlas.Kernel",
         "Atlas.Link",
         "Atlas.World",
+        "Atlas.Objects",
         "Unity.Profiling.Core",
         "glTFast",
         "Unity.Mathematics",

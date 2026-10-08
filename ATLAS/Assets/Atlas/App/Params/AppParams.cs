@@ -220,14 +220,18 @@ namespace Atlas.App
 
         // ---- scan, input ----------------------------------------------------------------------------------
 
-        /// <summary>scan.wallBridge, a kill switch: the RoomPlan wall bridge (route 4) may run. Off is the outline's walls as they were.</summary>
+        /// <summary>
+        /// scan.wallBridge (standalone-phone plan D13): RoomPlan's walls, doors and windows from the scan's one RoomPlan
+        /// session are merged into the confirmed room (route 4). On by default. Off is the outline's walls as they were;
+        /// the RoomPlan session still runs for the furniture boxes.
+        /// </summary>
         public const string ScanWallBridge = "scan.wallBridge";
 
         public static void DeclareScan(ParamRegistry registry, ScanSettings settings)
         {
             registry.DeclareInt(ScanRoute, "scan", 1, 4, 3, v => settings.Route = v);
             registry.DeclareBool(TeamPrescan, "scan", false, v => settings.TeamPrescan = v);
-            registry.DeclareBool(ScanWallBridge, "scan", false, Atlas.Scan.WallBridge.Apply);
+            registry.DeclareBool(ScanWallBridge, "scan", true, Atlas.Scan.WallBridge.Apply);
         }
 
         public static void DeclareInput(ParamRegistry registry, IAtlasInput input)
@@ -247,7 +251,7 @@ namespace Atlas.App
             if (registry.Find(CurvedMode) == null) registry.DeclareEnum(CurvedMode, "curved", s_curvedModes, 0, null, true);
             if (registry.Find(PortalDepth) == null) registry.DeclareInt(PortalDepth, "portal", 0, 1, 1);
             if (registry.Find(SlicerSource) == null) registry.DeclareEnum(SlicerSource, "slicer", s_slicerSources, 0, null, true);
-            if (registry.Find(ForgeBackend) == null) registry.DeclareEnum(ForgeBackend, "forge", s_forgeBackends, 0);
+            if (registry.Find(ForgeBackend) == null) registry.DeclareEnum(ForgeBackend, "forge", s_forgeBackends, 3);
         }
 
         // ---- the Editor-first path --------------------------------------------------------------------------
